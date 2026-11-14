@@ -2,6 +2,8 @@
 // PORT-165 synthetic regression: a MELEE_HORDE changes to a ranged position weapon.
 // The position-attack machine is selected at RW 0x74CFF1..0x74D019.
 #include "doctest.h"
+#include "Common/XferLoad.h"
+#include "Common/XferSave.h"
 #include "CombatTestUtil.h"
 #include "GameLogic/AI/AIAttack.h"
 #include "GameLogic/AI/AIAttackHordePosition.h"
@@ -128,43 +130,113 @@ const char kSynthetic[] =
 
 struct TestWorld : CombatWorld
 {
-    TestWorld() : CombatWorld(kSynthetic) { WeaponCommands::registerHandlers(dispatcher); }
+	TestWorld() : CombatWorld(kSynthetic) { WeaponCommands::registerHandlers(dispatcher); }
 };
 
 }
 
 TEST_CASE("PORT-165: position horde wait tracks active member states (RW 0x747999, 0x742CEA, 0x86D562)")
 {
-    TestWorld w;
-    w.combat().setAutoAcquireEnabled(false);
-    Object *horde = w.unit("P165ArcherHorde", 'A', 300, 300);
-    REQUIRE(horde);
-    w.frames(12);
-    const auto members = w.membersOf(horde);
-    REQUIRE(members.size() == 6);
-    AIStateMachine hordeMachine(*horde->getAIUpdateInterface(), "P165WaitTest");
-    AIHordePositionWaitState wait(hordeMachine);
-    CHECK(wait.onEnter() == STATE_CONTINUE);
-    CHECK(wait.update() == STATE_FAILURE); // at least one member is not active
-    AIStateMachine memberMachine(*members.front()->getAIUpdateInterface(), "P165NonHordeWaitTest");
-    AIHordePositionWaitState nonHordeWait(memberMachine);
-    CHECK(nonHordeWait.onEnter() == STATE_FAILURE);
-    const Coord3D spot{300.0f, 150.0f, w.logic->getGroundHeight(300.0f, 150.0f)};
-    for (Object *member : members)
-    {
-        WeaponSetToggle::setObjectWeaponSetFlag(*member, WeaponSetToggle::WEAPONSET_TOGGLE_1, true);
-        member->getWeapons()->setWeaponLock(2, LOCKED_TEMPORARILY);
-        member->getAIUpdateInterface()->aiAttackPosition(spot, 0x7fffffff, CMD_FROM_AI);
-    }
-    CHECK(wait.update() == STATE_CONTINUE); // every live member's state reports active
-    Object *target = w.unit("Dummy", 'B', 500, 500);
-    REQUIRE(target);
-    hordeMachine.setGoalObject(target->getID());
-    for (Object *member : members) member->getAIUpdateInterface()->setCurrentVictim(target);
-    CHECK(wait.update() == STATE_CONTINUE); // RW 0x86D438: all have the same victim
-    members.front()->getAIUpdateInterface()->setCurrentVictim(nullptr);
-    CHECK(wait.update() == STATE_FAILURE);
-    hordeMachine.setGoalObject((ObjectID)INVALID_ID);
-    members.front()->getAIUpdateInterface()->aiIdle(CMD_FROM_AI);
-    CHECK(wait.update() == STATE_FAILURE); // one inactive member is sufficient
+	TestWorld w;
+	w.combat().setAutoAcquireEnabled(false);
+	Object *horde = w.unit("P165ArcherHorde", 'A', 300, 300);
+	REQUIRE(horde);
+	w.frames(12);
+	const auto members = w.membersOf(horde);
+	REQUIRE(members.size() == 6);
+	AIStateMachine hordeMachine(*horde->getAIUpdateInterface(), "P165WaitTest");
+	AIHordePositionWaitState wait(hordeMachine);
+	CHECK(wait.onEnter() == STATE_CONTINUE);
+	CHECK(wait.update() == STATE_FAILURE); // at least one member is not active
+	AIStateMachine memberMachine(*members.front()->getAIUpdateInterface(), "P165NonHordeWaitTest");
+	AIHordePositionWaitState nonHordeWait(memberMachine);
+	CHECK(nonHordeWait.onEnter() == STATE_FAILURE);
+	const Coord3D spot{300.0f, 150.0f, w.logic->getGroundHeight(300.0f, 150.0f)};
+	for (Object *member : members)
+	{
+		WeaponSetToggle::setObjectWeaponSetFlag(*member, WeaponSetToggle::WEAPONSET_TOGGLE_1, true);
+		member->getWeapons()->setWeaponLock(2, LOCKED_TEMPORARILY);
+		member->getAIUpdateInterface()->aiAttackPosition(spot, 0x7fffffff, CMD_FROM_AI);
+	}
+	CHECK(wait.update() == STATE_CONTINUE); // every live member's state reports active
+	Object *target = w.unit("Dummy", 'B', 500, 500);
+	REQUIRE(target);
+	hordeMachine.setGoalObject(target->getID());
+	for (Object *member : members) member->getAIUpdateInterface()->setCurrentVictim(target);
+	CHECK(wait.update() == STATE_CONTINUE); // RW 0x86D438: all have the same victim
+	members.front()->getAIUpdateInterface()->setCurrentVictim(nullptr);
+	CHECK(wait.update() == STATE_FAILURE);
+	hordeMachine.setGoalObject((ObjectID)INVALID_ID);
+	members.front()->getAIUpdateInterface()->aiIdle(CMD_FROM_AI);
+	CHECK(wait.update() == STATE_FAILURE); // one inactive member is sufficient
+}
+
+namespace {
+struct PositionFireNotify : AttackFireNotify
+{
+	int shots = 0;
+	bool slotAllowed = true;
+	void notifyFired() override { ++shots; }
+	void notifyNewVictimChosen(Object *) override {}
+	bool isWeaponSlotOkToFire(int) const override { return slotAllowed; }
+	bool isAttackingObject() const override { return false; }
+};
+}
+
+TEST_CASE("PORT-165: position-fire state tests position range and fires once (RW 0x74C911 / 0x74C9FF)")
+{
+	TestWorld w;
+	w.combat().setAutoAcquireEnabled(false);
+	Object *horde = w.unit("P165ArcherHorde", 'A', 300, 300);
+	REQUIRE(horde);
+	w.frames(12);
+	WeaponSetToggle::setObjectWeaponSetFlag(*horde, WeaponSetToggle::WEAPONSET_TOGGLE_1, true);
+	horde->getWeapons()->setWeaponLock(2, LOCKED_TEMPORARILY);
+	AIStateMachine machine(*horde->getAIUpdateInterface(), "P165PositionFire");
+	PositionFireNotify notify;
+	AIHordePositionFireState fire(machine, notify);
+	machine.setGoalPosition(Coord3D{300.0f, 900.0f, 0.0f});
+	CHECK(fire.onEnter() == STATE_FAILURE);
+	machine.setGoalPosition(Coord3D{300.0f, 150.0f, 0.0f});
+	REQUIRE(fire.onEnter() == STATE_CONTINUE);
+	notify.slotAllowed = false;
+	CHECK(fire.update() == STATE_FAILURE);
+	CHECK(notify.shots == 0);
+	notify.slotAllowed = true;
+	CHECK(fire.update() == STATE_SUCCESS);
+	CHECK(notify.shots == 1);
+	CHECK(horde->getWeapons()->stats().shotsFired == 1);
+	fire.onExit(EXIT_NORMAL);
+	CHECK(fire.onEnter() == STATE_SUCCESS); // weapon is not yet ready
+}
+
+TEST_CASE("PORT-165: deferred position-fire state survives save/load (RW 0x74C9C5 / 0x74CA35)")
+{
+	TestWorld w;
+	w.combat().setAutoAcquireEnabled(false);
+	Object *horde = w.unit("P165ArcherHorde", 'A', 300, 300);
+	REQUIRE(horde);
+	w.frames(12);
+	const auto members = w.membersOf(horde);
+	REQUIRE(!members.empty());
+	Object *member = members.front();
+	WeaponSetToggle::setObjectWeaponSetFlag(*member, WeaponSetToggle::WEAPONSET_TOGGLE_1, true);
+	member->getWeapons()->setWeaponLock(2, LOCKED_TEMPORARILY);
+	if ((member->getAIUpdateInterface()->frame() & 1u) == 0) w.frames(1);
+	REQUIRE((member->getAIUpdateInterface()->frame() & 1u) == 1u);
+	AIStateMachine machine(*member->getAIUpdateInterface(), "P165DeferredFire");
+	machine.setGoalPosition(Coord3D{300.0f, 150.0f, 0.0f});
+	PositionFireNotify notify;
+	AIHordePositionFireState fire(machine, notify);
+	REQUIRE(fire.onEnter() == STATE_CONTINUE);
+	XferSave save;
+	fire.xfer(save);
+	AIHordePositionFireState restored(machine, notify);
+	XferLoad load(save.data());
+	restored.xfer(load);
+	CHECK(restored.update() == STATE_CONTINUE); // deferred pre-fire, no shot on this update
+	CHECK(notify.shots == 0);
+	CHECK(restored.update() == STATE_SUCCESS);
+	CHECK(notify.shots == 1);
+	restored.onExit(EXIT_NORMAL);
 }
