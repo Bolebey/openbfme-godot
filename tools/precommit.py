@@ -425,6 +425,10 @@ def main() -> int:
                 problems.append(problem)
         problems += pin_problems(pins, pin_reason)
         problems += shader_problems(files)
+        if any(rel.startswith(("docs/stops.d/", "docs/ennorath/night_watch.d/")) for rel, _ in files):
+            sys.path.insert(0, str(Path(__file__).resolve().parent))
+            import fragments  # the stop / night-watch fragments (tools/fragments.py)
+            problems += fragments.check()
     except (subprocess.CalledProcessError, ValueError, OSError) as exc:
         problems.append(f"cannot check staged files: {exc}")
     if problems:
