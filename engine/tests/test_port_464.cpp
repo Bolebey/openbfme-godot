@@ -151,7 +151,7 @@ struct SummonFx : combattest::CombatWorld
 	INIEnvironment aiEnv;
 	SpecialPowerStore powers;
 	SpecialPowerStore *savedPowers = TheSpecialPowerStore;
-	ObjectCreationListStore ocls;
+	ObjectCreationListStore ocls{ w.keys };
 	ObjectCreationListStore *savedOcl = TheObjectCreationListStore;
 	Object *summoner = nullptr;
 	Object *helper = nullptr;
@@ -160,7 +160,7 @@ struct SummonFx : combattest::CombatWorld
 	SummonFx()
 	{
 		TheSpecialPowerStore = &powers;
-		TheObjectCreationListStore = &oclcs;
+		TheObjectCreationListStore = &ocls;
 		w.fx.env.blocks.registerBlock("SpecialPower", [](INI *ini) { SpecialPowerStore::parseSpecialPowerDefinitionGlobal(ini); });
 		w.fx.env.blocks.registerBlock("ObjectCreationList", [](INI *ini) { ObjectCreationListStore::parseObjectCreationListDefinitionGlobal(ini); });
 		SpecialPowerModules::registerAll(w.modules);
