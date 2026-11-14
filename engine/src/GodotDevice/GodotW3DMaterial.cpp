@@ -1120,8 +1120,8 @@ W3DMaterialResult W3DMaterialFactory::Create(const MeshRenderData &mesh, const M
 	}
 	if (key.NormalMap) mat->set_shader_parameter("w3d_normal", normalTex);
 	if (key.HouseColor) mat->set_shader_parameter("w3d_hc_tex", hcTex);
-	// P-103: floor decals draw after Roads (kRoadRenderPriority = -125, offset 0) via instancer sorting_offset = 100000, and before Scorches (-124)
-	const int priority = FloorBlend ? -125 : std::clamp(surf.Pass - std::min(surf.SortLevel, 31) * 4, -128, 127);
+	// P-103 / P-100 (Local 50 + Local 52): floor decals take kFloorRenderPriority (-124): after Roads (-125), before Scorches (-123), RW 0x4E2F3A -> 0x4E53D3 RenderFloors
+	const int priority = W3D_Surface_Render_Priority(surf.SortLevel, surf.Pass, FloorBlend);
 	mat->set_render_priority(priority);
 
 	for (int s = 0; s < 2; ++s)

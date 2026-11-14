@@ -1,6 +1,7 @@
 // OpenBFME. GPL-3.0. See w3dshadergen.h.
 
 #include "Libraries/WWVegas/WW3D2/w3dshadergen.h"
+#include "GameClient/ParticleDraw.h"
 #include "GameEngineDevice/W3DDevice/GameClient/W3DHardwareFog.h"
 
 #include <algorithm>
@@ -949,4 +950,25 @@ std::string Generate_W3D_Shader_Code(const W3DShaderKey &k, W3DSamplerPolicy sam
 		line("}");
 	}
 	return c;
+}
+
+int W3D_Surface_Render_Priority(int sortLevel, int pass, bool floorBlend)
+{
+	if (floorBlend)
+	{
+		return FXParticleSystem::kFloorRenderPriority; // RW 0x4E2F3A -> 0x4E53D3 RenderFloors
+	}
+	constexpr int kMaxPasses = 3;
+	constexpr int kMaxStaticSort = 32; // RW 0x5762FC..0x576304: DefaultStaticSortListClass range 1..32
+	const int clampedPass = std::clamp(pass, 0, kMaxPasses - 1);
+	if (sortLevel <= 0)
+	{
+		// RW 0x470F5E -> 0x574406: SortLevel 0 meshes flush before StaticSortLists
+		return FXParticleSystem::kW3DRenderPriorityMin + clampedPass;
+	}
+	// RW 0x47166A -> 0x576240: StaticSortLists draw descending from SortLevel 32 down to 1
+	const int clampedSort = std::clamp(sortLevel, 1, kMaxStaticSort);
+	const int staticBase = FXParticleSystem::kW3DRenderPriorityMin + kMaxPasses;
+	const int priority = staticBase + (kMaxStaticSort - clampedSort) * kMaxPasses + clampedPass;
+	return std::clamp(priority, FXParticleSystem::kW3DRenderPriorityMin, FXParticleSystem::kW3DRenderPriorityMax);
 }

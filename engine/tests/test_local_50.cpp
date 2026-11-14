@@ -298,7 +298,9 @@ TEST_CASE("LOCAL-50 P-97: DynamicDecalOrder puts Alpha before Additive after Tra
 	CHECK(alpha.priority == FXParticleSystem::kTrackRenderPriority);
 	CHECK(add.priority == FXParticleSystem::kTrackRenderPriority);
 	CHECK(FXParticleSystem::kTrackRenderPriority == FXParticleSystem::kScorchRenderPriority + 1);
-	CHECK(FXParticleSystem::kTrackRenderPriority == FXParticleSystem::kParticleRenderPriorityMin - 1);
+	// Local 52 (P-100) puts W3D between tracks and particles (RW 0x4E3108 tracks, then the scene, then particles 0x4E302F)
+	CHECK(FXParticleSystem::kW3DRenderPriorityMin == FXParticleSystem::kTrackRenderPriority + 1);
+	CHECK(FXParticleSystem::kParticleRenderPriorityMin == 1); // the first particle level, above W3D -121 .. -23
 	CHECK(alpha.sortOffset == 100000.0f);
 	CHECK(add.sortOffset == 200000.0f);
 	const float expectedBias = 1.0f / (1.0f + 9.0f * 0.000625f);

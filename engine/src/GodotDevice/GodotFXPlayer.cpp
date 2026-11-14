@@ -574,6 +574,7 @@ void FXPlayer::updateClientEffects()
 			Ref<ShaderMaterial> mat;
 			mat.instantiate();
 			mat->set_shader(m_decalShaders[kv.first.shader]);
+			mat->set_render_priority(FXParticleSystem::kScorchRenderPriority);
 			mat->set_shader_parameter("decal_tex", particleTexture(kv.first.name));
 			mat->set_shader_parameter("depth_bias_scale", order.depthBias);
 			mat->set_render_priority(order.priority);

@@ -1369,6 +1369,8 @@ add_executable(openbfme_tests
     tests/test_local_48.cpp
     # lane LOCAL-50 (building floor decals P-103 and magma cauldron decal flicker P-97, issue #406)
     tests/test_local_50.cpp
+    # lane LOCAL-52 (W3D transparent/floor render priority order below particles, issue #408 / P-100)
+    tests/test_local_52.cpp
     # lane LOCAL-27 (bridges as retail: Bridge block, damage models, towers, scaffold, radar color, issue #189)
     tests/test_local_27.cpp
     # lane LOCAL-33 (castle gates and 'man the walls' as retail: GateProxyBehavior, ManTheWallsSpecialPower, issue #283)
