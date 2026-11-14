@@ -29,7 +29,6 @@
 #include "GameLogic/Module/SpecialAbilityModules.h"
 #include "GameLogic/Module/SpecialPowerModules.h"
 #include "GameLogic/Object/Object.h"
-#include "GameLogic/UpgradeTypes.h"
 
 #include <string>
 
@@ -54,6 +53,17 @@ const char kPort201Objects[] =
 	"    UnitCreatePoint = X:0.0 Y:-30.0 Z:0.0\n"
 	"    NaturalRallyPoint = X:0.0 Y:-60.0 Z:0.0\n"
 	"    ExitDelay = 0\n"
+	"  End\n"
+	"End\n"
+	"Object P201Unit\n"
+	"  KindOf = INFANTRY SELECTABLE\n"
+	"  BuildTime = 60\n"
+	"  Geometry = CYLINDER\n"
+	"  GeometryMajorRadius = 6\n"
+	"  GeometryMinorRadius = 6\n"
+	"  GeometryHeight = 15\n"
+	"  Body = ActiveBody ModuleTag_Body\n"
+	"    MaxHealth = 100\n"
 	"  End\n"
 	"End\n"
 	"SpecialPower SpecialPowerCaptureInfantry\n"
@@ -88,8 +98,8 @@ const char kPort201Objects[] =
 	"End\n";
 
 // the button that makes the hall queue a unit (the combat world's own Dummy unit)
-const char kPort201Commands[] = "CommandButton Command_P201BuildDummy\n  Command = UNIT_BUILD\n  Object = Dummy\nEnd\n"
-								"CommandSet P201HallSet\n  1 = Command_P201BuildDummy\nEnd\n";
+const char kPort201Commands[] = "CommandButton Command_P201BuildUnit\n  Command = UNIT_BUILD\n  Object = P201Unit\nEnd\n"
+								"CommandSet P201HallSet\n  1 = Command_P201BuildUnit\nEnd\n";
 
 // one OBJECT upgrade: the mask bit of RW 0x693817 that the reset (RW 0x68E083) clears
 const char kPort201Upgrades[] = "Upgrade P201Upgrade\n  Type = OBJECT\nEnd\n";
@@ -100,7 +110,6 @@ struct Port201World : combattest::CombatWorld
 	CommandStore *savedStore = nullptr;
 	SpecialPowerStore powers;
 	SpecialPowerStore *savedPowers = nullptr;
-	UpgradeTypeTable upgrades;
 	std::string error;
 
 	Port201World()
@@ -119,8 +128,8 @@ struct Port201World : combattest::CombatWorld
 		REQUIRE_MESSAGE(error.empty(), error);
 		error = w.load(kPort201Commands, INI_LOAD_OVERWRITE, "port201_commands.ini");
 		REQUIRE_MESSAGE(error.empty(), error);
-		REQUIRE_MESSAGE(upgrades.scan(kPort201Upgrades, &error), error);
-		logic->setUpgradeTypes(&upgrades);
+		error = w.load(kPort201Upgrades, INI_LOAD_OVERWRITE, "port201_upgrade.ini");
+		REQUIRE_MESSAGE(error.empty(), error);
 		logic->productionSettings() = prodtest::defaultSettings();
 		for (int i = 0; i < logic->players().getPlayerCount(); ++i)
 		{
@@ -176,9 +185,9 @@ struct Port201World : combattest::CombatWorld
 	{
 		ProductionUpdateInterface *pu = o->getProductionUpdate();
 		REQUIRE(pu != nullptr);
-		const ThingTemplate *dummy = w.get("Dummy");
-		REQUIRE(dummy != nullptr);
-		return pu->queueCreateUnit(dummy, -1, pu->requestUniqueUnitID(), -1, false, std::string(), false);
+		const ThingTemplate *unit = w.get("P201Unit");
+		REQUIRE(unit != nullptr);
+		return pu->queueCreateUnit(unit, -1, pu->requestUniqueUnitID(), -1, false, std::string(), false);
 	}
 };
 } // namespace
@@ -247,8 +256,15 @@ TEST_CASE("PORT-201 capture: a building that already belongs to the capturer's t
 	REQUIRE(Port201World::hasUpgrade(own));
 	REQUIRE(Port201World::queueOf(own) == 1);
 
-	// the ability finds nothing to take: both the target and the building are already the capturer's team
-	CHECK_FALSE(f.capture(capturer, own, aliceTeam));
+	// the ability finds nothing to take: the target is already the capturer's team, so the trigger returns before any team change
+	SpecialAbilityUpdate *u = Port201World::abilityOf(capturer);
+	REQUIRE(u != nullptr);
+	const SpecialPowerTemplate *spt = u->abilityData()->m_specialPowerTemplate;
+	REQUIRE(spt != nullptr);
+	u->initiateIntentToDoSpecialPower(spt, own, nullptr, 0, 0);
+	f.frames(60);
+	CHECK(own->getTeam() == aliceTeam);
+	CHECK(u->captures() == 0u);
 	CHECK(Port201World::hasUpgrade(own));
 	CHECK(Port201World::queueOf(own) == 1);
 }
