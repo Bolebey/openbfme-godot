@@ -24,6 +24,7 @@ Ennorath 1.9.8.2 (база с 2026-11-04, до этого 1.9.8.1 с 2026-11-03;
 | Реестр 11 фракций (граф достижимости) | `FactionXxx*.md` в этой папке, генератор `tools/mod/ennorath_docs.py` |
 | Всё, что не перенесено или выведено, с номером | [../STOPS.md](../STOPS.md), число в [../../README.md](../../README.md) |
 | Числа покрытия модулей | `engine/tests/test_module_coverage.cpp` |
+| Сколько осталось, по дням (поля с работой, недостающие модули, проблемы владельца найдено / закрыто, открытые стопы; график на дашборде, «Статистика») | [PROGRESS.tsv](PROGRESS.tsv); строку дня пишет Claude при каждом переносе: `python tools/mod/progress_snapshot.py --write` (с `--audit <field-audit.tsv>` после нового аудита полей) |
 | Правила сборки, проверки, нагрузки | [../ENNORATH_FACTION_PLAN.md](../ENNORATH_FACTION_PLAN.md) |
 | Промт для второго агента | `workspace/ennorath-audit/PROMPT-agent-B.md` (в Git не входит) |
 | Инструменты аудита (дизассемблер RW, выписка INI, охват) | `workspace/ennorath-audit/tools/` (в Git не входят), `tools/mod/` (входят) |
