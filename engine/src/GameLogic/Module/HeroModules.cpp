@@ -845,7 +845,7 @@ void AttributeModifierAuraUpdate::upgradeImplementation()
 }
 
 // RW 0x89F42D
-UpdateSleepTime AttributeModifierAuraUpdate::update()
+	UpdateSleepTime AttributeModifierAuraUpdate::update()
 {
 	Object *obj = getObject();
 	GameLogic &logic = obj->logic();
@@ -865,6 +865,12 @@ UpdateSleepTime AttributeModifierAuraUpdate::update()
 	{
 		return next;
 	}
+	// RW 0x89F4CA .. 0x89F4D5: eax = [esi+4] = esi->m_template (Thing+4), then the dword at eax+0x10C is shifted right by 28 and masked to bit 0 — that is bit 28 of
+	// m_kindOf word 1 (word index 1, bit 28, TheKindOfNames index 1*32+28 = 60 = WALK_ON_TOP_OF_WALL). This "special" flag skips the ALLIES relationship filter
+	// (RW 0x89F61F .. 0x89F62A) and makes the scan use the object's bounding radius instead of Range (RW 0x89F63C .. 0x89F655).
+	static const int kSpecialAuraBit = 1 * 32 + 28;
+	const ObjectTemplateInfo &ttInfo = logic.templateInfo(obj->getTemplate());
+	const bool specialAuraSource = (ttInfo.kindOf[kSpecialAuraBit >> 5] & (1u << (kSpecialAuraBit & 31))) != 0;
 	Pulse pulse;
 	pulse.source = obj;
 	if (d->m_antiCategory != 0 && !d->m_bonusName.empty())
@@ -875,18 +881,22 @@ UpdateSleepTime AttributeModifierAuraUpdate::update()
 		pulse.antiExpire = logic.getFrame() + (duration != 0 ? duration : 999999u);
 	}
 	static const int kWalkOnWall = ObjectTemplateInfoBuilder::kindOfIndex("WALK_ON_TOP_OF_WALL");
-	if (kWalkOnWall >= 0 && obj->isKindOf((unsigned)kWalkOnWall))
+	if (kWalkOnWall >= 0 && obj->isKindOf((unsigned)kWalkOnWall) && !specialAuraSource)
 	{
 		logic.noteStop("[S-856] AttributeModifierAuraUpdate: a WALK_ON_TOP_OF_WALL source (geometry radius, no relationship filter; RW 0x89F5F8) is not ported: Range is used");
 	}
 	++m_pulses;
 	if (!d->m_affectContainedOnly)
 	{
-		// RW 0x89F676: ThePartitionManager within Range (or the geometry radius of a WALK_ON_TOP_OF_WALL source, S-856), distance type 0 (FROM_CENTER_2D), sort mode 1
-		// (near to far, the STLport introsort: lane MODULES-2), with the filters RW 0xC10E20 (not effectively dead), RW 0xC1D660 (not the source), RW 0xC0F374 (the
-		// same Object + 0x458 bit 3 as the source: never set here, S-856), the relationship filter RW 0xC11DC0 (enemies 1 / allies 4, RW 0x89F610) and the ObjectFilter
-		// for the owner (RW 0xBE4CC8); an applied modifier can grant an upgrade at once (a CostModifierUpgrade appends to the player's ordered list), so the order is state
+		// RW 0x89F676: ThePartitionManager within Range (or the geometry radius for the special source, RW 0x89F63C .. 0x89F655), distance type 0 (FROM_CENTER_2D),
+		// sort mode 1 (near to far, the STLport introsort: lane MODULES-2), with the filters RW 0xC10E20 (not effectively dead), RW 0xC1D660 (not the source),
+		// RW 0xC0F374 (the same Object + 0x458 bit 3 as the source: never set here, S-856), the relationship filter RW 0xC11DC0 (enemies 1 / allies 4, RW 0x89F610;
+		// skipped for the special source when not targeting enemies, RW 0x89F61F .. 0x89F62A) and the ObjectFilter for the owner (RW 0xBE4CC8); an applied modifier
+		// can grant an upgrade at once (a CostModifierUpgrade appends to the player's ordered list), so the order is state
 		const Player *owner = obj->getControllingPlayer();
+		// RW 0x89F63C .. 0x89F655: radius = m_special ? bounding radius : data->Range. The bounding-radius path is S-856 (WALK_ON_TOP_OF_WALL); TAINT/ElvenWood area
+		// objects use Range (matching onDelete's clear at RW 0x89EEA9 with Range, not bounding radius). Keep Range for all non-S-856 sources.
+		const float scanRadius = d->m_range;
 		PartitionFilterFn targets([&](Object &o) {
 			if (o.isEffectivelyDead() || &o == obj)
 			{
@@ -894,16 +904,32 @@ UpdateSleepTime AttributeModifierAuraUpdate::update()
 			}
 			if (!d->m_affectGood && !d->m_affectEvil)
 			{
-				const Relationship rel = obj->getRelationship(o);
-				if (d->m_targetEnemy ? rel != ENEMIES : rel != ALLIES)
+				// RW 0x89F605 .. 0x89F62A: TargetEnemy links the enemy filter; non-TargetEnemy links the allies filter only when neither the
+				// special-source bit (KindOf word 1 bit 28 = WALK_ON_TOP_OF_WALL, S-856) nor a terrain condition (TAINT=bit1/ELVEN_WOOD=bit2) is set.
+				// Terrain-conditional auras (e.g. neutral ElvenGrove) defer the friendly/foe decision to affect(), which checks the taint cell's
+				// area owner against the target's relationship (RW 0x89F200 .. 0x89F271).
+				constexpr std::uint32_t kTerrainCondMask = 2u | 4u; // TAINT | ELVEN_WOOD
+				const bool skipAllyFilter = specialAuraSource || (d->m_requiredConditions & kTerrainCondMask) != 0;
+				if (d->m_targetEnemy)
 				{
-					return false;
+					if (obj->getRelationship(o) != ENEMIES)
+					{
+						return false;
+					}
+				}
+				else if (!skipAllyFilter)
+				{
+					// RW 0x89F61F: plain leadership/ally auras require ALLIES relationship.
+					if (obj->getRelationship(o) != ALLIES)
+					{
+						return false;
+					}
 				}
 			}
 			return !d->m_objectFilter || ObjectFilterMatch::allows(logic, *d->m_objectFilter, o, owner);
 		});
 		std::vector<Object *> hits;
-		for (const PartitionHit &hit : logic.partition().iterateObjectsInRange(*obj->getPosition(), d->m_range, FROM_CENTER_2D, { &targets }, ITER_SORTED_NEAR_TO_FAR))
+		for (const PartitionHit &hit : logic.partition().iterateObjectsInRange(*obj->getPosition(), scanRadius, FROM_CENTER_2D, { &targets }, ITER_SORTED_NEAR_TO_FAR))
 		{
 			if (!hit.object->isDestroyed())
 			{
