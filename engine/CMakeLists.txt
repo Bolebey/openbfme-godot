@@ -1350,6 +1350,8 @@ add_executable(openbfme_tests
     tests/test_local_47.cpp
     # lane LOCAL-48 (held objects: grabbed orc follows troll hand bone, torn-off tree W3DTreeDraw staticModel, issue #404 / P-81)
     tests/test_local_48.cpp
+    # lane LOCAL-61 (P-121: stunned unit does not act/attack/move in AIUpdateInterface::update, RW 0x669652 / BFME2 0x0026A05D, issue #482)
+    tests/test_local_61.cpp
     # lane LOCAL-27 (bridges as retail: Bridge block, damage models, towers, scaffold, radar color, issue #189)
     tests/test_local_27.cpp
     # lane LOCAL-33 (castle gates and 'man the walls' as retail: GateProxyBehavior, ManTheWallsSpecialPower, issue #283)
