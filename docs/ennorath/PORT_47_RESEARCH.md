@@ -298,3 +298,21 @@ This validates the actual test source and engine library on bc66c72f, but is
 explicitly NOT the standard all-tests executable. Its compilation continues;
 standard `openbfme_tests -tc="PORT-47*"`, the broad neighbours and FULL remain
 queued and are not claimed passed. No game-dependent skip counts as a pass.
+
+## Focused neighbours and PR
+
+On bc66c72f, a second temporary runner links the unchanged source objects from
+`test_local_21.cpp`, `test_upgrade_modules.cpp`, `test_w3d_draw_runtime.cpp`,
+`test_w3d_secondary_texture.cpp` and the new `test_port_47.cpp` against the same
+newly built core:
+
+```
+[doctest] test cases:   54 |   54 passed | 0 failed | 0 skipped
+[doctest] assertions: 1732 | 1732 passed | 0 failed |
+[doctest] Status: SUCCESS!
+```
+
+PR: https://github.com/Gleb302596555/openbfme-godot/pull/494 . It explicitly
+states that this is focused-object validation, not a completed standard
+all-tests build or FULL run. Standard PORT-47, broad neighbours and FULL remain
+in the already-running queue. Do not land on the focused result alone.
