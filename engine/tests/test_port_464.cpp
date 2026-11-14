@@ -34,7 +34,7 @@ const char kSkirmishAIData[] = "SkirmishAIData TheSkirmishAIData\nEnd\n";
 // the shape of Ennorath 1.9.8.2's AngmarDurmarth (data/ini/object/evilfaction/units/angmar/angmardurmarth.ini: OCLSpecialPower SpecialAbilityTrolldesNordens,
 // OCL OCL_SpawnSummonRogash, and AISpecialPowerUpdate RoyalGuardAI, SpecialPowerAIType = AI_SPECIAL_POWER_TARGETAOE_SUMMON): the summoner, the hero its
 // list creates and a victim that does not fight back
-const char kObjects[] =
+const char kObjectsTemplate[] =
 	"SpecialPower Port464Summon\n"
 	"  Enum = SPECIAL_SPELL_BOOK_MEN_OF_DALE_ALLIES\n"
 	"  ReloadTime = 1000\n"
@@ -54,8 +54,8 @@ const char kObjects[] =
 	"Object Port464Summoner\n"
 	"  KindOf = INFANTRY SELECTABLE HERO\n"
 	"  Geometry = CYLINDER\n"
-	"  GeometryMajorRadius = 8\n"
-	"  GeometryMinorRadius = 8\n"
+	"  GeometryMajorRadius = 1\n"
+	"  GeometryMinorRadius = 1\n"
 	"  GeometryHeight = 20\n"
 	"  ArmorSet\n"
 	"    Conditions = None\n"
@@ -85,8 +85,8 @@ const char kObjects[] =
 	"Object Port464Helper\n"
 	"  KindOf = INFANTRY SELECTABLE CAN_ATTACK HERO\n"
 	"  Geometry = CYLINDER\n"
-	"  GeometryMajorRadius = 8\n"
-	"  GeometryMinorRadius = 8\n"
+	"  GeometryMajorRadius = 1\n"
+	"  GeometryMinorRadius = 1\n"
 	"  GeometryHeight = 20\n"
 	"  ArmorSet\n"
 	"    Conditions = None\n"
@@ -107,14 +107,14 @@ const char kObjects[] =
 	"  LocomotorSet\n"
 	"    Locomotor = WalkerLoco\n"
 	"    Condition = SET_NORMAL\n"
-	"    Speed = 55\n"
+	"    Speed = 1\n"
 	"  End\n"
 	"End\n"
 	"Object Port464Victim\n"
 	"  KindOf = INFANTRY SELECTABLE\n"
 	"  Geometry = CYLINDER\n"
-	"  GeometryMajorRadius = 8\n"
-	"  GeometryMinorRadius = 8\n"
+	"  GeometryMajorRadius = 1\n"
+	"  GeometryMinorRadius = 1\n"
 	"  GeometryHeight = 20\n"
 	"  ArmorSet\n"
 	"    Conditions = None\n"
@@ -160,7 +160,9 @@ struct SummonFx : combattest::CombatWorld
 	Object *helper = nullptr;
 	Object *victim = nullptr;
 
-	SummonFx()
+	// the helper's weapon is the only per-world difference: RW 0x9EB961 branches on it (melee: RW 0x9EBACA's own position, ranged: RW 0x9EBB4F's
+	// path goal), and the helper must stay the template the OCL creates so the name lookup RW 0x99316A finds it
+	explicit SummonFx(const char *helperWeapon = "SwordWeapon")
 	{
 		TheSpecialPowerStore = &powers;
 		TheCommandStore = &commands;
@@ -170,7 +172,10 @@ struct SummonFx : combattest::CombatWorld
 		w.fx.env.blocks.registerBlock("CommandButton", [](INI *ini) { CommandStore::parseCommandButtonDefinitionGlobal(ini); });
 		w.fx.env.blocks.registerBlock("ObjectCreationList", [](INI *ini) { ObjectCreationListStore::parseObjectCreationListDefinitionGlobal(ini); });
 		SpecialPowerModules::registerAll(w.modules);
-		const std::string err = w.load(kObjects);
+		std::string objects = kObjectsTemplate;
+		const std::string from = "PRIMARY SwordWeapon";
+		objects.replace(objects.find(from), from.size(), std::string("PRIMARY ") + helperWeapon + "\n");
+		const std::string err = w.load(objects);
 		REQUIRE_MESSAGE(err.empty(), err);
 		aiStore.registerBlocks(aiEnv.blocks);
 		INI ini(aiEnv);
@@ -199,7 +204,19 @@ struct SummonFx : combattest::CombatWorld
 		REQUIRE(summoner);
 		REQUIRE(helper);
 		REQUIRE(victim);
+	}
+
+	// RW 0x8B714F runs on the module's first update and leaves it inactive when no command set holds the button (the synthetic world has no
+	// command set), so the test initialises it first, as if the set held Command_Port464Summon; then the AI's own first update runs
+	AISpecialPowerUpdate *armPower()
+	{
+		AISpecialPowerUpdate *p = powerOf(summoner);
+		REQUIRE(p);
+		p->initAsIfInCommandSetForTest();
+		REQUIRE(p->active());
+		REQUIRE(p->decision());
 		frames(2);
+		return p;
 	}
 };
 } // namespace
@@ -208,11 +225,7 @@ TEST_CASE("PORT-464: a computer player's summoned helper walks to the caster's v
 {
 	SummonFx f;
 	f.scene(100.0f, 140.0f, 300.0f, 300.0f);
-	AISpecialPowerUpdate *power = powerOf(f.summoner);
-	REQUIRE(power);
-	power->initAsIfInCommandSetForTest();
-	REQUIRE(power->active());
-	REQUIRE(power->decision());
+	AISpecialPowerUpdate *power = f.armPower();
 
 	f.summoner->getAIUpdateInterface()->setCurrentVictim(f.victim); // RW 0x668303 reads it
 	f.frames(2);
@@ -227,30 +240,43 @@ TEST_CASE("PORT-464: a computer player's summoned helper walks to the caster's v
 	CHECK(goal.y == doctest::Approx(300.0f).epsilon(0.001)); // tolerance: as above
 }
 
-TEST_CASE("PORT-464: a helper already within the 5 units of RW 0xC69574 is not moved, and a caster without a victim steers nothing (RW 0x668303)")
+TEST_CASE("PORT-464: a helper already close enough to the victim is not re-ordered, and a caster without a victim steers nothing (RW 0x9EB961, 0xC69574, 0xBE5AF8, 0x668303)")
 {
+	// the melee branch (RW 0x9EBACA): the helper's own position against the victim, 5 units (RW 0xC69574). The helper stands 3 units away; an order
+	// to the spot it already holds selects its weapon (before any order a synthetic helper has none), so RW 0x9EB961's weapon test takes the melee branch
 	SummonFx f;
-	// the helper stands 3 units from the victim: below RW 0xC69574's 25.0 squared distance
 	f.scene(297.0f, 300.0f, 300.0f, 300.0f);
-	AISpecialPowerUpdate *power = powerOf(f.summoner);
-	REQUIRE(power);
-	power->initAsIfInCommandSetForTest();
-	REQUIRE(power->active());
-
+	f.armPower();
+	Coord3D own{ 200.0f, 140.0f, 0.0f };
+	f.helper->getAIUpdateInterface()->aiMoveToPosition(own, CMD_FROM_PLAYER);
+	f.frames(1);
 	f.summoner->getAIUpdateInterface()->setCurrentVictim(f.victim);
 	f.frames(2);
 	const Coord3D kept = f.helper->getAIUpdateInterface()->machineGoalPosition();
-	CHECK(kept.x == doctest::Approx(297.0f).epsilon(0.001)); // tolerance: no order was given, so the goal is the helper's own placement float
-	CHECK(kept.y == doctest::Approx(300.0f).epsilon(0.001)); // tolerance: the helper's own placement float
+	CHECK(kept.x == 200.0f); // the helper's own order, not the victim's position (300)
+	CHECK(kept.y == 140.0f);
 
-	// no victim: RW 0x9EBADB's RW 0x668303 answers null and the frame steers nothing
-	SummonFx g;
+	// the goal branch (RW 0x9EBB4F): a helper with a weapon of range (BowWeapon) is tested by its path goal, 30 units (RW 0xBE5AF8). Its order sends
+	// it to a spot 10 units from the victim, so the frame issues no second order and the goal stays at that spot, not at the victim's position
+	SummonFx g("BowWeapon");
 	g.scene(100.0f, 140.0f, 300.0f, 300.0f);
-	AISpecialPowerUpdate *second = powerOf(g.summoner);
-	REQUIRE(second);
-	second->initAsIfInCommandSetForTest();
-	g.frames(2);
-	const Coord3D idle = g.helper->getAIUpdateInterface()->machineGoalPosition();
-	CHECK(idle.x == doctest::Approx(100.0f).epsilon(0.001)); // tolerance: the helper's own placement float, no order was given
-	CHECK(idle.y == doctest::Approx(140.0f).epsilon(0.001)); // tolerance: the helper's own placement float
+	g.armPower();
+	Coord3D far{ 290.0f, 300.0f, 0.0f };
+	g.helper->getAIUpdateInterface()->aiMoveToPosition(far, CMD_FROM_PLAYER);
+	g.frames(1);
+	g.summoner->getAIUpdateInterface()->setCurrentVictim(g.victim);
+	g.frames(1);
+	const Coord3D near = g.helper->getAIUpdateInterface()->machineGoalPosition();
+	CHECK(near.x == 290.0f); // the helper's own order, not the victim's position (300)
+	CHECK(near.y == 300.0f);
+
+	// no victim: RW 0x9EBADB's RW 0x668303 answers null and the frame steers nothing, so the helper never gets a goal
+	SummonFx h;
+	h.scene(100.0f, 140.0f, 300.0f, 300.0f);
+	h.armPower();
+	h.frames(2);
+	const Coord3D idle = h.helper->getAIUpdateInterface()->machineGoalPosition();
+	CHECK(idle.x == 0.0f);
+	CHECK(idle.y == 0.0f);
 }
+
