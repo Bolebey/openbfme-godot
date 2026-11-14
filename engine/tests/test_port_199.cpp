@@ -119,9 +119,9 @@ TEST_CASE("PORT-199: a contained target is delivered to through its producer's h
 	CHECK_FALSE(member->testStatus(0x42)); // RW 0x89FD38: the reservation clears on the target
 }
 
-TEST_CASE("PORT-199: a producer-linked target reserves the producer with itself and delivers into the producer's horde (RW 0x8A002C / RW 0x8A0037, RW 0x89FD77)")
+TEST_CASE("PORT-199: a producer-linked target reserves its producer and the upgrade lands in the producer's horde (RW 0x8A002C / RW 0x8A0037, RW 0x89FD77, RW 0x871A90)")
 {
-	Port199World w;
+	Port199World w(true); // DeliverUpgrade = Yes: the search, the only caller of the pair reservation, runs on its own
 	Object *porter = w.unit("P199Porter", 'A', 300, 300);
 	Object *horde = w.unit("P199Horde", 'A', 320, 300);
 	Object *member = w.unit("P199Soldier", 'A', 321, 300);
@@ -132,25 +132,22 @@ TEST_CASE("PORT-199: a producer-linked target reserves the producer with itself 
 	REQUIRE(linked);
 	REQUIRE(horde->getContain());
 	REQUIRE(horde->getContain()->addToContain(member));
-	linked->setProducer(horde); // a producer that is not a structure (Thing + 0x108 bit 0x80 is clear)
+	linked->setProducer(horde); // a producer that is not a structure (Thing + 0x108 bit 0x80 is clear, RW 0x89FFF1)
 	REQUIRE(linked->getContainedBy() == nullptr);
+	REQUIRE(linked->affectedByUpgrade(TheUpgradeCenter->findUpgrade("Upgrade_Barracks2")));
 
 	const UpgradeTemplate *upgrade = TheUpgradeCenter->findUpgrade("Upgrade_Barracks2");
 	REQUIRE(upgrade);
 	porter->giveUpgrade(upgrade);
-	SpecialAbilityUpdate *ability = w.porterAbility(porter);
-	REQUIRE(ability);
-	ability->initiateIntentToDoSpecialPower(ability->abilityData()->m_specialPowerTemplate, linked, nullptr, 0, 0);
-
-	// The search reserves the pair before the ability starts (RW 0x8A0029 sets the linked object, RW 0x8A0035 the
-	// candidate), so the reservation is there the moment the order lands.
-	CHECK(linked->testStatus(0x42));
-	CHECK(horde->testStatus(0x42));
-
+	w.logic->partition().update();
 	w.frames(30);
-	CHECK(horde->hasUpgrade(upgrade));        // RW 0x8A0243 -> RW 0x89FD77 -> slot 0xB8
+
+	CHECK(horde->hasUpgrade(upgrade));        // RW 0x8A0243 -> RW 0x89FD77 -> slot 0xB8 (RW 0x871AE5)
 	CHECK(member->hasUpgrade(upgrade));       // RW 0x871B08: the horde passes it to its affected members
 	CHECK_FALSE(linked->hasUpgrade(upgrade)); // the upgrade lands in the producer's horde, not on the linked object
+	// RW 0x8A002C reserved the producer together with the candidate, and the release RW 0x89FD41 clears the target and
+	// its container only, never the producer: the horde keeps the reservation the search gave it.
+	CHECK(horde->testStatus(0x42));
 }
 
 TEST_CASE("PORT-199: the delivering porter leaves the selection and the recipient flashes (RW 0x8A02A8 -> RW 0x625759, RW 0x8A02A3 -> RW 0x675749, colour RW 0xBE53BC)")
@@ -212,7 +209,6 @@ TEST_CASE("PORT-199: the automatic search wakes every frame, takes the nearest e
 	REQUIRE(horde->getContain());
 	REQUIRE(horde->getContain()->addToContain(member));
 	member->setProducer(horde);
-	far->setProducer(horde);
 
 	const UpgradeTemplate *upgrade = TheUpgradeCenter->findUpgrade("Upgrade_Barracks2");
 	REQUIRE(upgrade);
