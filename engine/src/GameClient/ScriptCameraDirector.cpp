@@ -385,6 +385,7 @@ void ScriptCameraDirector::update(double ms, std::uint32_t presentedFrame, doubl
 	}
 	m_zoom.update(ms);
 	m_pitch.update(ms);
+	m_focal.update(ms); // lane PORT-439: the viewers' focal-length angle (the game's camera steps its own in TacticalCamera::update)
 	if (m_notificationMs > 0.0)
 	{
 		m_notificationMs -= ms;

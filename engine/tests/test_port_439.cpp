@@ -145,7 +145,7 @@ TEST_CASE("PORT-439 focal length: the view's conversions (RW 0x8DAEEE, RW 0x8DAF
 	// RW 0x8DAEEE: 2 * atan(12 / mm), and mm <= 0 answers pi / 2 (RW 0xBD89D0 = 1.5707964)
 	CHECK(TacticalCamera::focalLengthToFov(0.0f) == 1.5707964f);
 	CHECK(TacticalCamera::focalLengthToFov(-5.0f) == 1.5707964f);
-	CHECK(TacticalCamera::focalLengthToFov(50.0f) == doctest::Approx(0.4713475f).epsilon(1e-5)); // tolerance: 2 * atan(0.24) at double precision, stored as float32 (the retail value is not pinned to a bit)
+	CHECK(TacticalCamera::focalLengthToFov(50.0f) == doctest::Approx(0.47108996f).epsilon(1e-6)); // tolerance: 2 * atan(12 / 50) evaluated in double (x87 fpatan, RW 0x8DAF31) and stored as float32
 	// the defaults: the view is 50 degrees = 2 * atan(12 / 28.8991..) (View + 0x6C, RW 0xBDD410)
 	CHECK(degrees(TacticalCamera::focalLengthToFov(TacticalCamera::fovToFocalLength(0.8726646f))) == doctest::Approx(50.0f).epsilon(1e-4)); // tolerance: the round trip through the float32 mm value (View + 0x6C is the pooled 50 degrees)
 
