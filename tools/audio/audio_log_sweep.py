@@ -43,14 +43,7 @@ def main(argv=None):
         print('%7d  %s' % (n, k))
 
     print('\n== outcomes')
-    def outcome_kind(outcome):
-        if outcome.startswith(('started', 'failed')):
-            return outcome.split(' Data')[0]
-        if outcome.startswith('level: '):
-            return 'level: ...'  # PORT-178: every looping 3D voice writes its level once per 150 audio steps, each line with its own numbers
-        return outcome
-
-    c = collections.Counter(outcome_kind(r['outcome']) for r in rows)
+    c = collections.Counter(r['outcome'].split(' Data')[0] if r['outcome'].startswith(('started', 'failed')) else r['outcome'] for r in rows)
     for k, n in c.most_common(a.top):
         print('%7d  %s' % (n, k))
 
