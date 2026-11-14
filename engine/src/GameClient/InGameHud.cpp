@@ -331,7 +331,7 @@ bool InGameHud::boot(std::string *error)
 		const bool shift = (m_keyState & KEY_STATE_SHIFT) != 0; // PORT-426: RW 0x940BB3
 		whenHeld([this, slot, inPalantir, shift]() {
 			const auto worldContext = enterContext(); // the movie's own update and invoke_at reach this outside the scoped entry points (BuildAssistant reads TheCommandStore)
-			m_bar->pressButton(slot, inPalantir, shift);
+			dispatchPalantirButtonPress(m_helpBox, *m_bar, slot, inPalantir, shift); // PORT-189 drops the hovered tooltip, PORT-426 passes Shift
 		});
 	});
 	// lane CAMPUI-1: a stance item of the stance toggle's radial (RW 0x96F53C: MSG_CHANGE_STANCE with the item's stance)
@@ -348,7 +348,7 @@ bool InGameHud::boot(std::string *error)
 		const bool shift = (m_keyState & KEY_STATE_SHIFT) != 0;
 		whenHeld([this, slot, inPalantir, shift]() {
 			const auto worldContext = enterContext();
-			m_bar->rightPressButton(slot, inPalantir, shift);
+			dispatchPalantirRightButtonPress(m_helpBox, *m_bar, slot, inPalantir, shift);
 		});
 	});
 	// lane SPELL-2: the spell book's press and the store button of the Palantir
@@ -1432,6 +1432,22 @@ bool InGameHud::pressSpell(int buttonIndex)
 	const bool ok = m_spellBar.press(buttonIndex, local->getPlayerIndex(), out);
 	send(out);
 	return ok;
+}
+
+// lane PORT-189 (issue #455): ParasiticInGameCommandButton::Impl left/right click notifications
+// (RW 0x9D2814 -> 0x9D282D / RW 0x9D288A -> 0x9D28A3 -> RW 0x8079BB -> RW 0x8076CD; DONOR BFME2 Rva005C33DDWindowNotification.cpp).
+// Disabled/unready clicks are already rejected in AptPalantir before these callbacks (RW 0x9D285E / 0x9D28D4),
+// and TOGGLE_STANCE routes to pressToggleStance (RW 0x96FAC6) without reaching this path.
+bool InGameHud::dispatchPalantirButtonPress(InGameHelpBox &helpBox, ControlBar &bar, int slot, bool inPalantir, bool shift)
+{
+	helpBox.dropProvider();
+	return bar.pressButton(slot, inPalantir, shift);
+}
+
+bool InGameHud::dispatchPalantirRightButtonPress(InGameHelpBox &helpBox, ControlBar &bar, int slot, bool inPalantir, bool shift)
+{
+	helpBox.dropProvider();
+	return bar.rightPressButton(slot, inPalantir, shift);
 }
 
 // lane OWNERFIX-1: RW 0x7BC586 (DISABLE_INPUT) / RW 0x7BC5E9 (ENABLE_INPUT); see InGameUI::applyScriptInput
