@@ -486,6 +486,7 @@ include(cmake/Port172.cmake)    # PORT-172: the skirmish AI position sampler hol
 include(cmake/Port191.cmake)    # PORT-191: AutoAbilityBehavior without a Query and its unported checks (issue #458; OPENBFME_PORT191_TESTS)
 include(cmake/Port430.cmake)    # PORT-430: a model texture named `None` is a name retail never opens (issue 430; OPENBFME_PORT430_TESTS)
 include(cmake/Port433.cmake)    # PORT-433: Ithilien grove (ElvenWood) area bonuses in the painted taint zone (issue #433; OPENBFME_PORT433_TESTS)
+include(cmake/Port428.cmake)    # PORT-428: the aerial path's 3D would-collide filter (OPENBFME_PORT428_TESTS)
 add_library(openbfme_core STATIC
     ${OPENBFME_PLAY2_SOURCES}
     ${OPENBFME_APT_SOURCES}
@@ -951,6 +952,7 @@ add_executable(openbfme_tests
     ${OPENBFME_PORT145_TESTS}
     ${OPENBFME_PORT5_TESTS}
     ${OPENBFME_PORT430_TESTS}
+    ${OPENBFME_PORT428_TESTS}
     ${OPENBFME_PORT4_TESTS}
     ${OPENBFME_PORT8_TESTS}
     ${OPENBFME_PORT11_TESTS}
