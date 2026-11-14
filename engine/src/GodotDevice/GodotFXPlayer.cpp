@@ -451,6 +451,7 @@ void FXPlayer::updateClientEffects()
 							 "\tALPHA = t.a * COLOR.a;\n"
 							 "}\n");
 			m_scorchMaterial->set_shader(shader);
+			m_scorchMaterial->set_render_priority(FXParticleSystem::kScorchRenderPriority);
 			m_scorchNode = memnew(MeshInstance3D);
 			m_scorchNode->set_name("Scorches");
 			m_scorchNode->set_material_override(m_scorchMaterial);
@@ -566,6 +567,7 @@ void FXPlayer::updateClientEffects()
 			Ref<ShaderMaterial> mat;
 			mat.instantiate();
 			mat->set_shader(m_decalShaders[kv.first.shader]);
+			mat->set_render_priority(FXParticleSystem::kScorchRenderPriority);
 			mat->set_shader_parameter("decal_tex", particleTexture(kv.first.name));
 			node->set_material_override(mat);
 			node->set_cast_shadows_setting(GeometryInstance3D::SHADOW_CASTING_SETTING_OFF);

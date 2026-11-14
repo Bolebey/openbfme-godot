@@ -119,6 +119,7 @@ public:
 	// bib's feathered edge, and write no depth (INFERENCE, stop S-4974: retail's terrain render object draws floors; the module only passes the fade
 	// of a dead object's floor on, FloorFadeRateOnObjectDeath). Off by default.
 	void Set_Floor_Blend(bool on) { FloorBlend = on; }
+	bool Floor_Blend() const { return FloorBlend; }
 	// lane SELWALL-1: the surfaces this factory builds belong to a wall top or bridge model (W3DShaderKey::SelectionDecals: its opaque surfaces draw the
 	// selection's merge decals); off by default
 	void Set_Selection_Decals(bool on) { SelectionDecals = on; }

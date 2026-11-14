@@ -115,8 +115,8 @@ const char *FogOmissionText()
 
 BatchOrder OrderForBatch(size_t rank, size_t count)
 {
-	// P-101: material priorities kParticleRenderPriorityMin (-122) .. -9; the six below belong to the terrain decals (ParticleDraw.h). Before, the
-	// particles began at -128 and the decals' -150 .. -145 were refused by Godot (left at 0, drawn over every particle)
+	// P-100 / P-101: material priorities kParticleRenderPriorityMin (1) .. kParticleRenderPriorityMax (114); terrain decals (-128..-122) and W3D
+	// blended/floor surfaces (-121..-23) draw before all particles, and >0 prevents default-0 materials from painting over particles
 	const size_t levels = (size_t)(kParticleRenderPriorityMax - kParticleRenderPriorityMin + 1);
 	BatchOrder o;
 	if (count <= levels)

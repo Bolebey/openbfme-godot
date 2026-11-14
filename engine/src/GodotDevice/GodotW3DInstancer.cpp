@@ -954,7 +954,8 @@ std::shared_ptr<W3DInstancer::MeshGpu> W3DInstancer::build_mesh(const MeshModelC
 		if (blends && surf.Sorted)
 		{
 			gpu->HasSorted = true;
-			gpu->SortPriorities.insert(std::clamp(surf.Pass - std::min(surf.SortLevel, 31) * 4, -128, 127)); // the render_priority the material gets
+			const bool floorBlend = Materials && Materials->Floor_Blend();
+			gpu->SortPriorities.insert(W3D_Surface_Render_Priority(surf.SortLevel, surf.Pass, floorBlend)); // the render_priority the material gets
 		}
 		if (surf.Kind == MATERIAL_FX || (surf.Kind == MATERIAL_CLASSIC && surf.State.Blend == W3D_GODOT_BLEND_OPAQUE)) gpu->HasOpaque = true;
 		Array arrays;

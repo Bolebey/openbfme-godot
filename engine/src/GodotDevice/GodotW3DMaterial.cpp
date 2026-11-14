@@ -1066,7 +1066,7 @@ W3DMaterialResult W3DMaterialFactory::Create(const MeshRenderData &mesh, const M
 	}
 	if (key.NormalMap) mat->set_shader_parameter("w3d_normal", normalTex);
 	if (key.HouseColor) mat->set_shader_parameter("w3d_hc_tex", hcTex);
-	const int priority = std::clamp(surf.Pass - std::min(surf.SortLevel, 31) * 4, -128, 127);
+	const int priority = W3D_Surface_Render_Priority(surf.SortLevel, surf.Pass, FloorBlend);
 	mat->set_render_priority(priority);
 
 	for (int s = 0; s < 2; ++s)
