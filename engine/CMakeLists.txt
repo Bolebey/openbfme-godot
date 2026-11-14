@@ -481,6 +481,7 @@ include(cmake/Bldfx1.cmake)     # FEAT-BLDFX-1: the FXList nugget sinks, scorche
 include(cmake/Decompfix1109.cmake) # DECOMPFIX-1109: FLEECHASE-1, ENTERADJUST-1, REQTHROTTLE-1 (OPENBFME_DECOMPFIX1109_TESTS)
 include(cmake/Port5.cmake)      # PORT-5: the bird's deferred ability target (OPENBFME_PORT5_TESTS)
 include(cmake/Port172.cmake)    # PORT-172: the skirmish AI position sampler holds no gone object (issue #425; OPENBFME_PORT172_TESTS)
+include(cmake/Port194.cmake)    # PORT-194: the crowd response of the unit voice, RotWK's CrowdResponse parser and threshold rule (issue #461; OPENBFME_PORT194_TESTS)
 add_library(openbfme_core STATIC
     ${OPENBFME_PLAY2_SOURCES}
     ${OPENBFME_APT_SOURCES}
@@ -909,6 +910,7 @@ add_executable(openbfme_tests
     ${OPENBFME_PLAY2_TESTS}
     ${OPENBFME_PORT427_TESTS}
     ${OPENBFME_PORT437_TESTS}
+    ${OPENBFME_PORT194_TESTS}
     ${OPENBFME_PORT133_TESTS}
     ${OPENBFME_PORT166_TESTS}
     ${OPENBFME_PORT137_TESTS}
