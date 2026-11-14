@@ -1,0 +1,255 @@
+#!/usr/bin/env python3
+"""Per-PR checker on a Colab sandbox (owner, 2026-11-14): every open fork PR is built alone on today's main and tested,
+before any batch, so a red test or a moved pin is pinned to its PR at once (PROCESS 7a).
+
+    python3 tools/colab/pr_checker.py [--once] [--pr N] [--no-comment]
+
+Runs from a clone on the sandbox (default /content/sandbox/openbfme-godot). For each open PR whose head was not
+checked yet (state in /content/prcheck/state.json):
+ 1. tree /content/prcheck/wt (one reused worktree, its build dir stays, so builds are incremental + ccache):
+    origin/main, then `git merge` of the PR head; a conflict is reported with its files;
+ 2. tools/fragments.py check, a stop id the PR adds that main already has, a STOPS / NIGHT_WATCH / README edit
+    (should be fragments since 2026-11-14);
+ 3. tools/colab/build_tests.sh (all cores); a compile error ends the check;
+ 4. the PR's own tests (the prefixes of the TEST_CASEs it adds, e.g. `PORT-206*`) and the base set
+    (BASE below) in parallel; a base test is compared with main's result for the same main commit (cached), so
+    only what the PR changes is reported; perf1 / uber1 red where main is green = the PR moves a pin;
+ 5. open PRs that change the same files;
+ 6. a comment on the PR (marker <!-- prcheck -->) and /content/prcheck/reports/<pr>-<sha>.md.
+The GitHub token is the sandbox's git credential (~/.git-credentials), never printed.
+"""
+from __future__ import annotations
+
+import argparse
+import concurrent.futures as cf
+import json
+import os
+import re
+import subprocess
+import sys
+import time
+from pathlib import Path
+
+GH = "Gleb302596555/openbfme-godot"
+REPO = Path(os.environ.get("PRCHECK_REPO", "/content/sandbox/openbfme-godot"))
+HOME = Path(os.environ.get("PRCHECK_HOME", "/content/prcheck"))
+WT = HOME / "wt"
+STATE = HOME / "state.json"
+REPORTS = HOME / "reports"
+BASE = ["ENNORATH scenario*", "module coverage*", "modgap2*", "mapobj*", "logic retail: the PlayerTemplate*",
+        "save4a retail*", "save4b retail*", "move retail*", "perf1*", "uber1*"]
+PINS = {"perf1*", "uber1*"}
+SHARED = ("docs/STOPS.md", "docs/ennorath/NIGHT_WATCH.md", "README.md")
+
+
+def sh(cmd: list[str] | str, cwd: Path = WT, timeout: int | None = None, env: dict | None = None) -> subprocess.CompletedProcess:
+    return subprocess.run(cmd, cwd=cwd, shell=isinstance(cmd, str), capture_output=True, text=True,
+                          encoding="utf-8", errors="replace", timeout=timeout, env=env)
+
+
+def token() -> str:
+    for line in Path.home().joinpath(".git-credentials").read_text().splitlines():
+        m = re.match(r"https://[^:]+:([^@]+)@github\.com", line)
+        if m:
+            return m.group(1)
+    raise SystemExit("prcheck: no github.com credential in ~/.git-credentials")
+
+
+def gh(*args: str) -> str:
+    env = dict(os.environ, GH_TOKEN=token())
+    done = subprocess.run(["gh", *args, "-R", GH], capture_output=True, text=True, encoding="utf-8", errors="replace", env=env)
+    if done.returncode:
+        raise RuntimeError(f"gh {' '.join(args[:2])}: {done.stderr.strip()[:300]}")
+    return done.stdout
+
+
+def load_state() -> dict:
+    return json.loads(STATE.read_text()) if STATE.exists() else {"checked": {}, "main": {}}
+
+
+def save_state(s: dict) -> None:
+    STATE.write_text(json.dumps(s, indent=1))
+
+
+def ensure_tree() -> None:
+    HOME.mkdir(parents=True, exist_ok=True)
+    REPORTS.mkdir(exist_ok=True)
+    if not (WT / ".git").exists():
+        sh(["git", "worktree", "add", "--detach", str(WT), "origin/main"], cwd=REPO).check_returncode()
+
+
+def build() -> tuple[bool, str]:
+    done = sh(["bash", "tools/colab/build_tests.sh"], timeout=3 * 3600)
+    log = done.stdout + done.stderr
+    (HOME / "build.log").write_text(log)
+    if done.returncode:
+        errs = [l for l in log.splitlines() if re.search(r"\berror\b", l)][:12]
+        return False, "\n".join(errs) or log[-2000:]
+    return True, ""
+
+
+def run_test(tc: str) -> tuple[str, str, str]:
+    """(pattern, 'pass'|'fail'|'none', first error lines)."""
+    exe = WT / "engine/build/openbfme_tests"
+    try:
+        done = sh([str(exe), f"-tc={tc}"], timeout=2400, env=agent_env())
+        out = done.stdout + done.stderr
+    except subprocess.TimeoutExpired:
+        return tc, "fail", "timeout 40 min"
+    m = re.search(r"test cases:\s*(\d+)\s*\|\s*(\d+) passed\s*\|\s*(\d+) failed", out)
+    if not m or m.group(1) == "0":
+        return tc, "none", ""
+    errs = "\n".join([l[:220] for l in out.splitlines() if re.search(r"ERROR|FATAL|SIGSEGV|CRASH", l)][:4])
+    return tc, ("fail" if (done.returncode or m.group(3) != "0") else "pass"), errs
+
+
+_ENV: dict | None = None
+
+
+def agent_env() -> dict:
+    global _ENV
+    if _ENV is None:
+        out = sh(["bash", "-c", "source /root/.agent_env 2>/dev/null; env -0"], cwd=HOME).stdout
+        _ENV = dict(kv.split("=", 1) for kv in out.split("\0") if "=" in kv)
+    return _ENV
+
+
+def run_set(patterns: list[str]) -> dict[str, tuple[str, str]]:
+    workers = max(1, (os.cpu_count() or 2) // 2)
+    with cf.ThreadPoolExecutor(workers) as pool:
+        return {tc: (st, err) for tc, st, err in pool.map(run_test, patterns)}
+
+
+def main_baseline(state: dict, main_sha: str) -> dict:
+    """BASE on main itself, once per main commit."""
+    if state["main"].get("sha") == main_sha:
+        return state["main"]["results"]
+    sh(["git", "checkout", "-q", "-f", "--detach", main_sha]).check_returncode()
+    ok, err = build()
+    if not ok:
+        raise RuntimeError(f"main {main_sha[:8]} does not build:\n{err}")
+    res = run_set(BASE)
+    state["main"] = {"sha": main_sha, "results": {k: v[0] for k, v in res.items()}}
+    save_state(state)
+    return state["main"]["results"]
+
+
+def own_tests(diff: str, title: str) -> list[str]:
+    pats = set()
+    for name in re.findall(r'^\+\s*TEST_CASE\("([^"]+)"', diff, re.M):
+        pats.add(re.split(r"[:\s]", name, 1)[0] + "*")
+    m = re.match(r"(Port|Local)\s+(\d+)", title)
+    if m and not pats:
+        pats.add(f"{m.group(1).upper()}-{m.group(2)}*")
+    return sorted(pats)
+
+
+def check_pr(pr: dict, state: dict, main_sha: str, open_prs: list[dict], comment: bool) -> str:
+    n, sha = pr["number"], pr["headRefOid"]
+    base = main_baseline(state, main_sha)
+    sh(["git", "fetch", "-q", "origin", f"+pull/{n}/head:refs/prcheck/{n}"]).check_returncode()
+    sh(["git", "checkout", "-q", "-f", "--detach", main_sha]).check_returncode()
+    lines = [f"<!-- prcheck {sha} -->", f"**Проверка PR #{n}** на `main` {main_sha[:8]}, голова {sha[:8]} (песочница 3, `tools/colab/pr_checker.py`)", ""]
+    merge = sh(["git", "-c", "user.name=prcheck", "-c", "user.email=prcheck@localhost", "merge", "--no-edit", "--no-verify", "-q", f"refs/prcheck/{n}"])
+    if merge.returncode:
+        files = sh(["git", "diff", "--name-only", "--diff-filter=U"]).stdout.split()
+        sh(["git", "merge", "--abort"])
+        lines += [f"❌ **Не вливается в main**: конфликт в {', '.join(f'`{f}`' for f in files) or merge.stderr[:300]}. Влей `origin/main` в свою ветку."]
+        return finish(n, sha, lines, comment, state)
+    changed = sh(["git", "diff", "--name-only", f"{main_sha}..HEAD"]).stdout.split()
+    diff = sh(["git", "diff", f"{main_sha}..HEAD"]).stdout
+    frag = sh([sys.executable, "tools/fragments.py", "check"]) if (WT / "tools/fragments.py").exists() else None
+    if frag and frag.returncode:
+        lines.append(f"❌ Фрагменты: {frag.stdout.strip()[:600]}")
+    shared = [f for f in changed if f in SHARED]
+    if shared:
+        lines.append(f"⚠️ Правит общие таблицы {', '.join(f'`{f}`' for f in shared)}: новые строки — файлами `docs/stops.d/S-<id>.md` и `docs/ennorath/night_watch.d/…`, README не трогать (PROCESS 5.7). Допустимо только закрыть или сузить существующий стоп.")
+    ok, err = build()
+    if not ok:
+        lines += ["❌ **Не собирается**:", "```", err[:3000], "```"]
+        return finish(n, sha, lines, comment, state)
+    lines.append("✅ Собирается (openbfme_tests и GDExtension, GCC).")
+    own = own_tests(diff, pr["title"])
+    res = run_set(own + BASE)
+    for tc in own:
+        st, e = res[tc]
+        mark = {"pass": "✅", "fail": "❌", "none": "⚠️ не найдено ни одного теста по шаблону"}[st]
+        lines.append(f"{mark} свои тесты `{tc}`" + (f"\n```\n{e}\n```" if st == "fail" and e else ""))
+    if not own:
+        lines.append("⚠️ PR не добавляет TEST_CASE: своего теста нет.")
+    worse, better = [], []
+    for tc in BASE:
+        st, e = res[tc]
+        was = base.get(tc)
+        if st == "fail" and was == "pass":
+            worse.append((tc, e))
+        elif st == "pass" and was == "fail":
+            better.append(tc)
+    if worse:
+        lines.append("❌ **Ломает то, что на main зелёное:**")
+        for tc, e in worse:
+            pin = " — **сдвигает пин**: назови причину в PR (владелец перемеряет)" if tc in PINS else ""
+            lines.append(f"- `{tc}`{pin}" + (f"\n```\n{e}\n```" if e else ""))
+    else:
+        reds = [tc for tc in BASE if base.get(tc) == "fail"]
+        lines.append("✅ Базовый набор как на main" + (f" (на main и так красные: {', '.join(f'`{t}`' for t in reds)})" if reds else "") + ".")
+    if better:
+        lines.append(f"ℹ️ Чинит красное на main: {', '.join(f'`{t}`' for t in better)}.")
+    mine = set(changed)
+    overlap = []
+    for other in open_prs:
+        if other["number"] == n:
+            continue
+        common = sorted(mine & {f["path"] for f in other.get("files", [])} - set(SHARED) - {"engine/CMakeLists.txt"})
+        if common:
+            overlap.append(f"- #{other['number']} {other['title'][:80]}: {', '.join(f'`{c}`' for c in common[:6])}")
+    if overlap:
+        lines += ["⚠️ Те же файлы правят открытые PR (при слиянии сверить функции):"] + overlap
+    return finish(n, sha, lines, comment, state)
+
+
+def finish(n: int, sha: str, lines: list[str], comment: bool, state: dict) -> str:
+    body = "\n".join(lines)
+    (REPORTS / f"{n}-{sha[:8]}.md").write_text(body)
+    if comment:
+        gh("pr", "comment", str(n), "--body", body)
+    state["checked"][str(n)] = sha
+    save_state(state)
+    return body
+
+
+def cycle(args) -> int:
+    state = load_state()
+    sh(["git", "fetch", "-q", "origin"], cwd=REPO).check_returncode()
+    main_sha = sh(["git", "rev-parse", "origin/main"], cwd=REPO).stdout.strip()
+    prs = json.loads(gh("pr", "list", "--state", "open", "--limit", "100", "--json", "number,title,headRefOid,headRefName,files,isDraft"))
+    todo = [p for p in prs if (args.pr is None or p["number"] == args.pr) and not p["isDraft"]
+            and state["checked"].get(str(p["number"])) != p["headRefOid"]
+            and not p["headRefName"].startswith(("claude/", "agent/claude/"))]
+    for p in sorted(todo, key=lambda p: p["number"]):
+        t0 = time.time()
+        try:
+            body = check_pr(p, state, main_sha, prs, not args.no_comment)
+            print(f"#{p['number']}: {body.count('❌')} red, {time.time() - t0:.0f}s", flush=True)
+        except Exception as e:  # one PR's failure does not stop the others
+            print(f"#{p['number']}: checker error: {e}", flush=True)
+    return len(todo)
+
+
+def main() -> int:
+    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("--once", action="store_true")
+    ap.add_argument("--pr", type=int)
+    ap.add_argument("--no-comment", action="store_true")
+    args = ap.parse_args()
+    ensure_tree()
+    while True:
+        n = cycle(args)
+        if args.once or args.pr:
+            return 0
+        if not n:
+            time.sleep(600)
+
+
+if __name__ == "__main__":
+    sys.exit(main())

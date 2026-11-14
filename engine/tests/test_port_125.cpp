@@ -19,19 +19,22 @@ TEST_CASE("PORT-125 / P-101: the terrain decal priorities are the six lowest God
 	CHECK(kWaterRenderPriority == -127);
 	CHECK(kRiverRenderPriority == -126);
 	CHECK(kRoadRenderPriority == -125);   // RW 0x4E2ECD
-	CHECK(kScorchRenderPriority == -124); // RW 0x4E2FD0
-	CHECK(kTrackRenderPriority == -123);  // RW 0x4E3003
-	CHECK(kParticleRenderPriorityMin == -122); // RW 0x4E302F: the particles after the tracks
-	CHECK(kParticleRenderPriorityMax == -9);
+	// pin: RW 0x4E2F3A RenderFloors, RW 0x470F5E SortLevel 0, RW 0x47166A StaticSortLists, RW 0x4716EE doParticles (Local 52 / P-100: floors and W3D blended meshes sit below particles)
+	CHECK(kFloorRenderPriority == -124);  // RW 0x4E2F3A
+	CHECK(kScorchRenderPriority == -123); // RW 0x4E2FD0
+	CHECK(kTrackRenderPriority == -122);  // RW 0x4E3108
+	CHECK(kParticleRenderPriorityMin == 1); // RW 0x4716EE: after W3D (-121..-23) and default 0
+	CHECK(kParticleRenderPriorityMax == 114);
 }
 
-TEST_CASE("PORT-125 / P-101: the first particle batch takes -122 and the last of 114 takes -9; more batches share the top bucket (OrderForBatch)")
+TEST_CASE("PORT-125 / P-101: the first particle batch takes 1 and the last of 114 takes 114; more batches share the top bucket (OrderForBatch)")
 {
-	CHECK(OrderForBatch(0, 1).priority == -122);
-	CHECK(OrderForBatch(0, 114).priority == -122);
-	CHECK(OrderForBatch(113, 114).priority == -9);
-	CHECK(OrderForBatch(0, 1000).priority == -122);
-	CHECK(OrderForBatch(999, 1000).priority == -9);
+	// pin: RW 0x4716EE doParticles after W3D (Local 52 / P-100): range shifted from -122..-9 to 1..114
+	CHECK(OrderForBatch(0, 1).priority == 1);
+	CHECK(OrderForBatch(0, 114).priority == 1);
+	CHECK(OrderForBatch(113, 114).priority == 114);
+	CHECK(OrderForBatch(0, 1000).priority == 1);
+	CHECK(OrderForBatch(999, 1000).priority == 114);
 }
 
 TEST_SUITE_END();

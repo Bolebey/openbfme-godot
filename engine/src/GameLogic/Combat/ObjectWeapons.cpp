@@ -25,6 +25,7 @@
 #include "GameLogic/Module/InvisibilityModules.h"
 #include "GameLogic/Object/Contain/HordeContainRuntime.h"
 #include "GameLogic/Object/Object.h"
+#include "GameLogic/ObjectFilterMatch.h"
 #include "GameLogic/System/InvisibilityManager.h"
 #include "GameLogic/SimMath.h"
 #include "GameLogic/System/ShroudManager.h"
@@ -132,50 +133,39 @@ public:
 	// RW 0x6CA4B5); null when no GameData block of the load set named WeaponBonus, which is RW's own null test
 	const WeaponBonusSet *globalWeaponBonusSet() override { return m_w.owner().logic().settings().globalWeaponBonusSet.get(); }
 	float rateOfFireAttributeProduct() override { return 1.0f; }              // the attribute modifiers (S-320)
-	// PORT-140 (issue #342): the container's ammo, RW 0x6CD298 -> contain vslot 0x114.
-	//   * RW 0x6CD298: `mov eax,[esi+4]` (the WeaponTemplate), `lea ecx,[eax+0x120]` (its ProjectileFilterInContainer), `call 0x762977` (the filter's
-	//     "has a rule" test) -> no filter: the slot is never asked; the object's contain is `[Object+0x258]` (RW 0x68B678 -> RW 0x762977's caller reads it
-	//     as `mov ecx,[ecx+0x258]`) and gets `mov eax,[ecx]; push &filter; call [eax+0x114]`. No contain: the count stays 0 and the caller takes the clip.
-	//   * contain slot 0x114 is OpenContain RW 0x865CE3: no filter (`[ebp+8] == 0`) -> the contained count `[edi+0x38]`; with a filter -> walk the
-	//     contained list (`call [eax+0x118]`) and `inc` for every item ObjectFilter::testTemplate RW 0x7640C1 accepts (RW 0x763543 with the item's and the
-	//     container's players, `call 0x68b678` = Object::getControllingPlayer). TransportContain RW 0x86B14D and GarrisonContain RW 0x87B8A9 hold their
-	//     own bodies of the same slot. The port keeps the contained list on ContainModuleInterface and the filter test in ObjectFilterMatch.
-	//   * the lane PERF-WS note stays: these two run on the logic job pool (computeWeaponStatusConditions through Weapon::getStatus) — they only read.
+	// lane PERF-WS: the two reads below run on the logic job pool (computeWeaponStatusConditions through Weapon::getStatus): keep them reads when
+	// S-320 is ported
+	// ProjectileFilterInContainer (Weapon template + 0x120), RW 0x6CD298: the owner (RW 0x449681 of [weapon + 8]) whose template's filter is set
+	// (RW 0x762977) is asked its contain ([object + 0x258]) with the filter through contain slot 0x114 (OpenContain RW 0x865CE3: the contained count
+	// whose rider the filter allows, ObjectFilterMatch RW 0x7640C1 with the container's player). Without a container, or with an unset filter, the
+	// weapon's clip answers instead, at the caller
 	bool containedAmmo(const ObjectFilter &filter, unsigned &count) override
 	{
 		count = 0;
-		const ContainModuleInterface *contain = m_w.owner().getContain();
-		if (!contain)
-		{
-			return false; // RW 0x6CD298: `test ecx,ecx / je` -> the caller's clip path
-		}
-		const Object &container = m_w.owner();
-		const Player *containerPlayer = container.getControllingPlayer(); // RW 0x68B678
-		for (const Object *item : *contain->getContainedItemsList()) // RW 0x865CE3's list walk (slot 0x118)
-		{
-			if (item && ObjectFilterMatch::allows(container.logic(), filter, *item, containerPlayer)) // RW 0x7640C1 -> RW 0x763543
-			{
-				++count;
-			}
-		}
-		return true;
-	}
-	// RW 0x6CD11F: `push dword ptr [ecx+8]` (the weapon's WeaponTemplate), `mov ecx,[0xDE412C]` (TheGameLogic), `call 0x449681` (findObjectByID), then
-	// `mov ecx,eax; call 0x68B634` = `add ecx,0x34C; call 0x8F1149` (`mov eax,[ecx+0x24]; ret`, the containment filter's rule at Object+0x370)
-	// `test al,al / setne al`. The filter tested is the template's own ProjectileFilterInContainer — the same one this call passes in — so the answer is
-	// "the container holds an item that filter accepts". No object / no contain: 0.
-	bool ownerHasContainAmmo(const ObjectFilter &filter) override
-	{
-		const ContainModuleInterface *contain = m_w.owner().getContain();
-		if (!contain)
+		if (!ObjectFilterMatch::isValid(&filter)) // RW 0x762977
 		{
 			return false;
 		}
-		const Object &container = m_w.owner();
-		const Player *containerPlayer = container.getControllingPlayer();
-		for (const Object *item : *contain->getContainedItemsList())
+		ContainModuleInterface *contain = m_w.owner().getContain(); // RW 0x6CD2BF
+		if (!contain)
 		{
-			if (item && ObjectFilterMatch::allows(container.logic(), filter, *item, containerPlayer))
+			return false; // RW 0x6CD2C9 -> RW 0x6CD2E1: no container, the clip's status
+		}
+		count = contain->countContainedMatching(filter); // RW 0x6CD2D9, slot 0x114
+		return true;
+	}
+	// RW 0x6CD11F: the owner's weapon in a slot (WeaponSet + 0x34C, RW 0x8F1149 of the slot record's + 0x24) whose template's filter is set; its
+	// caller RW 0x6CD1BF is the third gate of Weapon::getStatus (an owner that holds container ammo is ready to fire)
+	bool ownerHasContainAmmo(const ObjectFilter &filter) override
+	{
+		if (!m_w.owner().getWeapons() || !ObjectFilterMatch::isValid(&filter))
+		{
+			return false;
+		}
+		for (int slot = 0; slot < WEAPONSLOT_COUNT; ++slot)
+		{
+			const Weapon *w = m_w.owner().getWeapons()->weaponInSlot(slot);
+			if (w && w->getTemplate() && w->getTemplate()->m_projectileFilterInContainer.flag)
 			{
 				return true;
 			}

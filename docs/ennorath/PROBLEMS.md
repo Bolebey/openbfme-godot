@@ -925,8 +925,8 @@
 - Описание: проверка Local 29 (TOP20 п. 38): работает всё, кроме: у горного тролля Мордора после переключения на руки способность «найти и взять дерево» заблокирована.
 - Подсистема: способности (переключение оружия тролля)
 - Взял: Port 168 (fork issue 397, 2026-11-13); Local 48 (fork issue 404, 2026-11-13)
-- Причина и исправление: —
-- Проверка: —
+- Причина и исправление: Port 168, ветка `arena/424c9907-openbfme-godot` — (1) `GrabPassengerHealGainPercent` разбирался парсером процентов (`RW 0x42ED00`-семейство, ×0.01), а строка `RW 0xC561C0` указывает на `RW 0x42ED6F` (значение как записано, только отказ ниже 0), поэтому `grabFinish` (`RW 0x8532F9 .. 0x853331`) добавлял 0.5 % вместо 50 % — тролль на 1200 hp получал 1212 hp; теперь 2400. (2) аммуниция оружия из контейнера (`RW 0x6CD298` / `RW 0x6CD11F`) и ветка снаряда-пассажира в доставке нуге́та (`RW 0x90FA81 .. 0x90FAC9`, слот контейнера `0x13C` `RW 0x866367`) были заглушками — оружие `CaveTrollGoblinThrow` было вечно без патронов, а нуге́т без `ProjectileTemplateName` не запускал ничего; теперь схваченный гоблин и есть снаряд. Разбор: `docs/ennorath/PORT168_RW_ANALYSIS.md`, стоп S-7296.
+- Проверка: `openbfme_tests -tc="PORT-168*"` — 5 тестов, 216 проверок, зелёные (`engine/tests/test_port_168.cpp`); реверс-проверка: с прежним парсером процентов лечение 1212 вместо 2400, без ветки контейнера пассажир остаётся в руке. В игре — ждёт владельца.
 - Владелец 2026-11-12 (в игре, `main` `8b12b926`, Эннорат): у горного тролля Мордора способность «Search food» (взять дерево) серая и недоступна, когда выбран ближний бой. У пещерного тролля гоблинов так же недоступна «Grab a goblin». Механизм, вероятно, общий для обоих: кнопка способности тролля при переключённом оружии (Port 137, #339).
 - Владелец 2026-11-13 (в игре, `main` `dff1060a`, Эннорат): горный тролль Мордора — «Search food» в ближнем бою доступна, но здоровье тролля не восстанавливается, когда он съел орка, и модель схваченного орка не у руки тролля и не двигается за рукой. Пещерный тролль — «Grab a goblin» работает, но потом, если выбрать тролля и нажать атаку, он только машет рукой, гоблин не вылетает. У обоих «взять дерево» работает, но поверх бревна ещё движется текстура сорванного дерева.
 
@@ -1197,13 +1197,13 @@
 - Проверка: —
 
 ### P-109. Ошибка `EUSKLADN_A.GBFARM_BIB: texture not found: None`
-- Статус: [ ] **НЕ НАЧАТО**
+- Статус: [x] **ИСПРАВЛЕНО**, ждёт ночного прогона (PORT-430, issue #430)
 - Добавлено: 2026-11-13, владелец (в игре, `main` `df5f0b41`, Эннорат)
 - Описание: время от времени в консоли `ERROR: W3DInstancer: euskladN_a: EUSKLADN_A.GBFARM_BIB: texture not found: None`. Подложка (bib) модели называет текстуру `None` — тот же случай, что `CAH_skull` в P-99.
 - Подсистема: отрисовка: подложки зданий (W3DFloorDraw, #406 / P-103) и текстура `None`
 - Взял: Port 177 (fork issue 430, 2026-11-13)
-- Причина и исправление: —
-- Проверка: —
+- Причина и исправление: имя текстуры без расширения (`None`) RotWK не ищет на диске вообще: загрузчик `RW 0x530D29` подставляет `.dds` / `.tga` / `.jpg` / `.png` после последней точки (`RW 0x530D45`) и без точки выходит с нулевыми указателями файла (`RW 0x530D59`), а создание текстуры `RW 0x53193E` строит на этом 1 x 1 текстуру `0xFFFF00FF` (`RW 0x531B07 .. 0x531B44`) и ничего не пишет в лог (строки «texture not found» в `game.dat` 2.01 нет). Порт же искал файл для любого имени и печатал ошибку. Правка: `TextureResolution::Probed` / `W3D_Texture_Name_Is_Probed` в `Libraries/WWVegas/WW3D2/textureloader.{h,cpp}`; `GodotW3DModelBuilder::loadTexture` и `GodotW3DMaterial::Load_Texture` не отчитываются о таком имени, магента `W3D_MISSING_TEXTURE_COLOR` остаётся. Разбор: `docs/ennorath/PORT430_RW_ANALYSIS.md`.
+- Проверка: `PORT-430*` (`engine/tests/test_port_430.cpp`, 5 тестов); в игре — в Эннорате на ферме истерлингов (`EUSKLADN_A.GBFARM_BIB`) и у ангмарского портера (`ANGPORTER.BUCKET`) консоль без `texture not found: None`, подложка рисуется как в RotWK.
 - Владелец 2026-11-13 поздно вечером (`main` `8c4f1d60`, Ангмар): то же у `ERROR: W3DInstancer: angPorter: ANGPORTER.BUCKET: texture not found: None`. Общий механизм с `CAH_skull` (P-99): как RotWK разрешает имя текстуры `None` в модели.
 - Владелец 2026-11-14 (онлайн, `main` `dcc5125d`, Эннорат, Харад): `W3DInstancer: hablsmt_2: HABLSMT_2.CUBE: texture not found: habuild2.tga` — модель `hablsmt_2` из `haradforge.ini`; файла `habuild2` нет ни в одном архиве (Эннорат, RotWK, BFME2): изъян данных мода, тот же механизм (как RotWK обходится с ненайденной текстурой) — дописано в Port 177 (#430).
 
@@ -1251,8 +1251,8 @@
 - Описание: Радагаст в форме орла применяет ульту: звук есть, но враги не превращаются в животных, а способность становится недоступной и не уходит в откат.
 - Подсистема: спецспособность (превращение цели в другой объект), перезарядка кнопки
 - Взял: арена, Port 188 (https://github.com/Gleb302596555/openbfme-godot/issues/454)
-- Причина и исправление: —
-- Проверка: —
+- Причина и исправление: Port 188, ветка `arena/904dff1d-openbfme-godot` — у орлиной кнопки `Command_SpecialAbilityRadagastConvertEnemyAdler` (`commandbutton.inc:2442`, в отличие от пешей `Command_SpecialAbilityRadagastConvertEnemy` без `CommandTrigger`) задан `CommandTrigger = Command_SpecialAbilityConvertEnemyTracker` (`SpecialAbilityActivateeDummy`), поэтому `CommandTranslator` в один кадр отправляет два `MSG_DO_SPECIAL_POWER_AT_LOCATION`: основную `SpecialAbilityRadagastWordOfPoultry` (`ModuleTag_WordOfPoultryUpdate_Level2`) и вспомогательную `SpecialAbilityActivateeDummy` (`ModuleTag_ConvertEnemyDummyMover`). В `SpecialAbilityUpdate::initiateIntentToDoSpecialPower` (`SpecialAbilityModules.cpp:614`) порт проверял у соседних `SpecialAbilityUpdate` `other->isActive()` (слот `+0x08`, `m_active`), тогда как RotWK 2.01 (`RW 0x853076 .. 0x85309A`, донор BFME2 1.06 `0x004500A3`) проверяет `other->isPowerCurrentlyInUse(nullptr)` (слот `+0x18`, `RW 0x851C92`: `false`, пока `m_packingState == 0` или `!m_withinRange`). Из-за этого `ConvertEnemyDummyMover` в тот же кадр вызывал `finishAbility(false, true)` у ещё не начавшего распаковку `WordOfPoultryUpdate_Level2`: срабатывал только спавн `RohanRadagastNoUseAbility` (`USER_50` на ~58 с), а превращение врагов и 360-секундный откат (`UpdateModuleStartsAttack = Yes`) так и не запускались. Заменено на `other->isPowerCurrentlyInUse()`. Разбор: `docs/ennorath/PORT188_RW_ANALYSIS.md`. Примечание по данным мода: первые ~58 с после каста аура `RohanRadagastNoUseAbility` + `RadagastConvertFixer` держит `USER_50` (`DisableOnModelCondition = USER_50` -> кнопка `Restricted`), после чего оставшиеся ~302 с из 360 с кнопка отображается в `NotReady` с идущими часами перезарядки (~16 % -> 100 %).
+- Проверка: `openbfme_tests -tc="PORT-188*"` — 3 теста, 230 проверок, зелёные (`engine/tests/test_port_188.cpp`, обе редакции `RotWK201` и `BFME2_106`: живой клик по Палантиру и земле в радиусе, подлёт издалека с проверкой детерминизма, прямой контракт отмены соседнего `SpecialAbilityUpdate`); до правки падали все 3 теста (14 проверок). В игре — ждёт владельца.
 
 ### P-116. Подсказка кнопки автоатаки не обновляется после нажатия
 - Статус: [ ] **НЕ НАЧАТО**
@@ -1299,13 +1299,15 @@
 - Взял: —
 - Причина и исправление: —
 - Проверка: —
+- Причина и исправление: Local 58 (ветка `agent/local/station-1`, оба издания — RotWK 2.01 и донор BFME2 1.06): `RebuildHoleBehavior::update` (`RW 0x8868C2` / `BFME2 0x00483645`) при старте стройки ставит дыре `maskObject(true)`, `UNSELECTABLE | UNATTACKABLE` и `setScriptSelectable(false)`, но не скрывает саму модель до завершения стройки (`RW 0x886C40`). Ранее в порте: (1) `Object::maskObject(true)` (`RW 0x68BEB1` / `BFME2 0x0028B7E2`) не вызывал `GameLogic::deselectObject(..., ~(1u << ownerIdx), true)` (`RW 0x625759`); (2) `Object::setScriptSelectable(false)` (`RW 0x68BE3C` -> `Drawable::setSelectable` `RW 0x6719FA` / `BFME2 0x00271700`) не снимал выделение в `InGameUI` (`deselectDrawable`) и не переключал выборность в `HudObjects::collisionTypeOf` (`RW 0x4B2D5E` / `0x4B583C`, явный override `-1/0/1`, сохраняя начальное поведение `WALK_ON_TOP_OF_WALL`); (3) `HudObjects::canSelect` (`RW 0x83BDA2..0x83BDAF`) и `SelectionXlat` (`RW 0x81E691..0x81E6BF`) не фильтровали `UNSELECTABLE` / `isMasked()`, оставляя руинам перехват курсора и выбора; (4) `DrawableIconUI::wantsHealthBar` / `barCandidate` (`OPTS-2`) не отсекали `isMasked()` и статус `UNATTACKABLE`, из-за чего в режиме полосок (и пока дыра была выделена) рисовалась вторая полоска поверх строящегося здания (`HudInput::update` тоже синхронизирован). Исправлено во всех четырёх точках; саму модель дыры по `RW` не скрываем до завершения стройки.
+- Проверка: `LOCAL-58*` (`engine/tests/test_local58_rebuild_hole_ui.cpp`: синтетика + Ennorath `GoblinCave` -> `WildCaveHole` -> подъём и `ElvenEntMoot`), соседние `rebuild hole*`, `hud5 icons*`, `zoom1 health bars*`, `hud5 pick*`, `PORT-138*`, `PORT-101*`; в игре (Cheat Mode, Ennorath): разрушить `GoblinCave`, выделить руины `WildCaveHole`, дождаться 120 с начала восстановления — выделение с руин спадает, наведение курсора и единственная полоска здоровья относятся к поднимающейся `GoblinCave`, видны проценты стройки, а после завершения руины опускаются и исчезают.
 
 ### P-121. Отброшенный герой наносит урон, пока лежит на земле
 - Статус: [ ] **НЕ НАЧАТО**
 - Добавлено: 2026-11-14, владелец (в игре, `main` `d1ca316d`, Эннорат)
 - Описание: тролль отбросил героя; герой, ещё лёжа на земле (не встав на ноги), продолжал наносить урон и убил тролля. В оригинале отброшенный юнит до подъёма не атакует.
 - Подсистема: отбрасывание (knockback / THROWN, состояние лежания и подъёма) и машина атаки (Port 184, S-325, перенесена 2026-11-14 — проверить, не она ли пускает атаку из лежачего состояния)
-- Взял: —
+- Взял: Local 61 (#482), станция 1, после Local 52, 2026-11-14
 - Причина и исправление: —
 - Проверка: —
 
@@ -1314,7 +1316,7 @@
 - Добавлено: 2026-11-14, владелец (в игре, `main` `d1ca316d`, Эннорат)
 - Описание: на картах есть нейтральные здания, где можно заказывать отряды. Противник заказал отряд, здание в этот момент захвачено — заказанный противником отряд выходит и становится твоим. При смене владельца очередь должна отменяться (заказ противника снят, деньги по правилам RotWK).
 - Подсистема: захват здания (смена владельца) и ProductionUpdate (очередь производства)
-- Взял: —
+- Взял: Local 62 (#483), станция 2, после Local 57, 2026-11-14
 - Причина и исправление: —
 - Проверка: —
 

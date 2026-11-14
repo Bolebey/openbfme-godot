@@ -91,6 +91,8 @@ struct W3DShaderKey
 	// GameClient/SelectionDecals.h). Set by the material factory for an opaque surface of a wall model (W3DMaterialFactory::Set_Selection_Decals); the
 	// generator ignores it for any other surface. The decal is laid over the lit colour as on the terrain, kept above the object shadows
 	bool SelectionDecals = false;
+	// P-103: W3DFloorDraw conforms subdivided floor meshes to the height map and applies terrain decal projection depth bias.
+	bool Floor = false;
 
 	std::string Id() const;
 };
@@ -145,3 +147,7 @@ void W3D_FixedFunction_House_Color(const float t0[4], const float diffuse[3], fl
 // The stop line ("[S-6023] ...") of a fixed-function surface whose house colour specular rests on assumptions about the D3D runtime and the caps. Empty
 // when the surface is not fixed-function lit with the secondary gradient set.
 std::string W3D_FixedFunction_House_Color_Stop(bool converted, bool lit, int secGradient);
+
+// Transparent-pass render priority for a W3D surface (RW 0x4E2F3A RenderFloors, RW 0x470F5E SortLevel 0,
+// RW 0x47166A -> 0x576240 StaticSortLists descending 32..1). Both W3DMaterialFactory and W3DInstancer call this.
+int W3D_Surface_Render_Priority(int sortLevel, int pass, bool floorBlend);

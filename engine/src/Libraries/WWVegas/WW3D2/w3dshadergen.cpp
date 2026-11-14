@@ -1,6 +1,7 @@
 // OpenBFME. GPL-3.0. See w3dshadergen.h.
 
 #include "Libraries/WWVegas/WW3D2/w3dshadergen.h"
+#include "GameClient/ParticleDraw.h"
 #include "GameEngineDevice/W3DDevice/GameClient/W3DHardwareFog.h"
 
 #include <algorithm>
@@ -128,6 +129,7 @@ std::string W3DShaderKey::Id() const
 	if (OcclusionPass) id += "_occl" + std::to_string(OcclusionPass); // lane OCCLUDE-1
 	if (ParticleColor) id += "_pcol";
 	if (SelectionDecals) id += "_sel"; // lane SELWALL-1
+	if (Floor) id += "_flr"; // P-103
 	return id;
 }
 
@@ -272,6 +274,11 @@ std::string Generate_W3D_Shader_Code(const W3DShaderKey &k, W3DSamplerPolicy sam
 	if (k.HouseColor)
 	{
 		line("uniform sampler2D w3d_hc_tex : " + repeatMipFilter + ", repeat_enable; // housecolor.ini texture: the team colour mask is its alpha");
+	}
+	if (k.Floor && !k.OcclusionPass)
+	{
+		line("global uniform sampler2D w3d_floor_hm : filter_linear, repeat_disable;");
+		line("global uniform vec4 w3d_floor_hm_rect; // xy: origin (-border*10), zw: extent in cells; z <= 0 disables");
 	}
 	// Varyings each take a location; Intel Arc (Mesa ANV) offers Forward+ 29 for normal-mapped buildings, Metal 31. The two UV sets
 	// share one vec4 (the same interpolation), and the world position stays a vertex() local: only the vertex lighting reads it.
@@ -433,6 +440,16 @@ std::string Generate_W3D_Shader_Code(const W3DShaderKey &k, W3DSamplerPolicy sam
 		}
 	}
 	line("\tVERTEX = w3d_to_godot(p);");
+	if (k.Floor && !k.OcclusionPass)
+	{
+		line("\tif (w3d_floor_hm_rect.z > 0.0) {");
+		line("\t\tvec3 fw = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;");
+		line("\t\tvec2 fgrid = (vec2(fw.x, -fw.z) - w3d_floor_hm_rect.xy) / 10.0;");
+		line("\t\tfloat fhm = texture(w3d_floor_hm, (fgrid + 0.5) / w3d_floor_hm_rect.zw).r;");
+		line("\t\tfloat flift = max(VERTEX.y, 0.0) + 0.15;");
+		line("\t\tVERTEX += inverse(mat3(MODEL_MATRIX)) * vec3(0.0, (fhm + flift) - fw.y, 0.0);");
+		line("\t}");
+	}
 	if (!k.Skin && k.Camera == 0)
 	{
 		// lane VISUAL-2: vegetation.fxo's vertex shader (blob 5): position += (position.z - the tree's base z) * SwayOffsets[type], in world space (W3D Z up
@@ -581,6 +598,10 @@ std::string Generate_W3D_Shader_Code(const W3DShaderKey &k, W3DSamplerPolicy sam
 			line("\tif (slot == 0 || w3d_occl_on < 0.5) { VERTEX = vec3(0.0); }");
 			line("\tv_instance.z = float(slot);");
 		}
+	}
+	if (k.Floor && !k.OcclusionPass)
+	{
+		line("\tPOSITION = PROJECTION_MATRIX * vec4((MODELVIEW_MATRIX * vec4(VERTEX, 1.0)).xyz * 0.999375, 1.0);");
 	}
 	line("}");
 
@@ -929,4 +950,25 @@ std::string Generate_W3D_Shader_Code(const W3DShaderKey &k, W3DSamplerPolicy sam
 		line("}");
 	}
 	return c;
+}
+
+int W3D_Surface_Render_Priority(int sortLevel, int pass, bool floorBlend)
+{
+	if (floorBlend)
+	{
+		return FXParticleSystem::kFloorRenderPriority; // RW 0x4E2F3A -> 0x4E53D3 RenderFloors
+	}
+	constexpr int kMaxPasses = 3;
+	constexpr int kMaxStaticSort = 32; // RW 0x5762FC..0x576304: DefaultStaticSortListClass range 1..32
+	const int clampedPass = std::clamp(pass, 0, kMaxPasses - 1);
+	if (sortLevel <= 0)
+	{
+		// RW 0x470F5E -> 0x574406: SortLevel 0 meshes flush before StaticSortLists
+		return FXParticleSystem::kW3DRenderPriorityMin + clampedPass;
+	}
+	// RW 0x47166A -> 0x576240: StaticSortLists draw descending from SortLevel 32 down to 1
+	const int clampedSort = std::clamp(sortLevel, 1, kMaxStaticSort);
+	const int staticBase = FXParticleSystem::kW3DRenderPriorityMin + kMaxPasses;
+	const int priority = staticBase + (kMaxStaticSort - clampedSort) * kMaxPasses + clampedPass;
+	return std::clamp(priority, FXParticleSystem::kW3DRenderPriorityMin, FXParticleSystem::kW3DRenderPriorityMax);
 }

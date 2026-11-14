@@ -41,6 +41,7 @@
 #include <vector>
 
 class ArchiveFileSystem;
+class WorldHeightMap;
 struct W3DObjectLighting;
 
 namespace godot
@@ -119,6 +120,7 @@ public:
 	// bib's feathered edge, and write no depth (INFERENCE, stop S-4974: retail's terrain render object draws floors; the module only passes the fade
 	// of a dead object's floor on, FloorFadeRateOnObjectDeath). Off by default.
 	void Set_Floor_Blend(bool on) { FloorBlend = on; }
+	bool Floor_Blend() const { return FloorBlend; }
 	// lane SELWALL-1: the surfaces this factory builds belong to a wall top or bridge model (W3DShaderKey::SelectionDecals: its opaque surfaces draw the
 	// selection's merge decals); off by default
 	void Set_Selection_Decals(bool on) { SelectionDecals = on; }
@@ -204,6 +206,8 @@ void W3D_Set_Fogged_Light_Frac(float frac);
 // their switch (w3d_occl_on: GameData UseBehindBuildingMarker and TheGameLogic + 0x99); the caller owns the texture (GameWorld)
 void W3D_Set_Occlusion(bool on, const Ref<Texture2D> &colors);
 void W3D_Set_Fog_Shift(float shift);
+// P-103: terrain height map for W3DFloorDraw shader conformation (nullptr disables it).
+void W3D_Set_Floor_Height_Map(const ::WorldHeightMap *hm);
 // The light of the model viewers that show no map (not retail data): ambient 0.3 (defaultw3d.fxo's own AmbientLightColor default),
 // one white light toward (-0.5, -0.5, 0.7) SAGE, for both sets.
 void W3D_Apply_Viewer_Lighting();
