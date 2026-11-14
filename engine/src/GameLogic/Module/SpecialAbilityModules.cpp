@@ -1717,8 +1717,10 @@ void SpecialAbilityUpdate::grabTrigger(int type)
 // LINKED_TO_FLAG object within 150 (RW 0xC041F8) of the target (ThePartitionManager RW 0xA39090, distance type 1, the KindOf filter RW 0x445139): the capture
 // flag's structure. Nothing happens when there is none or when both are already the object's team's. Then the target (when it is not the building:
 // START_CAPTURE off, CAPTURED on) and the building take the default team of the object's player (RW 0x6996DC), the building gets CAPTURED, the target's
-// capturer (+ 0x80) clears, and the 0x1A enum restarts the power's recharge. Not ported (S-1225, noted): a garrisonable contain's passengers (vslots 0xA8 /
-// 0x54), an UNDER_CONSTRUCTION building's production cancel and score counts (RW 0x85463E .. 0x8546B5), the upgrades reset RW 0x68E083 (S-952); the radar /
+// capturer (+ 0x80) clears, and the 0x1A enum restarts the power's recharge. Both objects reset their upgrades first (RW 0x8546F4 and RW 0x854717,
+// each a call of RW 0x68E083: the mask clears, every upgrade module drops its upgrade), then take the team with (team, 1) (RW 0x6996DC's second
+// argument, the undetected-defector flag). Not ported (S-1225, noted): a garrisonable contain's passengers (vslots 0xA8 /
+// 0x54), an UNDER_CONSTRUCTION building's production cancel and score counts (RW 0x85463E .. 0x8546B5); the radar /
 // EVA / drawable calls are the client's. Lane DECOMP-3: the skirmish AI's object events RW 0x6A99CB / 0x6A9D9C around the building's capture. Returns false when nothing was captured
 bool SpecialAbilityUpdate::captureTarget(SpecialPowerModule *spm)
 {
@@ -1775,9 +1777,11 @@ bool SpecialAbilityUpdate::captureTarget(SpecialPowerModule *spm)
 			logic.noteStop("[S-1225] capture: an UNDER_CONSTRUCTION building's production cancel and score counts (RW 0x85463E .. 0x8546B5) are not ported");
 		}
 		ModelConditionBitsHelper::clearAndSet(*t, { kMcStartCapture }, { kMcCaptured }); // RW 0x8546DC
+		t->resetUpgrades();                                                              // RW 0x8546F4 (RW 0x68E083), before the team changes
 		t->setCapturedTeam(team);                                                       // RW 0x8546F6 / 0x854702
 	}
 	logic.skirmishAI().objectRemoved(*building); // RW 0x854712 (lane DECOMP-3): the skirmish AI manager's removal with the old owner
+	building->resetUpgrades();                   // RW 0x854717 (RW 0x68E083: the mask clears, every upgrade module drops its upgrade)
 	building->setCapturedTeam(team); // RW 0x854719 / 0x854725
 	setCondition(*building, kMcCaptured, true); // RW 0x85473B
 	t->setCapturerID(INVALID_ID);    // RW 0x854740
@@ -3136,9 +3140,11 @@ std::vector<std::string> SpecialAbilityModules::hero2StopLines()
 		"client's), the owner's EVA DisguiseStarted and the enemy-perspective portrait / name (DisguisedAsTemplate_EnemyPerspective, RW 0x8B4440 from RW 0x69194E: "
 		"client)",
 		"[S-1225] the capture (lane HERO-2): SPECIAL_INFANTRY_CAPTURE_BUILDING's preparation, unpack, trigger (RW 0x8544F2: the closest LINKED_TO_FLAG within 150, "
-		"RW 0x6996DC setCapturedTeam), end and the update's captured / ruined target tests run; not ported (noted): a garrisonable contain's passengers (vslots "
-		"0xA8 / 0x54), an UNDER_CONSTRUCTION building's production cancel and score counts, the upgrades reset RW 0x68E083 (S-952), the skirmish AI's object "
-		"events RW 0x6A99CB / 0x6A9D9C, RW 0x6996DC's production cancel, score counts, RW 0x68B303 / 0x8E3ABB and a captured container's passengers; "
+		"RW 0x6996DC setCapturedTeam), end and the update's captured / ruined target tests run; the target's and the building's upgrades reset (RW 0x8546F4 / "
+		"0x854717 -> RW 0x68E083) and setCapturedTeam cancels the previous owner's production queue (production slot 0x40, RW 0x8A1666 -> slot 0x3C, RW "
+		"0x8A05B2); not ported (noted): a garrisonable contain's passengers (vslots "
+		"\"0xA8 / 0x54), an UNDER_CONSTRUCTION building's production cancel and score counts, the skirmish AI's object "
+		"events RW 0x6A99CB / 0x6A9D9C, RW 0x6996DC's score counts, RW 0x68B303 / 0x8E3ABB and a captured container's passengers; "
 		"SPECIAL_BLACKLOTUS_CAPTURE_BUILDING (0x1A)'s special objects; DoCaptureFX's flash (client); INFERENCE: a target that is gone ends any ability (HERO-1's "
 		"reading; retail only tests a live target)",
 	};
