@@ -1,6 +1,6 @@
 # PORT-47 / issue #151 — research checkpoint (2026-11-08)
 
-Status: **reader implementation in progress, unblocked by Local 21 (#161)**.
+Status: **reader implemented; focused red/green passed on bc66c72f; standard executable/regression pending**.
 The historical scope stop below was resolved by main b03e82c8. The owner
 authorized continuing #151 on `Drawable::recolorRenderObject`.
 All instruction addresses below were read with `tools/mod/rw.py ... dis` against
@@ -219,9 +219,9 @@ plumbing was introduced; campaign startup/load outside these existing fields
 has not been verified here.
 
 All changed translation units, including the synthetic test, compile in the
-sandbox. Runtime assertions now have focused red/green evidence on the pre-rebase
-base (see below). The standard full executable and rebased-base verification
-remain pending the tests-only Release single-job build.
+sandbox. Runtime assertions have focused red/green evidence on both the
+pre-rebase and rebased bases (see below). The standard full executable and
+regression remain pending the tests-only Release single-job build.
 `tools/test_select.py --base origin/main` selects FULL (no test map; CMake
 registration cannot be traced). Game-dependent skips will not count as passes.
 
@@ -282,7 +282,19 @@ file and an explicit ownerless team, with a null-controller assertion. Both
 expectations remain as required by RW 0x54BE32 and 0x4B8727.
 
 After this evidence, fetched `origin/main` (`bc66c72f`) and rebased successfully;
-only appended NIGHT_WATCH rows conflicted, both sides retained. A new single-job
-build and repeat focused/standard checks are queued on that base. The result
-above is NOT claimed as a completed test of the rebased branch. Standard
-`openbfme_tests -tc="PORT-47*"`, neighbours and FULL are still pending.
+only appended NIGHT_WATCH rows conflicted, both sides retained. The focused
+check has now repeated on that base using newly built core libraries and
+freshly compiled original main/test objects:
+
+```
+/tmp/port47-focused-tests -tc="PORT-47*"
+[doctest] test cases:   3 |   3 passed | 0 failed | 0 skipped
+[doctest] assertions: 114 | 114 passed | 0 failed |
+[doctest] Status: SUCCESS!
+```
+
+The repeated red control has 3 failed cases / 8 failed assertions (exit 1).
+This validates the actual test source and engine library on bc66c72f, but is
+explicitly NOT the standard all-tests executable. Its compilation continues;
+standard `openbfme_tests -tc="PORT-47*"`, the broad neighbours and FULL remain
+queued and are not claimed passed. No game-dependent skip counts as a pass.
