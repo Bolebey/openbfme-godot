@@ -108,7 +108,7 @@ TEST_CASE("LOCAL-52 / P-100: synthetic alpha SortLevel 0, StaticSort 1, and floo
 	m.SortLevel = 0;
 	m.Vertices = { { -10, -10, 0 }, { 10, -10, 0 }, { 10, 10, 0 }, { -10, 10, 0 } };
 	m.Normals = { { 0, 0, 1 }, { 0, 0, 1 }, { 0, 0, 1 }, { 0, 0, 1 } };
-	m.Triangles = { { 0, 1, 2 }, { 0, 2, 3 } };
+	m.Triangles = { 0, 1, 2, 0, 2, 3 };
 	W3dShaderStruct s = {};
 	s.DepthCompare = 3; // PASS_LEQUAL
 	s.DepthMask = 0;    // WRITE_DISABLE
