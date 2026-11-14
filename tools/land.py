@@ -72,8 +72,11 @@ def main() -> int:
 
     changed = [l[3:] for l in run("git", "status", "--porcelain").splitlines() if l.strip()]
     if changed:
-        run("git", "add", "-A", "--", "README.md", "docs/STOPS.md", "docs/stops.d", "docs/ennorath/NIGHT_WATCH.md",
-            "docs/ennorath/night_watch.d", "docs/ennorath/PROGRESS.tsv", "engine/tests/test_module_coverage.cpp")
+        paths = ["README.md", "docs/STOPS.md", "docs/stops.d", "docs/ennorath/NIGHT_WATCH.md", "docs/ennorath/night_watch.d",
+                 "docs/ennorath/PROGRESS.tsv", "engine/tests/test_module_coverage.cpp"]
+        # a fragment directory exists only while it holds files (git keeps no empty directory); a deleted fragment is tracked
+        tracked = set(run("git", "ls-files", "--", *paths).splitlines())
+        run("git", "add", "-A", "--", *[p for p in paths if (TREE / p).exists() or any(t.startswith(p) for t in tracked)])
         left = run("git", "status", "--porcelain", "--untracked-files=no").splitlines()
         stray = [l for l in left if l[:2] in (" M", " D")]
         if stray:
