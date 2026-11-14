@@ -489,6 +489,7 @@ include(cmake/Port191.cmake)    # PORT-191: AutoAbilityBehavior without a Query 
 include(cmake/Port430.cmake)    # PORT-430: a model texture named `None` is a name retail never opens (issue 430; OPENBFME_PORT430_TESTS)
 include(cmake/Port433.cmake)    # PORT-433: Ithilien grove (ElvenWood) area bonuses in the painted taint zone (issue #433; OPENBFME_PORT433_TESTS)
 include(cmake/Port428.cmake)    # PORT-428: the aerial path's 3D would-collide filter (OPENBFME_PORT428_TESTS)
+include(cmake/Port199.cmake)    # PORT-199: GiveUpgradeUpdate contained targets, producer-linked pairs, deselection and flash (issue #466; OPENBFME_PORT199_TESTS)
 add_library(openbfme_core STATIC
     ${OPENBFME_PLAY2_SOURCES}
     ${OPENBFME_APT_SOURCES}

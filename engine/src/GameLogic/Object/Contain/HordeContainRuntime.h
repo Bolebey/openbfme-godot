@@ -41,6 +41,7 @@
 #include <vector>
 
 class HordeContainCore;
+class UpgradeTemplate;
 class ThingTemplate;
 struct ComboHordeEntry;
 struct HordeContainModuleData;
@@ -189,6 +190,14 @@ public:
 	virtual bool notComboFormation() const = 0;
 	// ---- lane PORT-169 (issue #398, RW HordeContainInterface slot 0xEC, RW 0x872B69): true when this horde formation is its main formation
 	virtual bool isMainFormation() const = 0;
+	// ---- lane PORT-199 (issue #466): the two slots GiveUpgradeUpdate's delivery asks a horde (declared LAST so no earlier declared order moves) ----
+	// slot 0xAC (RW 0x86ECAB): a contained member, or a member still on its way into a garrison (the id map at interface + 0x54), answers
+	// Object::affectedByUpgrade (RW 0x694914) for the upgrade; the first true member answers for the horde
+	virtual bool affectedByUpgrade(const UpgradeTemplate *upgrade) const = 0;
+	// slot 0xB8 (RW 0x871A90): the horde object takes the upgrade itself (RW 0x69388B), then every member: with `allMembers` all of them,
+	// otherwise only the members that are affectedByUpgrade; every member that takes it flashes (RW 0x871B0F -> RW 0x70E013, the grey
+	// 0.99 colour at RW 0xBE53BC, pushed as `push 0xf; push 4; push 4` at RW 0x871B18)
+	virtual void giveUpgrade(const UpgradeTemplate *upgrade, bool allMembers) = 0;
 };
 
 class HordeContain : public UpdateModule, public ContainModuleInterface, public CreateModuleInterface, public HordeContainInterface
@@ -270,6 +279,9 @@ public:
 	void exitContainer(Object *container, int source) override;
 	void releaseMembersToward(Object *container, int source) override;
 	std::vector<ObjectID> membersEntering() const override { return std::vector<ObjectID>(m_garrisonEntering.begin(), m_garrisonEntering.end()); }
+	// lane PORT-199: HordeContainInterface slots 0xAC / 0xB8 (RW 0x86ECAB / 0x871A90)
+	bool affectedByUpgrade(const UpgradeTemplate *upgrade) const override;
+	void giveUpgrade(const UpgradeTemplate *upgrade, bool allMembers) override;
 	void setMembersTeam(Team *team) override;
 	// lane GARRISON-3 (HordeGarrisonLink.cpp)
 	void recentreOnMembers(Object *about) override;
