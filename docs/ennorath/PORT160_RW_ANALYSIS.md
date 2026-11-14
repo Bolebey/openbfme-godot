@@ -90,6 +90,6 @@ capture reports, one assertion each) — and with the fix `3 passed / 129 passed
 ## 4. Open (needs the owner or a session with `game.dat`)
 
 * the instruction addresses of the two capture reports inside RW 0x853D31 .. 0x853ED0 and RW 0x8544F2 .. 0x854772 — `rw.py xref` of
-  RW 0x5DD9EE restricted to those ranges — to turn the INFERENCE above into a fact (stop S-7326);
+  RW 0x5DD9EE restricted to those ranges — to turn the INFERENCE above into a fact (stop S-7360);
 * whether the `target->isLocallyControlled()` guard survived into 2.01 unchanged;
 * `CastleMemberBehavior/StoreUpgradePrice` (data +0x18) stays unread by RotWK (batch-10 row 8) and unported.

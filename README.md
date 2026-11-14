@@ -208,7 +208,7 @@ the original are still missing[cite: 2].
 not reinvent it[cite: 2]. Where the evidence runs out and the team has to make an
 educated guess, that guess is not hidden: it is recorded as an *acceptance
 stop* in [docs/STOPS.md](docs/STOPS.md), reported by the game at runtime and
-pinned by a test. There are **941 open stops** today. Some are big
+pinned by a test. There are **946 open stops** today. Some are big
 pinned by a test. There are **928 open stops** today. Some are big
 pinned by a test. There are **929 open stops** today. Some are big
 pinned by a test. There are **942 open stops** today. Some are big
