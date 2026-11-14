@@ -36,8 +36,10 @@
 #include "GameLogic/AI/AIWorld.h"
 #include "GameLogic/AI/AIPathfind.h"
 #include "GameLogic/GameLogic.h"
+#include "GameLogic/Module/LogicModules.h"
 #include "GameLogic/Module/SpecialPowerModules.h"
 #include "GameLogic/Object/Object.h"
+#include "GameLogic/Object/PartitionManager.h"
 #include "GameLogic/SpellStores.h"
 #include "GameLogic/System/ShroudManager.h"
 
@@ -77,7 +79,7 @@ std::string powerBlock(const Power &p, const char *science)
 		"  RequiredSciences = " + science + "\n"
 		"  Flags = NO_FORBIDDEN_OBJECTS\n"
 		"  ForbiddenObjectRange = 25\n"
-		"  ForbiddenObjectFilter = NONE +INFANTRY +CAVALRY +STRUCTURE +MONSTER\n"
+		"  ForbiddenObjectFilter = ANY +INFANTRY +CAVALRY +STRUCTURE +MONSTER\n"
 		"End\n";
 }
 
@@ -143,6 +145,8 @@ struct SpellWorld : logictest::LogicWorld
 		REQUIRE_MESSAGE(loadError.empty(), loadError);
 		stores.install();
 		SpellStores::registerBlocks(w.fx.env.blocks);
+		// the runtime module classes (LogicModules::registerAll, as the other synthetic fixtures do): the behavior classes of the Object blocks below
+		LogicModules::registerAll(w.modules);
 		std::string ini = kWorldIni;
 		ini += powerBlock(kLehen, "SCIENCE_LehenAllies");
 		ini += powerBlock(kGraueSchaar, "SCIENCE_GraueSchaar");
@@ -155,6 +159,8 @@ struct SpellWorld : logictest::LogicWorld
 		ai = std::make_unique<AIWorld>(*logic, config, w.fx.env.macros);
 		ai->attach();
 		ai->newMap(terrain);
+		// the partition's grid over the same arena (RW 0x62FCCD gives it the terrain's extent): the forbidden test of RW 0x82D2FD is a partition query
+		logic->partition().setRegion(0.0f, 0.0f, 2000.0f, 2000.0f);
 		// the shroud: RW 0x82E913's FINAL_CLEAR and the summon-spot test of RW 0x82E80F ask the location's status for the casting player; a looker
 		// makes the aim cell CLEAR, as a player's own object standing there would
 		shroud.init(40.0f, 1);
@@ -170,6 +176,7 @@ struct SpellWorld : logictest::LogicWorld
 		Coord3D p{ x, y, z };
 		o->setPosition(&p);
 		o->setOrientation(0.0f);
+		logic->runLogicFrame(); // the object enters the partition at that position on the next logic frame
 		return o;
 	}
 	// the player's own look makes the aim cell CLEAR for player 0
@@ -182,9 +189,11 @@ struct SpellWorld : logictest::LogicWorld
 	Object *book()
 	{
 		Object *o = make("GondorSpellBookMods", teamOf("Alice"));
+		// the caster's own look makes the aim cell CLEAR for its player (RW 0x82E913 / the summon-spot test of RW 0x82E80F read the location's status)
 		revealAimFor(o->getControllingPlayer()->getPlayerIndex());
 		return o;
 	}
+
 	const SpecialPowerTemplate *power(const Power &p) { return stores.specialPowers().findSpecialPowerTemplate(p.name); }
 	int countOf(const char *templateName)
 	{
@@ -252,7 +261,8 @@ TEST_CASE("PORT-438 an accepted cast makes the OCL's object and starts the recha
 		wp.spawnAt("GondorFarm", kAim.x + 100.0f, kAim.y);
 		CHECK_MESSAGE(allowed(*caster, sp), "a farm 100 away (88 after its circle) is outside 25");
 		// CAVALRY is in the mod's filter: the rider at 5 is a forbidden object
-		wp.spawnAt("RohanRider", kAim.x + 5.0f, kAim.y);
+		Object *rider = wp.spawnAt("RohanRider", kAim.x + 5.0f, kAim.y);
+		CHECK(rider->isKindOfName("CAVALRY"));
 		CHECK_MESSAGE(!allowed(*caster, sp), "a rider at 5 forbids the point while the far farm does not");
 	}
 	{
