@@ -300,6 +300,7 @@ include(cmake/Port107.cmake) # PORT-107: Object UpgradeCameo1..5, the completeUp
 include(cmake/Port143.cmake) # PORT-143: CommandButton::m_currentIndex (RW +0xFC), the tactic picture of a gray stance button (issue #345; OPENBFME_PORT143_TESTS)
 include(cmake/Port61.cmake) # PORT-61: FlammableUpdate/FireFXList, the effects at ignition (issue #171; OPENBFME_PORT61_TESTS)
 include(cmake/Port62.cmake) # PORT-62: TransportContain/FireGrabWeaponOnVictim, the GrabWeapon fire (issue #172; OPENBFME_PORT62_TESTS)
+include(cmake/Port168.cmake) # PORT-168: the troll grab's heal percentage and the held passenger as the thrown projectile (fork issue 397; OPENBFME_PORT168_TESTS)
 include(cmake/Port80.cmake) # PORT-80: InvisibilityUpdate/UnitSpecificSoundNameToUseAsVoiceMoveToStealthyArea, the stealthy-area move voice (issue #212; OPENBFME_PORT80_TESTS)
 include(cmake/Port72.cmake) # PORT-72: FactionVictoryData, stop verdict S-7216 (issue #186; OPENBFME_PORT72_TESTS)
 include(cmake/Port96.cmake) # PORT-96: SlavedUpdate client fade on the master's guard point (issue #244; OPENBFME_PORT96_TESTS)
@@ -1008,6 +1009,7 @@ add_executable(openbfme_tests
     ${OPENBFME_PORT143_TESTS}
     ${OPENBFME_PORT61_TESTS}
     ${OPENBFME_PORT62_TESTS}
+    ${OPENBFME_PORT168_TESTS}
     ${OPENBFME_PORT80_TESTS}
     ${OPENBFME_PORT72_TESTS}
     ${OPENBFME_PORT96_TESTS}
