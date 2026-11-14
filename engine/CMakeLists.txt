@@ -484,6 +484,7 @@ include(cmake/Decompfix1109.cmake) # DECOMPFIX-1109: FLEECHASE-1, ENTERADJUST-1,
 include(cmake/Port5.cmake)      # PORT-5: the bird's deferred ability target (OPENBFME_PORT5_TESTS)
 include(cmake/Port172.cmake)    # PORT-172: the skirmish AI position sampler holds no gone object (issue #425; OPENBFME_PORT172_TESTS)
 include(cmake/Port191.cmake)    # PORT-191: AutoAbilityBehavior without a Query and its unported checks (issue #458; OPENBFME_PORT191_TESTS)
+include(cmake/Port430.cmake)    # PORT-430: a model texture named `None` is a name retail never opens (issue 430; OPENBFME_PORT430_TESTS)
 add_library(openbfme_core STATIC
     ${OPENBFME_PLAY2_SOURCES}
     ${OPENBFME_APT_SOURCES}
@@ -948,6 +949,7 @@ add_executable(openbfme_tests
     ${OPENBFME_PORT148_TESTS}
     ${OPENBFME_PORT145_TESTS}
     ${OPENBFME_PORT5_TESTS}
+    ${OPENBFME_PORT430_TESTS}
     ${OPENBFME_PORT4_TESTS}
     ${OPENBFME_PORT8_TESTS}
     ${OPENBFME_PORT11_TESTS}
@@ -1196,6 +1198,7 @@ add_executable(openbfme_tests
     ${OPENBFME_DECOMPFIX1109_TESTS}
     ${OPENBFME_PORT5_TESTS}
     ${OPENBFME_PORT172_TESTS}
+    ${OPENBFME_PORT430_TESTS}
     tests/test_main.cpp
     tests/test_big_archive.cpp
     tests/test_parser_fuzz_regressions.cpp
