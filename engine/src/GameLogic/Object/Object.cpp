@@ -2969,6 +2969,47 @@ void Object::setName(const std::string &name)
 
 // lane SCRIPT-2: RW 0x69317D (see Object.h). The call RW 0x68C213 before each disabled change (the partition / drawable notification of the disabled
 // change) is what setDisabled / clearDisabled already do here
+void Object::setScriptSelectable(bool on)
+{
+	// Both editions (RotWK RW 0x68BE3C, DONOR BFME2 0x0028B76D ObjectFindModule.cpp): record Object + 0x454 and notify Drawable::setSelectable.
+	m_scriptSelectable = on;
+	m_scriptSelectableExplicit = true;
+	if (!on)
+	{
+		// RW 0x6719FA / DONOR BFME2 0x00271700 (Drawable.cpp): disabling selectability deselects the drawable on the client UI.
+		if (ObjectClientHooks *c = clientHooks())
+		{
+			c->deselectDrawable(*this);
+		}
+	}
+}
+
+int Object::scriptSelectableOverride() const
+{
+	// RW 0x4B583C / DONOR BFME2 0x4B5FE6: draw module +0x214 starts at -1 (use template SELECTABLE || WALK_ON_TOP_OF_WALL),
+	// or becomes 0/1 after Drawable::setSelectable (RW 0x4B2D5E). Also preserve explicit 0 after a snapshot reload for SELECTABLE objects.
+	const bool tmplSelectable = isKindOfName("SELECTABLE");
+	if (m_scriptSelectableExplicit || m_scriptSelectable != tmplSelectable)
+	{
+		return m_scriptSelectable ? 1 : 0;
+	}
+	return -1;
+}
+
+void Object::maskObject(bool on)
+{
+	// Both editions (RotWK RW 0x68BEB1, DONOR BFME2 0x0028B7E2 ObjectMaskObject.cpp): set + 0x459 bit 1 and deselect for other players.
+	m_masked = on;
+	if (on)
+	{
+		const Player *owner = getControllingPlayer();
+		const std::uint32_t mask = (owner && owner->getPlayerIndex() >= 0 && owner->getPlayerIndex() < 32)
+			? ~(1u << owner->getPlayerIndex())
+			: ~0u;
+		m_logic.deselectObject(*this, mask, true); // RW 0x625759
+	}
+}
+
 void Object::setScriptStatus(std::uint8_t bits, bool set)
 {
 	const std::uint8_t old = m_scriptStatus;
