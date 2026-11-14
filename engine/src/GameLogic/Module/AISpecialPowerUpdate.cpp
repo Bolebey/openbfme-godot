@@ -21,6 +21,10 @@
 #include "GameLogic/Module/AIUpdate.h"
 #include "GameLogic/Module/SpecialAbilityModules.h"
 #include "GameLogic/Module/SpecialPowerModules.h"
+#include "GameLogic/Combat/ObjectWeapons.h"
+#include "GameLogic/Weapon.h"
+#include "GameLogic/SkirmishAI/AIStatCollector.h"
+#include "GameLogic/SkirmishAI/AITacticalAI.h"
 #include "GameLogic/Module/StancesBehavior.h"
 #include "GameLogic/Object/Contain/HordeContainRuntime.h"
 #include "GameLogic/Object/Object.h"
@@ -63,9 +67,10 @@ const char *const kStop =
 	"(ATTACK_HEAL_AOE RW 0x9E691D consumes the team's threat order, Team + 0x13C, written by the team's vslot 0x14 RW 0x7A59CB and erased RW 0x7A1C5E); not ported "
 	"(they answer no, counted): spell book "
 	"HEAL (RW 0x9E85C6: the ZH AIPlayer's list, Player + 0x2FC -> + 0x4, entries of type 0x1A); ARMY_BREAKER (RW 0x9E92CA: the brain's army trackers, "
-	"AI + 0x164 -> + 0x20); the per-frame "
-	"steering of a summoned helper (slot 1 of TARGETAOE_SUMMON RW 0x9EB961, ASSIST_BATTLE_* RW 0x9E8A42, SHROUD_REVEAL RW 0x9E7F0F: the helper is found through "
-	"the record's army and hero lists, RW 0x99316A, and steered by Object + 0xA4's goal position, RW 0x68B411; the counters run); INFERENCE: an unset "
+	"AI + 0x164 -> + 0x20); the per-frame steering of a summoned helper of "
+	"ASSIST_BATTLE_BUFF / _DEBUFF (slot 1 RW 0x9E8A42) and SHROUD_REVEAL (slot 1 RW 0x9E7F0F), counted: their prologue (the helper found through the record's "
+	"army and hero lists, RW 0x99316A) is shared with TARGETAOE_SUMMON, whose own steering (RW 0x9EB961: the caster's victim RW 0x668303, the move RW "
+	"0x66C4CA, the two thresholds RW 0xC69574 / RW 0xBE5AF8) is ported; INFERENCE: an unset "
 	"SpecialPowerAIType is -1, the map object re-init (behaviour slot 0xB4, RW 0x8B7554) is the first update's, the AI's goal object (AIUpdate + 0x40) is the "
 	"AI's current victim (ZH donor), only SpecialAbilityUpdate answers RW 0x68C461's vslot 4, Object + 0xA0 bit 6 (the disabled exception of RW 0x696FD2) is "
 	"clear, the player info record lists are the live objects in id order (S-418), ASSIST_BATTLE's timer list (RW 0xDEC154) belongs to the game, the battle "
@@ -345,7 +350,7 @@ UpdateSleepTime AISpecialPowerUpdate::update()
 	{
 		init();
 	}
-	++m_decision->counter; // slot 1, RW 0x993019 (slot 0x14 is empty for every type ported here)
+	slotOne(*obj); // slot 1, RW 0x993019 (slot 0x14 is empty for every type ported here): the steering overrides run before the counter
 	const CommandButton *b = m_decision->button;
 	if (!b)
 	{
@@ -788,6 +793,169 @@ void AISpecialPowerUpdate::runButton(Object &obj, Object *target, const Coord3D 
 	// handed a null target, so nothing happens
 }
 
+// ---- the per-frame steering of a summoned helper (issue #464, port of parked Port 197) --------------------------------------------------------------
+// RW 0x993019 is the decision base class's slot 1: ++counter (+ 0x10), then slot 0x14 (empty for every type). Three types override it: they steer the
+// object their power made, then chain to the base (RW 0x9EBBDC's `call 0x993019`). RW 0x9EB961 is TARGETAOE_SUMMON's override; RW 0x9E8A42
+// (ASSIST_BATTLE_BUFF / _DEBUFF) and RW 0x9E7F0F (SHROUD_REVEAL) share its prologue but keep their own bodies, which are not ported (stop S-1421).
+void AISpecialPowerUpdate::slotOne(Object &obj)
+{
+	switch (m_decision->type)
+	{
+	case AISP_TARGETAOE_SUMMON:
+		steerSummonedHelper(obj); // RW 0x9EB961
+		break;
+	case AISP_SPELLBOOK_ASSIST_BATTLE_BUFF:
+	case AISP_SPELLBOOK_ASSIST_BATTLE_DEBUFF:
+	case AISP_SPELLBOOK_SHROUD_REVEAL:
+		++stats().unsteeredHelpers; // RW 0x9E8A42 / 0x9E7F0F: the prologue and the body are not ported, counted (stop S-1421)
+		break;
+	default:
+		break;
+	}
+	++m_decision->counter; // RW 0x993019
+}
+
+namespace
+{
+// RW 0x99316A: the player's AI record (ThePlayerList + 0xA3C, RW 0x6A9999) lists the player's army ([record] -> + 4 / + 8, RW 0x72B229) and, when that list
+// has no hit, its heroes (record + 0x14, RW 0x8FF2D7). Every entry is an object id resolved with RW 0x449681: a gone object and a STRUCTURE (template
+// + 0x108 bit 7) are skipped, `heroesOnly` also wants HERO (+ 0x113 bit 2 = KindOf 90); the first whose template (Object + 0x04) name (+ 0x64) equals
+// `name` (RW 0x4065AA) wins. All three call sites pass 1 for `heroesOnly` (RW 0x9E8022 / 0x9E8B44 / 0x9EBA57's `push 1`).
+Object *findPlayerObjectByName(GameLogic &logic, const Player &player, const std::string &name, bool heroesOnly)
+{
+	if (name.empty())
+	{
+		return nullptr;
+	}
+	const AIStatCollector &record = AITacticalAI::recordOf(logic, player.getPlayerIndex());
+	static const int kStructure = kind("STRUCTURE");
+	static const int kHero = kind("HERO");
+	const std::vector<ObjectID> *lists[2] = { &record.army(), &record.heroes() };
+	for (const std::vector<ObjectID> *list : lists)
+	{
+		for (ObjectID id : *list)
+		{
+			Object *o = logic.findObjectByID(id); // RW 0x449681
+			if (!o || hasKind(*o, kStructure)) // RW 0x9931B7: template + 0x108 bit 7
+			{
+				continue;
+			}
+			if (heroesOnly && !hasKind(*o, kHero)) // RW 0x9931C9: template + 0x113 bit 2
+			{
+				continue;
+			}
+			const ThingTemplate *t = o->getTemplate();
+			if (t && t->getName() == name) // RW 0x4065AA
+			{
+				return o;
+			}
+		}
+	}
+	return nullptr;
+}
+} // namespace
+
+// RW 0x9EB9A5: while the decision's name is empty (RW 0x401E64 is true for a null or an empty string) the object's module for the button's power (RW
+// 0x68C26D on button + 0x44) is asked for the name its slot 0x5C returns; RW 0x9EBA12 keeps a non-empty one. An OCLSpecialPower answers the template its
+// list creates first (RW 0x8C74C4 -> RW 0x8C7393, the list's own slot 0).
+std::string AISpecialPowerUpdate::summonedHelperName(Object &obj)
+{
+	const SpecialPowerTemplate *t = m_decision->powerTemplate;
+	if (!t)
+	{
+		return std::string();
+	}
+	if (const SpecialPowerModuleInterface *m = SpecialPowerModules::findModule(obj, t)) // RW 0x68C26D
+	{
+		if (const OCLSpecialPower *ocl = dynamic_cast<const OCLSpecialPower *>(m))
+		{
+			return ocl->firstCreatedTemplateName(); // RW 0x8C74C4
+		}
+	}
+	return std::string();
+}
+
+void AISpecialPowerUpdate::steerSummonedHelper(Object &obj)
+{
+	// RW 0x9EB961: the object the power made walks to the casting object's current victim, every frame
+	const Player *player = obj.getControllingPlayer(); // RW 0x68B678
+	if (!player)
+	{
+		return;
+	}
+	if (player->getPlayerType() != PLAYER_COMPUTER) // RW 0x9EB999: Player + 0x5C == 1 (PlayerType COMPUTER)
+	{
+		return;
+	}
+	if (m_decision->helperName.empty()) // RW 0x9EB9A5
+	{
+		m_decision->helperName = summonedHelperName(obj); // RW 0x9EB9C3 .. 0x9EBA32
+	}
+	Object *helper = nullptr;
+	if (m_decision->helperId != INVALID_ID) // RW 0x9EBA37
+	{
+		helper = obj.logic().findObjectByID(m_decision->helperId); // RW 0x449681
+		if (!helper)
+		{
+			m_decision->helperId = INVALID_ID; // RW 0x9EBA54
+		}
+	}
+	if (!helper)
+	{
+		helper = findPlayerObjectByName(obj.logic(), *player, m_decision->helperName, true); // RW 0x9EBA77 -> RW 0x99316A
+		if (!helper)
+		{
+			return;
+		}
+		m_decision->helperId = helper->getID(); // RW 0x9EBA86: helper + 0x74 is the object's id
+	}
+	AIUpdateInterface *ai = helper->getAIUpdateInterface(); // RW 0x9EBA8C: Object + 0x260
+	if (!ai)
+	{
+		return;
+	}
+	static const int kCanAttack = kind("CAN_ATTACK");
+	if (!hasKind(*helper, kCanAttack)) // RW 0x9EBA9B: template + 0x108 bit 3 = KindOf CAN_ATTACK
+	{
+		return;
+	}
+	AIUpdateInterface *ownAI = obj.getAIUpdateInterface(); // RW 0x9EBACD
+	Object *victim = ownAI ? ownAI->currentVictim() : nullptr; // RW 0x9EBADB -> RW 0x668303
+	if (!victim)
+	{
+		return;
+	}
+	const Coord3D &target = *victim->getPosition(); // RW 0x9EBAE8: the victim's position, + 0x38 / + 0x3C
+	// RW 0x9EBAA8: the current weapon (AI + 0x1F0) and its range (Weapon + 0x40); no weapon or a range above 0 takes the goal branch (RW 0x9EBB4F)
+	const ObjectWeapons *weapons = helper->getWeapons();
+	const Weapon *current = weapons ? weapons->currentWeapon() : nullptr;
+	// INFERENCE: the port's WeaponTemplate melee flag (RW 0x441B59, template + 0x125) stands for RW 0x9EBAC4's "the weapon's range is above 0"
+	const bool ranged = !current || !current->getTemplate()->m_meleeWeapon;
+	if (ranged)
+	{
+		// RW 0x9EBB4F: the position the helper walks to (Object + 0xA4 through RW 0x68B411) against the victim's
+		const Coord3D goal = ai->machineGoalPosition(); // INFERENCE: the state machine's goal stands for retail's path goal (RW 0x8E1BD4)
+		const float dx = goal.x - target.x;
+		const float dy = goal.y - target.y;
+		if (dx * dx + dy * dy <= 900.0f) // RW 0xBE5AF8: 30 units
+		{
+			return;
+		}
+	}
+	else
+	{
+		// RW 0x9EBACA: the helper's own position (RW 0x9EBB01) against the victim's
+		const Coord3D *pos = helper->getPosition();
+		const float dx = pos->x - target.x;
+		const float dy = pos->y - target.y;
+		if (dx * dx + dy * dy <= 25.0f) // RW 0xC69574: 5 units
+		{
+			return;
+		}
+	}
+	ai->aiMoveToPosition(target, CMD_FROM_PLAYER); // RW 0x66C4CA with 0 (RW 0x9EBB3D / 0x9EBB3F push ebx = 0): CMD_FROM_PLAYER is 0
+}
+
 void AISpecialPowerUpdate::crc(StateHasher &h) const
 {
 	UpdateModule::crc(h);
@@ -814,6 +982,8 @@ void AISpecialPowerUpdate::crc(StateHasher &h) const
 		h.addI32(d.variant);
 		h.addU32((std::uint32_t)d.assistUnit);
 		h.addU32((std::uint32_t)d.assistTarget);
+		h.addString(d.helperName); // issue #464: the name the slot 1 override steers
+		h.addU32((std::uint32_t)d.helperId);
 		h.addU32((std::uint32_t)d.buffedIds.size());
 		for (ObjectID id : d.buffedIds)
 		{
@@ -852,7 +1022,7 @@ std::vector<std::string> AISpecialPowerUpdate::stopLines()
 // m_assumeButtonForTest is a test harness setting, not state.
 void AISpecialPowerUpdate::xfer(Xfer &x)
 {
-	SnapshotXfer::version(x, 1, 1);
+	SnapshotXfer::version(x, 2, 2); // issue #464: + helperName / helperId (the summoned helper the slot 1 override steers)
 	xferUpdateModule(x);
 	x.xferBool(&m_active);
 	x.xferBool(&m_initialized);
@@ -909,5 +1079,7 @@ void AISpecialPowerUpdate::xfer(Xfer &x)
 	SnapshotXfer::enumIn(x, d.variant, 0, 2, "an AI special power decision's variant");
 	x.xferObjectID(&d.assistUnit);
 	x.xferObjectID(&d.assistTarget);
+	x.xferAsciiString(&d.helperName); // issue #464: RW 0x9EB9A5's name and RW 0x9EBA37's cached object
+	x.xferObjectID(&d.helperId);
 	SnapshotXfer::ids(x, d.buffedIds);
 }

@@ -288,6 +288,10 @@ public:
 
 private:
 	const ObjectCreationList *pickOCL() const; // RW 0x8C7393
+	// issue #464: the special power interface's slot 0x5C (RW 0x8C74C4, interface RW 0xC73890) — the list pickOCL chooses, then the list's own name of what
+	// it creates; INFERENCE: that slot 0 body was not read (the port keeps the nuggets as data, no virtual), so the name is the first CreateObject
+	// nugget's first ObjectNames entry
+	std::string firstCreatedTemplateName() const;
 	void createOCL(const ObjectCreationList *ocl, const Coord3D &where, bool hasSecondary);
 	const OCLSpecialPowerModuleData *m_data;
 	std::vector<ObjectID> m_created; // the objects of the last cast (tests, the HUD)

@@ -481,6 +481,7 @@ include(cmake/Bldfx1.cmake)     # FEAT-BLDFX-1: the FXList nugget sinks, scorche
 include(cmake/Decompfix1109.cmake) # DECOMPFIX-1109: FLEECHASE-1, ENTERADJUST-1, REQTHROTTLE-1 (OPENBFME_DECOMPFIX1109_TESTS)
 include(cmake/Port5.cmake)      # PORT-5: the bird's deferred ability target (OPENBFME_PORT5_TESTS)
 include(cmake/Port172.cmake)    # PORT-172: the skirmish AI position sampler holds no gone object (issue #425; OPENBFME_PORT172_TESTS)
+include(cmake/Port464.cmake)    # PORT-464: the per-frame steering of a summoned helper (issue #464; OPENBFME_PORT464_TESTS)
 add_library(openbfme_core STATIC
     ${OPENBFME_PLAY2_SOURCES}
     ${OPENBFME_APT_SOURCES}
@@ -1190,6 +1191,7 @@ add_executable(openbfme_tests
     ${OPENBFME_DECOMPFIX1109_TESTS}
     ${OPENBFME_PORT5_TESTS}
     ${OPENBFME_PORT172_TESTS}
+    ${OPENBFME_PORT464_TESTS}
     tests/test_main.cpp
     tests/test_big_archive.cpp
     tests/test_parser_fuzz_regressions.cpp
