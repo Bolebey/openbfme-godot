@@ -1168,7 +1168,7 @@ std::string OCLSpecialPower::firstCreatedTemplateName() const
 	}
 	for (const OCLNugget &n : ocl->nuggets())
 	{
-		if (n.isCreateObject && !n.objectNames.empty())
+		if (n.kind == OCLNugget::CREATE_OBJECT && !n.objectNames.empty())
 		{
 			return n.objectNames.front();
 		}

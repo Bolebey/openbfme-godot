@@ -15,6 +15,7 @@
 #include "Common/INI.h"
 #include "Common/Player.h"
 #include "Common/SpecialPower.h"
+#include "GameClient/ControlBarCommands.h"
 #include "GameLogic/GameLogic.h"
 #include "GameLogic/Module/AISpecialPowerUpdate.h"
 #include "GameLogic/Module/AIUpdate.h"
@@ -151,6 +152,8 @@ struct SummonFx : combattest::CombatWorld
 	INIEnvironment aiEnv;
 	SpecialPowerStore powers;
 	SpecialPowerStore *savedPowers = TheSpecialPowerStore;
+	CommandStore commands; // the module's init finds its button by name (RW 0x69156B), initAsIfInCommandSetForTest supplies it
+	CommandStore *savedCommands = TheCommandStore;
 	ObjectCreationListStore ocls{ w.keys };
 	ObjectCreationListStore *savedOcl = TheObjectCreationListStore;
 	Object *summoner = nullptr;
@@ -160,8 +163,11 @@ struct SummonFx : combattest::CombatWorld
 	SummonFx()
 	{
 		TheSpecialPowerStore = &powers;
+		TheCommandStore = &commands;
+		commands.setThingFactory(&w.things);
 		TheObjectCreationListStore = &ocls;
 		w.fx.env.blocks.registerBlock("SpecialPower", [](INI *ini) { SpecialPowerStore::parseSpecialPowerDefinitionGlobal(ini); });
+		w.fx.env.blocks.registerBlock("CommandButton", [](INI *ini) { CommandStore::parseCommandButtonDefinitionGlobal(ini); });
 		w.fx.env.blocks.registerBlock("ObjectCreationList", [](INI *ini) { ObjectCreationListStore::parseObjectCreationListDefinitionGlobal(ini); });
 		SpecialPowerModules::registerAll(w.modules);
 		const std::string err = w.load(kObjects);
@@ -178,6 +184,7 @@ struct SummonFx : combattest::CombatWorld
 	~SummonFx()
 	{
 		TheSpecialPowerStore = savedPowers;
+		TheCommandStore = savedCommands;
 		TheObjectCreationListStore = savedOcl;
 	}
 	Player *bob() { return players.findPlayerWithName("Bob"); }
