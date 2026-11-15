@@ -492,6 +492,7 @@ include(cmake/Port430.cmake)    # PORT-430: a model texture named `None` is a na
 include(cmake/Port433.cmake)    # PORT-433: Ithilien grove (ElvenWood) area bonuses in the painted taint zone (issue #433; OPENBFME_PORT433_TESTS)
 include(cmake/Port428.cmake)    # PORT-428: the aerial path's 3D would-collide filter (OPENBFME_PORT428_TESTS)
 include(cmake/Port439.cmake)    # PORT-439: the script action FOCAL_LENGTH_CAMERA (the view's focal length, issue #439; OPENBFME_PORT439_TESTS)
+include(cmake/Port194.cmake)    # PORT-194: the crowd response of the unit voice, RotWK's CrowdResponse parser and threshold rule (issue #461; OPENBFME_PORT194_TESTS)
 add_library(openbfme_core STATIC
     ${OPENBFME_PLAY2_SOURCES}
     ${OPENBFME_APT_SOURCES}
@@ -923,6 +924,7 @@ add_executable(openbfme_tests
     ${OPENBFME_PORT427_TESTS}
     ${OPENBFME_PORT437_TESTS}
     ${OPENBFME_PORT436_TESTS}
+    ${OPENBFME_PORT194_TESTS}
     ${OPENBFME_PORT133_TESTS}
     ${OPENBFME_PORT166_TESTS}
     ${OPENBFME_PORT137_TESTS}
