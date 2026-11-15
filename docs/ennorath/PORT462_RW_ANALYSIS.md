@@ -113,3 +113,16 @@ ennorath-ini-1.9.8.3.zip returned auth_error: the connection is no longer
 valid. No further connector request was made. The archive is not present
 in this sandbox. Owner must reconnect Google Drive before the required
 mod-first validation can proceed.
+
+## Data access restored and implementation
+
+Drive access restored; downloaded ennorath-ini-1.9.8.3.zip and extracted
+only in /tmp. Verified RohanRohirrim in
+object/goodfaction/units/men/rohanrohirrim.ini has charge/move/attack voices;
+MiscAudio.ini assigns PlanningModeOrderGiven. No mod bytes are committed.
+
+Implemented planning replacement for move/attack/enter through existing
+choice collection (including NoSound early exit). Waypoint gate queries
+existing live UI, not a cached simulation flag. No new simulation state.
+The charge back-reference guard is implicit in the Object-based picker;
+its erroneous comment is corrected, not replaced with a headless-object mute.
