@@ -57,6 +57,11 @@ CATEGORIES = [
     ("NO-SELECT", re.compile(r"could not be selected")),
     ("LEFT-WORLD", re.compile(r"left the world")),
     ("INVENTORY", re.compile(r"does not exist")),
+    ("DISABLED", re.compile(r"\(not enabled\)")),                     # the button stays greyed at the top level: a requirement the test or the port misses
+    ("NOT-APPLIED", re.compile(r"not on the unit after")),            # an upgrade button whose upgrade never lands
+    ("NO-MODULE", re.compile(r"no module of the unit")),              # the power has no module on the unit to run it
+    ("NO-SEND", re.compile(r"sent nothing")),                         # the press or its target click sent no message
+    ("FORMATION", re.compile(r"HORDE_TOGGLE_FORMATION left the state")),
 ]
 
 
@@ -198,8 +203,9 @@ def cmd_collect(a) -> None:
     cells = {}
     for fac, d in per.items():
         cats = collections.Counter(d["buttons"].values())
-        total, ok = sum(cats.values()), cats.get("PASS", 0)
-        red = total - ok - cats.get("STANCE", 0)
+        # the stance button (S-289: it opens the radial) is on every unit: a known stop, not counted as a button of the matrix
+        total, ok = sum(cats.values()) - cats.get("STANCE", 0), cats.get("PASS", 0)
+        red = total - ok
         cells[fac] = (f"[{total} кнопок: ✓{ok} ✗{red}](MATRIX.tsv) ({stamp})", str(ok))
         print(f"{fac}: {total} buttons, {ok} pass, {red} red: " + ", ".join(f"{k} {v}" for k, v in cats.most_common() if k != "PASS"))
     update_readme(cells)
