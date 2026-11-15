@@ -47,6 +47,7 @@ NOT_CONTENT = {"requiredobject", "buildingrequired", "displaynameinvisibleforene
 
 # what a FAIL line means, first match wins (the words are unitsOf's)
 CATEGORIES = [
+    ("CRASH", re.compile(r"^CRASH")),                                # the engine died at this press: the first thing to fix
     ("STANCE", re.compile(r"^S-289")),                              # the stance button opens the radial: a known stop, not a fault
     ("NO-FIRE", re.compile(r"did not fire")),
     ("NO-RULE", re.compile(r"no effect of .* is asserted")),         # the test cannot judge it yet
@@ -102,17 +103,53 @@ def cmd_seeds(a) -> None:
         print(f"{f}: {len(rows)} selectable objects reached")
 
 
+TRACE = re.compile(r"^factb trace: (.+)$", re.M)
+MAX_CRASHES = 40
+
+
 def run_one(a, faction: str) -> tuple[str, int, float]:
+    """One faction, rerun after each crash: the report is appended to as the test goes, the crashed press (or object, when a rerun crashes
+    again before its first press) gets a CRASH line and is skipped with every press already reported."""
     seeds = a.out / f"{faction}.seeds"
     if not seeds.exists():
         raise SystemExit(f"{seeds} is missing: run `seeds` first")
+    tsv, skip, log_path = a.out / f"{faction}.tsv", a.out / f"{faction}.skip", a.out / f"{faction}.log"
     env = dict(os.environ)
     env.update(OPENBFME_SWEEP_OVERLAY=str(env_path("OPENBFME_ENNORATH_INSTALL", a.overlay)), OPENBFME_SWEEP_FACTION=faction,
-               OPENBFME_SWEEP_SEEDS=str(seeds), OPENBFME_SWEEP_REPORT=str(a.out / f"{faction}.tsv"), OPENBFME_SWEEP_MAP=a.map)
-    (a.out / f"{faction}.tsv").unlink(missing_ok=True)
+               OPENBFME_SWEEP_SEEDS=str(seeds), OPENBFME_SWEEP_REPORT=str(tsv), OPENBFME_SWEEP_MAP=a.map, OPENBFME_SWEEP_SKIP=str(skip),
+               FACTB_TRACE="1")
+    tsv.unlink(missing_ok=True)
+    skip.write_text("", encoding="utf-8")
     t0 = time.time()
-    with open(a.out / f"{faction}.log", "wb") as log:
-        rc = subprocess.call([str(a.tests), f"-tc={TEST_CASE}"], cwd=REPO, env=env, stdout=log, stderr=subprocess.STDOUT)
+    rc = 0
+    crashed: list[str] = []
+    for attempt in range(MAX_CRASHES + 1):
+        with open(log_path, "ab") as log:
+            log.write(f"\n===== attempt {attempt + 1} =====\n".encode())
+            log.flush()
+            rc = subprocess.call([str(a.tests), f"-tc={TEST_CASE}"], cwd=REPO, env=env, stdout=log, stderr=subprocess.STDOUT)
+        text = log_path.read_text(encoding="utf-8", errors="replace").rsplit("===== attempt", 1)[-1]
+        if "CRASHED" not in text:
+            break
+        traces = TRACE.findall(text)
+        last = traces[-1].strip() if traces else ""
+        if not last:
+            break  # crashed before the first object: nothing to skip, the log says why
+        skips = set(skip.read_text(encoding="utf-8").splitlines())
+        if last in skips:
+            last = last.split(" ", 1)[0]  # the same press again (a rerun's spawn): skip the whole object
+        crashed.append(last)
+        obj, _, button = last.partition(" ")
+        with open(tsv, "a", encoding="utf-8") as out:
+            out.write(f"{faction}\t{obj}\t{button}\tFAIL\tCRASH: the test process died (SIGSEGV or similar) at this {'press' if button else 'object'}\n")
+        done = set()
+        for line in tsv.read_text(encoding="utf-8", errors="replace").splitlines():
+            p = line.split("\t")
+            if len(p) == 5 and p[2]:
+                done.add(f"{p[1]} {p[2]}")
+        skip.write_text("\n".join(sorted(done | skips | {last})) + "\n", encoding="utf-8")
+    if crashed:
+        print(f"{faction}: {len(crashed)} crash(es): {', '.join(crashed)}", flush=True)
     return faction, rc, time.time() - t0
 
 
@@ -138,6 +175,7 @@ def cmd_collect(a) -> None:
                 rows.append((fac, obj, button, category(verdict, detail), detail))
     if not rows:
         raise SystemExit(f"no <faction>.tsv in {a.out}: run `run` first")
+    rows = list(dict.fromkeys(rows))  # a rerun after a crash repeats the inventory lines
     order = {f: i for i, f in enumerate(FACTIONS)}
     rows.sort(key=lambda r: (order.get(r[0], 99), r[1], r[2], r[3]))
     head = "# The Ennorath button matrix (tools/matrix_run.py collect; docs/ennorath/BUTTON_SWEEP.md). One line per pressed button and failure.\n"

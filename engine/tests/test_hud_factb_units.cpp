@@ -61,13 +61,36 @@ struct Results
 {
 	std::map<std::string, std::vector<std::string>> problems;
 	std::map<std::string, std::string> passed;
-	void fail(const std::string &item, const std::string &what) { problems[item].push_back(what); }
+	// the button matrix: every verdict is appended to the report at once, so a crash later in the run keeps what came before
+	std::FILE *stream = nullptr;
+	std::string streamFaction;
+	void fail(const std::string &item, const std::string &what)
+	{
+		problems[item].push_back(what);
+		tsvLine(item, "FAIL", what);
+	}
 	void pass(const std::string &item, const std::string &what)
 	{
 		if (!problems.count(item))
 		{
 			passed[item] = what;
+			tsvLine(item, "PASS", what);
 		}
+	}
+	void tsvLine(const std::string &item, const char *verdict, std::string what)
+	{
+		if (!stream)
+		{
+			return;
+		}
+		for (char &ch : what)
+		{
+			ch = ch == '\t' || ch == '\n' || ch == '\r' ? ' ' : ch;
+		}
+		const size_t sp = item.find(' ');
+		const std::string object = item.substr(0, sp), button = sp == std::string::npos ? std::string() : item.substr(sp + 1);
+		std::fprintf(stream, "%s\t%s\t%s\t%s\t%s\n", streamFaction.c_str(), object.c_str(), button.c_str(), verdict, what.c_str());
+		std::fflush(stream);
 	}
 	void print(const char *title)
 	{
@@ -83,37 +106,6 @@ struct Results
 				std::printf("  FAIL %s: %s\n", kv.first.c_str(), p.c_str());
 			}
 		}
-	}
-	// the button matrix's machine-readable report (tools/matrix_run.py): `faction<TAB>object<TAB>button<TAB>PASS|FAIL<TAB>detail` per line, one line
-	// per failure of an item; an object-level line has an empty button
-	void writeTsv(const char *path, const std::string &faction) const
-	{
-		std::FILE *f = std::fopen(path, "wb");
-		REQUIRE_MESSAGE(f, "cannot write " << path);
-		auto clean = [](std::string s) {
-			for (char &ch : s)
-			{
-				ch = ch == '\t' || ch == '\n' || ch == '\r' ? ' ' : ch;
-			}
-			return s;
-		};
-		auto line = [&](const std::string &item, const char *verdict, const std::string &what) {
-			const size_t sp = item.find(' ');
-			const std::string object = item.substr(0, sp), button = sp == std::string::npos ? std::string() : item.substr(sp + 1);
-			std::fprintf(f, "%s\t%s\t%s\t%s\t%s\n", faction.c_str(), object.c_str(), button.c_str(), verdict, clean(what).c_str());
-		};
-		for (const auto &kv : passed)
-		{
-			line(kv.first, "PASS", kv.second);
-		}
-		for (const auto &kv : problems)
-		{
-			for (const std::string &p : kv.second)
-			{
-				line(kv.first, "FAIL", p);
-			}
-		}
-		std::fclose(f);
 	}
 	// `known`: the items that fail for a registered stop (item -> stop id; a key "*suffix" stands for every item ending so). They are reported as
 	// KNOWN, not passed and not failed; a known item that no longer fails is a failure (the stop's pin must move)
@@ -185,6 +177,36 @@ void trace(const std::string &item)
 		std::fprintf(stderr, "factb trace: %s\n", item.c_str());
 		std::fflush(stderr);
 	}
+}
+
+// the button matrix's rerun after a crash (tools/matrix_run.py): OPENBFME_SWEEP_SKIP=<file>, one "object button" item per line, not pressed again
+const std::set<std::string> &sweepSkips()
+{
+	static const std::set<std::string> skips = [] {
+		std::set<std::string> out;
+		if (const char *path = std::getenv("OPENBFME_SWEEP_SKIP"))
+		{
+			if (std::FILE *f = std::fopen(path, "rb"))
+			{
+				char buf[1024];
+				while (std::fgets(buf, sizeof(buf), f))
+				{
+					std::string s = buf;
+					while (!s.empty() && (s.back() == '\n' || s.back() == '\r'))
+					{
+						s.pop_back();
+					}
+					if (!s.empty())
+					{
+						out.insert(s);
+					}
+				}
+				std::fclose(f);
+			}
+		}
+		return out;
+	}();
+	return skips;
 }
 
 // the faction's own soldier horde, the friendly target of a power on own units (lane FACT-C: the Goblins' and Angmar's too: their powers' filters take
@@ -1070,6 +1092,14 @@ void unitsSweep(const std::string &faction, Results &res, bool sweep)
 		{
 			continue; // a horde member is tested inside its horde; the spell book is not a unit
 		}
+		if (sweep && sweepSkips().count(e->name))
+		{
+			continue; // tools/matrix_run.py: the object crashed outside a press (its spawn), skipped whole
+		}
+		if (sweep)
+		{
+			trace(e->name); // an object-level trace line: a crash before its first press names the object
+		}
 		if (const char *only = std::getenv("FACTB_ONLY")) // a debugging run of some units: comma-separated parts of their names
 		{
 			bool any = false;
@@ -1209,6 +1239,10 @@ void unitsSweep(const std::string &faction, Results &res, bool sweep)
 					continue;
 				}
 				const std::string item = e->name + " " + cb->m_name;
+				if (sweep && sweepSkips().count(item))
+				{
+					continue; // tools/matrix_run.py's rerun after a crash: reported already, or the press that crashed
+				}
 				trace(item);
 				if (cb->m_options & 0x10000000u)
 				{
@@ -1970,15 +2004,22 @@ TEST_CASE("ENNORATH sweep units: every unit, horde and hero ability and upgrade 
 		return;
 	}
 	Results r;
-	unitsSweep(faction, r, true);
+	// tools/matrix_run.py: the report is appended to (a rerun after a crash goes on in the same file), one line per verdict
+	if (const char *tsv = std::getenv("OPENBFME_SWEEP_REPORT"))
+	{
+		r.stream = std::fopen(tsv, "ab");
+		REQUIRE_MESSAGE(r.stream, "cannot write " << tsv);
+		r.streamFaction = faction;
+	}
 	for (const std::string &p : factb::inventory(faction).problems)
 	{
 		r.fail("(inventory)", p); // a name the data or the graph's seeds give that the engine does not know
 	}
+	unitsSweep(faction, r, true);
 	r.print((std::string("units ") + faction).c_str());
-	if (const char *tsv = std::getenv("OPENBFME_SWEEP_REPORT")) // tools/matrix_run.py
+	if (r.stream)
 	{
-		r.writeTsv(tsv, faction);
+		std::fclose(r.stream);
 	}
 }
 
