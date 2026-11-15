@@ -1013,7 +1013,7 @@ void toughen(GameLogic &logic, ObjectID id)
 
 // `sweep` (the button matrix on a mod's data, docs/ennorath/BUTTON_SWEEP.md): the structures' buttons are pressed too, and every command set the
 // inventory found for an object (its own, then the ones a CommandSetUpgrade switches to) gets its round, the unit wearing that set
-void unitsOf(const std::string &faction, Results &res, bool sweep = false)
+void unitsSweep(const std::string &faction, Results &res, bool sweep)
 {
 	const factb::Inventory &inv = factb::inventory(faction);
 	SharedWorld &s = shared();
@@ -1918,6 +1918,12 @@ void unitsOf(const std::string &faction, Results &res, bool sweep = false)
 		g.step(3);
 	}
 }
+
+// the factb / factc cases (a function pointer of two arguments): the sweep's own scope, no matrix extras
+void unitsOf(const std::string &faction, Results &res)
+{
+	unitsSweep(faction, res, false);
+}
 } // namespace
 
 TEST_CASE("factb units: every Isengard unit, horde and hero ability and upgrade button")
@@ -1964,7 +1970,7 @@ TEST_CASE("ENNORATH sweep units: every unit, horde and hero ability and upgrade 
 		return;
 	}
 	Results r;
-	unitsOf(faction, r, true);
+	unitsSweep(faction, r, true);
 	for (const std::string &p : factb::inventory(faction).problems)
 	{
 		r.fail("(inventory)", p); // a name the data or the graph's seeds give that the engine does not know
