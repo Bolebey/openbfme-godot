@@ -355,6 +355,7 @@ TEST_CASE("shader budget: no other W3D key field changes the varying set")
 		{ "HouseColorBaked", 2, [](W3DShaderKey &k, int v) { k.HouseColorBaked = v != 0; } },
 		{ "Fog", 4, [](W3DShaderKey &k, int v) { k.Fog = v; } },
 		{ "SelectionDecals", 2, [](W3DShaderKey &k, int v) { k.SelectionDecals = v != 0; } },
+		{ "Vegetation", 2, [](W3DShaderKey &k, int v) { k.Vegetation = v != 0; } },
 	};
 	int checked = 0;
 	int worst = -1;
@@ -407,7 +408,7 @@ TEST_CASE("shader budget: no other W3D key field changes the varying set")
 			}
 		}
 	}
-	CHECK(checked == 2 * 3 * 8 * 2 * 101);
+	CHECK(checked == 2 * 3 * 8 * 2 * 103);
 	CHECK(worst == 28); // the new worst: Fx + opaque + selection decals + shadow receiver (see the next test)
 	std::fprintf(stderr, "w3d shader budget: %d single-field variants counted, the most is %d/%d (%s; Fx %d, occlusion %d, blend %d, alpha override %d)\n",
 		checked, worst, ShaderVaryings::kMaxVaryings, worstField.c_str(), worstKey.Fx, worstKey.OcclusionPass, worstKey.Blend, worstKey.AlphaOverride);

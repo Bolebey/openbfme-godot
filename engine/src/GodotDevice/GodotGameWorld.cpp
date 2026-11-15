@@ -975,13 +975,16 @@ void GameWorld::build_static_layer(const Ref<RetailFileSystem> &fs, Dictionary &
 			// RW 0x4E8C1B / RW 0x4EC9B5: W3DShrubBuffer / W3DTreeBuffer keys tree types by (ModelName, TextureName) and applies TextureName
 			swaps.emplace_back("*", p.textureName);
 		}
-		const std::string key = AsciiStringUtil::lowered(p.modelName) + W3DInstancer::Texture_Swap_Suffix(swaps) + (p.kind == W3D_DRAWKIND_FLOOR ? "#floor" : "");
+		const bool isTree = p.kind == W3D_DRAWKIND_TREE;
+		const bool isFloor = p.kind == W3D_DRAWKIND_FLOOR;
+		const std::string key = AsciiStringUtil::lowered(p.modelName) + W3DInstancer::Texture_Swap_Suffix(swaps) + (isFloor ? "#floor" : "") + (isTree ? "#veg" : "");
 		auto it = m_staticModels.find(key);
 		int64_t model;
 		if (it == m_staticModels.end())
 		{
 			staticInst->Set_Build_Texture_Swaps(swaps);
-			staticInst->Set_Build_Floor(p.kind == W3D_DRAWKIND_FLOOR); // stop S-4974: a floor blends by its texel alpha
+			staticInst->Set_Build_Floor(isFloor); // stop S-4974: a floor blends by its texel alpha
+			staticInst->Set_Build_Vegetation(isTree); // P-92 / Local 49: Vegetation.fx abs(N.L) lighting
 			model = staticInst->add_model(toGodot(p.modelName));
 			m_staticModels[key] = model;
 		}
@@ -3176,13 +3179,14 @@ int64_t GameWorld::addTreeModelInstance(const std::string &model, const std::str
 		// RW 0x4E8C1B / RW 0x4EC9B5: W3DShrubBuffer / W3DTreeBuffer keys tree types by (ModelName, TextureName) and applies TextureName
 		swaps.emplace_back("*", texture);
 	}
-	const std::string key = AsciiStringUtil::lowered(model) + W3DInstancer::Texture_Swap_Suffix(swaps);
+	const std::string key = AsciiStringUtil::lowered(model) + W3DInstancer::Texture_Swap_Suffix(swaps) + "#veg";
 	auto it = m_staticModels.find(key);
 	int64_t m;
 	if (it == m_staticModels.end())
 	{
 		st->Set_Build_Texture_Swaps(swaps);
 		st->Set_Build_Floor(false);
+		st->Set_Build_Vegetation(true); // P-92 / Local 49: Vegetation.fx abs(N.L) lighting
 		m = st->add_model(toGodot(model));
 		m_staticModels[key] = m;
 	}
