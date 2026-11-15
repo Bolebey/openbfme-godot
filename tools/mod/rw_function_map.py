@@ -113,3 +113,52 @@ def scan_citations(root: Path) -> dict[int, str]:
 
 def importance(objects: int, depth: int, instructions: int, module: str, address: int):
     return (-objects, depth, -instructions, module, address)
+
+
+def cited_neighbours(address: int, functions: dict[int, Function], citations: dict[int, str]):
+    """Cited immediate callers and callees, sorted by address, with direction.
+
+    This is evidence for manual investigation, not proof that the uncited
+    function itself was ported. Only citations supplied by the caller count.
+    """
+    result: set[tuple[str, int, str]] = set()
+    for callee in functions.get(address, Function(frozenset(), frozenset(), 0)).calls:
+        if callee in citations:
+            result.add(('callee', callee, citations[callee]))
+    for caller, function in functions.items():
+        if address in function.calls and caller in citations:
+            result.add(('caller', caller, citations[caller]))
+    return sorted(result)
+
+
+class DecompLookup:
+    """Optional counterpart map using the same bounds and fields as rw2decomp."""
+
+    def __init__(self, path: Path):
+        import sys
+        from bisect import bisect_right
+
+        self._bisect_right = bisect_right
+        self.rows = []
+        self.starts = []
+        if not path.exists():
+            return
+        # rw2decomp owns CSV parsing and RotWK RVA/size interpretation.
+        re_dir = str(Path(__file__).resolve().parents[1] / 're')
+        if re_dir not in sys.path:
+            sys.path.insert(0, re_dir)
+        import rw2decomp
+        self.rows = rw2decomp.load(path)
+        self.starts = [r['_rva'] for r in self.rows]
+
+    def get(self, address: int) -> str:
+        rva = address - 0x400000
+        i = self._bisect_right(self.starts, rva) - 1
+        if i < 0 or rva >= self.starts[i] + self.rows[i]['_size']:
+            return ''
+        row = self.rows[i]
+        # No BFME2 counterpart: do not present the RotWK name as decomp.
+        if row['tier'] == '-':
+            return ''
+        name = row.get('decomp_qualname') or row.get('decomp_name') or ''
+        return f"{name} (tier {row['tier']})" if name else ''
