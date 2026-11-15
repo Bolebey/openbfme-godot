@@ -96,16 +96,36 @@ of `AudioEvent DefaultSoundEffect`) is identical to a hero that sounds right. Bo
 that survives to the device is the ratio of the two `MinVolume` floors times the slider factor; the port computes that ratio
 the way RW `0x4591D4` does.
 
-## 4. Open item (candidate stop)
+## 4. Answer for the fork issue
 
-The one part of the chain the port models by inference instead of by RW is the eight-entry slider table of `0x4516DE` /
-`0x458825` (step 8). Its variants multiply the volume by a per-(slider, positional) system volume, by `this->[0x9C]`, by
-`this->[0x94]` for 2D events and by a per-slider script volume, and they switch on whether ducking is running and whether the
-event itself carries `VolumeSliderMultiplier` entries. That is the mixer as a whole (every event, every slide), not the volume
-of one hero's lines — it belongs to a follow-up task, and the port's existing behaviour there is documented by stop S-243.
+The Iron Hills hero's voice events carry their own `Volume` / `MinVolume` pair, and it sits below the pair the rest of the roster
+uses (75 / 65 percent against 115 / 105, both read from the mod's `voice.ini`; every other field of those blocks — `Priority`,
+`Type = world player voice`, `SubmixSlider = voice`, and the `MinRange` / `MaxRange` inherited from `AudioEvent DefaultSoundEffect`
+— is the same as a hero who sounds right). RW 0x4591D4 turns exactly that pair into the loudness: the distance law pushes the
+volume down to the `MinVolume` floor at ordinary camera distances, so the hero's line lands on 0.65 while the roster's lands on
+1.05, and the only later multiplication (the slider factor, 0x458825) is the same for both. The port reproduces every step of that
+chain (section 3), so the hero is quieter in the port **by his own INI numbers, exactly as in retail**. Nothing in the manager
+treats one hero differently from another, and no term of the chain can be "fixed" to even the roster out without departing from
+RotWK.
 
-## 5. Next
+The tests of `engine/tests/test_port_214.cpp` (`PORT-214*`) pin that: the chain on two event shapes, the ratio of the two floors
+under two different voice sliders, an audit of a synthetic roster against an independent implementation of the formula, and the
+constructor defaults / post-parse of the INI side.
 
-1. Measure the port for the two event shapes of section 3 (synthetic INI, `PORT-214 …`) against the hand-computed
-   `0x4591D4` result, to pin the whole chain with a test.
-2. Only if a term there departs from RW, fix that term.
+## 5. What is still open (stop S-7386, narrower than S-243)
+
+The absolute loudness level of the mixer is not exact yet: the submix slider factor the port multiplies in last
+(`AudioManager::sliderFactor`) is its own `system * zoom * script * duck` product, while RW keeps **eight** floats per slider at
+MilesAudioManager +0xC8 and refreshes them in 0x4516DE as
+
+```
+base = systemVolume(+4 + 4 * (pos + 2 * slider)) * [0xD99014 + 4 * slider] * this->[0x98]   (* this->[0x94] when pos == 0)
+v0 = base      v1 = this->[0x9C] * base      v2 = scriptSlider(+0x34 + 4 * slider) * base      v3 = this->[0x9C] * v2
+```
+
+each clamped into [0, 1] (slider 5, NONE, is four 1.0). `0x458825` picks the entry with
+`index = 4 * (2 * slider + pos) + bits`, `pos` = positional or ambient stream (0x458832 / 0x45883F), bit 1 = "the event has **no**
+`VolumeSliderMultiplier` entries" (0x458888-0x458898), bit 0 = "no ducking runs, or the event is in the immune set 0x456726".
+What writes +4 (per slider **and** position), +0x34, [0x94] / [0x98] / [0x9C] and 0xD99014 — and when the manager refreshes them —
+is not read yet. It is the mixer as a whole (every event, every slider), so it belongs to a follow-up task; the per-event ratio is
+what this lane pins.
