@@ -311,7 +311,6 @@ void HordeContain::updateFormation()
 }
 
 
-
 // RotWK HordeContain's create interface (+ 0x34, vtable RW 0xC5B470): slot 0, onCreate (RW 0x86C77D), only sets a flag (+ 0x291, when module data + 0x1D8 is
 // 0; not ported); slot 1, onBuildComplete (RW 0x8718ED), makes the payload (primary slot 28, RW 0x871B9B). Every creator runs onBuildComplete after it has
 // placed the object (the map loop RW 0x62DCE4: setPosition RW 0x62E13F, then RW 0x68D252 at 0x62E176; the OCL RW 0x5F1623; ProductionUpdate; the transport
@@ -1036,7 +1035,6 @@ Object *HordeContain::combineWith(Object *target)
 		logic.destroyObject(other);
 	}
 	logic.destroyObject(self);
-	logic.noteStop(combineStopLine());
 	return made;
 }
 
@@ -1073,13 +1071,6 @@ void HordeContain::adoptMembers(HordeContain &to, const std::vector<Object *> &m
 			}
 		}
 	}
-}
-
-const char *HordeContain::combineStopLine()
-{
-	return "[S-6028] HordeContain::combineWith (RW 0x876481): NOT ported: the InitiateVoice of the ComboHordes entry (entry + 8, read by the horde "
-		   "interface's RW 0x871F29 -> RW 0x645716 with the entry of the target's outermost container; the default RW 0x8C72DF) and the entry's "
-		   "machine/leader arm RW 0x87657F (module data + 0x240 / + 0x244)";
 }
 
 void HordeContain::removeFromContain(Object *obj, bool exposeStealthUnits)

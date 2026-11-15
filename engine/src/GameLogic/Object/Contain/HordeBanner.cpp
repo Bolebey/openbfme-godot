@@ -27,6 +27,7 @@
 #include "Common/Thing/ModuleFactory.h"
 #include "Common/Thing/ThingFactory.h"
 #include "Common/Thing/ThingTemplate.h"
+#include "GameLogic/Combat/CombatNames.h"
 #include "GameLogic/Combat/ObjectWeapons.h"
 #include "GameLogic/GameLogic.h"
 #include "GameLogic/FXEvents.h"
@@ -60,8 +61,10 @@ const char *const kStop =
 	"RW 0x89A392: capacity, AllowBannerSpawnUpgrade RW 0x89A308, the score keeper off, UnitSpawnFX; RW 0x873AE3: the carrier's matrix, weapon set flags 0x18 .. 0x1A, "
 	"the template's experience pool, the attribute modifiers, the lifetime and the formation modifiers), the DISABLED_HELD update (RW 0x855830) and the carrier's "
 	"removal RW 0x871915 (DiedRespawnTime; not on a garrison release) are ported, as is nearby replenishment (RW 0x89AB8F: allied "
-	"hordes in distance order, capacity, one/all, shroud/UnitSpawnFX, expedited banner countdown); NOT ported: RW 0x8719E4's RW 0x8B50A5, the carrier's copied "
-	"upgrades / experience, the producer's exit, RW 0x871915's H+0x264 branch (BannerCarrierDestroyHordeOnDeath is ported), RW 0x873AE3's defection hand-over, RW 0x625E0A, interface slots 0x174 / 0x10 and behavior links, the ExpLevelDraw grammar (raw token; the "
+	"hordes in distance order, capacity, one/all, shroud/UnitSpawnFX, expedited banner countdown), as are the carrier made at build complete (RW 0x8718F5 .. 0x87190E -> "
+	"RW 0x870204, lane PORT-209) and the carrier's hand-over RW 0x876406; NOT ported: RW 0x8719E4's RW 0x8B50A5, the carrier's copied "
+	"upgrades / experience, the producer's exit (RW 0x873AE3's and RW 0x870204's door RW 0x870396 .. 0x8703DE), RW 0x870204's TEMPORARILY_DEFECTED arms and shroud, RW 0x871915's H+0x264 branch (BannerCarrierDestroyHordeOnDeath is ported), RW 0x873AE3's defection hand-over, "
+	"the War of the Ring army id RW 0x625E0A (ArmySummarySystem::assignArmyID RW 0x80FD9C), the H + 0x20 interface's slot 0x174 (the member's upgrades), the garrison-entry walk RW 0x8759FF (horde interface slot 0x10) and behavior links, the ExpLevelDraw grammar (raw token; the "
 	"morph side is lane PORT-75: MorphCondition RW 0x89A90F parsed and applied by RW 0x89A5C5, BannerMorphFX + 0x30 played from the contain's accept path); INFERENCE: the carrier stands at its BannerCarrierPosition, a carrier lost on its way into a garrison is cleared as by RW 0x871915";
 
 HordeContain *hordeContainOf(Object *o)
@@ -686,8 +689,36 @@ void HordeContain::spawnBannerCarrier()
 // (RW 0x86D66D, getBannerCarrierIndexToUse) picks the carrier's formation entry from the list H + 0x270 by the source's template (a HORDE source: the first
 // entry) and returns -1 only for an empty list; the port's carrier slot stays bannerMemberSlot's reading of BannerCarrierPosition (S-587's INFERENCE), so
 // the -1 arm (nothing happens, RW 0x876420) is not reproduced
-void HordeContain::handOverBannerCarrier(Object &carrier, bool walksIn)
+bool HordeContain::handOverBannerCarrier(Object &carrier, bool walksIn)
 {
+	Object *horde = getObject();
+	// interface slot 0x6C (RW 0x86C81E) with flag = true: a horde with a carrier accepts no second one (RW 0x86C81E .. 0x86C82A)
+	if (m_bannerCarrier != 0)
+	{
+		return false;
+	}
+	// RW 0x86C832 .. 0x86C86B: one of the two TEMPORARILY_DEFECTED (status 0x3E, RW 0x44DDEC): the same team (+ 0x31C) and the same status, else no
+	static const int temporarilyDefected = CombatNames::status("TEMPORARILY_DEFECTED"); // 0x3e
+	const bool carrierDefected = carrier.testStatus((unsigned)temporarilyDefected);
+	const bool hordeDefected = horde->testStatus((unsigned)temporarilyDefected);
+	if ((carrierDefected || hordeDefected) && (carrier.getTeam() != horde->getTeam() || carrierDefected != hordeDefected))
+	{
+		return false;
+	}
+	// RW 0x86C86D .. 0x86C89E: the carrier's template (+ 0x5E8, its id) is one of BannerCarriersAllowed (each name through RW 0x6D1305)
+	bool allowed = false;
+	for (const std::string &name : m_data->horde.m_bannerCarriersAllowed)
+	{
+		if (AsciiStringUtil::compareNoCase(name, carrier.getTemplate()->getName()) == 0)
+		{
+			allowed = true;
+			break;
+		}
+	}
+	if (!allowed)
+	{
+		return false;
+	}
 	// RW 0x876431 -> RW 0x876394: the id (RW 0x8763A9: H + 0x26C = carrier + 0x74) before the contain takes the carrier in (RW 0x8763C9: the contain interface's
 	// slot 0x9C), so the join already knows which member the banner is. The morph (RW 0x87643F -> RW 0x86BF96 -> RW 0x89A5C5) runs inside the port's accept
 	// (bannerCarrierMorph), with the FX unless the combine's latch H + 0x2B4 is set (RW 0x876560)
@@ -708,16 +739,17 @@ void HordeContain::handOverBannerCarrier(Object &carrier, bool walksIn)
 	if (!joined)
 	{
 		m_bannerCarrier = 0; // the port's accept refused (a destroyed horde destroys the carrier itself; a member already in the list stays what it was)
-		return;
+		return false;
 	}
 	// RW 0x87645E .. 0x876476: the carrier's ExperienceTracker (carrier + 0x26C) gains the horde's level (+ 0x24) minus its own, without feedback
 	// (RW 0x79D7E5(levels, 0)); a carrier above the horde's level gains nothing (the loop of RW 0x79D7E5 runs `levels` times)
 	ExperienceTracker *carrierTracker = carrier.getExperienceTracker();
-	const ExperienceTracker *hordeTracker = getObject()->getExperienceTracker();
+	const ExperienceTracker *hordeTracker = horde->getExperienceTracker();
 	if (carrierTracker && hordeTracker)
 	{
 		carrierTracker->gainLevels(hordeTracker->getRank() - carrierTracker->getRank(), false);
 	}
+	return true;
 }
 
 // RW 0x871915. NOT PORTED (S-587): the H + 0x264 branch (the other non-slot member, not identified). With BannerCarrierDestroyHordeOnDeath (module data
@@ -845,9 +877,10 @@ Object *HordeContain::spawnReplacementMember(const Coord3D &pos, float orientati
 			memberLife->setLifetimeRange(left, left);
 		}
 	}
-	// NOT PORTED (S-587): the TEMPORARILY_DEFECTED hand-over (RW 0x873B4E .. 0x873B61), RW 0x625E0A (RW 0x873B73), interface slot 0x174 (RW 0x873C4B) and the
-	// behavior links (RW 0x873CD8 .. 0x873D08). RW 0x873D19 .. 0x873D2F: the horde interface's slot 0x10(0) (not identified) and slot 0x1E4 (RW 0x86C92D): the
-	// formation's AttributeModifiers go to every member again, the new one included
+	// NOT PORTED (S-587): the TEMPORARILY_DEFECTED hand-over (RW 0x873B4E .. 0x873B61), the War of the Ring army id RW 0x625E0A (RW 0x873B73: ArmySummarySystem::
+	// assignArmyID RW 0x80FD9C, lane PORT-209 read it), slot 0x174 of the interface at H + 0x20 (RW 0x873C4B, with the member's upgrade mask + 0x28C) and the
+	// behavior links (RW 0x873CD8 .. 0x873D08). RW 0x873D19 .. 0x873D2F: the horde interface's slot 0x10(0) (RW 0x8759FF: the walk of the garrison-entry map
+	// interface + 0x54, the garrison lane's) and slot 0x1E4 (RW 0x86C92D): the formation's AttributeModifiers go to every member again, the new one included
 	applyFormationModifiers();
 	m_dirty = true;
 	return m;

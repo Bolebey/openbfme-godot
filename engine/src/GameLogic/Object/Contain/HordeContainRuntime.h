@@ -461,7 +461,6 @@ public:
 	bool isMainFormation() const override;
 	bool canCombineWith(const Object &other) const override;
 	Object *combineWith(Object *target) override;
-	static const char *combineStopLine();
 	// lane PORT-209 (fork issue 491): the combine's member hand-over in RW 0x876481's order. detachMembers is interface slot 0x44 (RW 0x87317A at
 	// RW 0x876653 on this horde, RW 0x87670D on the target): the members, the banner carrier among them, leave `from` in list order without its "last
 	// member gone" destruction (the formation swap's rule); adoptMembers is slot 0x78 (RW 0x876A08 at RW 0x876990): each joins `to` (slot 0x2C, RW
@@ -484,9 +483,12 @@ public:
 	// hand-over of the surviving carrier (RW 0x876962), both with flag = true. The carrier's id is the horde's (RW 0x8763A9) and it joins the contain (RW
 	// 0x876431 -> RW 0x876394); its BannerCarrierUpdate morphs for the horde (RW 0x86BF96 -> RW 0x89A5C5; the FX only while H + 0x2B4 is 0, RW 0x876560); its
 	// ExperienceTracker gains the horde's level minus its own (RW 0x87645E .. 0x876476 -> RW 0x79D7E5(levels, 0)). `walksIn`: the combine's carrier joins
-	// unplaced like the other members (adoptMembers), the spawn's is put on its slot (addToContain). Not ported: the flag = false arm (RW 0x876444 ..
-	// 0x876459, the horde gains a level, RW 0x79DA0A(1, 1, 0)): no caller of the port reaches it
-	void handOverBannerCarrier(Object &carrier, bool walksIn);
+	// unplaced like the other members (adoptMembers), the spawn's is put on its slot (addToContain). The arm's gate is interface slot 0x6C (RW 0x876541 ->
+	// RW 0x86C81E): false when the horde has a carrier (H + 0x26C, RW 0x86C81E), when the carrier's template is not one of BannerCarriersAllowed (RW
+	// 0x86C86D .. 0x86C89E, by template) or when one of the two is TEMPORARILY_DEFECTED and they differ in team or in that status (RW 0x86C832 .. 0x86C86B
+	// with flag = true); then nothing happens and the carrier stays where it is (RW 0x87657F's arm returns 0). Not ported: the flag = false arm (RW
+	// 0x876444 .. 0x876459, the horde gains a level, RW 0x79DA0A(1, 1, 0)): no caller of the port reaches it
+	bool handOverBannerCarrier(Object &carrier, bool walksIn);
 	ObjectID bannerCarrier() const { return m_bannerCarrier; }
 	unsigned bannerCountdown() const { return m_bannerCountdown; }
 	// RW 0x871915 (lane BANNER-1): the removed member was the banner carrier: the id goes and the countdown becomes its BannerCarrierUpdate's DiedRespawnTime. Only the
