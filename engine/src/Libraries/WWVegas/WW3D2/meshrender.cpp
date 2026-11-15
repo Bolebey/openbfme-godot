@@ -67,6 +67,81 @@ float Godot_Tangent_Sign(const float n[3], const float t[3], const float b[3])
 	return cx * b[0] + cy * b[1] + cz * b[2] < 0.0f ? -1.0f : 1.0f;
 }
 
+void Godot_Tangent_Basis(const float n[3], const float t[3], const float b[3], float outT[3], float outB[3])
+{
+	// Retail copies W3D_CHUNK_TANGENTS / W3D_CHUNK_BITANGENTS raw into the D3D9 vertex buffer (RW 0x0058C6B0..0x0058C707,
+	// DONOR BFME2 0x0058C84E..0x0058D16B FXShaderGeometry::Init), where D3D9 vs_2_0 `nrm` maps a zero vector to (0, 0, 0).
+	// Godot octahedral-encodes ARRAY_TANGENT as a unit direction and computes BINORMAL = normalize(cross(NORMAL, TANGENT.xyz)) * w,
+	// which divides 0/0 -> NaN on CPU and Vulkan/SPIR-V when a W3D vertex has a zero or normal-collinear tangent (e.g. IBArmory_A).
+	const float t2 = t[0] * t[0] + t[1] * t[1] + t[2] * t[2];
+	const float cx = n[1] * t[2] - n[2] * t[1];
+	const float cy = n[2] * t[0] - n[0] * t[2];
+	const float cz = n[0] * t[1] - n[1] * t[0];
+	const float c2 = cx * cx + cy * cy + cz * cz;
+	if (t2 > 1e-12f && c2 > 1e-2f * t2)
+	{
+		outT[0] = t[0];
+		outT[1] = t[1];
+		outT[2] = t[2];
+		const float b2 = b[0] * b[0] + b[1] * b[1] + b[2] * b[2];
+		if (b2 > 1e-12f)
+		{
+			outB[0] = b[0];
+			outB[1] = b[1];
+			outB[2] = b[2];
+		}
+		else
+		{
+			const float inv = 1.0f / std::sqrt(c2);
+			outB[0] = cx * inv;
+			outB[1] = cy * inv;
+			outB[2] = cz * inv;
+		}
+		return;
+	}
+	const float b2 = b[0] * b[0] + b[1] * b[1] + b[2] * b[2];
+	const float bx = b[1] * n[2] - b[2] * n[1];
+	const float by = b[2] * n[0] - b[0] * n[2];
+	const float bz = b[0] * n[1] - b[1] * n[0];
+	const float bc2 = bx * bx + by * by + bz * bz;
+	if (b2 > 1e-12f && bc2 > 1e-2f * b2)
+	{
+		const float inv = 1.0f / std::sqrt(bc2);
+		outT[0] = bx * inv;
+		outT[1] = by * inv;
+		outT[2] = bz * inv;
+		outB[0] = b[0];
+		outB[1] = b[1];
+		outB[2] = b[2];
+		return;
+	}
+	const float n2 = n[0] * n[0] + n[1] * n[1] + n[2] * n[2];
+	if (n2 > 1e-12f)
+	{
+		const float invN = 1.0f / std::sqrt(n2);
+		const float nx = n[0] * invN, ny = n[1] * invN, nz = n[2] * invN;
+		const float ax = std::fabs(ny) < 0.9f ? 0.0f : 1.0f;
+		const float ay = std::fabs(ny) < 0.9f ? 1.0f : 0.0f;
+		const float tx = ay * nz;
+		const float ty = -ax * nz;
+		const float tz = ax * ny - ay * nx;
+		const float invT = 1.0f / std::sqrt(tx * tx + ty * ty + tz * tz);
+		outT[0] = tx * invT;
+		outT[1] = ty * invT;
+		outT[2] = tz * invT;
+		outB[0] = ny * outT[2] - nz * outT[1];
+		outB[1] = nz * outT[0] - nx * outT[2];
+		outB[2] = nx * outT[1] - ny * outT[0];
+		return;
+	}
+	outT[0] = 1.0f;
+	outT[1] = 0.0f;
+	outT[2] = 0.0f;
+	outB[0] = 0.0f;
+	outB[1] = 1.0f;
+	outB[2] = 0.0f;
+}
+
 std::uint32_t MeshRenderData::TotalSurfaceTriangles() const
 {
 	std::uint32_t n = 0;
@@ -207,12 +282,9 @@ bool Build_Mesh_Render_Data(const MeshModelClass &mesh, MeshRenderData &out, std
 		out.Bitangent.resize(nv * 3);
 		for (size_t v = 0; v < nv; ++v)
 		{
-			out.Tangent[v * 3 + 0] = mesh.Tangents[v].X;
-			out.Tangent[v * 3 + 1] = mesh.Tangents[v].Y;
-			out.Tangent[v * 3 + 2] = mesh.Tangents[v].Z;
-			out.Bitangent[v * 3 + 0] = mesh.Bitangents[v].X;
-			out.Bitangent[v * 3 + 1] = mesh.Bitangents[v].Y;
-			out.Bitangent[v * 3 + 2] = mesh.Bitangents[v].Z;
+			const float tIn[3] = { mesh.Tangents[v].X, mesh.Tangents[v].Y, mesh.Tangents[v].Z };
+			const float bIn[3] = { mesh.Bitangents[v].X, mesh.Bitangents[v].Y, mesh.Bitangents[v].Z };
+			Godot_Tangent_Basis(&out.Normal[v * 3], tIn, bIn, &out.Tangent[v * 3], &out.Bitangent[v * 3]);
 		}
 	}
 

@@ -381,8 +381,10 @@ Node3D *MapObjectBuilder::build_objects(const Ref<RetailFileSystem> &fsRef, cons
 		}
 		const bool playerColored = houseColors && d.sideIndex >= 0 && m_drawables->sides[(size_t)d.sideIndex].hasColor;
 		const std::uint32_t playerColor = playerColored ? m_drawables->sides[(size_t)d.sideIndex].colorRGB : 0;
+		const bool isTree = p.kind == W3D_DRAWKIND_TREE;
 		const std::string key = AsciiStringUtil::lowered(modelName)
 			+ W3DInstancer::Texture_Swap_Suffix(swaps)
+			+ (isTree ? "#veg" : "")
 			+ (playerColored ? "#player&" + std::to_string(playerColor) : "");
 		auto it = cache.find(key);
 		int64_t model;
@@ -392,6 +394,7 @@ Node3D *MapObjectBuilder::build_objects(const Ref<RetailFileSystem> &fsRef, cons
 			{
 				target->Set_Build_Texture_Swaps(swaps);
 			}
+			target->Set_Build_Vegetation(isTree); // P-92 / Local 49: Vegetation.fx abs(N.L) lighting
 			if (playerColored) {
 			 PackedInt64Array colors;colors.push_back((int64_t)playerColor);
 			 model=target->add_model_colored(toGodot(modelName),1,colors);

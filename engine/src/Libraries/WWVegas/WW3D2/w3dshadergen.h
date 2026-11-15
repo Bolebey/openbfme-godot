@@ -93,6 +93,9 @@ struct W3DShaderKey
 	bool SelectionDecals = false;
 	// P-103: W3DFloorDraw conforms subdivided floor meshes to the height map and applies terrain decal projection depth bias.
 	bool Floor = false;
+	// P-92 / Local 49: Vegetation.fx (RW 0x4E6753, 0x4E699E, 0x4E9BD5; DONOR BFME2 Rva000E6D94AllocateBuffers.cpp):
+	// W3DTreeBuffer and W3DShrubBuffer shade both sides of foliage with abs(N.L) and omit specular.
+	bool Vegetation = false;
 
 	std::string Id() const;
 };

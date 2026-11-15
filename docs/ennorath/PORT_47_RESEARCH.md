@@ -1,12 +1,12 @@
 # PORT-47 / issue #151 — research checkpoint (2026-11-08)
 
-Status: **stopped for owner scope decision; no engine change, no acceptance claim**.
-The reachable reader is proven, but the common render-object lifecycle needed
-to preserve its result is not ported (existing S-090 / S-5015).
+Status: **reader implemented; focused red/green passed on bc66c72f; standard executable/regression pending**.
+The historical scope stop below was resolved by main b03e82c8. The owner
+authorized continuing #151 on `Drawable::recolorRenderObject`.
 All instruction addresses below were read with `tools/mod/rw.py ... dis` against
 the supplied RotWK 2.01 executable. No retail bytes or mod INI are included.
 
-## Current port
+## Historical port before Local 21 / reader fix
 
 `SubObjectsUpgradeModuleData::m_excludeSubobjects` is parsed by
 `UpgradeModuleClasses.cpp` but has no runtime consumer.
@@ -101,7 +101,7 @@ It is installed as vslot +0x1F8 in table `0xBEC7F0`; the inspected
 constructor body writes that table at `0x59F025`. The exact hierarchy
 composition selected by every model/LOD is not claimed here.
 
-## Blocking common mechanism: render-object replacement (S-090 / S-5015)
+## Historical blocker, resolved by Local 21: render-object replacement (S-090 / S-5015)
 
 The requested reader is an operation on the **current render object**, not a
 persistent negative house-colour flag. An excluded mesh returns before changing
@@ -151,7 +151,7 @@ must not be silently patched only for SubObjectsUpgrade or guessed from the
 current port. INFERENCE: the complete set of visual regressions is not yet
 measured; no new runtime behaviour is proposed or implemented.
 
-## Remaining
+## Historical remaining work at the scope stop
 
 Owner decision on the scope above; then finish the lifecycle analysis, implement
 one existing end-to-end path, obtain a mod reproduction scenario, add synthetic
@@ -159,7 +159,7 @@ PORT-47 tests/lane with red/green evidence and neighbouring behaviour, and open
 the requested PR. No PORT-47 test exists, no test expectation was changed, and
 no acceptance or visual verification is claimed. Game/mod data were not committed.
 
-## Build checkpoint
+## Historical build checkpoint at the scope stop
 
 The sandbox initially lacked CMake/Ninja; installed them inside ignored `.venv`
 from PyPI along with capstone/pefile. Tests-only Release CMake configuration
@@ -168,3 +168,151 @@ to the planned PORT-47 filter. The single-job build was restarted after rebasing
 (29814b9d); it is not a completed build or passing test run. Build stopped when
 the scope dependency was identified, rather than spending the full initial
 build on a documentation-only stop.
+
+## Reader integration after Local 21
+
+Re-read with rw.py dis: 0x8B9265..0x8B9284, 0x67273A..0x6727AD,
+0x4B8701..0x4B8771 and 0x54BE08..0x54BE43. Implement only their live reader:
+
+- Keep the existing texture event first. Only a nonempty UpgradeTexture with
+  RecolorHouse emits the subsequent recolour operation (0x8B9269 / 0x8B9272).
+- Preserve drawable enabled/campaign gates (0x67274A / 0x672781). The existing
+  campaign carryover pointer represents the linear-campaign context; Living
+  World uses gameKind == 3 and livingWorld (0x6253FD).
+- Require a controlling player (0x4B8727); snapshot kind 1 and its day colour,
+  independently of night/custom palettes (0x4B872C / 0x4B8759).
+- Snapshot only the first name, or empty for no exclusion (0x4B873C..0x4B874F).
+  Deliver once to Drawable::recolorRenderObject after upgradeTextures. Its
+  Local 21 implementation already owns all per-mesh and replacement state.
+- No simulation state, new parser, renderer path or saved-state layout is
+  introduced. Events are presentation-only, following ClientEventRecorder's
+  existing ordered owner-thread transport. Existing client reload limitations
+  (S-4190: no module loadPostProcess) are not expanded into a new save system.
+
+The synthetic tests must exercise an actual parsed SubObjectsUpgrade through
+ClientEventRecorder and DrawableManager, assert exactly one ordered recolour,
+first-name-only/case-insensitive matching and retained base palette, plus no
+recolour for the negative gates and reset on texture removal. No other module
+fields or Local 21's implementation are to be changed.
+
+## Current verification checkpoint
+
+The reader is implemented in `SubObjectsUpgrade::upgradeImplementation` →
+`ObjectClientHooks::recolorHouse` → the existing ordered recorder/manager path
+→ `Drawable::recolorRenderObject`. The renderer and Local 21 lifecycle were
+not changed. New client events are transient, not simulation state.
+
+| Changed behaviour | RW evidence | Synthetic test in `test_port_47.cpp` |
+|---|---|---|
+| Texture then explicit recolour, once | 0x8B9265/69, 0x8B926B/72, 0x8B927D | upgrade recolours after texture replacement |
+| Controller day colour, kind 1; not night or custom | 0x4B8727/2C, 0x4B8759 | same case, different custom/base/night and explicit colours |
+| First exclusion only; empty means no exclusion | 0x4B873C..0x4B874F | same case and empty exclusion case |
+| Excluded mesh retains base colour; match after first dot, case-insensitive | 0x54BE24..0x54BE43 | same case, Blade / Armor / Extra.Blade and a dotless mesh |
+| House-enabled and campaign KindOf gates | 0x67274A, 0x672760/81 | no recolour case, ten input scenarios, including no controller |
+| Subsequent texture removal resets overrides through existing lifecycle | 0x4C107F, 0x4C4648/4B, 0x4B2C18 | same case, removal assertion |
+
+Campaign-helper instructions were re-read at 0x5FF924, 0x626355 and 0x6253FD.
+INFERENCE (port representation, not RW branch semantics): the port's optional
+`campaignCarryover()` represents the current linear campaign pointer. Living
+World uses the existing gameKind/livingWorld fields. No new campaign-state
+plumbing was introduced; campaign startup/load outside these existing fields
+has not been verified here.
+
+All changed translation units, including the synthetic test, compile in the
+sandbox. Runtime assertions have focused red/green evidence on both the
+pre-rebase and rebased bases (see below). The standard full executable and
+regression remain pending the tests-only Release single-job build.
+`tools/test_select.py --base origin/main` selects FULL (no test map; CMake
+registration cannot be traced). Game-dependent skips will not count as passes.
+
+Visible verification must be done by the owner, not claimed from these tests.
+The supplied Ennorath archive was checked beyond the field occurrence:
+`LAGondorFighter` has the field, but its `GondorFighterCommandSet` has no active
+purchase buttons in this mod. It is NOT a valid normal-click reproduction.
+
+Use the verified playable route instead:
+
+1. Start an Ennorath Angmar skirmish with Cheat Mode and a bright player colour;
+   pause the opponent's AI, give resources, keep instant building enabled.
+2. Spawn `AngmarDarkDunedainHorde` and `AngmarForgeWorks` through Cheat Mode
+   (named spawn API if not in the filtered UI list; see `docs/CHEAT_MODE.md`).
+3. Level the forge through its normal building-upgrade buttons. Research
+   `Command_PurchaseTechnologyAngmarDarkIronBlades` (level-2 prerequisite) and
+   `Command_PurchaseTechnologyAngmarDarkIronArmor` (level-3 prerequisite).
+4. Select the horde and purchase `Command_PurchaseUpgradeAngmarDarkIronBlades`
+   first, then `Command_PurchaseUpgradeAngmarDarkIronArmor`. Its active command
+   set includes both. Compare the visible blade before/after the armour upgrade:
+   armour is recoloured with the player's day colour, the excluded blade keeps
+   its preceding material colour. Repeat on a night map to distinguish the
+   explicit day recolour from the ordinary night palette.
+5. Include related house/custom-palette entries of `VISUAL_REGRESSIONS.md` in
+   the owner's next visual check batch; this branch does not claim them passed.
+
+Sources checked in the extracted archive: `object/evilfaction/units/angmar/
+angmardarkdunedain.ini` (`Armor_Upgrade` and the blade exclusion),
+`object/evilfaction/hordes/angmar/angmarhordes.ini` (horde command sets),
+`commandset.ini` and `commandbutton.ini` (active purchases and prerequisites).
+This verifies a data path, not a completed visual test. Game assets/INI were
+not committed; the extracted archive remains under /tmp only.
+
+## Focused runtime evidence before final rebase
+
+Base `8b8af54f`, reader/test commit `aa9351ec`: linked the existing
+`test_port_47.cpp` object with the original `test_main.cpp` and built engine
+libraries into a temporary focused runner, without other test objects. No
+retail files or installation environment are required.
+
+```
+[doctest] test cases:   3 |   3 passed | 0 failed | 0 skipped
+[doctest] assertions: 114 | 114 passed | 0 failed |
+[doctest] Status: SUCCESS!
+```
+
+Red control: copied the core archive under /tmp and replaced only the
+`UpgradeModuleClasses.cpp` object, changing the one `recolorHouse` call back to
+its former diagnostic increment. The identical test object then reports
+3 failed cases, 8 failed assertions (exit 1). Tracked sources, the main archive
+and the normal executable were not modified by this control.
+
+The first focused attempt exposed fixture errors, not accepted engine changes:
+(1) a dotless child mesh is resolved from its own asset file, not the HLOD's
+container file; (2) passing a null team to object construction gives the neutral
+player's default team. The fixture now supplies the separate synthetic mesh
+file and an explicit ownerless team, with a null-controller assertion. Both
+expectations remain as required by RW 0x54BE32 and 0x4B8727.
+
+After this evidence, fetched `origin/main` (`bc66c72f`) and rebased successfully;
+only appended NIGHT_WATCH rows conflicted, both sides retained. The focused
+check has now repeated on that base using newly built core libraries and
+freshly compiled original main/test objects:
+
+```
+/tmp/port47-focused-tests -tc="PORT-47*"
+[doctest] test cases:   3 |   3 passed | 0 failed | 0 skipped
+[doctest] assertions: 114 | 114 passed | 0 failed |
+[doctest] Status: SUCCESS!
+```
+
+The repeated red control has 3 failed cases / 8 failed assertions (exit 1).
+This validates the actual test source and engine library on bc66c72f, but is
+explicitly NOT the standard all-tests executable. Its compilation continues;
+standard `openbfme_tests -tc="PORT-47*"`, the broad neighbours and FULL remain
+queued and are not claimed passed. No game-dependent skip counts as a pass.
+
+## Focused neighbours and PR
+
+On bc66c72f, a second temporary runner links the unchanged source objects from
+`test_local_21.cpp`, `test_upgrade_modules.cpp`, `test_w3d_draw_runtime.cpp`,
+`test_w3d_secondary_texture.cpp` and the new `test_port_47.cpp` against the same
+newly built core:
+
+```
+[doctest] test cases:   54 |   54 passed | 0 failed | 0 skipped
+[doctest] assertions: 1732 | 1732 passed | 0 failed |
+[doctest] Status: SUCCESS!
+```
+
+PR: https://github.com/Gleb302596555/openbfme-godot/pull/494 . It explicitly
+states that this is focused-object validation, not a completed standard
+all-tests build or FULL run. Standard PORT-47, broad neighbours and FULL remain
+in the already-running queue. Do not land on the focused result alone.

@@ -142,6 +142,8 @@ public:
 	// C++ only: the next add_model builds a W3DFloorDraw's model (a structure's floor / bib): its opaque surfaces blend by their texel alpha, no depth write
 	// (W3DMaterialFactory::Set_Floor_Blend, stop S-4974); the model is cached under its own name ("#floor"). The add clears it.
 	void Set_Build_Floor(bool floor) { PendingFloor = floor; }
+	// P-92 / Local 49: the next add_model builds a W3DTreeDraw tree/shrub using Vegetation.fx lighting
+	void Set_Build_Vegetation(bool veg) { PendingVegetation = veg; }
 	// lane SELWALL-1 (C++ only): the next add_model / add_model_colored builds a wall top or bridge model (KINDOF_WALK_ON_TOP_OF_WALL): its meshes are built
 	// again under a name with "#sel", their opaque surfaces draw the selection decals (W3DShaderKey::SelectionDecals: the merge decals and, lane HERORING-1,
 	// the alpha decals). The add clears it
@@ -422,6 +424,7 @@ private:
 	const std::map<std::string, HouseColorParams> *PendingMeshColors = nullptr; // LOCAL-21
 	std::vector<std::pair<std::string, std::string>> PendingSwaps; // stop S-5015: Set_Build_Texture_Swaps, taken by the next add_model
 	bool PendingFloor = false; // stop S-4974: Set_Build_Floor, taken by the next add_model
+	bool PendingVegetation = false; // P-92 / Local 49: Set_Build_Vegetation, taken by the next add_model
 	bool BuildingFloor = false; // P-103: active while building a #floor model
 	bool PendingSelectionDecals = false; // lane SELWALL-1: Set_Build_Selection_Decals, taken by the next add_model
 	std::vector<std::unique_ptr<Model>> Models;

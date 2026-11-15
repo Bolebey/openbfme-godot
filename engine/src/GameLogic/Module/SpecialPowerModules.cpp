@@ -1157,6 +1157,25 @@ OCLSpecialPower::OCLSpecialPower(Thing *thing, const OCLSpecialPowerModuleData *
 }
 
 // RW 0x8C7393: the first UpgradeOCL whose science the player owns, else OCL
+// issue #464: RW 0x8C74C4 (the interface's slot 0x5C) asks the object creation list RW 0x8C7393 picks for the name its slot 0 returns. INFERENCE: that
+// slot 0 body was not read; the port's list keeps its nuggets as data, so the name is the first CreateObject nugget's first ObjectNames entry.
+std::string OCLSpecialPower::firstCreatedTemplateName() const
+{
+	const ObjectCreationList *ocl = pickOCL(); // RW 0x8C7393
+	if (!ocl)
+	{
+		return std::string();
+	}
+	for (const OCLNugget &n : ocl->nuggets())
+	{
+		if (n.kind == OCLNugget::CREATE_OBJECT && !n.objectNames.empty())
+		{
+			return n.objectNames.front();
+		}
+	}
+	return std::string();
+}
+
 const ObjectCreationList *OCLSpecialPower::pickOCL() const
 {
 	Player *p = getObject()->getControllingPlayer();

@@ -121,6 +121,9 @@ public:
 	// of a dead object's floor on, FloorFadeRateOnObjectDeath). Off by default.
 	void Set_Floor_Blend(bool on) { FloorBlend = on; }
 	bool Floor_Blend() const { return FloorBlend; }
+	// P-92 / Local 49: Vegetation.fx (W3DTreeBuffer / W3DShrubBuffer) lights both sides with abs(N.L) and ignores VertexMaterial colours
+	void Set_Vegetation(bool on) { Vegetation = on; }
+	bool Is_Vegetation() const { return Vegetation; }
 	// lane SELWALL-1: the surfaces this factory builds belong to a wall top or bridge model (W3DShaderKey::SelectionDecals: its opaque surfaces draw the
 	// selection's merge decals); off by default
 	void Set_Selection_Decals(bool on) { SelectionDecals = on; }
@@ -175,6 +178,7 @@ private:
 	bool ParticleColor = false;
 	bool FloorBlend = false;
 	bool SelectionDecals = false; // lane SELWALL-1
+	bool Vegetation = false; // P-92 / Local 49
 	// Shared entries live while a requesting factory owns them; the process lookup
 	// holds weak pointers and cannot keep GPU resources alive at shutdown.
 	std::vector<std::shared_ptr<const Ref<Shader>>> ShaderOwners;

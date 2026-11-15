@@ -180,6 +180,7 @@ include(cmake/Build.cmake)      # BUILD-1: construction, castles, dozers (append
 include(cmake/Combat.cmake)     # OPENBFME_COMBAT_SOURCES / OPENBFME_COMBAT_TESTS (lane COMBAT-1)
 include(cmake/Structure.cmake)  # OPENBFME_STRUCTURE_SOURCES / OPENBFME_STRUCTURE_TESTS (lane COMBAT-2)
 include(cmake/Spell.cmake)      # OPENBFME_SPELL_SOURCES / OPENBFME_SPELL_TESTS (lane SPELL-1)
+include(cmake/Port438.cmake) # PORT-438: the forbidden-objects distance of a summon is the 2D bounding circle (fork issue 438; OPENBFME_PORT438_TESTS)
 include(cmake/Port43.cmake)     # PORT-43: GameData/PowerLimit -> GameLogic + 0x118 (issue #128; OPENBFME_PORT43_TESTS)
 include(cmake/Port51.cmake)     # PORT-51: Object/InstanceScaleFuzziness, parsed and never read by RotWK (issue #155; OPENBFME_PORT51_TESTS)
 include(cmake/Port99.cmake)     # PORT-99: PlayerTemplate/LightPointsUpSound, its only reader is the light-point (WOTR) action (issue #259; OPENBFME_PORT99_TESTS)
@@ -187,6 +188,7 @@ include(cmake/Port119.cmake)   # PORT-119: AttachToBoneInAnotherModule, the two 
 include(cmake/Port156.cmake)  # PORT-156: PlayerTemplate spell-book labels and screen images, parsed and read by nobody (issue #374; OPENBFME_PORT156_TESTS)
 include(cmake/Port164.cmake)   # PORT-164: the GiantBird contact point through getBestContactPoint mode 1 (fork issue 387; OPENBFME_PORT164_TESTS)
 include(cmake/Port160.cmake)   # PORT-160: the capture / loss EVA and the camp-destroyed EVA (issue #378; OPENBFME_PORT160_TESTS)
+include(cmake/Port201.cmake)   # PORT-201: a captured building's upgrades reset and production cancel (fork issue 468; OPENBFME_PORT201_TESTS)
 include(cmake/Port113.cmake)    # PORT-113: the light points of the War of the Ring (issue #280; appends to OPENBFME_SIM_SOURCES; OPENBFME_PORT113_TESTS)
 include(cmake/Port81.cmake)     # PORT-81: HordeContain/RanksToJustFreeWhenAttacking, parsed and never read by RotWK (issue #213; OPENBFME_PORT81_TESTS)
 include(cmake/Port84.cmake)     # PORT-84: unit voice of the combine-with-horde order (issue #232; OPENBFME_PORT84_TESTS)
@@ -232,6 +234,7 @@ include(cmake/FactB.cmake)      # OPENBFME_FACTB_TESTS (lane FACT-B: Isengard an
 include(cmake/Port151.cmake) # PORT-151: the enter-state unit voices of the AI orders (issue #369; OPENBFME_PORT151_TESTS)
 include(cmake/Port4.cmake) # OPENBFME_PORT4_TESTS
 include(cmake/Port109.cmake) # OPENBFME_PORT109_TESTS
+include(cmake/Port47.cmake) # OPENBFME_PORT47_TESTS
 include(cmake/Play2.cmake) # OPENBFME_PLAY2_TESTS (lane PLAY-2)
 include(cmake/Port427.cmake) # PORT-427: the porcupine formation's members face outward, each its radial bearing (issue #427; OPENBFME_PORT427_TESTS)
 include(cmake/Port437.cmake) # PORT-437: the generic attack machine's object conditions (issue #437; OPENBFME_PORT437_TESTS)
@@ -489,6 +492,10 @@ include(cmake/Port191.cmake)    # PORT-191: AutoAbilityBehavior without a Query 
 include(cmake/Port430.cmake)    # PORT-430: a model texture named `None` is a name retail never opens (issue 430; OPENBFME_PORT430_TESTS)
 include(cmake/Port433.cmake)    # PORT-433: Ithilien grove (ElvenWood) area bonuses in the painted taint zone (issue #433; OPENBFME_PORT433_TESTS)
 include(cmake/Port428.cmake)    # PORT-428: the aerial path's 3D would-collide filter (OPENBFME_PORT428_TESTS)
+include(cmake/Port439.cmake)    # PORT-439: the script action FOCAL_LENGTH_CAMERA (the view's focal length, issue #439; OPENBFME_PORT439_TESTS)
+include(cmake/Port194.cmake)    # PORT-194: the crowd response of the unit voice, RotWK's CrowdResponse parser and threshold rule (issue #461; OPENBFME_PORT194_TESTS)
+include(cmake/Port202.cmake)    # PORT-202: the locomotor's wading updater and the disguised climber's reveal (issue #469; OPENBFME_PORT202_TESTS)
+include(cmake/Port464.cmake)    # PORT-464: the per-frame steering of a summoned helper (issue #464; OPENBFME_PORT464_TESTS)
 include(cmake/Port199.cmake)    # PORT-199: GiveUpgradeUpdate contained targets, producer-linked pairs, deselection and flash (issue #466; OPENBFME_PORT199_TESTS)
 add_library(openbfme_core STATIC
     ${OPENBFME_PLAY2_SOURCES}
@@ -915,10 +922,13 @@ add_executable(openbfme_tests
     ${OPENBFME_XP_TESTS}
     ${OPENBFME_FACTB_TESTS}
     ${OPENBFME_PORT109_TESTS}
+    ${OPENBFME_PORT47_TESTS}
+    ${OPENBFME_PORT439_TESTS}
     ${OPENBFME_PLAY2_TESTS}
     ${OPENBFME_PORT427_TESTS}
     ${OPENBFME_PORT437_TESTS}
     ${OPENBFME_PORT436_TESTS}
+    ${OPENBFME_PORT194_TESTS}
     ${OPENBFME_PORT133_TESTS}
     ${OPENBFME_PORT166_TESTS}
     ${OPENBFME_PORT137_TESTS}
@@ -935,6 +945,7 @@ add_executable(openbfme_tests
     ${OPENBFME_PORT119_TESTS}
     ${OPENBFME_PORT164_TESTS}
     ${OPENBFME_PORT160_TESTS}
+    ${OPENBFME_PORT201_TESTS}
     ${OPENBFME_PORT102_TESTS}
     ${OPENBFME_PORT113_TESTS}
     ${OPENBFME_PORT75_TESTS}
@@ -1045,6 +1056,7 @@ add_executable(openbfme_tests
     ${OPENBFME_COMBAT_TESTS}
     ${OPENBFME_STRUCTURE_TESTS}
     ${OPENBFME_SPELL_TESTS}
+    ${OPENBFME_PORT438_TESTS}
     ${OPENBFME_PORT43_TESTS}
     ${OPENBFME_PORT123_TESTS}
     ${OPENBFME_PORT51_TESTS}
@@ -1208,6 +1220,8 @@ add_executable(openbfme_tests
     ${OPENBFME_PORT172_TESTS}
     ${OPENBFME_PORT430_TESTS}
     ${OPENBFME_PORT433_TESTS}
+    ${OPENBFME_PORT202_TESTS}
+    ${OPENBFME_PORT464_TESTS}
     ${OPENBFME_PORT199_TESTS}
     tests/test_main.cpp
     tests/test_big_archive.cpp
@@ -1369,10 +1383,20 @@ add_executable(openbfme_tests
     tests/test_local_47.cpp
     # lane LOCAL-48 (held objects: grabbed orc follows troll hand bone, torn-off tree W3DTreeDraw staticModel, issue #404 / P-81)
     tests/test_local_48.cpp
+    # lane LOCAL-49 (tree/shrub foliage lighting: Vegetation.fx abs(N.L) two-sided diffuse, issue #405 / P-92)
+    tests/test_local_49.cpp
     # lane LOCAL-50 (building floor decals P-103 and magma cauldron decal flicker P-97, issue #406)
     tests/test_local_50.cpp
+    # lane LOCAL-51 (Isengard Armory under construction degenerate W3D tangents P-105, issue #407)
+    tests/test_local_51.cpp
     # lane LOCAL-52 (W3D transparent/floor render priority order below particles, issue #408 / P-100)
     tests/test_local_52.cpp
+    # lane LOCAL-62 (capturing a production building cancels its production queue, issue #483 / P-122)
+    tests/test_local_62.cpp
+    # lane LOCAL-59 (WeaponFireSpecialAbilityUpdate makes and loads weapon in ctor, fork issue #418)
+    tests/test_local_59.cpp
+    # lane LOCAL-61 (P-121: stunned unit does not act/attack/move in AIUpdateInterface::update, RW 0x669652 / BFME2 0x0026A05D, issue #482)
+    tests/test_local_61.cpp
     # lane LOCAL-27 (bridges as retail: Bridge block, damage models, towers, scaffold, radar color, issue #189)
     tests/test_local_27.cpp
     # lane LOCAL-33 (castle gates and 'man the walls' as retail: GateProxyBehavior, ManTheWallsSpecialPower, issue #283)

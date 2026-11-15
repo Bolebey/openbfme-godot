@@ -154,23 +154,17 @@ public:
 		count = contain->countContainedMatching(filter); // RW 0x6CD2D9, slot 0x114
 		return true;
 	}
-	// RW 0x6CD11F: the owner's weapon in a slot (WeaponSet + 0x34C, RW 0x8F1149 of the slot record's + 0x24) whose template's filter is set; its
-	// caller RW 0x6CD1BF is the third gate of Weapon::getStatus (an owner that holds container ammo is ready to fire)
-	bool ownerHasContainAmmo(const ObjectFilter &filter) override
+	// RW 0x6CD11F (the third gate of Weapon::getStatus, its caller RW 0x6CD1BF): `push [weapon + 8]`, findObjectByID (RW 0x449681), then RW 0x68B634 =
+	// Object::isCurWeaponLocked: `add ecx, 0x34C` (the object's WeaponSet) and RW 0x8F1149 `mov eax, [ecx + 0x24]` = WeaponSet::m_curWeaponLockedStatus
+	// (DONOR BFME2: Weapon::isAmmoReady, Weapon_getRemainingAmmo.cpp, `owner->isCurWeaponLocked()`; Object::isCurWeaponLocked 0x0028AF65, WeaponSet at
+	// +0x330 there, the lock status at its + 0x24). The filter is not read: an owner whose current weapon is locked (a thrown passenger, a grabbed
+	// object) is ready to fire it; an unlocked owner is not. Port 140 read it as "the container holds an item the filter accepts" and Port 168 as "a weapon
+	// with a filter is in a slot"; the second answered yes for every creep troll (MordorCaveTrollRockThrow has IdleAfterFiringDelay 2167, so its empty
+	// rock reached this gate and was chosen again: P-104 back on 2026-11-15)
+	bool ownerHasContainAmmo(const ObjectFilter &) override
 	{
-		if (!m_w.owner().getWeapons() || !ObjectFilterMatch::isValid(&filter))
-		{
-			return false;
-		}
-		for (int slot = 0; slot < WEAPONSLOT_COUNT; ++slot)
-		{
-			const Weapon *w = m_w.owner().getWeapons()->weaponInSlot(slot);
-			if (w && w->getTemplate() && w->getTemplate()->m_projectileFilterInContainer.flag)
-			{
-				return true;
-			}
-		}
-		return false;
+		const ObjectWeapons *weapons = m_w.owner().getWeapons();
+		return weapons && weapons->isCurWeaponLocked(); // RW 0x68B634 -> RW 0x8F1149
 	}
 	int barrelCount(int) override { return 1; } // the drawable's barrel count (S-320)
 	int firingTrackerShotsAtTarget(bool hasVictim, unsigned victimID, const Coord3D &pos) override { return m_w.m_tracker.getShotsAtTarget(hasVictim, victimID, pos); }

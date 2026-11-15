@@ -305,7 +305,11 @@ UpdateSleepTime GiveUpgradeUpdate::update()
 			return result;
 		}
 	}
-	return m_searching ? UPDATE_SLEEP(1) : result; // RW 0x8A01A1: a searching porter wakes every frame
+	// RW 0x8A01A1: a searching porter wakes every frame; otherwise RW returns the base update's answer. INFERENCE (S-6011): a fading porter
+	// wakes every frame too. RW's base keeps the ability active while the porter fades (its idle answer is RW 0x854EA4's 0x3FFFFFFF, sleep forever),
+	// the port's SpecialAbilityUpdate ends it the frame after the delivery and would leave the porter half faded; until the base's active span
+	// is read (RW 0x851551 / 0x854EAE), the fade keeps the module awake as main did.
+	return (m_searching || m_fading) ? UPDATE_SLEEP(1) : result;
 }
 
 void GiveUpgradeUpdate::finishAbility(bool ownerDying, bool aborted)

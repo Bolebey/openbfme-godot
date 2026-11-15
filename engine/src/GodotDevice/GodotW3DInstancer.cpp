@@ -1110,7 +1110,7 @@ int64_t W3DInstancer::add_model(const String &model_name)
 		BuildSuffix = savedSuffix;
 		return id;
 	}
-	if (PendingSwaps.empty() && !PendingFloor)
+	if (PendingSwaps.empty() && !PendingFloor && !PendingVegetation)
 	{
 		return build_model(model_name);
 	}
@@ -1119,14 +1119,17 @@ int64_t W3DInstancer::add_model(const String &model_name)
 	swaps.swap(PendingSwaps);
 	const bool floor = PendingFloor;
 	PendingFloor = false;
+	const bool vegetation = PendingVegetation;
+	PendingVegetation = false;
 	const std::string savedSuffix = BuildSuffix;
-	BuildSuffix += Texture_Swap_Suffix(swaps) + (floor ? "#floor" : "");
+	BuildSuffix += Texture_Swap_Suffix(swaps) + (floor ? "#floor" : "") + (vegetation ? "#veg" : "");
 	const bool savedBuildingFloor = BuildingFloor;
 	BuildingFloor = floor;
 	if (Materials)
 	{
 		Materials->Set_Texture_Swaps(swaps);
 		Materials->Set_Floor_Blend(floor);
+		Materials->Set_Vegetation(vegetation);
 	}
 	const int64_t id = build_model(model_name);
 	BuildingFloor = savedBuildingFloor;
@@ -1134,6 +1137,7 @@ int64_t W3DInstancer::add_model(const String &model_name)
 	{
 		Materials->Set_Texture_Swaps({});
 		Materials->Set_Floor_Blend(false);
+		Materials->Set_Vegetation(false);
 	}
 	BuildSuffix = savedSuffix;
 	return id;

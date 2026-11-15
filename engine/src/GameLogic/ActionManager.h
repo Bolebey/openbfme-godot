@@ -27,7 +27,8 @@
 //     integer grid with step 2 over [cvttss2si(loc - r), cvttss2si(loc + r)] strictly inside the circle ((x - lx)^2 + (y - ly)^2 < r * r, SSE on
 //     cvtsi2ss values) has no water cell; RW 0x82DEA6 (NEEDS_OBJECT_FILTER, bit 2): some live object within RadiusCursorRadius (distance type 0) passes
 //     ObjectFilter (+ 0x60) for the controlling player (RW 0xBE4CC8); RW 0x82D2FD (NO_FORBIDDEN_OBJECTS, bit 4): no live object within
-//     ForbiddenObjectRange (+ 0x7C, distance type 1) passes ForbiddenObjectFilter (+ 0x78). Then the type tests of RW 0x82E135 .. 0x82E8F3 and the
+//     ForbiddenObjectRange (+ 0x7C, RW distance type 1 = RW 0xA3AE50, the 2D distance to the bounding circle; FROM_BOUNDINGSPHERE_2D here) passes
+//     ForbiddenObjectFilter (+ 0x78). Then the type tests of RW 0x82E135 .. 0x82E8F3 and the
 //     final switch RW 0x82E913 (types 10 .. 0x9E, table RW 0x82EE0D / 0x82EDE1): the shroud status of the location for the controlling player
 //     (ShroudManager RW 0xB4D9A0, player index + 0x54) CLEAR / not SHROUDED, always, or the type's own test; the other types answer no.
 //   * RW 0x82D925 canDoSpecialPowerAtObject(obj, target, source, power, options, checkSourceRequirements) (lane MODCOMPAT-MOD1, for

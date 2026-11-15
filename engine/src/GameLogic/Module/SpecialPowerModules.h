@@ -281,6 +281,10 @@ public:
 	OCLSpecialPower(Thing *thing, const OCLSpecialPowerModuleData *data);
 	const OCLSpecialPowerModuleData *data() const { return m_data; }
 	const std::vector<ObjectID> &created() const { return m_created; }
+	// issue #464: the special power interface's slot 0x5C (RW 0x8C74C4, interface RW 0xC73890) — the list pickOCL chooses, then the list's own name of what
+	// it creates; INFERENCE: that slot 0 body was not read (the port keeps the nuggets as data, no virtual), so the name is the first CreateObject
+	// nugget's first ObjectNames entry
+	std::string firstCreatedTemplateName() const;
 	ObjectID secondaryObject() const { return m_secondaryUsed; }
 	void doSpecialPower(unsigned options) override;                          // RW 0x8C73EF
 	void doSpecialPowerAtObject(Object *target, unsigned options) override;  // RW 0x8C73D7
