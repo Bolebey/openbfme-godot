@@ -147,7 +147,7 @@ def main_baseline(state: dict, main_sha: str) -> dict:
 def own_tests(diff: str, title: str) -> list[str]:
     pats = set()
     for name in re.findall(r'^\+\s*TEST_CASE\("([^"]+)"', diff, re.M):
-        pats.add(re.split(r"[:\s]", name, 1)[0] + "*")
+        pats.add(re.split(r"[:\s]", name, maxsplit=1)[0] + "*")
     m = re.match(r"(Port|Local)\s+(\d+)", title)
     if m and not pats:
         pats.add(f"{m.group(1).upper()}-{m.group(2)}*")
