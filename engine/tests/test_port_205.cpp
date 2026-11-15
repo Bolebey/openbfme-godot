@@ -41,33 +41,39 @@ using namespace combattest;
 
 namespace
 {
-// The members' weapons: Arc400 (the banner's), Arc200 (the payload's) and Arc100 (a spear), then the horde's own rangefinder (a HordeAttackNugget and
-// nothing else) and a trebuchet-like launcher whose warhead carries the DamageContainedNugget.
+// A hit of 5 for anything (a DamageNugget's slot 1, RW 0x90E855: the base test, the owner, LostLeadershipUselessAgainst and the victim's estimate) and the
+// same reach with nothing that can damage (a FireLogicNugget alone answers false: its slot 1 is RW 0x8F8014). Reach does NOT enter isApplicable; only the
+// member's weapon can decide the pick, so the fixtures differ by "can damage", not by range.
 const char kPort205Weapons[] =
-	"Weapon P205Arc100\n"
+	"Weapon P205ShortHit\n"
 	"  AttackRange = 100\n"
-	"  WeaponSpeed = 100\n"
-	"  ProjectileNugget\n"
-	"    ProjectileTemplateName = Arrow\n"
-	"    WarheadTemplateName = BowWarhead\n"
+	"  DamageNugget\n"
+	"    Damage = 5\n"
+	"    DamageType = SLASH\n"
+	"    DeathType = NORMAL\n"
 	"  End\n"
 	"End\n"
-	"Weapon P205Arc200\n"
-	"  AttackRange = 200\n"
-	"  WeaponSpeed = 100\n"
-	"  ProjectileNugget\n"
-	"    ProjectileTemplateName = Arrow\n"
-	"    WarheadTemplateName = BowWarhead\n"
-	"  End\n"
-	"End\n"
-	"Weapon P205Arc400\n"
+	"Weapon P205LongHit\n"
 	"  AttackRange = 400\n"
-	"  WeaponSpeed = 100\n"
-	"  ProjectileNugget\n"
-	"    ProjectileTemplateName = Arrow\n"
-	"    WarheadTemplateName = BowWarhead\n"
+	"  DamageNugget\n"
+	"    Damage = 5\n"
+	"    DamageType = SLASH\n"
+	"    DeathType = NORMAL\n"
 	"  End\n"
 	"End\n"
+	"Weapon P205ShortWaste\n"
+	"  AttackRange = 100\n"
+	"  FireLogicNugget\n"
+	"    LogicType = INCREASE_BURN_RATE\n"
+	"  End\n"
+	"End\n"
+	"Weapon P205LongWaste\n"
+	"  AttackRange = 400\n"
+	"  FireLogicNugget\n"
+	"    LogicType = INCREASE_BURN_RATE\n"
+	"  End\n"
+	"End\n"
+	// the horde's own weapon: a HordeAttackNugget and nothing else
 	"Weapon P205HordeWeapon\n"
 	"  AttackRange = 150\n"
 	"  DelayBetweenShots = 1000\n"
@@ -75,6 +81,7 @@ const char kPort205Weapons[] =
 	"  HordeAttackNugget\n"
 	"  End\n"
 	"End\n"
+	// a trebuchet-like launcher whose warhead carries the DamageContainedNugget (the fire drake's shape)
 	"Weapon P205ContainedWarhead\n"
 	"  DamageContainedNugget\n"
 	"    KillCount = 5\n"
@@ -90,8 +97,9 @@ const char kPort205Weapons[] =
 	"  End\n"
 	"End\n";
 
-// An archer (Arc200), a banner (Arc400, KindOf BANNER), a spear (Arc100), a horde of two archers that carries the rangefinder, the same horde as a
-// COMBO_HORDE, a plain victim, a garrison tower, a garrison tower whose garrison is immune to the clearing of what it attacks, and a rider.
+// P205Archer carries a weapon that can damage (P205ShortHit), P205WasteArcher one that cannot (P205ShortWaste); both reach 100, so a horde's answer follows
+// the member the pick names and not the range. P205Banner (KindOf BANNER) cannot damage either, P205LongBanner can (P205LongHit, reach 400). P205Rider has
+// no weapon at all.
 const char kPort205Objects[] =
 	"Object P205Archer\n"
 	"  KindOf = INFANTRY SELECTABLE CAN_ATTACK\n"
@@ -101,7 +109,23 @@ const char kPort205Objects[] =
 	"  GeometryHeight = 20\n"
 	"  WeaponSet\n"
 	"    Conditions = None\n"
-	"    Weapon = PRIMARY P205Arc200\n"
+	"    Weapon = PRIMARY P205ShortHit\n"
+	"  End\n"
+	"  Body = ActiveBody ModuleTag_Body\n"
+	"    MaxHealth = 100\n"
+	"  End\n"
+	"  Behavior = AIUpdateInterface ModuleTag_AI\n"
+	"  End\n"
+	"End\n"
+	"Object P205WasteArcher\n"
+	"  KindOf = INFANTRY SELECTABLE CAN_ATTACK\n"
+	"  Geometry = CYLINDER\n"
+	"  GeometryMajorRadius = 8\n"
+	"  GeometryMinorRadius = 8\n"
+	"  GeometryHeight = 20\n"
+	"  WeaponSet\n"
+	"    Conditions = None\n"
+	"    Weapon = PRIMARY P205ShortWaste\n"
 	"  End\n"
 	"  Body = ActiveBody ModuleTag_Body\n"
 	"    MaxHealth = 100\n"
@@ -117,7 +141,7 @@ const char kPort205Objects[] =
 	"  GeometryHeight = 20\n"
 	"  WeaponSet\n"
 	"    Conditions = None\n"
-	"    Weapon = PRIMARY P205Arc400\n"
+	"    Weapon = PRIMARY P205ShortWaste\n"
 	"  End\n"
 	"  Body = ActiveBody ModuleTag_Body\n"
 	"    MaxHealth = 100\n"
@@ -125,15 +149,15 @@ const char kPort205Objects[] =
 	"  Behavior = AIUpdateInterface ModuleTag_AI\n"
 	"  End\n"
 	"End\n"
-	"Object P205Spear\n"
-	"  KindOf = INFANTRY SELECTABLE CAN_ATTACK\n"
+	"Object P205LongBanner\n"
+	"  KindOf = INFANTRY SELECTABLE CAN_ATTACK BANNER\n"
 	"  Geometry = CYLINDER\n"
 	"  GeometryMajorRadius = 8\n"
 	"  GeometryMinorRadius = 8\n"
 	"  GeometryHeight = 20\n"
 	"  WeaponSet\n"
 	"    Conditions = None\n"
-	"    Weapon = PRIMARY P205Arc100\n"
+	"    Weapon = PRIMARY P205LongHit\n"
 	"  End\n"
 	"  Body = ActiveBody ModuleTag_Body\n"
 	"    MaxHealth = 100\n"
@@ -141,7 +165,12 @@ const char kPort205Objects[] =
 	"  Behavior = AIUpdateInterface ModuleTag_AI\n"
 	"  End\n"
 	"End\n"
-	"Object P205Horde\n"
+	// four hordes, each with a fixed member list (InitialPayload keeps its order, so no member has to be moved at run time):
+	//   P205HordeBannerFirst  [P205Banner (cannot damage), P205Archer (can)]
+	//   P205HordeHitFirst     [P205Archer (can), P205WasteArcher (cannot)]
+	//   P205WasteHorde        [P205WasteArcher] alone
+	//   P205ComboBannerFirst  COMBO_HORDE [P205WasteArcher (reach 100), P205LongBanner (reach 400, can)]
+	"Object P205HordeBannerFirst\n"
 	"  KindOf = HORDE LARGE_RECTANGLE_PATHFIND SELECTABLE CAN_ATTACK\n"
 	"  Geometry = BOX\n"
 	"  GeometryMajorRadius = 30\n"
@@ -157,11 +186,55 @@ const char kPort205Objects[] =
 	"  Behavior = HordeAIUpdate ModuleTag_AI\n"
 	"  End\n"
 	"  Behavior = HordeContain ModuleTag_Contain\n"
-	"    RankInfo = RankNumber:1 UnitType:P205Archer Position:X:50 Y:0 Position:X:50 Y:20\n"
-	"    InitialPayload = P205Archer 2\n"
+	"    RankInfo = RankNumber:1 UnitType:P205Banner Position:X:50 Y:0\n"
+	"    RankInfo = RankNumber:1 UnitType:P205Archer Position:X:50 Y:20\n"
+	"    InitialPayload = P205Banner 1\n"
+	"    InitialPayload = P205Archer 1\n"
 	"  End\n"
 	"End\n"
-	"Object P205ComboHorde\n"
+	"Object P205HordeHitFirst\n"
+	"  KindOf = HORDE LARGE_RECTANGLE_PATHFIND SELECTABLE CAN_ATTACK\n"
+	"  Geometry = BOX\n"
+	"  GeometryMajorRadius = 30\n"
+	"  GeometryMinorRadius = 45\n"
+	"  GeometryHeight = 20\n"
+	"  WeaponSet\n"
+	"    Conditions = None\n"
+	"    Weapon = PRIMARY P205HordeWeapon\n"
+	"  End\n"
+	"  Body = ImmortalBody ModuleTag_Body\n"
+	"    MaxHealth = 1\n"
+	"  End\n"
+	"  Behavior = HordeAIUpdate ModuleTag_AI\n"
+	"  End\n"
+	"  Behavior = HordeContain ModuleTag_Contain\n"
+	"    RankInfo = RankNumber:1 UnitType:P205Archer Position:X:50 Y:0\n"
+	"    RankInfo = RankNumber:1 UnitType:P205WasteArcher Position:X:50 Y:20\n"
+	"    InitialPayload = P205Archer 1\n"
+	"    InitialPayload = P205WasteArcher 1\n"
+	"  End\n"
+	"End\n"
+	"Object P205WasteHorde\n"
+	"  KindOf = HORDE LARGE_RECTANGLE_PATHFIND SELECTABLE CAN_ATTACK\n"
+	"  Geometry = BOX\n"
+	"  GeometryMajorRadius = 30\n"
+	"  GeometryMinorRadius = 45\n"
+	"  GeometryHeight = 20\n"
+	"  WeaponSet\n"
+	"    Conditions = None\n"
+	"    Weapon = PRIMARY P205HordeWeapon\n"
+	"  End\n"
+	"  Body = ImmortalBody ModuleTag_Body\n"
+	"    MaxHealth = 1\n"
+	"  End\n"
+	"  Behavior = HordeAIUpdate ModuleTag_AI\n"
+	"  End\n"
+	"  Behavior = HordeContain ModuleTag_Contain\n"
+	"    RankInfo = RankNumber:1 UnitType:P205WasteArcher Position:X:50 Y:0\n"
+	"    InitialPayload = P205WasteArcher 1\n"
+	"  End\n"
+	"End\n"
+	"Object P205ComboBannerFirst\n"
 	"  KindOf = HORDE COMBO_HORDE LARGE_RECTANGLE_PATHFIND SELECTABLE CAN_ATTACK\n"
 	"  Geometry = BOX\n"
 	"  GeometryMajorRadius = 30\n"
@@ -177,8 +250,10 @@ const char kPort205Objects[] =
 	"  Behavior = HordeAIUpdate ModuleTag_AI\n"
 	"  End\n"
 	"  Behavior = HordeContain ModuleTag_Contain\n"
-	"    RankInfo = RankNumber:1 UnitType:P205Archer Position:X:50 Y:0 Position:X:50 Y:20\n"
-	"    InitialPayload = P205Archer 2\n"
+	"    RankInfo = RankNumber:1 UnitType:P205WasteArcher Position:X:50 Y:0\n"
+	"    RankInfo = RankNumber:1 UnitType:P205LongBanner Position:X:50 Y:20\n"
+	"    InitialPayload = P205WasteArcher 1\n"
+	"    InitialPayload = P205LongBanner 1\n"
 	"  End\n"
 	"End\n"
 	"Object P205Victim\n"
@@ -300,87 +375,77 @@ void reorderContain(Object *horde, const std::vector<Object *> &order)
 TEST_CASE("PORT-205: HordeAttackNugget asks the first member that is not a banner, not the first member at all (RW 0x9119CB, RW 0x8705A6)")
 {
 	Port205World w;
-	Object *horde = w.unit("P205Horde", 'A', 300, 300);
-	HordeContainInterface *hi = hordeInterface(horde);
-	REQUIRE(hi);
 	// the bit RotWK passes: 0xA4 = 164, the index of BANNER in the name table (BitFlagNames.cpp)
 	const int kBanner = ObjectTemplateInfoBuilder::kindOfIndex("BANNER");
 	REQUIRE(kBanner == 164);
-	std::vector<Object *> members = membersOf(horde);
-	REQUIRE(members.size() == 2u); // InitialPayload = P205Archer 2, both Arc200
+	Object *victim = w.unit("P205Victim", 'B', 600, 300);
 
-	// no banner: the first listed member
-	CHECK(hi->firstMemberNotKindOf((unsigned)kBanner) == members[0]);
-
-	// a banner in front of a fighter: the pick passes it over (RW 0x8705CB), so the banner's Arc400 is not the weapon asked
-	Object *banner = w.unit("P205Banner", 'A', 305, 300);
-	REQUIRE(banner);
-	reorderContain(horde, { banner, members[1] });
-	members = membersOf(horde);
+	// a banner whose weapon cannot damage sits FIRST, a fighter that can behind it: the pick passes the banner over and the nugget applies
+	Object *bannerFirst = w.unit("P205HordeBannerFirst", 'A', 300, 300);
+	HordeContainInterface *hi = hordeInterface(bannerFirst);
+	REQUIRE(hi);
+	std::vector<Object *> members = membersOf(bannerFirst);
 	REQUIRE(members.size() == 2u);
-	CHECK(members[0] == banner);
+	CHECK(members[0]->getTemplate()->getName() == "P205Banner");
+	CHECK(members[1]->getTemplate()->getName() == "P205Archer");
 	CHECK(hi->firstMemberNotKindOf((unsigned)kBanner) == members[1]);
+	CHECK(hordeWeaponApplies(w, bannerFirst, victim)); // the fighter's P205ShortHit, not the banner's P205ShortWaste
 
-	// 250 away: the fighter's Arc200 cannot damage it, the banner's Arc400 could -- so the answer says which member was asked
-	Object *farVictim = w.unit("P205Victim", 'B', 550, 300);
-	layAt(banner, 305, 300);
-	layAt(members[1], 310, 300);
-	CHECK_FALSE(hordeWeaponApplies(w, horde, farVictim));
+	// a horde of one fighter that cannot damage: the pick is that member and the nugget does not apply
+	Object *waste = w.unit("P205WasteHorde", 'A', 700, 300);
+	HordeContainInterface *wasteHi = hordeInterface(waste);
+	REQUIRE(wasteHi);
+	std::vector<Object *> wasteMembers = membersOf(waste);
+	REQUIRE(wasteMembers.size() == 1u);
+	CHECK(wasteHi->firstMemberNotKindOf((unsigned)kBanner) == wasteMembers[0]);
+	CHECK_FALSE(hordeWeaponApplies(w, waste, victim));
 
-	// 150 away: the fighter's Arc200 reaches it, thus the nugget applies
-	Object *nearVictim = w.unit("P205Victim", 'B', 450, 300);
-	CHECK(hordeWeaponApplies(w, horde, nearVictim));
-
-	// a dead member is not passed over: the first member that is not a banner answers even when its body is gone (RW 0x8705D4 reads the template only)
-	layAt(members[1], 320, 300);
-	members[1]->kill(DAMAGE_UNRESISTABLE, DEATH_NORMAL);
-	REQUIRE(members[1]->isEffectivelyDead());
-	CHECK(hi->firstMemberNotKindOf((unsigned)kBanner) == members[1]);
-	CHECK_FALSE(hordeWeaponApplies(w, horde, farVictim));
-
-	// with a list of banners only, the fallback is the list's first entry (RW 0x8705E3), immune or not to the KindOf test
-	reorderContain(horde, { banner });
-	CHECK(hi->firstMemberNotKindOf((unsigned)kBanner) == banner);
-	CHECK(hordeWeaponApplies(w, horde, farVictim)); // the banner's Arc400 reaches 250
+	// the pick reads the list, so a fighter first in it decides: a horde [P205Archer, P205WasteArcher] answers true, and the same horde after the archer
+	// died answers false -- the dead member has left the contain (HordeContain's own removal), so the second member is the pick
+	Object *hitFirst = w.unit("P205HordeHitFirst", 'A', 900, 300);
+	HordeContainInterface *hitHi = hordeInterface(hitFirst);
+	REQUIRE(hitHi);
+	std::vector<Object *> hitMembers = membersOf(hitFirst);
+	REQUIRE(hitMembers.size() == 2u);
+	CHECK(hitMembers[0]->getTemplate()->getName() == "P205Archer");
+	CHECK(hitMembers[1]->getTemplate()->getName() == "P205WasteArcher");
+	CHECK(hordeWeaponApplies(w, hitFirst, victim));
+	hitMembers[0]->kill(DAMAGE_UNRESISTABLE, DEATH_NORMAL);
+	REQUIRE(hitMembers[0]->isEffectivelyDead());
+	std::vector<Object *> left = membersOf(hitFirst);
+	REQUIRE(left.size() == 1u); // the dead member left the contain list (Object::kill -> the horde's removal)
+	CHECK(hitHi->firstMemberNotKindOf((unsigned)kBanner) == left[0]);
+	CHECK_FALSE(hordeWeaponApplies(w, hitFirst, victim));
 }
 
 // RW 0x86FEEC, the pick of a COMBO_HORDE (RW 0x911A09: KindOf word 3 bit 6 set): the member whose current weapon has the greatest attack range
-// (RW 0x6CA8BD at dz 0), the first of two equals keeping the place (RW 0x86FF4B / 0x86FF4F replace only on a strictly greater range), and a member without
-// a current weapon passed over (RW 0x68B58C then RW 0x86FF32).
+// (RW 0x6CA8BD at dz 0), the first of two equals keeping the place (RW 0x86FF4B / 0x86FF4F replace only on a strictly greater range), a member without a
+// current weapon passed over (RW 0x68B58C then RW 0x86FF32). The nugget then asks that member's weapon (RW 0x911A3A .. 0x911A4A).
 TEST_CASE("PORT-205: a COMBO_HORDE asks the longest-reaching member, not the first (RW 0x9119CB, RW 0x86FEEC)")
 {
 	Port205World w;
-	Object *horde = w.unit("P205ComboHorde", 'A', 300, 300);
-	HordeContainInterface *hi = hordeInterface(horde);
-	REQUIRE(hi);
-	std::vector<Object *> members = membersOf(horde);
-	REQUIRE(members.size() == 2u); // two archers, Arc200 each: the first keeps the place
-
-	CHECK(hi->memberWithLongestAttackRange() == members[0]);
-
-	// a banner (Arc400) joins last: it is the longest-reaching member although it is the last one
-	Object *banner = w.unit("P205Banner", 'A', 305, 300);
-	REQUIRE(banner);
-	REQUIRE(horde->getContain()->addToContain(banner));
-	CHECK(hi->memberWithLongestAttackRange() == banner);
-
-	// and the nugget of the combo horde asks that member: 300 away only the banner's Arc400 reaches it
 	Object *victim = w.unit("P205Victim", 'B', 600, 300);
-	CHECK_FALSE(w.membersOf(horde).empty());
-	CHECK(hordeWeaponApplies(w, horde, victim));
+	// a fighter of 100 of reach first, a banner of 400 that can damage behind it
+	Object *combo = w.unit("P205ComboBannerFirst", 'A', 300, 300);
+	HordeContainInterface *hi = hordeInterface(combo);
+	REQUIRE(hi);
+	std::vector<Object *> members = membersOf(combo);
+	REQUIRE(members.size() == 2u);
+	CHECK(members[0]->getTemplate()->getName() == "P205WasteArcher");
+	CHECK(members[1]->getTemplate()->getName() == "P205LongBanner");
+	// the longest reach is the last member's weapon (RW 0x6CA8BD on both: 100 against 400) even though it is a BANNER (only the non-combo branch skips those)
+	CHECK(hi->memberWithLongestAttackRange() == members[1]);
+	CHECK(hordeWeaponApplies(w, combo, victim));
 
-	// the same order on a horde that is not a combo horde asks the first member instead (RW 0x911A09 both branches)
-	Object *plain = w.unit("P205Horde", 'A', 900, 900);
-	REQUIRE(plain);
-	Object *plainBanner = w.unit("P205Banner", 'A', 905, 900);
-	REQUIRE(plainBanner);
-	std::vector<Object *> plainMembers = membersOf(plain);
-	REQUIRE(plainMembers.size() == 2u);
-	reorderContain(plain, { plainMembers[0], plainBanner });
-	layAt(plainMembers[0], 910, 900);
-	layAt(plainBanner, 915, 900);
-	Object *farVictim = w.unit("P205Victim", 'B', 1200, 900); // 300 from the horde
-	CHECK_FALSE(hordeWeaponApplies(w, plain, farVictim));       // the first archer's Arc200 answers
+	// the same two members on a horde that is NOT a COMBO_HORDE: the pick is the first member that is not a banner, whose weapon cannot damage
+	Object *bannerFirst = w.unit("P205HordeBannerFirst", 'A', 700, 300);
+	HordeContainInterface *bannerHi = hordeInterface(bannerFirst);
+	REQUIRE(bannerHi);
+	std::vector<Object *> bannerMembers = membersOf(bannerFirst);
+	REQUIRE(bannerMembers.size() == 2u);
+	CHECK(bannerHi->firstMemberNotKindOf(164u) == bannerMembers[1]);
+	// both members of that horde hold a P205Short* weapon: their reaches are equal, so the first scored candidate keeps the place
+	CHECK(bannerHi->memberWithLongestAttackRange() == bannerMembers[0]);
 }
 
 // RW 0x87B308 (contain slot 0x1C of the GarrisonContain family: tables RW 0xC5C698 / RW 0xC5C9F0 / RW 0xC5F0D0 / RW 0xC5F2E8) answers the module data's
@@ -421,7 +486,7 @@ TEST_CASE("PORT-205: DamageContainedNugget spares a garrison immune to the clear
 TEST_CASE("PORT-205: contain slot 0x1C answers true for a container that is not a garrison (RW 0x8BD372)")
 {
 	Port205World w;
-	Object *horde = w.unit("P205Horde", 'A', 300, 300);
+	Object *horde = w.unit("P205WasteHorde", 'A', 300, 300);
 	REQUIRE(horde->getContain());
 	CHECK(horde->getContain()->isImmuneToClearBuildingAttacks());
 	Object *plainTower = w.unit("P205Tower", 'B', 400, 300);
