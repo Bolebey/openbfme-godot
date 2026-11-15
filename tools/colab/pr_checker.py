@@ -126,6 +126,13 @@ def main_baseline(state: dict, main_sha: str) -> dict:
     """BASE on main itself, once per main commit."""
     if state["main"].get("sha") == main_sha:
         return state["main"]["results"]
+    old = state["main"].get("sha")
+    if old:  # main moved by docs / tools only (a landing's own commits): the engine is the same, keep its results
+        moved = sh(["git", "diff", "--name-only", f"{old}..{main_sha}"]).stdout.split()
+        if moved and not any(f.startswith(("engine/", "godot/")) for f in moved):
+            state["main"]["sha"] = main_sha
+            save_state(state)
+            return state["main"]["results"]
     sh(["git", "checkout", "-q", "-f", "--detach", main_sha]).check_returncode()
     ok, err = build()
     if not ok:
