@@ -706,8 +706,9 @@ bool UnitVoiceResponse::planningOrderVoice(const Object &obj, int msgType, Choic
 	// RW 0x8DEE0E: the bypass bool is original message 0x46A, not force-attack.
 	// RW 0x8DE901 / 0x8DDFD7 / 0x8DF416: planning replaces move/attack/enter
 	// before their normal rules. Even an empty MiscAudio slot exits: no unit fallback.
+	constexpr int kPlanningVoiceBypassMessage = 0x46A; // RW 0x8DEE0E
 	const Player *player = obj.getControllingPlayer();
-	if (isEnterState(msgType) || msgType == 0x46A || !player || player->orderMode() != 2)
+	if (isEnterState(msgType) || msgType == kPlanningVoiceBypassMessage || !player || player->orderMode() != 2)
 	{
 		return false;
 	}
@@ -983,7 +984,7 @@ void UnitVoiceResponse::attackVoices(Object &obj, int msgType, const Info *info,
 	if (!done(c))
 	{
 		// RW 0x671ED8: the charge voice is allowed when neither the unit nor its horde is ATTACKING (RW 0x694154(0x25): the model condition bit 37 through
-		// 0x46E918, the horde resolved by 0x693A1A(0); review r1 fix 5) and obj + 0x384 (frame + VoiceAttackChargeTimeout) has passed. The retail
+		// 0x46E918, the horde resolved by 0x693A1A(0); review r1 fix 5) and drawable + 0x384 (frame + VoiceAttackChargeTimeout) has passed. The retail
 		// receiver is the DRAWABLE (RW 0x8DDF50 -> 0x8DE15C); +0xFC is its Object.
 		// RW 0x671EE4 rejects an unbound drawable, not a headless Object. This picker
 		// already has a live Object reference; do not test Object::clientHooks here.
@@ -1605,8 +1606,7 @@ std::vector<std::string> UnitVoiceResponse::acceptanceStops()
 		"[S-703] unit voice: message types of RW 0x8DEDBB not answered here: weapon modes (0x43A), "
 		"the planned action queue (0x46A), the Ring voices (0x7E4, 0x7E5); combine hordes (0x423, RW 0x8DF2EB) is answered (PORT-84); 0x7DB .. 0x7DD are answered (PORT-86); "
 		"0x7EA (RW 0x8DFD0D) and 0x7EB (RW 0x8DFE7B) are answered (PORT-87), the post of 0x7EA is stop S-7226",
-		"[S-704] unit voice: rules of the move / attack / enter helpers not ported: the planning order mode (player + 0x770 == 2 -> MiscAudio PlanningModeOrderGiven), "
-		"VoiceCrush (GameData + 0x8B9, crushable target), the busy gate (GameData + 0x8B0), the charge voice's drawable gate (RW 0x671EE4: no drawable, no charge)",
+		"[S-704] unit voice: VoiceCrush (InGameUI + 0x8B9, crushable target) is not ported; planning and waypoint movement gates are ported (PORT-462)",
 		"[S-705] unit voice: the candidate order is selection then member order (retail iterates a hash map keyed by Object pointers), a count tie between "
 		"two sounds goes to the lower-case name order (retail: the lower audio info POINTER, RW 0x8DE522's unsigned compare), and a hero's level is the "
 		"minimum (the experience tracker RW 0x79D12A is lane XP-1's): which sound wins a tie and which object of a bucket speaks may differ from retail",
