@@ -115,3 +115,21 @@ TEST_CASE("PORT-462 charge guard is a drawable Object back-reference not clientH
 	CHECK(r.sink.played == std::vector<std::string>{"Attack462"});
 	CHECK_FALSE(r.voice.pickAndPlay({INVALID_ID}, MSG_DO_ATTACK_OBJECT));
 }
+
+TEST_CASE("PORT-462 waypoint gate includes waiting for path but excludes enter-state")
+{
+	// RW 0x8DEA37–0x8DEA43 ORs isMoving with AI +0x3B1; 0x8DEA49
+	// bypasses waypoint suppression for enter-state movement.
+	Rig462 r;
+	auto *ai = r.unit->getAIUpdateInterface();
+	REQUIRE(ai);
+	const Coord3D destination{100.0f, 0.0f, 0.0f};
+	ai->mover().requestAttackPath(PATHFIND_INVALID_ID, destination);
+	REQUIRE(ai->mover().isWaitingForPath());
+	REQUIRE_FALSE(ai->isMoving());
+	r.ui.setWaypointMode(true);
+	CHECK_FALSE(r.play(MSG_DO_MOVETO));
+	CHECK(r.sink.played.empty());
+	CHECK(r.play(UnitVoiceResponse::VOICE_EVENT_ENTER_STATE_MOVE));
+	CHECK(r.sink.played == std::vector<std::string>{"EnterMove462"});
+}
