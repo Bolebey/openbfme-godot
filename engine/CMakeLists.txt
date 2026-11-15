@@ -1391,6 +1391,8 @@ add_executable(openbfme_tests
     tests/test_local_52.cpp
     # lane LOCAL-62 (capturing a production building cancels its production queue, issue #483 / P-122)
     tests/test_local_62.cpp
+    # lane LOCAL-63 (Isengard unpack buildings stay visible at 100% completion, issue #508 / P-129)
+    tests/test_local_63.cpp
     # lane LOCAL-59 (WeaponFireSpecialAbilityUpdate makes and loads weapon in ctor, fork issue #418)
     tests/test_local_59.cpp
     # lane LOCAL-61 (P-121: stunned unit does not act/attack/move in AIUpdateInterface::update, RW 0x669652 / BFME2 0x0026A05D, issue #482)
