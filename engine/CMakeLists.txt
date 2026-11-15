@@ -1367,6 +1367,8 @@ add_executable(openbfme_tests
     tests/test_local_47.cpp
     # lane LOCAL-48 (held objects: grabbed orc follows troll hand bone, torn-off tree W3DTreeDraw staticModel, issue #404 / P-81)
     tests/test_local_48.cpp
+    # lane LOCAL-49 (tree/shrub foliage lighting: Vegetation.fx abs(N.L) two-sided diffuse, issue #405 / P-92)
+    tests/test_local_49.cpp
     # lane LOCAL-50 (building floor decals P-103 and magma cauldron decal flicker P-97, issue #406)
     tests/test_local_50.cpp
     # lane LOCAL-52 (W3D transparent/floor render priority order below particles, issue #408 / P-100)
