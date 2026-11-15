@@ -1,7 +1,7 @@
 # Несколько агентов в одной рабочей области
 В colab-sandbox одновременно работают Claude и два агента Cline: один на DeepSeek, другой на Qwen
 (модель Qwen стоит на другом аккаунте Colab и приходит через туннель, `tools/colab/ollama_qwen_tunnel.ipynb`).
-- Задача «Local N» (промт с дашборда): работай только в станции из промта, `agent/local/station-N`, дерево `workspace/wt/local-station-N`
+- Задача «Local N» (промт с дашборда): работай только в станции из промта, `agent/local/sbN-stK`, дерево `workspace/wt/local-sbN-stK` (с 2026-11-15 у каждой песочницы N свои три станции K; старые общие `station-1..3` — только для уже выданных на них задач)
   (как его создать, если его нет, — в промте). Своей станции под «Local N» не создавай.
 - Работа без issue «Local N» (по прямому слову владельца): своё дерево и ветка `python3 tools/agent_worktree.py new <агент> station-1`
   (агент `cline-ds` для DeepSeek, `cline-qwen` для Qwen; дерево остаётся и берёт задачу за задачей).
