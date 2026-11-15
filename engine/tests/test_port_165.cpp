@@ -7,6 +7,9 @@
 #include "CombatTestUtil.h"
 #include "GameLogic/AI/AIAttack.h"
 #include "GameLogic/AI/AIAttackHordePosition.h"
+#include "GameLogic/AI/AIHunt.h"
+#include "GameLogic/AI/AIGarrisonStates.h"
+#include "GameLogic/Combat/CombatNames.h"
 #include "GameLogic/AI/WeaponCommands.h"
 #include "GameLogic/Combat/ObjectWeapons.h"
 #include "GameLogic/Object/Contain/HordeContainRuntime.h"
@@ -238,5 +241,41 @@ TEST_CASE("PORT-165: deferred position-fire state survives save/load (RW 0x74C9C
 	CHECK(notify.shots == 0);
 	CHECK(restored.update() == STATE_SUCCESS);
 	CHECK(notify.shots == 1);
+	restored.onExit(EXIT_NORMAL);
+}
+
+TEST_CASE("PORT-165: position approach tests range and queues an attack path (RW 0x74E9DD / 0x741EF3)")
+{
+	TestWorld w;
+	w.combat().setAutoAcquireEnabled(false);
+	Object *horde = w.unit("P165ArcherHorde", 'A', 300, 600);
+	REQUIRE(horde);
+	w.frames(12);
+	WeaponSetToggle::setObjectWeaponSetFlag(*horde, WeaponSetToggle::WEAPONSET_TOGGLE_1, true);
+	horde->getWeapons()->setWeaponLock(2, LOCKED_TEMPORARILY);
+	AIStateMachine machine(*horde->getAIUpdateInterface(), "P165Approach");
+	machine.setGoalPosition(Coord3D{300.0f, 450.0f, 0.0f});
+	AIHordePositionApproachState inRange(machine);
+	CHECK(inRange.onEnter() == STATE_SUCCESS);
+	machine.setGoalPosition(Coord3D{300.0f, 150.0f, 0.0f});
+	AIHordePositionApproachState distant(machine);
+	horde->getAIUpdateInterface()->setLastCommandSource(CMD_FROM_PLAYER);
+	CHECK(AIAttackSquadState::canChase(*horde));
+	CHECK(GarrisonRules::isMobile(*horde));
+	CHECK_FALSE(horde->testStatus((unsigned)CombatNames::statuses().hordeMember));
+	CHECK_FALSE(horde->getAIUpdateInterface()->isStatusImmobile());
+	REQUIRE(distant.onEnter() == STATE_CONTINUE);
+	CHECK(horde->getAIUpdateInterface()->mover().attackRequestPending());
+	CHECK(horde->getAIUpdateInterface()->mover().isWaitingForPath());
+	XferSave save;
+	distant.xfer(save);
+	AIHordePositionApproachState restored(machine);
+	XferLoad load(save.data());
+	restored.xfer(load);
+	XferSave again;
+	restored.xfer(again);
+	CHECK(again.data() == save.data());
+	restored.onTemporaryStateEnded();
+	CHECK(restored.update() == STATE_CONTINUE); // restored move still dispatches its special path hook
 	restored.onExit(EXIT_NORMAL);
 }

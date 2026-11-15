@@ -1,15 +1,21 @@
 // OpenBFME. GPL-3.0.
-// PORT-165 (issue #394): the member-attack wait state of RW 0x74548D.
+// PORT-165 (issue #394): states of the horde attack-on-position machine RW 0x74548D.
 #include "GameLogic/AI/AIAttackHordePosition.h"
 
 #include "Common/StateHash.h"
+#include "Common/GameCommon.h"
 #include "Common/Xfer.h"
 #include "GameLogic/AI/AIAttack.h"
+#include "GameLogic/AI/AIGarrisonStates.h"
+#include "GameLogic/AI/AIHunt.h"
+#include "GameLogic/AI/AIXfer.h"
+#include "GameLogic/AI/TurretAI.h"
 #include "GameLogic/Combat/CombatNames.h"
 #include "GameLogic/Combat/ObjectWeapons.h"
 #include "GameLogic/Module/AIUpdate.h"
 #include "GameLogic/Weapon.h"
 #include "GameLogic/Object/Object.h"
+#include "GameLogic/SimMath.h"
 
 #include <algorithm>
 #include <stdexcept>
@@ -195,4 +201,144 @@ void AIHordePositionFireState::xfer(Xfer &x)
 	XferVersion v{ 1, 1 };
 	x.xferVersion(v);
 	x.xferBool(&m_deferred);
+}
+
+// Position approach, RW 0x74E9DD / 0x74A3E2 / 0x741EF3 / 0x74A4EE.
+AIHordePositionApproachState::AIHordePositionApproachState(AIStateMachine &machine)
+	: AIState(machine, "AIHordePositionApproachState")
+{
+}
+
+void AIHordePositionApproachState::ensureMove()
+{
+	if (!m_move)
+	{
+		m_move = std::make_unique<AIMoveToState>(ai().mover(), Coord3D{0.0f, 0.0f, 0.0f}, false);
+		m_move->setComputePathHook(this);
+	}
+}
+
+bool AIHordePositionApproachState::computeSpecialPath(AIMoveToState &move)
+{
+	// RW 0x741EF3: mobile only; a pending request keeps its goal. Refresh the
+	// goal at most once per second while a path exists; only a pathless unit
+	// actually queues the attack path to the position.
+	if (!GarrisonRules::isMobile(owner())) return false;
+	if (move.waitingForPath()) return true;
+	AIMover &mover = ai().mover();
+	const bool noPath = !mover.path() && !mover.isWaitingForPath();
+	if (!noPath && ai().frame() - m_pathFrame < (unsigned)LOGICFRAMES_PER_SECOND) return true;
+	m_pathFrame = ai().frame();
+	move.setAdjustsDestination(true);
+	m_stopIfInRange = false;
+	move.setGoal(machine().goalPosition());
+	if (noPath)
+	{
+		mover.requestAttackPath(PATHFIND_INVALID_ID, move.goal());
+		move.setWaitingForPath(mover.isWaitingForPath());
+	}
+	return true;
+}
+
+StateReturnType AIHordePositionApproachState::onEnter()
+{
+	Object &obj = owner();
+	if (obj.isKindOfName("PROJECTILE"))
+	{
+		// RW 0x74E9EC toggles locomotor precise Z; its shared locomotor reader
+		// is not part of this state port, so never silently approximate it.
+		throw std::logic_error("AIHordePositionApproachState: projectile precise-Z locomotion is not ported");
+	}
+	m_ownerPosition = *obj.getPosition();
+	m_waiting = false;
+	m_pathFrame = 0u - (unsigned)LOGICFRAMES_PER_SECOND;
+	ObjectWeapons *weapons = obj.getWeapons();
+	if (!weapons || !weapons->currentWeapon()) return STATE_FAILURE;
+	if (weapons->isWithinAttackRange(machine().goalPosition())) return STATE_SUCCESS;
+	if (!AIAttackSquadState::canChase(obj) || (obj.testStatus((unsigned)CombatNames::statuses().hordeMember) && obj.getContainedBy()))
+		return STATE_FAILURE;
+	if (!GarrisonRules::isMobile(obj) || ai().curLocomotorSpeed() < 0.1f)
+	{
+		m_waiting = true;
+		m_waitFrame = ai().frame() + 2u * (unsigned)LOGICFRAMES_PER_SECOND;
+		return STATE_CONTINUE;
+	}
+	if (TurretAI *turret = ai().turretForCurWeapon()) turret->setTurretTargetPosition(&machine().goalPosition());
+	ensureMove();
+	if (!computeSpecialPath(*m_move)) return STATE_FAILURE;
+	m_move->setAdjustsDestination(false);
+	const StateReturnType result = m_move->onEnter();
+	m_move->setAdjustsDestination(true);
+	return result;
+}
+
+StateReturnType AIHordePositionApproachState::update()
+{
+	ensureMove();
+	ObjectWeapons *weapons = owner().getWeapons();
+	Weapon *weapon = weapons ? weapons->currentWeapon() : nullptr;
+	// RW 0x74A3F5: stop in range after the attack request is consumed, or
+	// while waiting for a speedless owner; melee weapons suppress that stop.
+	m_stopIfInRange = !ai().mover().attackRequestPending() || m_waiting;
+	if (weapon && weapon->getTemplate() && weapon->getTemplate()->m_meleeWeapon) m_stopIfInRange = false;
+	StateReturnType result;
+	if (m_stopIfInRange && weapon && weapons->isWithinAttackRange(m_move->goal())) result = STATE_SUCCESS;
+	else if (!computeSpecialPath(*m_move)) result = STATE_FAILURE;
+	else result = m_move->update();
+	// RW 0x74A49B: during the initial approach a weapon turret can aim at a
+	// mood target, separately from the machine's position goal.
+	if (m_initialApproach)
+	{
+		if (TurretAI *turret = ai().turretForCurWeapon())
+		{
+			if (ai().getNextMoodTarget(true, false))
+			{
+				// RW 0x74A4DC also sets AI + 0x3C7, unported shared state (S-1189).
+				throw std::logic_error("AIHordePositionApproachState: turret mood-target flag is not ported (S-1189)");
+			}
+		}
+	}
+	return result;
+}
+
+void AIHordePositionApproachState::onExit(StateExitType)
+{
+	if (ai().isDestroying()) return;
+	ensureMove();
+	m_move->onExit(); // RW 0x748D8A
+	ai().mover().ignoreObstacle(PATHFIND_INVALID_ID);
+	if (ai().isDoingGroundMovement())
+	{
+		const Coord3D &goal = m_move->goal();
+		const Coord3D &pos = *owner().getPosition();
+		const float dx = SimMath::subf32(goal.x, pos.x), dy = SimMath::subf32(goal.y, pos.y);
+		if (SimMath::addf32(SimMath::mulf32(dx, dx), SimMath::mulf32(dy, dy)) < 12.5f) owner().setPosition(&goal);
+	}
+	ai().setLocomotorGoalNone();
+	m_initialApproach = false;
+}
+
+void AIHordePositionApproachState::onTemporaryStateEnded()
+{
+	if (m_move) m_move->clearWaitingForPath(); // RW 0x740C97
+}
+
+void AIHordePositionApproachState::crc(StateHasher &h) const
+{
+	h.addBool(m_move != nullptr);
+	if (m_move) m_move->crc(h);
+	h.addFloat(m_ownerPosition.x); h.addFloat(m_ownerPosition.y); h.addFloat(m_ownerPosition.z);
+	h.addU32(m_pathFrame); h.addU32(m_waitFrame);
+	h.addBool(m_stopIfInRange); h.addBool(m_initialApproach); h.addBool(m_waiting);
+}
+
+void AIHordePositionApproachState::xfer(Xfer &x)
+{
+	XferVersion v{1, 1};
+	x.xferVersion(v);
+	xferMove(x, ai().mover(), m_move);
+	AIXfer::coord(x, m_ownerPosition);
+	x.xferUnsignedInt(&m_pathFrame); x.xferUnsignedInt(&m_waitFrame);
+	x.xferBool(&m_stopIfInRange); x.xferBool(&m_initialApproach); x.xferBool(&m_waiting);
+	if (x.isLoading() && m_move) m_move->setComputePathHook(this);
 }
