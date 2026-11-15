@@ -762,7 +762,7 @@
 - Проверка: —
 
 ### P-67. `ownerfix1 campaign powers played` красный на main: Chill Wind не применяется
-- Статус: [ ] открыто
+- Статус: [x] **ВЫПОЛНЕНО** — на `main` `4011137d` тест зелёный с файлами игры (Colab, RotWK 2.01 + Эннорат 1.9.8.3: `ownerfix1 campaign powers*` 2 / 2, 84 / 84), 2026-11-15; Port 181 (#434) закрыт без правки: ошибку закрыла одна из правок после 2026-11-09
 - Добавлено: 2026-11-09, Claude (приёмка партии PR арены в station-0)
 - Тест: `ownerfix1 campaign powers played: the first Angmar mission's intro ends ...`, `engine/tests/test_ownerfix1_input.cpp:1122..1124`: `CHECK_FALSE( c.hud->spellBar().targeting() )`, `countTemplate(..., "SpellBookChillWind") == winds0 + 1`, `spellStateName(p->spellSlotState(0)) == "_notReady"` — после прицеливания и клика заклинание не применено, прицел остаётся.
 - Сборка: `main` `c54fb932` (сборка станции 1, 16:16) — падает; так же на сборке партии PR #174 .. #197 в station-0 (до и после #198). Значит, не от партии. В `TEST_BASELINE.md` нет.
