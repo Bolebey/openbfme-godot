@@ -46,6 +46,8 @@ const char kPort212Objects[] =
 	"  End\n"
 	"  Body = ActiveBody ModuleTag_Body\n"
 	"    MaxHealth = 1000\n"
+	"    MaxHealthDamaged = 500\n"
+	"    MaxHealthReallyDamaged = 100\n"
 	"  End\n"
 	"End\n"
 	"Object Plot\n"
