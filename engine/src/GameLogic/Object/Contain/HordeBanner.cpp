@@ -589,7 +589,7 @@ void HordeContain::bannerCarrierMorph(Object &member)
 	{
 		return;
 	}
-	update->morphForTemplate(getPayloadMemberTemplateName(), true);
+	update->morphForTemplate(getPayloadMemberTemplateName(), !m_bannerMorphFXSuppressed); // RW 0x876560: the FX unless the combine's latch H + 0x2B4 is set
 }
 
 // RW 0x8719E4
@@ -629,30 +629,95 @@ void HordeContain::bannerCheck(bool force)
 			return;
 		}
 	}
-	// RW 0x870204
-	if (data.m_bannerCarriersAllowed.empty())
+	spawnBannerCarrier(); // RW 0x871A65
+}
+
+// RW 0x870204 (lane PORT-209, fork issue 491). Its callers: bannerCheck (RW 0x871A65) and the tail of onBuildComplete (RW 0x87190E). Not ported here (S-587):
+// the original team of a TEMPORARILY_DEFECTED horde (RW 0x870281 .. 0x8702D4: status 0x3E, the team RW 0x86DBC4 names, RW 0x7A7483), the local player's
+// shroud over the new drawable (RW 0x87033D .. 0x87036A), the replacement state of a defected horde (RW 0x87036F .. 0x87037F, RW 0x6930C9), the War of the
+// Ring army id (RW 0x870384 .. 0x870391: RW 0x625E0A = GameLogic + 0x184's ArmySummarySystem::assignArmyID RW 0x80FD9C with Object + 0x47C) and the exit
+// through the producer's ExitInterface while the horde is UNDER_CONSTRUCTION (RW 0x870396 .. 0x8703DE: RW 0x449681, status 2, RW 0x68BB14, its slots 1 and 2).
+// The scoring switch around the creation (RW 0x87025D .. 0x87027C / 0x8702F6, Player + 0x3DC byte + 0x110) is the port's score keeper, which newObject
+// does not touch
+void HordeContain::spawnBannerCarrier()
+{
+	Object *horde = getObject();
+	const HordeContainModuleData &data = m_data->horde;
+	if (m_bannerCarrier != 0) // RW 0x870217 .. 0x870220
 	{
 		return;
 	}
-	const ThingTemplate *tt = horde->logic().things().findTemplate(data.m_bannerCarriersAllowed[0]);
+	if (data.m_bannerCarriersAllowed.empty()) // RW 0x870226 .. 0x870233
+	{
+		return;
+	}
+	const ThingTemplate *tt = horde->logic().things().findTemplate(data.m_bannerCarriersAllowed[0]); // RW 0x870239 .. 0x87024A (RW 0x6D1305)
 	if (!tt)
 	{
 		return;
 	}
-	Object *carrier = horde->logic().newObject(tt, horde->getTeam(), ObjectStatusMaskType{});
+	Object *carrier = horde->logic().newObject(tt, horde->getTeam(), ObjectStatusMaskType{}); // RW 0x87028E / 0x8702EA (RW 0x6D165E, the horde's team + 0x31C)
 	if (!carrier)
 	{
 		return;
 	}
+	// RW 0x8702FB .. 0x870338: the horde's weapon set flags 0x18, 0x19, 0x1A (RW 0x68DEEC on the horde) go to the carrier (RW 0x691059)
+	const WeaponConditionFlags &hordeFlags = horde->getWeaponSetFlags();
+	for (int bit = 0x18; bit <= 0x1A; ++bit)
+	{
+		if (((hordeFlags[(size_t)bit >> 5] >> (bit & 31)) & 1u) != 0)
+		{
+			carrier->setWeaponSetFlag(bit, true);
+		}
+	}
+	// RW 0x8703E0 .. 0x8703F5: the horde's transform (RW 0x70BA76) and layer (RW 0x68BBE0 -> RW 0x68BB9D) when no producer door takes the carrier out
 	carrier->setPosition(horde->getPosition());
 	carrier->setOrientation(horde->getOrientation());
-	m_bannerCarrier = carrier->getID();
-	addToContain(carrier);
+	handOverBannerCarrier(*carrier, false); // RW 0x8703FA .. 0x870409: interface slot 0x74 (carrier, horde, true) -> RW 0x876406
+	// RW 0x870414 .. 0x870426: the carrier's BannerCarrierUpdate (RW 0x86BF43), its data + 0x14 = MeleeFreeBannerReSpawnTime, becomes the countdown H + 0x27C
 	if (BannerCarrierUpdate *b = dynamic_cast<BannerCarrierUpdate *>(carrier->findModule("BannerCarrierUpdate")))
 	{
 		m_bannerCountdown = b->data().m_meleeFreeBannerReSpawnTime;
 	}
 	m_dirty = true;
+}
+
+// RW 0x876406 (lane PORT-209, fork issue 491), with flag = true as both of its callers pass it (RW 0x870409 the spawn, RW 0x876962 the combine). RW 0x876418
+// (RW 0x86D66D, getBannerCarrierIndexToUse) picks the carrier's formation entry from the list H + 0x270 by the source's template (a HORDE source: the first
+// entry) and returns -1 only for an empty list; the port's carrier slot stays bannerMemberSlot's reading of BannerCarrierPosition (S-587's INFERENCE), so
+// the -1 arm (nothing happens, RW 0x876420) is not reproduced
+void HordeContain::handOverBannerCarrier(Object &carrier, bool walksIn)
+{
+	// RW 0x876431 -> RW 0x876394: the id (RW 0x8763A9: H + 0x26C = carrier + 0x74) before the contain takes the carrier in (RW 0x8763C9: the contain interface's
+	// slot 0x9C), so the join already knows which member the banner is. The morph (RW 0x87643F -> RW 0x86BF96 -> RW 0x89A5C5) runs inside the port's accept
+	// (bannerCarrierMorph), with the FX unless the combine's latch H + 0x2B4 is set (RW 0x876560)
+	m_bannerCarrier = carrier.getID();
+	bool joined;
+	if (walksIn)
+	{
+		joined = acceptCreatedMember(&carrier);
+		if (joined)
+		{
+			m_producedMembers.erase(std::remove(m_producedMembers.begin(), m_producedMembers.end(), carrier.getID()), m_producedMembers.end());
+		}
+	}
+	else
+	{
+		joined = addToContain(&carrier);
+	}
+	if (!joined)
+	{
+		m_bannerCarrier = 0; // the port's accept refused (a destroyed horde destroys the carrier itself; a member already in the list stays what it was)
+		return;
+	}
+	// RW 0x87645E .. 0x876476: the carrier's ExperienceTracker (carrier + 0x26C) gains the horde's level (+ 0x24) minus its own, without feedback
+	// (RW 0x79D7E5(levels, 0)); a carrier above the horde's level gains nothing (the loop of RW 0x79D7E5 runs `levels` times)
+	ExperienceTracker *carrierTracker = carrier.getExperienceTracker();
+	const ExperienceTracker *hordeTracker = getObject()->getExperienceTracker();
+	if (carrierTracker && hordeTracker)
+	{
+		carrierTracker->gainLevels(hordeTracker->getRank() - carrierTracker->getRank(), false);
+	}
 }
 
 // RW 0x871915. NOT PORTED (S-587): the H + 0x264 branch (the other non-slot member, not identified). With BannerCarrierDestroyHordeOnDeath (module data
