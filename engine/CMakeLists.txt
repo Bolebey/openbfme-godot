@@ -231,6 +231,7 @@ include(cmake/Port151.cmake) # PORT-151: the enter-state unit voices of the AI o
 include(cmake/Port4.cmake) # OPENBFME_PORT4_TESTS
 include(cmake/Port109.cmake) # OPENBFME_PORT109_TESTS
 include(cmake/Play2.cmake) # OPENBFME_PLAY2_TESTS (lane PLAY-2)
+include(cmake/Port196.cmake) # PORT-196: the AI spell book's ARMY_BREAKER decision (issue 463; OPENBFME_PORT196_TESTS)
 include(cmake/Port427.cmake) # PORT-427: the porcupine formation's members face outward, each its radial bearing (issue #427; OPENBFME_PORT427_TESTS)
 include(cmake/Port437.cmake) # PORT-437: the generic attack machine's object conditions (issue #437; OPENBFME_PORT437_TESTS)
 include(cmake/Port133.cmake) # PORT-133: the charge attack machine of a CanFireWhileCharging weapon (issue #335; OPENBFME_PORT133_TESTS)
@@ -907,6 +908,7 @@ add_executable(openbfme_tests
     ${OPENBFME_FACTB_TESTS}
     ${OPENBFME_PORT109_TESTS}
     ${OPENBFME_PLAY2_TESTS}
+    ${OPENBFME_PORT196_TESTS}
     ${OPENBFME_PORT427_TESTS}
     ${OPENBFME_PORT437_TESTS}
     ${OPENBFME_PORT133_TESTS}

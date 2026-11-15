@@ -767,6 +767,7 @@ void SkirmishAIManager::reset()
 	m_attackedAtIds = 0; // RW 0x6A922D
 	m_expansionHeuristicFrames = 0;
 	m_assistTimers.clear();
+	m_armyBreakerTimers.clear();
 }
 
 const AISkirmishPlayer *SkirmishAIManager::findAI(int playerIndex) const
@@ -803,6 +804,14 @@ void SkirmishAIManager::crc(StateHasher &h) const
 	h.addU32(m_expansionHeuristicFrames);
 	h.addU32((std::uint32_t)m_assistTimers.size());
 	for (const std::pair<int, unsigned> &t : m_assistTimers)
+	{
+		h.addI32(t.first);
+		h.addU32(t.second);
+	}
+	// lane PORT-196: the ARMY_BREAKER taken-player timer list (RW 0xDEC168 / 0xDEC16C): the caster's player index and the frame it is free again. The delay
+	// bounds are RW's constants (RW 0xBCA418 / 0xBCA42F: LOGICFRAMES_PER_SECOND * 15 / * 30) in both ports, so only the list is state.
+	h.addU32((std::uint32_t)m_armyBreakerTimers.size());
+	for (const std::pair<int, unsigned> &t : m_armyBreakerTimers)
 	{
 		h.addI32(t.first);
 		h.addU32(t.second);
