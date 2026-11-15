@@ -59,3 +59,38 @@ def test_decomp_lookup_is_optional_and_respects_function_extents(tmp_path):
     assert lookup.get(0x401003) == 'Thing::run (tier A)'
     assert lookup.get(0x401004) == ''
     assert lookup.get(0x401010) == ''
+
+
+def test_reports_are_deterministic_sorted_and_show_status_changes(tmp_path, capsys):
+    from rw_function_map import MapRow, write_reports
+    tsv, md = tmp_path / 'map.tsv', tmp_path / 'map.md'
+    rows = [
+        MapRow('Low', 0, 0x401000, 'none', objects=1, instructions=20),
+        MapRow('High', 1, 0x401010, 'partial', (0x401000,), (0x24,),
+               (('caller', 0x401000, 'ported'),), 'Foo::bar (tier A)', 10, 4),
+        MapRow('High', 0, 0x401020, 'none', objects=10, instructions=2),
+    ]
+    assert write_reports(rows, tsv, md, 'example', {0x401100: 'allocator'}, {0x401200: 201}, 200) == []
+    text = md.read_text(encoding='utf-8')
+    assert text.index('0x00401020') < text.index('0x00401010') < text.index('0x00401000')
+    assert '0x00401100: allocator' in text and '201 call sites' in text
+    content = tsv.read_text(encoding='utf-8')
+    assert '\tdecomp\n' in content and 'vcall +0x24' in content and 'Foo::bar (tier A)' in content
+    assert write_reports(list(reversed(rows)), tsv, md, 'example', {0x401100: 'allocator'}, {0x401200: 201}, 200) == []
+    assert content == tsv.read_text(encoding='utf-8')
+    from dataclasses import replace
+    changed = [replace(r, status='ported') if r.function == 0x401010 else r for r in rows]
+    assert write_reports(changed, tsv, md, 'example', {}, {}, 200) == [('High', 0x401010, 'partial')]
+    assert 'partial -> ported' in capsys.readouterr().out
+
+
+def test_reports_reject_ambiguous_rows_and_existing_format(tmp_path):
+    import pytest
+    from rw_function_map import MapRow, write_reports
+    tsv, md = tmp_path / 'map.tsv', tmp_path / 'map.md'
+    row = MapRow('X', 0, 0x401000, 'none')
+    with pytest.raises(ValueError, match='duplicate'):
+        write_reports([row, row], tsv, md, 'example', {}, {}, 200)
+    tsv.write_text('unexpected\theader\n', encoding='utf-8')
+    with pytest.raises(ValueError, match='columns'):
+        write_reports([row], tsv, md, 'example', {}, {}, 200)

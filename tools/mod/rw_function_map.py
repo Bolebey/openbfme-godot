@@ -162,3 +162,93 @@ class DecompLookup:
             return ''
         name = row.get('decomp_qualname') or row.get('decomp_name') or ''
         return f"{name} (tier {row['tier']})" if name else ''
+
+
+@dataclass(frozen=True)
+class MapRow:
+    module: str
+    depth: int
+    function: int
+    status: str
+    called_from: tuple[int, ...] = ()
+    vcalls: tuple[int, ...] = ()
+    neighbours: tuple[tuple[str, int, str], ...] = ()
+    decomp: str = ''
+    objects: int = 0
+    instructions: int = 0
+
+
+TSV_COLUMNS = ('module', 'depth', 'function', 'status', 'called from', 'vcalls', 'neighbour cited', 'decomp')
+
+
+def write_reports(rows: list[MapRow], tsv: Path, markdown: Path, command: str,
+                  hand_stops: dict[int, str], frequency_stops: dict[int, int], threshold: int):
+    """Write reports from already validated graph rows, printing improvements.
+
+    Counts are per (module, function) row, not distinct binary functions.
+    No module coverage, function boundaries or stop frequencies are inferred here.
+    The inventory/graph producer is responsible for supplying those facts.
+    """
+    import csv
+    from collections import Counter
+
+    keys = [(r.module, r.function) for r in rows]
+    if len(keys) != len(set(keys)):
+        raise ValueError('duplicate module/function row')
+    if any(r.status not in {'none', 'partial', 'ported'} or r.depth < 0 or r.objects < 0 or r.instructions < 0 for r in rows):
+        raise ValueError('invalid map row')
+    previous = {}
+    if tsv.exists():
+        with tsv.open(newline='', encoding='utf-8') as f:
+            reader = csv.DictReader(f, delimiter='\t')
+            if tuple(reader.fieldnames or ()) != TSV_COLUMNS:
+                raise ValueError(f'invalid existing report columns: {reader.fieldnames}')
+            for row in reader:
+                key = (row['module'], int(row['function'], 16))
+                if key in previous:
+                    raise ValueError(f'duplicate existing report row: {key}')
+                previous[key] = row['status']
+    ordered = sorted(rows, key=lambda r: (r.module.casefold(), r.module, r.depth, r.function))
+    changed = [(r.module, r.function, previous[(r.module, r.function)]) for r in ordered
+               if r.status == 'ported' and previous.get((r.module, r.function)) in {'none', 'partial'}]
+    tsv.parent.mkdir(parents=True, exist_ok=True)
+    markdown.parent.mkdir(parents=True, exist_ok=True)
+    with tsv.open('w', newline='', encoding='utf-8') as f:
+        out = csv.writer(f, delimiter='\t', lineterminator='\n')
+        out.writerow(TSV_COLUMNS)
+        for r in ordered:
+            out.writerow((r.module, r.depth, f'0x{r.function:08X}', r.status,
+                          ', '.join(f'0x{x:08X}' for x in sorted(r.called_from)),
+                          ', '.join(f'vcall {x:+#x}' for x in sorted(r.vcalls)),
+                          ', '.join(f'{direction} 0x{address:08X} ({status})'
+                                    for direction, address, status in sorted(r.neighbours)), r.decomp))
+    counts = Counter(r.status for r in rows)
+    lines = ['# RotWK module function map', '', f'Command: `{command}`', '',
+             f"Rows: {len(rows)}; ported {counts['ported']}, partial {counts['partial']}, none {counts['none']}.",
+             'Counts are per module/function pair, not unique functions.', '',
+             '## Stop list', '', f'Frequency threshold: more than {threshold} call sites.', '',
+             'Hand list:']
+    lines.extend(f'- 0x{a:08X}: {name}' for a, name in sorted(hand_stops.items()))
+    if not hand_stops:
+        lines.append('- (empty)')
+    lines.extend(['', 'Frequency list:'])
+    lines.extend(f'- 0x{a:08X}: {count} call sites' for a, count in sorted(frequency_stops.items()))
+    if not frequency_stops:
+        lines.append('- (empty)')
+    lines.extend(['', '## How to read', '',
+                  'A citation is evidence, not a proof of complete equivalence. An uncited address can be',
+                  'implemented under another address or inlined. Cited neighbours are leads, not proof.',
+                  'Indirect memory calls are candidates for virtual calls; their targets are not followed.', '',
+                  '## None / partial, by importance', '',
+                  '| Module | Objects | Depth | Function | Instructions | Status | Decomp |',
+                  '|---|---:|---:|---|---:|---|---|'])
+    pending = sorted((r for r in rows if r.status != 'ported'),
+                     key=lambda r: importance(r.objects, r.depth, r.instructions, r.module, r.function))
+    for r in pending:
+        clean = lambda s: s.replace('|', '\\|').replace('\n', ' ')
+        lines.append(f'| {clean(r.module)} | {r.objects} | {r.depth} | 0x{r.function:08X} | {r.instructions} | {r.status} | {clean(r.decomp)} |')
+    markdown.write_text('\n'.join(lines) + '\n', encoding='utf-8')
+    for module, address, old in changed:
+        print(f'{module} 0x{address:08X}: {old} -> ported')
+    print(f'{len(changed)} rows moved from none/partial to ported')
+    return changed
