@@ -111,6 +111,7 @@ bool BuildCommands::foundationConstruct(GameLogic &logic, const GameMessage &m)
 		refuse(m, "Player::canBuild (RW 0x6AAA2E) refuses the template");
 		return true;
 	}
+	FoundationAIUpdate *foundation = nullptr;
 	for (const std::unique_ptr<BehaviorModule> &mod : plot->modules())
 	{
 		if (FoundationAIUpdate *f = mod->getFoundationAIUpdate())
