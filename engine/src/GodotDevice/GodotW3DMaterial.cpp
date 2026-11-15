@@ -4,10 +4,12 @@
 #include "GodotDevice/GodotDds.h"
 #include "GodotDevice/GodotShaderBudget.h"
 #include "Common/BfmeGame.h"
+#include "GameEngineDevice/W3DDevice/GameClient/WorldHeightMap.h"
 #include "GodotDevice/GodotPackedTexture.h"
 #include "Libraries/Source/Apt/AptLoad.h"
 
 #include <cstdio>
+#include <cstring>
 
 #include "Common/ArchiveFileSystem.h"
 #include "Common/AsciiString.h"
@@ -220,6 +222,49 @@ void W3D_Ensure_Light_Globals()
 	rs->global_shader_parameter_add(StringName("radius_cursor_texture"), RenderingServer::GLOBAL_VAR_TYPE_SAMPLER2D, Variant());
 	rs->global_shader_parameter_add(StringName("radius_cursor_transform"), RenderingServer::GLOBAL_VAR_TYPE_VEC4, Vector4());
 	rs->global_shader_parameter_add(StringName("radius_cursor_params"), RenderingServer::GLOBAL_VAR_TYPE_VEC4, Vector4());
+	rs->global_shader_parameter_add(StringName("w3d_floor_hm"), RenderingServer::GLOBAL_VAR_TYPE_SAMPLER2D, Variant());
+	rs->global_shader_parameter_add(StringName("w3d_floor_hm_rect"), RenderingServer::GLOBAL_VAR_TYPE_VEC4, Vector4(0.0f, 0.0f, 0.0f, 0.0f));
+}
+
+namespace {
+Ref<ImageTexture> g_floorHeightTexture;
+} // namespace
+
+void W3D_Set_Floor_Height_Map(const ::WorldHeightMap *hm)
+{
+	W3D_Ensure_Light_Globals();
+	RenderingServer *rs = RenderingServer::get_singleton();
+	if (!hm || hm->m_width <= 0 || hm->m_height <= 0 || hm->m_data.size() < (size_t)hm->m_width * (size_t)hm->m_height)
+	{
+		if (rs)
+		{
+			rs->global_shader_parameter_set(StringName("w3d_floor_hm"), Variant());
+			rs->global_shader_parameter_set(StringName("w3d_floor_hm_rect"), Vector4(0.0f, 0.0f, 0.0f, 0.0f));
+		}
+		g_floorHeightTexture.unref();
+		return;
+	}
+	PackedByteArray heightBytes;
+	heightBytes.resize((int64_t)hm->m_width * hm->m_height * sizeof(float));
+	for (int y = 0; y < hm->m_height; ++y)
+	{
+		for (int x = 0; x < hm->m_width; ++x)
+		{
+			const float z = hm->getHeight(x, y) * MAP_HEIGHT_SCALE;
+			std::memcpy(heightBytes.ptrw() + ((int64_t)y * hm->m_width + x) * sizeof(float), &z, sizeof(float));
+		}
+	}
+	Ref<Image> img = Image::create_from_data(hm->m_width, hm->m_height, false, Image::FORMAT_RF, heightBytes);
+	g_floorHeightTexture = ImageTexture::create_from_image(img);
+	if (rs)
+	{
+		rs->global_shader_parameter_set(StringName("w3d_floor_hm"), g_floorHeightTexture);
+		rs->global_shader_parameter_set(StringName("w3d_floor_hm_rect"), Vector4(
+			-(float)hm->m_borderSize * MAP_XY_FACTOR,
+			-(float)hm->m_borderSize * MAP_XY_FACTOR,
+			(float)hm->m_width,
+			(float)hm->m_height));
+	}
 }
 
 void W3D_Set_Fog_Shift(float shift)
@@ -541,7 +586,10 @@ Ref<Texture2D> W3DMaterialFactory::Load_Texture(const std::string &name, std::ve
 	}
 	if (!res.Found)
 	{
-		if (!quietWhenMissing)
+		// A name without an extension (the W3D data's `None`, GBFARM_BIB / ANGPORTER.BUCKET / CAH_skull) is never opened by
+		// retail's loader (RW 0x530D59: no dot, no candidate), so its 1 x 1 texture (RW 0x53193E) is the whole story and
+		// retail logs nothing. The caller still draws W3D_MISSING_TEXTURE_COLOR, as before.
+		if (!quietWhenMissing && res.Probed)
 		{
 			errors.push_back("texture not found: " + name
 				+ (res.TerrainFolderPath.empty() ? std::string() : " (a file of that name exists only as " + res.TerrainFolderPath + ", which retail's texture lookup does not search: RW 0x477D1C)"));
@@ -779,12 +827,6 @@ W3DMaterialResult W3DMaterialFactory::Create(const MeshRenderData &mesh, const M
 			if (!stop.empty()) out.Notes.push_back(stop);
 		}
 		alphaRef = st.AlphaRef / 255.0f - 0.5f / 255.0f; // GREATEREQUAL on an 8 bit value
-		if (FloorBlend && key.Blend == W3D_GODOT_BLEND_OPAQUE && !key.AlphaTest)
-		{
-			key.Blend = W3D_GODOT_BLEND_MIX;
-			key.DepthWrite = false;
-			out.Notes.push_back("floor surface blended by its texel alpha (W3DFloorDraw, S-4974)");
-		}
 		if (st.PriGradient == W3D_GRADIENT_ADD) out.Notes.push_back("primary gradient ADD drawn as a modulated colour");
 		if (st.NeverDraws) out.Notes.push_back("depth function NEVER: nothing passes the depth test");
 		if (surf.HasVertexMaterial)
@@ -900,6 +942,28 @@ W3DMaterialResult W3DMaterialFactory::Create(const MeshRenderData &mesh, const M
 		if (diffuse.a <= 0.0f) diffuse.a = 1.0f;
 		key.Fog = W3DHardwareFog::FOG_ENABLE; // lane RENDER-4: normalmapped.fxo outputs oFog (vs_2_0 blob 22); the opaque pass fogs toward the fog colour
 		}
+	}
+	if (FloorBlend)
+	{
+		// RW 0x4E53D3 / terrain.fxo RenderingMode 3: floor decals draw in one pass with SRCALPHA / INVSRCALPHA, no alpha test, no depth write
+		if (key.Blend == W3D_GODOT_BLEND_OPAQUE || key.AlphaTest)
+		{
+			key.Blend = W3D_GODOT_BLEND_MIX;
+			out.Notes.push_back("floor surface blended by its texel alpha (W3DFloorDraw, S-4974)");
+		}
+		key.AlphaTest = false;
+		key.DepthWrite = false;
+		key.Floor = true;
+	}
+	if (Vegetation && !key.Fx && !key.SimpleFx)
+	{
+		// P-92 / Local 49: RW 0x4E6753 (W3DVegetationBufferBase::allocateBuffers), RW 0x4E699E, RW 0x4E9BD5;
+		// DONOR BFME2 Rva000E6D94AllocateBuffers.cpp: trees and shrubs draw with Vegetation.fx (abs(N.L), no specular, ignores VertexMaterial colours).
+		key.Vegetation = true;
+		diffuse = Color(1, 1, 1, 1);
+		ambientMat = Color(1, 1, 1, 1);
+		emissive = Color(0, 0, 0, 1);
+		specColor = Color(0, 0, 0, 1);
 	}
 
 	// stop S-5015: the ModelConditionState's `Texture = A B` pairs of the model being built (the SNOW state's KBHall.tga -> KBHall_snow.tga of 159 faction
@@ -1066,7 +1130,8 @@ W3DMaterialResult W3DMaterialFactory::Create(const MeshRenderData &mesh, const M
 	}
 	if (key.NormalMap) mat->set_shader_parameter("w3d_normal", normalTex);
 	if (key.HouseColor) mat->set_shader_parameter("w3d_hc_tex", hcTex);
-	const int priority = std::clamp(surf.Pass - std::min(surf.SortLevel, 31) * 4, -128, 127);
+	// P-103 / P-100 (Local 50 + Local 52): floor decals take kFloorRenderPriority (-124): after Roads (-125), before Scorches (-123), RW 0x4E2F3A -> 0x4E53D3 RenderFloors
+	const int priority = W3D_Surface_Render_Priority(surf.SortLevel, surf.Pass, FloorBlend);
 	mat->set_render_priority(priority);
 
 	for (int s = 0; s < 2; ++s)

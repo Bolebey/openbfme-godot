@@ -1157,6 +1157,25 @@ OCLSpecialPower::OCLSpecialPower(Thing *thing, const OCLSpecialPowerModuleData *
 }
 
 // RW 0x8C7393: the first UpgradeOCL whose science the player owns, else OCL
+// issue #464: RW 0x8C74C4 (the interface's slot 0x5C) asks the object creation list RW 0x8C7393 picks for the name its slot 0 returns. INFERENCE: that
+// slot 0 body was not read; the port's list keeps its nuggets as data, so the name is the first CreateObject nugget's first ObjectNames entry.
+std::string OCLSpecialPower::firstCreatedTemplateName() const
+{
+	const ObjectCreationList *ocl = pickOCL(); // RW 0x8C7393
+	if (!ocl)
+	{
+		return std::string();
+	}
+	for (const OCLNugget &n : ocl->nuggets())
+	{
+		if (n.kind == OCLNugget::CREATE_OBJECT && !n.objectNames.empty())
+		{
+			return n.objectNames.front();
+		}
+	}
+	return std::string();
+}
+
 const ObjectCreationList *OCLSpecialPower::pickOCL() const
 {
 	Player *p = getObject()->getControllingPlayer();
@@ -1537,9 +1556,30 @@ bool SpecialPowerModules::canUseSpecialPower(const Object &obj, const SpecialPow
 
 namespace
 {
-SpecialPowerModuleInterface *usable(Object &obj, const SpecialPowerTemplate *t, bool force)
+// RW 0x68E5AC .. 0x68E5FB / 0x68E683 .. 0x68E6D2: when options has AUTO_ABILITY_TRIGGERED (0x20000000), a disabled object may cast through
+// doSpecialPower / doSpecialPowerAtObject iff its AutoAbilityBehavior's getDisabledTypesToProcess (RW 0x855830: DISABLED_HELD) intersects its disabled mask
+// (RW 0x6252E4); doSpecialPowerAtLocation (RW 0x68E754 / 0x68E760) has no 0x20000000 exception.
+bool disabledBlocksSpecialPower(Object &obj, unsigned options, bool allowAutoAbilityDisabled)
 {
-	if (obj.getDisabledMask() != 0) // RW 0x68E760
+	if (obj.getDisabledMask() == 0)
+	{
+		return false;
+	}
+	if (!allowAutoAbilityDisabled || (options & 0x20000000u) == 0)
+	{
+		return true;
+	}
+	const UpdateModule *aa = dynamic_cast<const UpdateModule *>(obj.findModule("AutoAbilityBehavior"));
+	if (!aa)
+	{
+		return true;
+	}
+	return (aa->getDisabledTypesToProcess() & obj.getDisabledMask()) == 0;
+}
+
+SpecialPowerModuleInterface *usable(Object &obj, const SpecialPowerTemplate *t, unsigned options, bool force, bool allowAutoAbilityDisabled)
+{
+	if (disabledBlocksSpecialPower(obj, options, allowAutoAbilityDisabled))
 	{
 		return nullptr;
 	}
@@ -1553,7 +1593,7 @@ SpecialPowerModuleInterface *usable(Object &obj, const SpecialPowerTemplate *t, 
 
 bool SpecialPowerModules::doSpecialPowerAtLocation(Object &obj, const SpecialPowerTemplate *t, const Coord3D &loc, unsigned options, bool force)
 {
-	SpecialPowerModuleInterface *m = usable(obj, t, force);
+	SpecialPowerModuleInterface *m = usable(obj, t, options, force, false); // RW 0x68E754 / 0x68E760
 	if (!m)
 	{
 		return false;
@@ -1564,7 +1604,7 @@ bool SpecialPowerModules::doSpecialPowerAtLocation(Object &obj, const SpecialPow
 
 bool SpecialPowerModules::doSpecialPowerAtObject(Object &obj, const SpecialPowerTemplate *t, Object *target, unsigned options, bool force)
 {
-	SpecialPowerModuleInterface *m = usable(obj, t, force);
+	SpecialPowerModuleInterface *m = usable(obj, t, options, force, true); // RW 0x68E67A
 	if (!m)
 	{
 		return false;
@@ -1575,7 +1615,7 @@ bool SpecialPowerModules::doSpecialPowerAtObject(Object &obj, const SpecialPower
 
 bool SpecialPowerModules::doSpecialPower(Object &obj, const SpecialPowerTemplate *t, unsigned options, bool force)
 {
-	SpecialPowerModuleInterface *m = usable(obj, t, force);
+	SpecialPowerModuleInterface *m = usable(obj, t, options, force, true); // RW 0x68E5A3
 	if (!m)
 	{
 		return false;

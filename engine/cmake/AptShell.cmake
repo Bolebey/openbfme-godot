@@ -37,6 +37,7 @@ list(APPEND OPENBFME_APT_TESTS
     tests/test_apt_shell.cpp
     tests/test_apt_gadgets.cpp
     tests/test_p93_gadget_sounds.cpp # P-93: the list and drop-down clicks (MiscAudio ComboBoxClick)
+    tests/test_local_55.cpp # Local 55 (issue #411, P-93): check box click and hover sounds
     tests/test_apt_skirmish.cpp
     tests/test_p95_map_previews.cpp # P-95: the menu pictures of every map on Ennorath data
     tests/test_p16_ui.cpp

@@ -742,13 +742,16 @@ bool canDoSpecialPowerAtLocation(Object &obj, const Coord3D &loc, const SpecialP
 			return false;
 		}
 	}
-	// RW 0x82D2FD (NO_FORBIDDEN_OBJECTS): no live object within ForbiddenObjectRange (distance type 1) passes ForbiddenObjectFilter
+	// RW 0x82D2FD (NO_FORBIDDEN_OBJECTS): no live object within ForbiddenObjectRange passes ForbiddenObjectFilter. The distance type RW pushes there is 1,
+	// and RW table 0xDBDAF8's entry 1 is RW 0xA3AE50: the 2D centre distance minus the object's bounding circle radius, squared (z not read). The enum below
+	// keeps ZH's numbering, so RW's 1 is FROM_BOUNDINGSPHERE_2D here (PartitionManager.h); DONOR BFME2 0x0041C9F8 (ActionManagerSpecialPowerChecks.cpp,
+	// validateLocationForForbiddenObjects) passes the same 1 to getClosestObject(pos, forbiddenObjectRange, 1, ...).
 	if (t.m_flags & SPF_NO_FORBIDDEN_OBJECTS)
 	{
 		const ObjectFilter &f = filterOrDefault(t.m_forbiddenObjectFilter);
 		PartitionFilterFn pass([&](Object &o) { return ObjectFilterMatch::allows(logic, f, o, player); });
 		PartitionFilterFn alive([](Object &o) { return !o.isEffectivelyDead(); });
-		if (logic.partition().getClosestObject(loc, t.m_forbiddenObjectRange, FROM_CENTER_3D, { &pass, &alive }))
+		if (logic.partition().getClosestObject(loc, t.m_forbiddenObjectRange, FROM_BOUNDINGSPHERE_2D, { &pass, &alive }))
 		{
 			return false;
 		}

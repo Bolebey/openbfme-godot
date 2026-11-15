@@ -179,7 +179,9 @@ size_t HudInput::update()
 			continue;
 		}
 		// An occupied plot hidden by Construction::constructOnPlot leaves the client selection, closing its command menu.
+		static const int unselectable = ObjectTemplateInfoBuilder::objectStatusIndex("UNSELECTABLE");
 		if (!o || o->isDestroyed() || (sold >= 0 && o->testStatus((unsigned)sold)) ||
+			o->isMasked() || !o->isScriptSelectable() || (unselectable >= 0 && o->testStatus((unsigned)unselectable)) ||
 			(o->isDrawableHidden() &&
 				(o->isKindOfName("BASE_FOUNDATION") || o->isKindOfName("BASE_DEFENSE_FOUNDATION") || o->isKindOfName("EXPANSION_PAD"))))
 		{

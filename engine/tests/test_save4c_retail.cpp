@@ -1180,6 +1180,16 @@ TEST_CASE("save4c coverage (review r2): units attacking, moving, guarding, hunti
 	// the guard is an idle unit: after the merge of upstream 1d505ac3 the first fit at frame 3000 was an ElvenLorienArcherHorde busy in its own state 50, which
 	// carried on with it (AI_MOVE_TO) after guardHere; before it, the first fit was an idle ElvenPorter. An idle unit keeps the guard order the test saves
 	Object *guard = firstOf(playerIds[2], [&](Object *o) { return takes(o, 0) && o->getAIUpdateInterface()->currentStateId() == AI_IDLE; });
+	if (!guard)
+	{
+		// batch 3 (2026-11-15, owner approved): with its four simulation changes together (#487, #496, #500, #501; each alone keeps an idle unit here) the third
+		// player has no idle unit at frame 3000; as for the mover below, the role goes to the first idle unit of any player that is not an actor yet
+		for (int p : playerIds)
+		{
+			Object *c = firstOf(p, [&](Object *o) { return takes(o, 0) && o != attacker && o != mover && o->getAIUpdateInterface()->currentStateId() == AI_IDLE; });
+			guard = guard ? guard : c;
+		}
+	}
 	auto huntable = [&](Object *o) { return armed(o) && takes(o, 0x12) && GarrisonRules::isMobile(*o) && hasPrey(o) && keepsHunt.count(o->getID()) == 1; }; // RW 0x66450F's test
 	Object *hunter = firstOf(playerIds[3], [&](Object *o) { return huntable(o) && !inAITeam(o); });
 	hunter = hunter ? hunter : firstOf(playerIds[3], huntable);

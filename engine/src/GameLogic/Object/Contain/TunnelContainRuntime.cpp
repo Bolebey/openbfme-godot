@@ -461,9 +461,9 @@ void TunnelContain::crc(StateHasher &h) const
 }
 
 // ---- lane SAVE-4b: TunnelTracker::xfer (RW 0x8FA569, tier A, (1, 1); ZH TunnelTracker::xfer is the donor of its first part) ---------------------------
-// version, the tunnel ids (xferSTLObjectIDList), the rider count (i32) and the riders' ids, the tunnel count (u32), then RotWK's two additions: an object id
-// and a u32 (inference: the nemesis + 0x20 and its frame + 0x24, the fields after the tunnel count + 0x1C; not ported, S-1107: written as 0, and a load of
-// anything else is refused). The riders are objects of the snapshot, made by the Objects block before this block loads. The heal count is a statistic.
+// version, the tunnel ids (xferSTLObjectIDList), the rider count (i32) and the riders' ids, the tunnel count (u32), then RotWK's two additions: the nemesis
+// object id (+ 0x20, validated < nextObjectID) and its frame (+ 0x24) after the tunnel count (+ 0x1C). The riders are objects of the snapshot, made by the
+// Objects block before this block loads. The heal count is a statistic.
 void TunnelTracker::xfer(Xfer &x, GameLogic &logic)
 {
 	SnapshotXfer::version(x, 1, 1);

@@ -382,6 +382,32 @@ def added_lines() -> dict[str, set[int]]:
     return result
 
 
+FWD = re.compile(r"^\+\s*(class|struct)\s+(\w+)\s*;")
+DEF = r"^\s*(template\s*<[^>]*>\s*)?(class|struct)\s+(\w+\s+)?{name}\s*(final\s*)?(:[^;{{]*)?\{{?\s*(//.*)?$"
+
+
+def fwd_decl_problems() -> list[str]:
+    """A new `class X;` for a `struct X` (or the reverse): GCC accepts it, MSVC mangles class and struct apart and the Windows link fails
+    with LNK2019 (Port 168 #452, BehaviorModule.h, 2026-11-15). Only forward declarations the commit adds are checked."""
+    out = git("-c", "core.quotepath=false", "diff", "--cached", "-U0", "--no-color", "--diff-filter=ACMR", "--", "engine/src", "engine/tests",
+              "tools").stdout.decode("utf-8", "replace")
+    problems, path = [], ""
+    for line in out.splitlines():
+        if line.startswith("+++ "):
+            path = diff_new_path(line)
+            continue
+        m = FWD.match(line)
+        if not m or not path.endswith((".h", ".hpp", ".cpp", ".inl")):
+            continue
+        kind, name = m.groups()
+        found = git("grep", "--cached", "-h", "-E", DEF.format(name=name), "--", "engine/src").stdout.decode("utf-8", "replace")
+        kinds = {re.search(r"\b(class|struct)\b", l).group(1) for l in found.splitlines() if l.strip()}
+        if len(kinds) == 1 and kind not in kinds:
+            problems.append(f"{path}: `{kind} {name};` but {name} is defined as `{kinds.pop()}`: MSVC mangles class and struct apart "
+                            f"(LNK2019 in the Windows build, GCC does not see it); write `{'struct' if kind == 'class' else 'class'} {name};`")
+    return problems
+
+
 def shader_problems(files: list[tuple[str, str]]) -> list[str]:
     """Every Godot shader the index holds must fit Intel's varying budget once a shader file or a GDScript file with an inline shader is staged
     (check_shader_varyings.py)."""
@@ -425,6 +451,11 @@ def main() -> int:
                 problems.append(problem)
         problems += pin_problems(pins, pin_reason)
         problems += shader_problems(files)
+        problems += fwd_decl_problems()
+        if any(rel.startswith(("docs/stops.d/", "docs/ennorath/night_watch.d/")) for rel, _ in files):
+            sys.path.insert(0, str(Path(__file__).resolve().parent))
+            import fragments  # the stop / night-watch fragments (tools/fragments.py)
+            problems += fragments.check()
     except (subprocess.CalledProcessError, ValueError, OSError) as exc:
         problems.append(f"cannot check staged files: {exc}")
     if problems:

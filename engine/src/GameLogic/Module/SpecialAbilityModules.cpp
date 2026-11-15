@@ -242,7 +242,8 @@ const FieldParse kSpecialAbility[] = { // RW 0xC55F40
 	{ "ChargeAttackSpeedBoost", INI::parseBool, nullptr, SA_OFF(m_chargeAttackSpeedBoost) },
 	{ "CustomAnimAndDuration", parseAnimAndDuration<0>, nullptr, 0 },
 	{ "GrabPassengerAnimAndDuration", parseAnimAndDuration<1>, nullptr, 0 },
-	{ "GrabPassengerHealGainPercent", INI::parsePercentToReal, nullptr, SA_OFF(m_grabPassengerHealGainPercent) },
+	// RW 0xC561C0: parser RW 0x42ED6F (no 0.01 scale: the INI number is the percentage added to the health ratio), offset + 0x30
+	{ "GrabPassengerHealGainPercent", INI::parseNonNegativeReal, nullptr, SA_OFF(m_grabPassengerHealGainPercent) },
 	{ "UnpackingVariation", INI::parseInt, nullptr, SA_OFF(m_unpackingVariation) },
 	{ "MustFinishAbility", INI::parseBool, nullptr, SA_OFF(m_mustFinishAbility) },
 	{ "FreezeAfterTriggerDuration", INI::parseDurationUnsignedInt, nullptr, SA_OFF(m_freezeAfterTriggerFrames) },
@@ -607,11 +608,12 @@ void SpecialAbilityUpdate::initiateIntentToDoSpecialPower(const SpecialPowerTemp
 	}
 	m_active = true;
 	m_approachCounter = 0;
-	// RW 0x852FF9: every other active special power update of the object is finished
+	// PORT-188 (issue #454): RW 0x853062 .. 0x8530A4 (BFME2 1.06 0x004500A3, SpecialAbilityUpdateInitiateIntent.cpp): every other special ability update of
+	// the object whose isPowerCurrentlyInUse(nullptr) (vslot +0x18, RW 0x851C92) answers yes is finished
 	for (const std::unique_ptr<BehaviorModule> &m : obj->modules())
 	{
 		SpecialAbilityUpdate *other = dynamic_cast<SpecialAbilityUpdate *>(m.get());
-		if (other && other != this && other->isActive())
+		if (other && other != this && other->isPowerCurrentlyInUse())
 		{
 			other->finishAbility(false, true);
 		}
@@ -1717,8 +1719,10 @@ void SpecialAbilityUpdate::grabTrigger(int type)
 // LINKED_TO_FLAG object within 150 (RW 0xC041F8) of the target (ThePartitionManager RW 0xA39090, distance type 1, the KindOf filter RW 0x445139): the capture
 // flag's structure. Nothing happens when there is none or when both are already the object's team's. Then the target (when it is not the building:
 // START_CAPTURE off, CAPTURED on) and the building take the default team of the object's player (RW 0x6996DC), the building gets CAPTURED, the target's
-// capturer (+ 0x80) clears, and the 0x1A enum restarts the power's recharge. Not ported (S-1225, noted): a garrisonable contain's passengers (vslots 0xA8 /
-// 0x54), an UNDER_CONSTRUCTION building's production cancel and score counts (RW 0x85463E .. 0x8546B5), the upgrades reset RW 0x68E083 (S-952); the radar /
+// capturer (+ 0x80) clears, and the 0x1A enum restarts the power's recharge. Both objects reset their upgrades first (RW 0x8546F4 and RW 0x854717,
+// each a call of RW 0x68E083: the mask clears, every upgrade module drops its upgrade), then take the team with (team, 1) (RW 0x6996DC's second
+// argument, the undetected-defector flag). Not ported (S-1225, noted): a garrisonable contain's passengers (vslots 0xA8 /
+// 0x54), an UNDER_CONSTRUCTION building's production cancel and score counts (RW 0x85463E .. 0x8546B5); the radar /
 // EVA / drawable calls are the client's. Lane DECOMP-3: the skirmish AI's object events RW 0x6A99CB / 0x6A9D9C around the building's capture. Returns false when nothing was captured
 bool SpecialAbilityUpdate::captureTarget(SpecialPowerModule *spm)
 {
@@ -1775,9 +1779,11 @@ bool SpecialAbilityUpdate::captureTarget(SpecialPowerModule *spm)
 			logic.noteStop("[S-1225] capture: an UNDER_CONSTRUCTION building's production cancel and score counts (RW 0x85463E .. 0x8546B5) are not ported");
 		}
 		ModelConditionBitsHelper::clearAndSet(*t, { kMcStartCapture }, { kMcCaptured }); // RW 0x8546DC
+		t->resetUpgrades();                                                              // RW 0x8546F4 (RW 0x68E083), before the team changes
 		t->setCapturedTeam(team);                                                       // RW 0x8546F6 / 0x854702
 	}
 	logic.skirmishAI().objectRemoved(*building); // RW 0x854712 (lane DECOMP-3): the skirmish AI manager's removal with the old owner
+	building->resetUpgrades();                   // RW 0x854717 (RW 0x68E083: the mask clears, every upgrade module drops its upgrade)
 	building->setCapturedTeam(team); // RW 0x854719 / 0x854725
 	setCondition(*building, kMcCaptured, true); // RW 0x85473B
 	t->setCapturerID(INVALID_ID);    // RW 0x854740
@@ -2122,28 +2128,61 @@ void SpecialAbilityUpdate::crc(StateHasher &h) const
 // ---------------------------------------------------------------------------------------------------------------------------------
 // WeaponFireSpecialAbilityUpdate
 // ---------------------------------------------------------------------------------------------------------------------------------
+namespace
+{
+// RW 0x6CEE0F (Weapon::loadAmmoNow) takes Object *source and reads only the owner's weapon bonus condition mask (+0x39C), GameData's global
+// WeaponBonusSet ([0xDE4364]+0xAD0) and TheGameLogic->getFrame() ([0xDE412C]+0x40), without touching ObjectWeapons (Object::m_weapons is built
+// after buildModules() at Object.cpp:454). Using a lightweight WeaponHost over Object avoids constructing a premature m_ownHost (ObjectWeapons) on
+// objects that have a WeaponSet.
+class ConstructorWeaponHost final : public WeaponHost
+{
+public:
+	explicit ConstructorWeaponHost(Object &obj)
+		: m_obj(obj)
+	{
+	}
+	std::uint32_t currentFrame() override { return m_obj.logic().getFrame(); }
+	GameLogicRandom &logicRandom() override { return m_obj.logic().random(); }
+	std::uint32_t weaponBonusConditionMask() override { return m_obj.weaponBonusConditionMask(); }
+	const WeaponBonusSet *globalWeaponBonusSet() override { return m_obj.logic().settings().globalWeaponBonusSet.get(); }
+	float rateOfFireAttributeProduct() override { return 1.0f; }
+	bool containedAmmo(const ObjectFilter &, unsigned &count) override
+	{
+		count = 0;
+		return false;
+	}
+	bool ownerHasContainAmmo(const ObjectFilter &) override { return false; }
+	int barrelCount(int) override { return 1; }
+	int firingTrackerShotsAtTarget(bool, unsigned, const Coord3D &) override { return 0; }
+	bool ownerPositionMatchesLastShot() override { return false; }
+	void setOwnerDisabledUntil(std::uint32_t frame) override { m_obj.setDisabled(8, frame); }
+	float groundHeightAt(float x, float y) override { return m_obj.logic().getGroundHeight(x, y); }
+	Coord3D linearTargetPosition(float, float) override { return *m_obj.getPosition(); }
+	Object *streamObjectByID(ObjectID id) override { return id == INVALID_ID ? nullptr : m_obj.logic().findObjectByID(id); }
+	Object *createProjectileStream(const std::string &, Object &) override { return nullptr; }
+	Object *weaponOwner() override { return &m_obj; }
+
+private:
+	Object &m_obj;
+};
+} // namespace
+
+// RW 0x895D98 (DONOR BFME2 0x00492708 WeaponFireSpecialAbilityUpdateCtor.cpp): look up SpecialWeapon (moduleData + 0xD0) via TheWeaponStore
+// (RW 0x6CC5DF); a missing template leaves m_weapon (+0x88) null without an error, else allocate slot-0 weapon (RW 0x68B150), clear its owner id
+// (RW 0x895E16: weapon + 8 = 0) and load its ammo now (RW 0x6CEE0F(m_object)).
 WeaponFireSpecialAbilityUpdate::WeaponFireSpecialAbilityUpdate(Thing *thing, const WeaponFireSpecialAbilityUpdateModuleData *data)
 	: SpecialAbilityUpdate(thing, data)
 	, m_wf(data)
 {
-}
-
-// RW 0x895DF2 (the constructor): the SpecialWeapon from TheWeaponStore (RW 0x6CC5DF), made and loaded; an unknown name leaves no weapon (the trigger then fires
-// nothing). Here the object's weapon host (ObjectWeapons) exists only after the modules are built, so the weapon is made at its first use (a fresh weapon is
-// loaded either way)
-Weapon *WeaponFireSpecialAbilityUpdate::specialWeapon()
-{
-	if (!m_weaponMade)
+	const WeaponTemplate *wt = (!m_wf->m_specialWeapon.empty() && TheWeaponStore) ? TheWeaponStore->findWeaponTemplate(m_wf->m_specialWeapon) : nullptr;
+	if (wt)
 	{
-		m_weaponMade = true;
-		const WeaponTemplate *wt = TheWeaponStore ? TheWeaponStore->findWeaponTemplate(m_wf->m_specialWeapon) : nullptr;
-		ObjectWeapons *w = wt ? weaponHost() : nullptr;
-		if (wt && w)
-		{
-			m_weapon = w->makeExtraWeapon(wt);
-		}
+		Object *obj = getObject();
+		m_weapon = std::make_unique<Weapon>(wt, PRIMARY_WEAPON, obj->logic().getFrame()); // RW 0x68B150(template, 0)
+		m_weapon->setOwnerID(0);                                                          // RW 0x895E16
+		ConstructorWeaponHost loadHost(*obj);
+		m_weapon->loadAmmoNow(loadHost); // RW 0x6CEE0F(m_object)
 	}
-	return m_weapon.get();
 }
 
 ObjectWeapons *WeaponFireSpecialAbilityUpdate::weaponHost()
@@ -2159,7 +2198,14 @@ ObjectWeapons *WeaponFireSpecialAbilityUpdate::weaponHost()
 	return m_ownHost.get();
 }
 
-WeaponFireSpecialAbilityUpdate::~WeaponFireSpecialAbilityUpdate() = default;
+// RW 0x895BFB (DONOR BFME2 0x0049256B): deletes m_weapon (+0x88) via Weapon::~Weapon (RW 0x6CDB57 -> 0x6CD0BE, destroying any ProjectileStreamName object)
+WeaponFireSpecialAbilityUpdate::~WeaponFireSpecialAbilityUpdate()
+{
+	if (m_weapon && getObject())
+	{
+		m_weapon->destroyProjectileStream(getObject()->logic());
+	}
+}
 
 // the model condition of WhichSpecialWeapon (RW 0x895F10: 1 .. 3 SPECIAL_WEAPON_ONE .. THREE at Object + 0x128, 4 .. 6 FOUR .. SIX at + 0x154)
 int WeaponFireSpecialAbilityUpdate::specialWeaponCondition() const
@@ -2208,7 +2254,7 @@ void WeaponFireSpecialAbilityUpdate::startUnpacking()
 void WeaponFireSpecialAbilityUpdate::triggerAbilityEffect()
 {
 	Object *obj = getObject();
-	ObjectWeapons *weapons = specialWeapon() ? weaponHost() : obj->getWeapons();
+	ObjectWeapons *weapons = m_weapon ? weaponHost() : obj->getWeapons();
 	// RW 0x896210: the FiringTracker's RW 0x8E302A(1) (the object's + 0x248) is COMBAT-1's: not called here
 	if (!(isHorde(*obj) && m_data->m_suppressForHordes))
 	{
@@ -2225,7 +2271,7 @@ void WeaponFireSpecialAbilityUpdate::triggerAbilityEffect()
 				}
 			}
 		}
-		if (specialWeapon() && weapons && weapons->extraWeaponStatus(*m_weapon) == 0) // RW 0x6CDCE7 == READY_TO_FIRE
+		if (m_weapon && weapons && weapons->extraWeaponStatus(*m_weapon) == 0) // RW 0x6CDCE7 == READY_TO_FIRE
 		{
 			m_weapon->setOwnerID(obj->getID());
 			if (!victim)
@@ -2259,7 +2305,6 @@ void WeaponFireSpecialAbilityUpdate::finishAbility(bool ownerDying, bool aborted
 void WeaponFireSpecialAbilityUpdate::crc(StateHasher &h) const
 {
 	SpecialAbilityUpdate::crc(h);
-	h.addBool(m_weaponMade);
 	h.addBool(m_weapon != nullptr);
 	if (m_weapon)
 	{
@@ -3136,9 +3181,11 @@ std::vector<std::string> SpecialAbilityModules::hero2StopLines()
 		"client's), the owner's EVA DisguiseStarted and the enemy-perspective portrait / name (DisguisedAsTemplate_EnemyPerspective, RW 0x8B4440 from RW 0x69194E: "
 		"client)",
 		"[S-1225] the capture (lane HERO-2): SPECIAL_INFANTRY_CAPTURE_BUILDING's preparation, unpack, trigger (RW 0x8544F2: the closest LINKED_TO_FLAG within 150, "
-		"RW 0x6996DC setCapturedTeam), end and the update's captured / ruined target tests run; not ported (noted): a garrisonable contain's passengers (vslots "
-		"0xA8 / 0x54), an UNDER_CONSTRUCTION building's production cancel and score counts, the upgrades reset RW 0x68E083 (S-952), the skirmish AI's object "
-		"events RW 0x6A99CB / 0x6A9D9C, RW 0x6996DC's production cancel, score counts, RW 0x68B303 / 0x8E3ABB and a captured container's passengers; "
+		"RW 0x6996DC setCapturedTeam), end and the update's captured / ruined target tests run; the target's and the building's upgrades reset (RW 0x8546F4 / "
+		"0x854717 -> RW 0x68E083) and setCapturedTeam cancels and releases the previous owner's production (production slot 0x40, RW 0x8A1666: slot 0x3C "
+		"RW 0x8A05B2, the doorway unit and releaseLastExit; lane LOCAL-62); not ported (noted): a garrisonable contain's passengers (vslots "
+		"0xA8 / 0x54), an UNDER_CONSTRUCTION building's production cancel and score counts, the skirmish AI's object "
+		"events RW 0x6A99CB / 0x6A9D9C, RW 0x6996DC's score counts, RW 0x68B303 / 0x8E3ABB and a captured container's passengers; "
 		"SPECIAL_BLACKLOTUS_CAPTURE_BUILDING (0x1A)'s special objects; DoCaptureFX's flash (client); INFERENCE: a target that is gone ends any ability (HERO-1's "
 		"reading; retail only tests a live target)",
 	};
@@ -3202,21 +3249,15 @@ void SpecialAbilityUpdate::xfer(Xfer &x)
 	}
 }
 
-// the special weapon is made on first use (specialWeapon): a load makes it when the snapshot's was made, then loads its state
+// RW 0x895C75 (DONOR BFME2 0x004925E5): m_weapon (+0x88) is made and loaded in the constructor, not lazily; version 2 drops the port's
+// m_weaponMade flag (version 1 saves are refused explicitly). RW 0x895C9F returns immediately on XferCRC after SpecialAbilityUpdate::xfer.
 void WeaponFireSpecialAbilityUpdate::xfer(Xfer &x)
 {
-	SnapshotXfer::version(x, 1, 1);
+	SnapshotXfer::version(x, 2, 2);
 	SpecialAbilityUpdate::xfer(x);
-	bool made = !x.isLoading() && m_weaponMade;
-	x.xferBool(&made);
-	if (x.isLoading() && made != m_weaponMade)
+	if (x.getXferMode() == XFER_CRC)
 	{
-		m_weapon.reset();
-		m_weaponMade = false;
-		if (made)
-		{
-			specialWeapon();
-		}
+		return; // RW 0x895C9F .. 0x895CA4
 	}
 	bool has = !x.isLoading() && m_weapon != nullptr;
 	x.xferBool(&has);

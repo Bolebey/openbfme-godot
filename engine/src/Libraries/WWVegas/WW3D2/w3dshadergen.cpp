@@ -1,6 +1,7 @@
 // OpenBFME. GPL-3.0. See w3dshadergen.h.
 
 #include "Libraries/WWVegas/WW3D2/w3dshadergen.h"
+#include "GameClient/ParticleDraw.h"
 #include "GameEngineDevice/W3DDevice/GameClient/W3DHardwareFog.h"
 
 #include <algorithm>
@@ -128,6 +129,8 @@ std::string W3DShaderKey::Id() const
 	if (OcclusionPass) id += "_occl" + std::to_string(OcclusionPass); // lane OCCLUDE-1
 	if (ParticleColor) id += "_pcol";
 	if (SelectionDecals) id += "_sel"; // lane SELWALL-1
+	if (Floor) id += "_flr"; // P-103
+	if (Vegetation) id += "_veg"; // P-92
 	return id;
 }
 
@@ -273,6 +276,11 @@ std::string Generate_W3D_Shader_Code(const W3DShaderKey &k, W3DSamplerPolicy sam
 	{
 		line("uniform sampler2D w3d_hc_tex : " + repeatMipFilter + ", repeat_enable; // housecolor.ini texture: the team colour mask is its alpha");
 	}
+	if (k.Floor && !k.OcclusionPass)
+	{
+		line("global uniform sampler2D w3d_floor_hm : filter_linear, repeat_disable;");
+		line("global uniform vec4 w3d_floor_hm_rect; // xy: origin (-border*10), zw: extent in cells; z <= 0 disables");
+	}
 	// Varyings each take a location; Intel Arc (Mesa ANV) offers Forward+ 29 for normal-mapped buildings, Metal 31. The two UV sets
 	// share one vec4 (the same interpolation), and the world position stays a vertex() local: only the vertex lighting reads it.
 	// The smooth varyings are packed into vec4s (every varying takes one location whatever its width, as on the terrain): v_fade
@@ -341,13 +349,15 @@ std::string Generate_W3D_Shader_Code(const W3DShaderKey &k, W3DSamplerPolicy sam
 	line("\treturn texelFetch(w3d_palette, ivec2(idx & " + std::to_string(W3D_PALETTE_WIDTH - 1) + ", idx >> " + std::to_string(W3D_PALETTE_WIDTH_LOG2) + "), 0);");
 	line("}");
 	// normalmapped.fxo blob 22 / defaultw3d.fxo blob 151 / vegetation.fxo blob 6: d = |P - world position|, att = max(1 - d / Range, 0)^2,
-	// Color * att * max(N.L, 0) with N the world normal of the vertex (not the normal map) and L toward the light
+	// Color * att^2 * (abs(N.L) for Vegetation.fx or max(N.L, 0) otherwise) with N the world normal of the vertex (not the normal map) and L toward the light
 	line("vec3 w3d_point_light(vec4 pl, vec3 col, vec3 wpos, vec3 wn) {");
 	line("\tif (pl.w <= 0.0) return vec3(0.0);");
 	line("\tvec3 d = pl.xyz - wpos;");
 	line("\tfloat dl = length(d);");
 	line("\tfloat att = max(1.0 - dl / pl.w, 0.0);");
-	line("\treturn col * (att * att) * max(dot(wn, d / max(dl, 1e-4)), 0.0);");
+	line(k.Vegetation
+		? "\treturn col * (att * att) * abs(dot(wn, d / max(dl, 1e-4)));"
+		: "\treturn col * (att * att) * max(dot(wn, d / max(dl, 1e-4)), 0.0);");
 	line("}");
 	if (k.Fog != W3DHardwareFog::FOG_DISABLE)
 	{
@@ -433,6 +443,16 @@ std::string Generate_W3D_Shader_Code(const W3DShaderKey &k, W3DSamplerPolicy sam
 		}
 	}
 	line("\tVERTEX = w3d_to_godot(p);");
+	if (k.Floor && !k.OcclusionPass)
+	{
+		line("\tif (w3d_floor_hm_rect.z > 0.0) {");
+		line("\t\tvec3 fw = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;");
+		line("\t\tvec2 fgrid = (vec2(fw.x, -fw.z) - w3d_floor_hm_rect.xy) / 10.0;");
+		line("\t\tfloat fhm = texture(w3d_floor_hm, (fgrid + 0.5) / w3d_floor_hm_rect.zw).r;");
+		line("\t\tfloat flift = max(VERTEX.y, 0.0) + 0.15;");
+		line("\t\tVERTEX += inverse(mat3(MODEL_MATRIX)) * vec3(0.0, (fhm + flift) - fw.y, 0.0);");
+		line("\t}");
+	}
 	if (!k.Skin && k.Camera == 0)
 	{
 		// lane VISUAL-2: vegetation.fxo's vertex shader (blob 5): position += (position.z - the tree's base z) * SwayOffsets[type], in world space (W3D Z up
@@ -447,6 +467,8 @@ std::string Generate_W3D_Shader_Code(const W3DShaderKey &k, W3DSamplerPolicy sam
 	line("\tNORMAL = normalize(w3d_to_godot(n));");
 	if (k.Tangents)
 	{
+		line("\tif (dot(tg, tg) < 1e-12) tg = abs(n.y) < 0.9 ? cross(vec3(0.0, 1.0, 0.0), n) : cross(vec3(1.0, 0.0, 0.0), n);");
+		line("\tif (dot(bn, bn) < 1e-12) bn = cross(n, tg);");
 		line("\tTANGENT = normalize(w3d_to_godot(tg));");
 		line("\tBINORMAL = normalize(w3d_to_godot(bn));");
 	}
@@ -529,7 +551,7 @@ std::string Generate_W3D_Shader_Code(const W3DShaderKey &k, W3DSamplerPolicy sam
 		// oD0.a = vertex alpha * Opacity, oD1.rgb = sum(colour * lit.z) * ColorSpecular * 0.5; the interpolators saturate both
 		line("\t{");
 		line("\t\tvec3 wn = normalize(MODEL_NORMAL_MATRIX * NORMAL);");
-		line("\t\tvec3 vv = normalize(CAMERA_POSITION_WORLD - wpos);");
+		if (!k.Vegetation) line("\t\tvec3 vv = normalize(CAMERA_POSITION_WORLD - wpos);");
 		line("\t\tbool inf = mod(v_instance.x, 2.0) > 0.5;");
 		line("\t\tmat3 lc = inf ? w3d_lcol_inf : w3d_lcol_obj;");
 		line("\t\tmat3 ld = inf ? w3d_ldir_inf : w3d_ldir_obj;");
@@ -545,26 +567,45 @@ std::string Generate_W3D_Shader_Code(const W3DShaderKey &k, W3DSamplerPolicy sam
 		line("\t\tvec3 ssum = vec3(0.0);");
 		line("\t\tfor (int i = 0; i < 3; i++) {");
 		line("\t\t\tfloat ndl = dot(wn, ld[i]);");
-		line("\t\t\tfloat ndh = dot(wn, normalize(vv + ld[i]));");
-		line("\t\t\tdsum += lc[i] * max(ndl, 0.0);");
-		// D3D9 lit clamps the power to [-127.9961, 127.9961]
-		line("\t\t\tssum += lc[i] * ((ndl > 0.0 && ndh > 0.0) ? pow(ndh, clamp(w3d_shininess, " + fmt(-W3D_LIT_POWER_LIMIT) + ", " + fmt(W3D_LIT_POWER_LIMIT) + ")) : 0.0);");
-		line("\t\t}");
-		// lane LOCAL-38: defaultw3d.fxo blob 151 adds PointLight[0] to the directional diffuse sum before ColorDiffuse
-		line("\t\tdsum += w3d_pt;");
-		line(k.HasDCG ? "\t\tvec4 vc = COLOR;" : "\t\tvec4 vc = vec4(1.0);");
-		if (k.ParticleColor)
+		if (k.Vegetation)
 		{
-			line("\t\tvec3 diff_rgb = w3d_diffuse.rgb; vec3 emis_rgb = w3d_emissive;");
-			line("\t\tif (v_instance.z > 0.5) { float hv = v_instance.z - 1.0; emis_rgb = vec3(floor(hv / 65536.0), floor(mod(hv, 65536.0) / 256.0), mod(hv, 256.0)) / 255.0; }");
-			line("\t\telse if (v_instance.z < -0.5) { float hv = -v_instance.z - 1.0; diff_rgb = vec3(floor(hv / 65536.0), floor(mod(hv, 65536.0) / 256.0), mod(hv, 256.0)) / 255.0; }");
-			line("\t\tv_lit0 = clamp(vec4((dsum * diff_rgb + amb * w3d_ambient_mat + emis_rgb) * vc.rgb * 0.5, vc.a * w3d_diffuse.a), 0.0, 1.0);");
+			// P-92 / Local 49: vegetation.fxo vs_1_1 blobs 6/7 (RW 0x4E6753 W3DVegetationBufferBase::allocateBuffers;
+			// DONOR BFME2 Rva000E6D94AllocateBuffers.cpp): abs(N.L) for directional lights 0..2, no specular
+			line("\t\t\tdsum += lc[i] * abs(ndl);");
 		}
 		else
 		{
-			line("\t\tv_lit0 = clamp(vec4((dsum * w3d_diffuse.rgb + amb * w3d_ambient_mat + w3d_emissive) * vc.rgb * 0.5, vc.a * w3d_diffuse.a), 0.0, 1.0);");
+			line("\t\t\tfloat ndh = dot(wn, normalize(vv + ld[i]));");
+			line("\t\t\tdsum += lc[i] * max(ndl, 0.0);");
+			// D3D9 lit clamps the power to [-127.9961, 127.9961]
+			line("\t\t\tssum += lc[i] * ((ndl > 0.0 && ndh > 0.0) ? pow(ndh, clamp(w3d_shininess, " + fmt(-W3D_LIT_POWER_LIMIT) + ", " + fmt(W3D_LIT_POWER_LIMIT) + ")) : 0.0);");
 		}
-		line("\t\tv_lit1 = clamp(ssum * w3d_spec_color * 0.5, 0.0, 1.0);");
+		line("\t\t}");
+		// lane LOCAL-38: defaultw3d.fxo blob 151 / vegetation.fxo blob 6 add PointLight[0] to the directional diffuse sum
+		line("\t\tdsum += w3d_pt;");
+		line(k.HasDCG ? "\t\tvec4 vc = COLOR;" : "\t\tvec4 vc = vec4(1.0);");
+		if (k.Vegetation)
+		{
+			// vegetation.fxo has no ColorDiffuse / ColorAmbient / ColorEmissive / ColorSpecular material parameters:
+			// oD0.rgb = clamp((dsum + amb) * vc.rgb * 0.5, 0, 1), oD0.a = vc.a, no specular
+			line("\t\tv_lit0 = clamp(vec4((dsum + amb) * vc.rgb * 0.5, vc.a), 0.0, 1.0);");
+			line("\t\tv_lit1 = vec3(0.0);");
+		}
+		else
+		{
+			if (k.ParticleColor)
+			{
+				line("\t\tvec3 diff_rgb = w3d_diffuse.rgb; vec3 emis_rgb = w3d_emissive;");
+				line("\t\tif (v_instance.z > 0.5) { float hv = v_instance.z - 1.0; emis_rgb = vec3(floor(hv / 65536.0), floor(mod(hv, 65536.0) / 256.0), mod(hv, 256.0)) / 255.0; }");
+				line("\t\telse if (v_instance.z < -0.5) { float hv = -v_instance.z - 1.0; diff_rgb = vec3(floor(hv / 65536.0), floor(mod(hv, 65536.0) / 256.0), mod(hv, 256.0)) / 255.0; }");
+				line("\t\tv_lit0 = clamp(vec4((dsum * diff_rgb + amb * w3d_ambient_mat + emis_rgb) * vc.rgb * 0.5, vc.a * w3d_diffuse.a), 0.0, 1.0);");
+			}
+			else
+			{
+				line("\t\tv_lit0 = clamp(vec4((dsum * w3d_diffuse.rgb + amb * w3d_ambient_mat + w3d_emissive) * vc.rgb * 0.5, vc.a * w3d_diffuse.a), 0.0, 1.0);");
+			}
+			line("\t\tv_lit1 = clamp(ssum * w3d_spec_color * 0.5, 0.0, 1.0);");
+		}
 		line("\t}");
 	}
 	if (k.OcclusionPass)
@@ -581,6 +622,10 @@ std::string Generate_W3D_Shader_Code(const W3DShaderKey &k, W3DSamplerPolicy sam
 			line("\tif (slot == 0 || w3d_occl_on < 0.5) { VERTEX = vec3(0.0); }");
 			line("\tv_instance.z = float(slot);");
 		}
+	}
+	if (k.Floor && !k.OcclusionPass)
+	{
+		line("\tPOSITION = PROJECTION_MATRIX * vec4((MODELVIEW_MATRIX * vec4(VERTEX, 1.0)).xyz * 0.999375, 1.0);");
 	}
 	line("}");
 
@@ -929,4 +974,25 @@ std::string Generate_W3D_Shader_Code(const W3DShaderKey &k, W3DSamplerPolicy sam
 		line("}");
 	}
 	return c;
+}
+
+int W3D_Surface_Render_Priority(int sortLevel, int pass, bool floorBlend)
+{
+	if (floorBlend)
+	{
+		return FXParticleSystem::kFloorRenderPriority; // RW 0x4E2F3A -> 0x4E53D3 RenderFloors
+	}
+	constexpr int kMaxPasses = 3;
+	constexpr int kMaxStaticSort = 32; // RW 0x5762FC..0x576304: DefaultStaticSortListClass range 1..32
+	const int clampedPass = std::clamp(pass, 0, kMaxPasses - 1);
+	if (sortLevel <= 0)
+	{
+		// RW 0x470F5E -> 0x574406: SortLevel 0 meshes flush before StaticSortLists
+		return FXParticleSystem::kW3DRenderPriorityMin + clampedPass;
+	}
+	// RW 0x47166A -> 0x576240: StaticSortLists draw descending from SortLevel 32 down to 1
+	const int clampedSort = std::clamp(sortLevel, 1, kMaxStaticSort);
+	const int staticBase = FXParticleSystem::kW3DRenderPriorityMin + kMaxPasses;
+	const int priority = staticBase + (kMaxStaticSort - clampedSort) * kMaxPasses + clampedPass;
+	return std::clamp(priority, FXParticleSystem::kW3DRenderPriorityMin, FXParticleSystem::kW3DRenderPriorityMax);
 }

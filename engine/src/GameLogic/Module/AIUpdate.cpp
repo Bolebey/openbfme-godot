@@ -560,7 +560,27 @@ public:
 		}
 		return logic.settings().gravity;
 	}
-	bool hasStealthModule() const override { return StealthUpdate::of(obj()) != nullptr; } // RW 0x68FBD3
+	// Port 202, RW 0x5E7C08 .. 0x5E7C22: the sequence of the Climb portal's reveal (RW 0x66A143 .. 0x66A166, lane WALL-2), instruction for instruction
+	void revealDisguisedClimber() override { m_ai.revealDisguiseOnClimb(); }
+	// Port 202, RW 0x5E579A .. 0x5E57E8 (the wading updater's reads). The water query is the pathfinder's map view, as isUnderwater above; a game without a
+	// map has no water areas, and NO_Z_MOTIVE_FORCE's height there is the logic's ground query (layerHeightAt), so the answer is "dry", not an error
+	bool wadingWaterAt(float x, float y, WadingWater &out) const override
+	{
+		if (m_ai.m_adapter && m_ai.m_adapter->getLayer() != LAYER_GROUND) // RW 0x5E579A: Object::getLayer (RW 0x68BBE0) == 1
+		{
+			return false;
+		}
+		const PathfindTerrain *terrain = m_ai.m_world ? m_ai.m_world->pathfinder().terrainView() : nullptr;
+		float waterZ = 0.0f, terrainZ = 0.0f;
+		if (!terrain || !terrain->isUnderwater(x, y, &waterZ, &terrainZ)) // RW 0x5E57CB: TheTerrainLogic vslot 0x4C
+		{
+			return false;
+		}
+		out.waterZ = waterZ;
+		out.terrainZ = terrainZ;
+		out.wadeWaterDepth = obj().logic().settings().wadeWaterDepth; // RW 0x5E57D2 .. 0x5E57E3: TheAI -> + 0x18 -> + 0x98
+		return true;
+	}
 	bool isKindOfSubmarine() const override
 	{
 		static const int kSubmarine = CombatNames::kindOf("SUBMARINE"); // KindOf 187: template + 0x11F bit 3
@@ -843,6 +863,10 @@ UpdateSleepTime AIUpdateInterface::update()
 	{
 		getObject()->logic().scriptModelConditionEvents(*getObject(), m_luaConditionSnapshot); // lane HERO-2: RW 0x66964D -> 0x663E32
 	}
+	// RW 0x669652 .. 0x669708 (DONOR BFME2 0x0026A05D, Rva0026A05DUpdate.cpp; both editions): a stunned non-member unit
+	// cannot run its AI state machine, attack-move scan, turret, or locomotor until PhysicsBehavior clears m_stunned (+0x5C).
+	const PhysicsBehavior *const phys = !memberUpdate ? getObject()->physicsModule() : nullptr;
+	const bool stunnedNormalUnit = phys != nullptr && phys->isStunned();
 	if (ObjectWeapons *w = getObject()->getWeapons())
 	{
 		// the weapon model conditions (RW 0x68E197) are the WeaponStatusHelper's (lane PROJ-2: a PHASE_FINAL module, after this update; RW 0x66DA50 is
@@ -850,7 +874,7 @@ UpdateSleepTime AIUpdateInterface::update()
 		w->updateFiringTracker(); // RW 0x8E30DD
 	}
 	updateBeforeBase();
-	if (m_attackMoveActive && !m_mover->isAiDead())
+	if (m_attackMoveActive && !m_mover->isAiDead() && !stunnedNormalUnit)
 	{
 		// ZH AIAttackMoveToState::update: look around while marching; a target interrupts the march (the idle state resumes it). Lane TARGET-1: the scan is
 		// RotWK's mood scan (RW 0x755798 -> RW 0x66844A(1, 0)); its cadence is the mood check's (AI + 0x21C)
@@ -868,6 +892,31 @@ UpdateSleepTime AIUpdateInterface::update()
 	{
 		// RW 0x66E6FF .. 0x66E707: horde member update returns sleep and jumps to 0x66E711
 		finalSleep = hordeMemberUpdate();
+	}
+	else if (stunnedNormalUnit)
+	{
+		// RW 0x66966A .. 0x669708 (DONOR BFME2 0x0026A05D): keep AI halted while knocked back / stunned / standing up.
+		if (getObject()->isEffectivelyDead())
+		{
+			if (currentStateId() != (unsigned)AI_DEAD && !m_machine->isLocked())
+			{
+				m_machine->setState(AI_DEAD); // RW 0x669673 .. 0x6696B2
+			}
+		}
+		else
+		{
+			if (currentStateId() != (unsigned)AI_IDLE)
+			{
+				m_mover->destroyPath(); // RW 0x66276B
+				setLocomotorGoalNone(); // AI vslot 0x220
+			}
+			m_world->pathfinder().removeGoal(*m_adapter); // RW 0x68B401 -> 0x8E2138
+		}
+		static const int cMoving = CombatNames::modelCondition("MOVING");
+		static const int cBackingUp = CombatNames::modelCondition("BACKING_UP");
+		getObject()->setModelConditionState(cMoving, false);     // RW 0x6696FA: bit 61
+		getObject()->setModelConditionState(cBackingUp, false);  // RW 0x6696FA: bit 156
+		finalSleep = (unsigned)UPDATE_SLEEP_NONE;
 	}
 	else
 	{
