@@ -244,6 +244,7 @@ include(cmake/Port166.cmake) # PORT-166: the FIRE_WEAPON charge end to end - rel
 include(cmake/Port137.cmake) # PORT-137: auto-pickup button and selected group
 include(cmake/Port135.cmake) # OPENBFME_PORT135_TESTS
 include(cmake/Port426.cmake) # PORT-426: Shift on a production button queues five units (issue 426; OPENBFME_PORT426_TESTS)
+include(cmake/Port212.cmake) # PORT-212: a plot's construction applies no MaxSimultaneousOfType (fork issue 502; OPENBFME_PORT212_TESTS)
 include(cmake/Port121.cmake) # PORT-121: the ParticleSysBone creation reads the draw's pose (OPENBFME_PORT121_TESTS)
 include(cmake/Port435.cmake) # PORT-435: a gate's contact-point aim follows its ACTIVE geometry (OPENBFME_PORT435_TESTS)
 include(cmake/Port132.cmake) # PORT-132: Locomotor AeleronCorrection* / ElevatorCorrection*, the ship's roll and pitch (issue #334; OPENBFME_PORT132_TESTS)
@@ -933,6 +934,7 @@ add_executable(openbfme_tests
     ${OPENBFME_PORT137_TESTS}
     ${OPENBFME_PORT135_TESTS}
     ${OPENBFME_PORT426_TESTS}
+    ${OPENBFME_PORT212_TESTS}
     ${OPENBFME_PORT121_TESTS}
     ${OPENBFME_PORT435_TESTS}
     ${OPENBFME_PORT132_TESTS}
