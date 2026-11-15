@@ -180,6 +180,7 @@ include(cmake/Build.cmake)      # BUILD-1: construction, castles, dozers (append
 include(cmake/Combat.cmake)     # OPENBFME_COMBAT_SOURCES / OPENBFME_COMBAT_TESTS (lane COMBAT-1)
 include(cmake/Structure.cmake)  # OPENBFME_STRUCTURE_SOURCES / OPENBFME_STRUCTURE_TESTS (lane COMBAT-2)
 include(cmake/Spell.cmake)      # OPENBFME_SPELL_SOURCES / OPENBFME_SPELL_TESTS (lane SPELL-1)
+include(cmake/Port438.cmake) # PORT-438: the forbidden-objects distance of a summon is the 2D bounding circle (fork issue 438; OPENBFME_PORT438_TESTS)
 include(cmake/Port43.cmake)     # PORT-43: GameData/PowerLimit -> GameLogic + 0x118 (issue #128; OPENBFME_PORT43_TESTS)
 include(cmake/Port51.cmake)     # PORT-51: Object/InstanceScaleFuzziness, parsed and never read by RotWK (issue #155; OPENBFME_PORT51_TESTS)
 include(cmake/Port99.cmake)     # PORT-99: PlayerTemplate/LightPointsUpSound, its only reader is the light-point (WOTR) action (issue #259; OPENBFME_PORT99_TESTS)
@@ -1046,6 +1047,7 @@ add_executable(openbfme_tests
     ${OPENBFME_COMBAT_TESTS}
     ${OPENBFME_STRUCTURE_TESTS}
     ${OPENBFME_SPELL_TESTS}
+    ${OPENBFME_PORT438_TESTS}
     ${OPENBFME_PORT43_TESTS}
     ${OPENBFME_PORT123_TESTS}
     ${OPENBFME_PORT51_TESTS}
