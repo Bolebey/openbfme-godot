@@ -24,7 +24,7 @@
 #include <vector>
 
 class Object;
-class ObjectFilter;
+struct ObjectFilter; // a struct (GameLogic/ObjectFilter.h): MSVC mangles class and struct apart, LNK2019 in the Windows build
 struct Coord3D;
 struct DamageInfo;
 struct DamageInfoInput;

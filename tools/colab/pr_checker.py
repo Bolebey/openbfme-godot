@@ -40,6 +40,8 @@ BASE = ["ENNORATH scenario*", "module coverage*", "modgap2*", "mapobj*", "logic 
         "save4a retail*", "save4b retail*", "move retail*", "perf1*", "uber1*"]
 PINS = {"perf1*", "uber1*"}
 SHARED = ("docs/STOPS.md", "docs/ennorath/NIGHT_WATCH.md", "README.md")
+DOC_UNION = {"docs/STOPS.md", "docs/ennorath/NIGHT_WATCH.md", "docs/ennorath/PROBLEMS.md", "docs/ennorath/TOP20.md",
+             "docs/ennorath/PR_CANDIDATES.md", "docs/ennorath/MODULE_GAPS.md", "docs/ennorath/TEST_BASELINE.md", "engine/CMakeLists.txt"}
 
 
 def sh(cmd: list[str] | str, cwd: Path = WT, timeout: int | None = None, env: dict | None = None) -> subprocess.CompletedProcess:
@@ -153,9 +155,25 @@ def check_pr(pr: dict, state: dict, main_sha: str, open_prs: list[dict], comment
     merge = sh(["git", "-c", "user.name=prcheck", "-c", "user.email=prcheck@localhost", "merge", "--no-edit", "--no-verify", "-q", f"refs/prcheck/{n}"])
     if merge.returncode:
         files = sh(["git", "diff", "--name-only", "--diff-filter=U"]).stdout.split()
-        sh(["git", "merge", "--abort"])
-        lines += [f"❌ **Не вливается в main**: конфликт в {', '.join(f'`{f}`' for f in files) or merge.stderr[:300]}. Влей `origin/main` в свою ветку."]
-        return finish(n, sha, lines, comment, state)
+        code = [f for f in files if f not in DOC_UNION and f != "README.md"]
+        if code or not files:
+            sh(["git", "merge", "--abort"])
+            lines += [f"❌ **Не вливается в main**: конфликт в {', '.join(f'`{f}`' for f in code) or merge.stderr[:300]}. Влей `origin/main` в свою ветку."]
+            return finish(n, sha, lines, comment, state)
+        for f in files:  # the shared tables: both sides' rows kept (as the batch merge does), README taken from main
+            if f == "README.md":
+                sh(["git", "checkout", "-q", "--ours", f])
+            else:
+                parts = [sh(["git", "show", f":{k}:{f}"]).stdout for k in (2, 1, 3)]
+                tmp = [HOME / f"merge{k}" for k in range(3)]
+                for t, text in zip(tmp, parts):
+                    t.write_text(text, encoding="utf-8")
+                sh(["git", "merge-file", "--union", *map(str, tmp)])
+                (WT / f).write_text(tmp[0].read_text(encoding="utf-8"), encoding="utf-8")
+            sh(["git", "add", f])
+        sh(["git", "-c", "user.name=prcheck", "-c", "user.email=prcheck@localhost", "commit", "-q", "--no-verify", "--no-edit"]).check_returncode()
+        lines.append(f"⚠️ Конфликт только в общих таблицах ({', '.join(f'`{f}`' for f in files)}): для проверки сведён объединением строк. "
+                     "Новые строки — файлами `docs/stops.d/`, `docs/ennorath/night_watch.d/` (PROCESS 5.7).")
     changed = sh(["git", "diff", "--name-only", f"{main_sha}..HEAD"]).stdout.split()
     diff = sh(["git", "diff", f"{main_sha}..HEAD"]).stdout
     frag = sh([sys.executable, "tools/fragments.py", "check"]) if (WT / "tools/fragments.py").exists() else None
