@@ -70,7 +70,7 @@ TEST_CASE("MODS-3: Ennorath 1.9.8.5's game.dat turns on ennorath.stance-keeps-mo
 	REQUIRE_MESSAGE(ModEngineFeatures::activate({ "fc32e4c4142b5c607b90972eaf448400" }, &error), error);
 	CHECK(ModEngineFeatures::activeProfiles() == std::vector<std::string>{ "Ennorath 1.9.8.5 game.dat" });
 	CHECK(ModEngineFeatures::identityFeatures() ==
-		std::vector<std::string>{ "mod-engine:ennorath.stance-keeps-moving", "mod-engine:ennorath.middle-click-camera", "mod-engine:ennorath.evacuate-containers", "mod-engine:ennorath.options-pages", "mod-engine:ennorath.option-hotkeys", "mod-engine:ennorath.online-delay-fix", "mod-engine:ennorath.lobby-map-search", "mod-engine:ennorath.chat-mute", "mod-engine:ennorath.observer-command-range", "mod-engine:ennorath.commandset-64", "mod-engine:ennorath.upgrades-5120", "mod-engine:ennorath.building-limit-fix", "mod-engine:ennorath.spell-store-delay", "mod-engine:ennorath.select-all-buildings", "mod-engine:ennorath.replay-tabs-chat-pause", "mod-engine:ennorath.wotr-8-players" }); // a retail peer is refused
+		std::vector<std::string>{ "mod-engine:ennorath.stance-keeps-moving", "mod-engine:ennorath.middle-click-camera", "mod-engine:ennorath.evacuate-containers", "mod-engine:ennorath.options-pages", "mod-engine:ennorath.option-hotkeys", "mod-engine:ennorath.online-delay-fix", "mod-engine:ennorath.lobby-map-search", "mod-engine:ennorath.chat-mute", "mod-engine:ennorath.observer-command-range", "mod-engine:ennorath.commandset-64", "mod-engine:ennorath.upgrades-5120", "mod-engine:ennorath.building-limit-fix", "mod-engine:ennorath.spell-store-delay", "mod-engine:ennorath.select-all-buildings", "mod-engine:ennorath.replay-tabs-chat-pause", "mod-engine:ennorath.wotr-8-players", "mod-engine:ennorath.chat-clipboard" }); // a retail peer is refused
 	CHECK_FALSE(ModEngineFeatures::has(ModEngineFeature::EdainUnchainedHerobarKindOf));
 	const std::vector<std::string> lines = ModEngineFeatures::stopLines();
 	REQUIRE(lines.size() == 1);
@@ -81,7 +81,7 @@ TEST_CASE("MODS-3: Ennorath 1.9.8.5's game.dat turns on ennorath.stance-keeps-mo
 	CHECK(lines[0].find("replays (tabs, chat, Ctrl+] pause: .rpchat / .rppause / .rppvar)") != std::string::npos); // Local 144
 	CHECK(lines[0].find("War of the Ring for 8 players (.wotrui / .wotrobs / .wtrview / .wtrdisp / .lobfac)") != std::string::npos); // Local 144
 	CHECK(lines[0].find("select all buildings (.bldgrp / .padsel / .bldext / .bldcan / .bldlvl), ") != std::string::npos); // Local 143
-	CHECK(lines[0].find("not yet (docs/ennorath/ENNORATH_EXE.md): the text entry clipboard (.txtclip, P-128)") != std::string::npos); // Local 143 + 144
+	CHECK(lines[0].find("the text entry clipboard Ctrl+A / C / X / V (.txtclip); not yet (docs/ennorath/ENNORATH_EXE.md): the DirectX") != std::string::npos); // P-128 (owner 2026-11-23)
 }
 
 namespace
