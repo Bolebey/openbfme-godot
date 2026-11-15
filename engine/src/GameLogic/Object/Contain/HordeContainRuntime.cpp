@@ -311,6 +311,7 @@ void HordeContain::updateFormation()
 }
 
 
+
 // RotWK HordeContain's create interface (+ 0x34, vtable RW 0xC5B470): slot 0, onCreate (RW 0x86C77D), only sets a flag (+ 0x291, when module data + 0x1D8 is
 // 0; not ported); slot 1, onBuildComplete (RW 0x8718ED), makes the payload (primary slot 28, RW 0x871B9B). Every creator runs onBuildComplete after it has
 // placed the object (the map loop RW 0x62DCE4: setPosition RW 0x62E13F, then RW 0x68D252 at 0x62E176; the OCL RW 0x5F1623; ProductionUpdate; the transport

@@ -486,8 +486,9 @@ public:
 	// unplaced like the other members (adoptMembers), the spawn's is put on its slot (addToContain). The arm's gate is interface slot 0x6C (RW 0x876541 ->
 	// RW 0x86C81E): false when the horde has a carrier (H + 0x26C, RW 0x86C81E), when the carrier's template is not one of BannerCarriersAllowed (RW
 	// 0x86C86D .. 0x86C89E, by template) or when one of the two is TEMPORARILY_DEFECTED and they differ in team or in that status (RW 0x86C832 .. 0x86C86B
-	// with flag = true); then nothing happens and the carrier stays where it is (RW 0x87657F's arm returns 0). Not ported: the flag = false arm (RW
-	// 0x876444 .. 0x876459, the horde gains a level, RW 0x79DA0A(1, 1, 0)): no caller of the port reaches it
+	// with flag = true); then RotWK goes on to the slot's machine arm RW 0x87657F .. 0x8765D7 (MachineAllowed / MachineType: not ported, S-7375; no mod
+	// object sets MachineAllowed) and the carrier stays where it is. Not ported: the flag = false arm (RW 0x876444 .. 0x876459, the horde gains a level,
+	// RW 0x79DA0A(1, 1, 0)): no caller of the port reaches it
 	bool handOverBannerCarrier(Object &carrier, bool walksIn);
 	ObjectID bannerCarrier() const { return m_bannerCarrier; }
 	unsigned bannerCountdown() const { return m_bannerCountdown; }

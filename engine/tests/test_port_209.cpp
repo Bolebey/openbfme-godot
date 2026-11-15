@@ -216,7 +216,8 @@ TEST_CASE("PORT-209 onBuildComplete: a produced horde, a BannerCarrierMinLevel a
 		horde->setPosition(&at);
 		horde->setProducer(producer);
 		Port209World::completeHorde(horde);
-		CHECK(f.membersNamed(horde, "Swordsman").size() == 3u);
+		// a produced horde gets neither its payload (RW 0x871BAB .. 0x871BB3: the producer fills it) nor a carrier in the call
+		CHECK(f.membersOf(horde).empty());
 		CHECK(f.hordeOf(horde)->bannerCarrier() == 0);
 		CHECK(f.membersNamed(horde, "Port209Bannerman").empty());
 	}
