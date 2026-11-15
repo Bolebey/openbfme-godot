@@ -279,3 +279,122 @@ TEST_CASE("PORT-165: position approach tests range and queues an attack path (RW
 	CHECK(restored.update() == STATE_CONTINUE); // restored move still dispatches its special path hook
 	restored.onExit(EXIT_NORMAL);
 }
+
+TEST_CASE("PORT-165: a toggled melee horde attacks the clicked position with its ranged weapon")
+{
+    TestWorld w;
+    w.combat().setAutoAcquireEnabled(false);
+    Object *horde = w.unit("P165ArcherHorde", 'A', 300, 300);
+    REQUIRE(horde);
+    w.frames(12);
+    const auto members = w.membersOf(horde);
+    REQUIRE(members.size() == 6);
+    REQUIRE(horde->getWeapons()->weaponInSlot(2) == nullptr);
+    for (Object *member : members) REQUIRE(member->getWeapons()->weaponInSlot(2) == nullptr);
+    WeaponSetToggle::setObjectWeaponSetFlag(*horde, WeaponSetToggle::WEAPONSET_TOGGLE_1, true);
+    for (Object *member : members) WeaponSetToggle::setObjectWeaponSetFlag(*member, WeaponSetToggle::WEAPONSET_TOGGLE_1, true);
+    w.frames(2);
+    REQUIRE(horde->getWeapons()->weaponInSlot(2));
+    int player = w.playerIndex("Alice");
+    w.select(player, { horde });
+    w.frames(1);
+    Coord3D spot{300.0f, 150.0f, w.logic->getGroundHeight(300.0f, 150.0f)};
+    GameMessage click(MSG_DO_WEAPON_AT_LOCATION, player);
+    click.appendIntegerArgument(2);
+    click.appendLocationArgument(spot);
+    click.appendIntegerArgument(0x7fffffff);
+    w.send(click);
+    w.frames(1);
+    // A completed first shot releases the temporary lock when IdleAfterFiringDelay is -1.
+    CHECK(horde->getWeapons()->stats().shotsFired == 1);
+    CHECK(horde->getWeapons()->curSlot() == 2);
+    for (Object *member : members) CHECK(member->getWeapons()->curSlot() == 2);
+    CHECK(horde->getAIUpdateInterface()->currentStateId() == (unsigned)AI_ATTACK_POSITION);
+    auto *attack = dynamic_cast<AIAttackState *>(horde->getAIUpdateInterface()->stateMachine().currentState());
+    REQUIRE(attack);
+    REQUIRE(attack->attackMachine());
+    CHECK(attack->attackMachine()->currentState()->id() == 0x2BE);
+    XferSave save;
+    attack->xfer(save);
+    AIAttackState restored(horde->getAIUpdateInterface()->stateMachine(), false, false, false);
+    XferLoad load(save.data());
+    restored.xfer(load);
+    REQUIRE(restored.attackMachine());
+    CHECK(restored.attackMachine()->currentState()->id() == 0x2BE);
+    XferSave again;
+    restored.xfer(again);
+    CHECK(again.data() == save.data());
+    HordeContain *contain = w.hordeOf(horde);
+    REQUIRE(contain);
+    const int frames = w.runUntil([&] { return contain->attackStats().positionOrders >= members.size(); }, 300);
+    CHECK(frames < 300); // tolerance: asynchronous unit updates must complete within ten seconds
+    CHECK(contain->attackStats().positionOrders == members.size());
+    const int shotFrames = w.runUntil([&] {
+        for (Object *member : members) if (member->getWeapons()->stats().shotsFired == 0) return false;
+        return true;
+    }, 300);
+    CHECK(shotFrames < 300); // tolerance: member weapon timing and movement are asynchronous
+}
+
+TEST_CASE("PORT-165: out-of-range kind-7 approach and machine snapshot (RW 0x74548D)")
+{
+    TestWorld w;
+    w.combat().setAutoAcquireEnabled(false);
+    Object *horde = w.unit("P165ArcherHorde", 'A', 300, 600);
+    REQUIRE(horde);
+    w.frames(12);
+    WeaponSetToggle::setObjectWeaponSetFlag(*horde, WeaponSetToggle::WEAPONSET_TOGGLE_1, true);
+    for (Object *member : w.membersOf(horde)) WeaponSetToggle::setObjectWeaponSetFlag(*member, WeaponSetToggle::WEAPONSET_TOGGLE_1, true);
+    REQUIRE(horde->getWeapons()->setWeaponLock(2, LOCKED_TEMPORARILY));
+    auto *ai = horde->getAIUpdateInterface();
+    const Coord3D spot{300.0f, 150.0f, w.logic->getGroundHeight(300.0f, 150.0f)};
+    ai->aiAttackPosition(spot, 0x7fffffff, CMD_FROM_PLAYER);
+    auto *attack = dynamic_cast<AIAttackState *>(ai->stateMachine().currentState());
+    REQUIRE(attack);
+    auto *inner = attack->attackMachine();
+    REQUIRE(inner);
+    CHECK(inner->currentStateId() == 0x2BC);
+    REQUIRE(inner->findState(0x2BC));
+    REQUIRE(inner->findState(0x2BD));
+    REQUIRE(inner->findState(0x2BE));
+    REQUIRE(inner->findState(0x2C0));
+    CHECK(inner->findState(0x2BC)->successId() == 0x2BD);
+    CHECK(inner->findState(0x2BC)->failureId() == 0x2C0);
+    CHECK(inner->findState(0x2BD)->successId() == 0x2BE);
+    CHECK(inner->findState(0x2BD)->failureId() == 0x2BC);
+    CHECK(inner->findState(0x2BE)->successId() == 0x2BC);
+    CHECK(inner->findState(0x2BE)->failureId() == 0x2BC);
+    CHECK(inner->findState(0x2C0)->successId() == MACHINE_DONE_FAILURE);
+    CHECK(inner->findState(0x2C0)->failureId() == MACHINE_DONE_FAILURE);
+    XferSave save;
+    attack->xfer(save);
+    AIAttackState restored(ai->stateMachine(), false, false, false);
+    XferLoad load(save.data());
+    restored.xfer(load);
+    REQUIRE(restored.attackMachine());
+    CHECK(restored.attackMachine()->currentStateId() == 0x2BC);
+    XferSave again;
+    restored.xfer(again);
+    CHECK(again.data() == save.data());
+    const int frames = w.runUntil([&] { return w.hordeOf(horde)->attackStats().positionOrders > 0; }, 600);
+    CHECK(frames < 600); // tolerance: pathfinding and horde travel time are asynchronous
+}
+
+TEST_CASE("PORT-165: horde object attack retains the existing kind-6 machine (RW 0x74D012)")
+{
+    TestWorld w;
+    w.combat().setAutoAcquireEnabled(false);
+    Object *horde = w.unit("P165ArcherHorde", 'A', 300, 300);
+    Object *target = w.unit("Dummy", 'B', 300, 450);
+    REQUIRE(horde);
+    REQUIRE(target);
+    w.frames(12);
+    WeaponSetToggle::setObjectWeaponSetFlag(*horde, WeaponSetToggle::WEAPONSET_TOGGLE_1, true);
+    REQUIRE(horde->getWeapons()->setWeaponLock(2, LOCKED_TEMPORARILY));
+    auto *ai = horde->getAIUpdateInterface();
+    ai->aiAttackObject(target, CMD_FROM_PLAYER);
+    auto *attack = dynamic_cast<AIAttackState *>(ai->stateMachine().currentState());
+    REQUIRE(attack);
+    REQUIRE(attack->attackMachine());
+    CHECK(attack->attackMachine()->findState(0x2BC) == nullptr);
+}

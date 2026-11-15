@@ -1,6 +1,6 @@
 # Port 165: horde position-attack machine investigation
 
-Issue #394. Investigation only; this does not implement or verify the fix.
+Issue #394. The kind-7 machine is now connected; full projectile/FX acceptance and in-game verification remain outstanding.
 Addresses are RotWK 2.01 (RW), with BFME2 donor paths under
 `Code/GameEngine/Source/GameLogic/AI`.
 
@@ -10,9 +10,8 @@ Addresses are RotWK 2.01 (RW), with BFME2 donor paths under
 flag only for an object attack with a goal object, and clears it for an
 immobile owner. At 0x74CFF1–0x74D019, after earlier special-case branches,
 a HORDE with that flag clear and the attacking-object flag clear selects
-kind 7; other HORDE attacks select kind 6. The port's
-`AIAttackState::createAttackMachine` selects the horde machine based on the
-AI module without a separate position branch.
+kind 7; other HORDE attacks select kind 6. The port now selects the position machine separately before the existing
+kind-6 horde machine, preserving the earlier giant-bird and contesting guards.
 
 The kind-7 constructor RW 0x74548D defines these rows (also BFME2
 `AttackPositionHordeStateMachine.cpp`, 0x00343A86):
@@ -67,3 +66,12 @@ behavioural proof, not just matching the transition graph.
   the required full projectile/FX acceptance test.
 * Check other owners of the shared states and finish the issue's review
   and upstream eligibility requirements. No game or mod data is committed.
+
+## Integration progress
+
+The synthetic `PORT-165` suite exercises both in-range and out-of-range
+position orders, member shots, the kind-6 object-attack guard, transition
+rows and kind-7 save/load. This is not yet a projectile-impact or FX test.
+The approach state's projectile precise-Z flag and the turret mood-target
+flag (AI +0x3C7, S-1189) remain explicitly unsupported rather than silently
+approximated; these are not exercised by the synthetic corsair-like horde.

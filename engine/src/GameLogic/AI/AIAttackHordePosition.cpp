@@ -332,6 +332,12 @@ void AIHordePositionApproachState::crc(StateHasher &h) const
 	h.addBool(m_stopIfInRange); h.addBool(m_initialApproach); h.addBool(m_waiting);
 }
 
+// RW 0x7443B0 initializes +0x61 once; RW 0x74A58B clears it on exit.
+void AIHordePositionApproachState::crcPersistent(StateHasher &h) const
+{
+	h.addBool(m_initialApproach);
+}
+
 void AIHordePositionApproachState::xfer(Xfer &x)
 {
 	XferVersion v{1, 1};
@@ -341,4 +347,16 @@ void AIHordePositionApproachState::xfer(Xfer &x)
 	x.xferUnsignedInt(&m_pathFrame); x.xferUnsignedInt(&m_waitFrame);
 	x.xferBool(&m_stopIfInRange); x.xferBool(&m_initialApproach); x.xferBool(&m_waiting);
 	if (x.isLoading() && m_move) m_move->setComputePathHook(this);
+}
+
+std::unique_ptr<AIStateMachine> makeHordePositionAttackMachine(AIUpdateInterface &ai, AttackFireNotify &notify)
+{
+	// RW 0x74548D .. 0x7455B1; 0x270F is the failure terminal on both wait-exit edges.
+	constexpr unsigned approach = 0x2BC, fire = 0x2BD, wait = 0x2BE, failedApproachWait = 0x2C0;
+	auto m = std::make_unique<AIStateMachine>(ai, "AttackPositionHordeStateMachine");
+	m->defineState(approach, std::make_unique<AIHordePositionApproachState>(*m), fire, failedApproachWait);
+	m->defineState(failedApproachWait, std::make_unique<AIHordePositionWaitState>(*m), MACHINE_DONE_FAILURE, MACHINE_DONE_FAILURE);
+	m->defineState(fire, std::make_unique<AIHordePositionFireState>(*m, notify), wait, approach);
+	m->defineState(wait, std::make_unique<AIHordePositionWaitState>(*m), approach, approach);
+	return m;
 }

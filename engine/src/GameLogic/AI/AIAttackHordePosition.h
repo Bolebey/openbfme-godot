@@ -42,6 +42,8 @@ public:
 	void onExit(StateExitType status) override;
 	void onTemporaryStateEnded() override;
 	void crc(class StateHasher &hasher) const override;
+	void crcPersistent(class StateHasher &hasher) const override;
+	bool hasPersistentCrc() const override { return true; }
 	void xfer(class Xfer &x) override;
 
 private:
@@ -55,3 +57,6 @@ private:
 	bool m_initialApproach = true;
 	bool m_waiting = false;
 };
+
+// RW 0x74548D: shared kind-7 machine, including both distinct wait rows.
+std::unique_ptr<AIStateMachine> makeHordePositionAttackMachine(AIUpdateInterface &ai, AttackFireNotify &notify);
