@@ -34,7 +34,7 @@ GH = "Gleb302596555/openbfme-godot"
 REPO = Path(os.environ.get("PRCHECK_REPO", "/content/sandbox/openbfme-godot"))
 HOME = Path(os.environ.get("PRCHECK_HOME", "/content/prcheck"))
 WT = HOME / "wt"
-STATE = HOME / "state.json"
+STATE = Path(os.environ.get("PRCHECK_STATE", str(HOME / "state.json")))  # autostart keeps it in /content/sandbox (saved to Drive)
 REPORTS = HOME / "reports"
 BASE = ["ENNORATH scenario*", "module coverage*", "modgap2*", "mapobj*", "logic retail: the PlayerTemplate*",
         "save4a retail*", "save4b retail*", "move retail*", "perf1*", "uber1*"]
@@ -77,6 +77,7 @@ def ensure_tree() -> None:
     HOME.mkdir(parents=True, exist_ok=True)
     REPORTS.mkdir(exist_ok=True)
     if not (WT / ".git").exists():
+        sh(["git", "worktree", "prune"], cwd=REPO)  # a Colab restart leaves the old tree's registration behind
         sh(["git", "worktree", "add", "--detach", str(WT), "origin/main"], cwd=REPO).check_returncode()
 
 
@@ -126,6 +127,13 @@ def main_baseline(state: dict, main_sha: str) -> dict:
     """BASE on main itself, once per main commit."""
     if state["main"].get("sha") == main_sha:
         return state["main"]["results"]
+    old = state["main"].get("sha")
+    if old:  # main moved by docs / tools only (a landing's own commits): the engine is the same, keep its results
+        moved = sh(["git", "diff", "--name-only", f"{old}..{main_sha}"]).stdout.split()
+        if moved and not any(f.startswith(("engine/", "godot/")) for f in moved):
+            state["main"]["sha"] = main_sha
+            save_state(state)
+            return state["main"]["results"]
     sh(["git", "checkout", "-q", "-f", "--detach", main_sha]).check_returncode()
     ok, err = build()
     if not ok:
