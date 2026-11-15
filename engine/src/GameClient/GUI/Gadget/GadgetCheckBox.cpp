@@ -6,6 +6,19 @@
 // checked box, per state (ZH GadgetCheckBox.h GadgetCheckBoxGet*BoxImage / *BoxColor).
 
 #include "GameClient/GUI/Gadgets.h"
+#include "Common/Audio/AudioEntryPoints.h"
+
+namespace
+{
+void playCheckBoxSound(const char *eventName)
+{
+	// RW 0x815772 (PlaySound): skips when TheAudio (0xDE42FC) is null; otherwise adds a 2D UI event (VIEW_ANY).
+	if (AudioApi::current())
+	{
+		AudioApi::playUiSound(eventName);
+	}
+}
+} // namespace
 
 WindowMsgHandledType GadgetCheckBoxInput(GameWindow *window, std::uint32_t msg, WindowMsgData mData1, WindowMsgData mData2)
 {
@@ -18,6 +31,7 @@ WindowMsgHandledType GadgetCheckBoxInput(GameWindow *window, std::uint32_t msg, 
 			{
 				BitSet(instData->m_state, WIN_STATE_HILITED);
 				mgr.winSendSystemMsg(window->winGetOwner(), GBM_MOUSE_ENTERING, msgData(window), mData1);
+				playCheckBoxSound("Gui_ShellMapMouseOver"); // RW 0x729522 -> 0x815772 (BFME2 0x727938)
 			}
 			break;
 		case GWM_MOUSE_LEAVING:
@@ -25,6 +39,7 @@ WindowMsgHandledType GadgetCheckBoxInput(GameWindow *window, std::uint32_t msg, 
 			{
 				BitClear(instData->m_state, WIN_STATE_HILITED);
 				mgr.winSendSystemMsg(window->winGetOwner(), GBM_MOUSE_LEAVING, msgData(window), mData1);
+				playCheckBoxSound("Gui_ShellMapMouseOut"); // RW 0x7294ED -> 0x729527 -> 0x815772 (BFME2 0x727938)
 			}
 			break;
 		case GWM_LEFT_DRAG:
@@ -39,6 +54,7 @@ WindowMsgHandledType GadgetCheckBoxInput(GameWindow *window, std::uint32_t msg, 
 			}
 			instData->m_state ^= WIN_STATE_SELECTED;
 			mgr.winSendSystemMsg(window->winGetOwner(), GBM_SELECTED, msgData(window), mData1);
+			playCheckBoxSound("Gui_ShellMapSelect"); // RW 0x7293FA -> 0x729527 -> 0x815772 (BFME2 0x727938)
 			break;
 		case GWM_RIGHT_DOWN:
 			break;
