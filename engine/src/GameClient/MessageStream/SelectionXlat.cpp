@@ -479,6 +479,13 @@ MessageDisposition SelectionTranslator::translate(const ClientMessage &msg)
 			{
 				// the mouseover hint for the command translator and the cursor
 				Object *under = HudObjects::pickForHover(m_ctx, pixel); // RW 0x83CC13
+				// RW 0x81E691..0x81E6BF (both editions): a masked object loses cursor hover unless SHRUBBERY, FORCEATTACKABLE, ROCK, or ROCK_VENDOR.
+				if (under && under->isMasked()
+					&& !under->isKindOfName("SHRUBBERY") && !under->isKindOfName("FORCEATTACKABLE")
+					&& !under->isKindOfName("ROCK") && !under->isKindOfName("ROCK_VENDOR"))
+				{
+					under = nullptr;
+				}
 				if (under && (!HudObjects::isEffectivelyDead(*under) || under->isKindOfName("ALWAYS_SELECTABLE")))
 				{
 					m_ctx.ui.setMouseover(under->getID());

@@ -13,6 +13,7 @@
 #include "Common/PlayerTemplate.h"
 #include "Common/Thing/ThingTemplate.h"
 #include "GameClient/Drawable.h"
+#include "GameLogic/Module/ConstructionModules.h"
 #include "GameClient/DrawableManager.h"
 #include "GameClient/GUI/GameTextSource.h"
 #include "GameClient/GUI/Image.h"
@@ -35,6 +36,7 @@
 #include "GameLogic/ObjectTemplateInfo.h"
 
 #include <algorithm>
+#include <cctype>
 #include <cstdio>
 #include <variant>
 
@@ -233,7 +235,13 @@ bool wantsHealthBar(const Object &obj, const IconUISettings &s, const std::set<O
 	static const int WALL_UPGRADE = kindIndex("WALL_UPGRADE"), DEFENSIVE_WALL = kindIndex("DEFENSIVE_WALL"), UNATTACKABLE = kindIndex("UNATTACKABLE");
 	static const int CREEP = kindIndex("CREEP");
 	static const int ROCK_VENDOR = kindIndex("ROCK_VENDOR"), HORDE = kindIndex("HORDE");
+	static const int STATUS_UNATTACKABLE = ObjectTemplateInfoBuilder::objectStatusIndex("UNATTACKABLE");
 	if (!s.showObjectHealth)
+	{
+		return false;
+	}
+	// LOCAL-58 (P-118): masked objects (e.g., RebuildHoleBehavior while the structure reconstructs, RW 0x8868C2) never draw health bars.
+	if (obj.isMasked())
 	{
 		return false;
 	}
@@ -244,7 +252,11 @@ bool wantsHealthBar(const Object &obj, const IconUISettings &s, const std::set<O
 	}
 	if (!sel && mousedOver != obj.getID())
 	{
-		// lane OPTS-2: the OpenBFME health bar mode (retail: none here)
+		// lane OPTS-2: the OpenBFME health bar mode (retail: none here); skip UNATTACKABLE status (masked holes/dummies)
+		if (STATUS_UNATTACKABLE >= 0 && obj.testStatus((unsigned)STATUS_UNATTACKABLE))
+		{
+			return false;
+		}
 		const BodyModuleInterface *body = s.healthBarMode == IconUISettings::HEALTH_BARS_DAMAGED ? obj.getBodyModule() : nullptr;
 		const bool extra = s.healthBarMode == IconUISettings::HEALTH_BARS_ALWAYS || (body && body->getHealth() < body->getMaxHealth());
 		if (!extra)
@@ -488,14 +500,20 @@ void DrawableIconUI::build(GameLogic &logic, const DrawableManager &drawables, c
 		// so objects that cannot produce any decoration skip them. The produced list is the one the full walk gives.
 		const Object *containerOf = obj->getContainedBy();
 		const bool selectedNow = selected.count(obj->getID()) != 0 || (containerOf && selected.count(containerOf->getID()) != 0);
+		static const int STATUS_UNATTACKABLE = ObjectTemplateInfoBuilder::objectStatusIndex("UNATTACKABLE");
 		bool barCandidate = false;
-		if (s.showObjectHealth)
+		if (s.showObjectHealth && !obj->isMasked())
 		{
-			if (selectedNow || mousedOver == obj->getID() || s.healthBarMode == IconUISettings::HEALTH_BARS_ALWAYS)
+			const bool unattackableExtra = STATUS_UNATTACKABLE >= 0 && obj->testStatus((unsigned)STATUS_UNATTACKABLE);
+			if (selectedNow || mousedOver == obj->getID())
 			{
 				barCandidate = true;
 			}
-			else if (s.healthBarMode == IconUISettings::HEALTH_BARS_DAMAGED)
+			else if (!unattackableExtra && s.healthBarMode == IconUISettings::HEALTH_BARS_ALWAYS)
+			{
+				barCandidate = true;
+			}
+			else if (!unattackableExtra && s.healthBarMode == IconUISettings::HEALTH_BARS_DAMAGED)
 			{
 				const BodyModuleInterface *body = obj->getBodyModule();
 				barCandidate = body && body->getHealth() < body->getMaxHealth();
@@ -515,7 +533,8 @@ void DrawableIconUI::build(GameLogic &logic, const DrawableManager &drawables, c
 		// and the filter is missing. Those objects emit no decoration, so skipping them would drop the note. Keep them in the
 		// walk; the marks list still inserts the note only after the same on-screen queue the old walk used.
 		const bool noteCandidate = !s.veterancyFilter && obj->getExperienceTracker() && !obj->isEffectivelyDead() && !hordeMember;
-		if (!barCandidate && !obj->isUnderConstruction() && !vetCandidate && !noteCandidate)
+		const bool constructCandidate = obj->isUnderConstruction() && !obj->isEffectivelyDead();
+		if (!barCandidate && !constructCandidate && !vetCandidate && !noteCandidate)
 		{
 			continue;
 		}
@@ -590,11 +609,30 @@ void DrawableIconUI::build(GameLogic &logic, const DrawableManager &drawables, c
 				out.push_back(a);
 			}
 		}
-		// RW 0x677CF9 / 0x679AE8: a fresh drawable's cached percent is -1, leaving its construction caption empty during unit exit.
-		if (obj.isUnderConstruction() && !obj.testStatus(19) && obj.getConstructionPercent() != -1.0f) // status 0x13 SOLD (TheObjectStatusNames RW 0xD8AFF0)
+		// RW 0x677CF9 / DONOR BFME2 0x002779CE (Drawable::drawConstructPercent):
+		// require UNDER_CONSTRUCTION, !SOLD (0x13), !isEffectivelyDead (RW 0x677D3D), and percent != -1.0f (RW 0x679AE8).
+		if (obj.isUnderConstruction() && !obj.testStatus(19) && !obj.isEffectivelyDead() && obj.getConstructionPercent() != -1.0f)
 		{
 			std::string text;
-			if (!kindOf(obj, WALL_SEGMENT) && !kindOf(obj, DEFENSIVE_WALL))
+			// Both editions (RW 0x677DF7..0x677E40, slot +0x2C -> RW 0x8227A4; DONOR BFME2 endsWithNoCase("moot") && isCouncil()):
+			// use CONTROLBAR:CouncilDesc when the template name ends in "moot" and GettingBuiltBehavior::forceComplete() is set.
+			auto endsWithMootNoCase = [](const std::string &name) {
+				if (name.size() < 4) return false;
+				const size_t off = name.size() - 4;
+				const char tail[4] = { 'm', 'o', 'o', 't' };
+				for (size_t i = 0; i < 4; ++i)
+				{
+					if (std::tolower(static_cast<unsigned char>(name[off + i])) != tail[i]) return false;
+				}
+				return true;
+			};
+			const ThingTemplate *tt = static_cast<const ThingTemplate *>(obj.getTemplate());
+			const GettingBuiltBehavior *gb = dynamic_cast<const GettingBuiltBehavior *>(obj.findModule("GettingBuiltBehavior"));
+			if (tt && endsWithMootNoCase(tt->getName()) && gb && gb->forceComplete())
+			{
+				text = loadScreenU16ToUtf8(LocalizedText::format(fetchOrMissing(s.text, "CONTROLBAR:CouncilDesc"), { (double)obj.getConstructionPercent() }));
+			}
+			else if (!kindOf(obj, WALL_SEGMENT) && !kindOf(obj, DEFENSIVE_WALL))
 			{
 				text = constructionText(s.text, (double)obj.getConstructionPercent());
 			}

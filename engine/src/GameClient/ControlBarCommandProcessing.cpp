@@ -114,7 +114,7 @@ void ControlBar::playStanceVoice(int stance)
 	}
 }
 
-bool ControlBar::pressButton(int slot, bool inPalantir)
+bool ControlBar::pressButton(int slot, bool inPalantir, bool shift)
 {
 	const ControlBarButton *cb = find(slot, inPalantir);
 	Object *obj = m_ctx.logic.findObjectByID(m_source);
@@ -190,12 +190,17 @@ bool ControlBar::pressButton(int slot, bool inPalantir)
 			{
 				return false;
 			}
-			// MSG_QUEUE_UNIT_CREATE, RotWK layout (RW 0x77A764): { byte fromBuildIndex, int templateId, int value30, byte batch, byte secondary }
+			// MSG_QUEUE_UNIT_CREATE, RotWK layout (RW 0x77A764): { byte fromBuildIndex, int templateId, int value30, byte batch, byte secondary }.
+			// PORT-426: the fourth argument is processCommandUI's `multiple` (RW 0x940C3E). RW 0x940BB3 calls Keyboard::isShift (RW 0x63F122),
+			// RW 0x940BC2 excludes a REVIVE, RW 0x940BCF reads ThingTemplate + 0x5F0 (MaxSimultaneousOfType, field table offset 1520) and
+			// RW 0x940BD9 sets the flag only when all three hold. The logic's batch loop is RW 0x8A1260 (`lea eax,[eax*4+1]`: 5 or 1).
+			// REVIVE has its own case below (RW 0x940B1B) and always sends one, as RW 0x940BC2 requires.
+			const bool multiple = shift && BuildAssistant::maxSimultaneousOfType(*tt) == 0;
 			ClientMessage &m = m_ctx.stream.append(MSG_QUEUE_UNIT_CREATE);
 			m.appendBoolean(false);
 			m.appendInteger((int)tt->getTemplateID());
 			m.appendInteger(-1);
-			m.appendBoolean(false);
+			m.appendBoolean(multiple);
 			m.appendBoolean(false);
 			return true;
 		}
@@ -295,11 +300,11 @@ bool ControlBar::pressButton(int slot, bool inPalantir)
 		}
 		case GUI_COMMAND_TOGGLE_WEAPONSET:
 		{
-			// lane HUD-4 / PORT-169: RW 0x9412C8 sends MSG_WEAPONSET_TOGGLE with the context object's id (logic case RW 0x77B529, GameLogic/WeaponSetToggle.cpp),
-			// then RW 0x9412F3 -> 0x941A22 calls updateToggleImage(obj, true) (RW 0x75D22E).
+			// lane HUD-4 / PORT-169 / PORT-189: RW 0x9412C8 sends MSG_WEAPONSET_TOGGLE with the context object's id (logic case RW 0x77B529, GameLogic/WeaponSetToggle.cpp),
+			// then RW 0x9412F3 -> 0x941A22 calls updateToggleImage(obj, true) (RW 0x75D22E) and RW 0x941C16 refreshes the button image.
 			ClientMessage &m = m_ctx.stream.append(MSG_WEAPONSET_TOGGLE);
 			m.appendObjectID(m_source);
-			updateToggleIndex(b, obj, true);
+			applyPredictedToggle(b, obj);
 			return true;
 		}
 		case GUI_COMMAND_TOGGLE_GATE:
@@ -361,13 +366,13 @@ bool ControlBar::pressButton(int slot, bool inPalantir)
 						m.appendInteger(target);
 					}
 				}
-				updateToggleIndex(b, obj, true); // RW 0x941A22 -> 0x75D22E(obj, 1)
+				applyPredictedToggle(b, obj); // PORT-189: RW 0x941A22 -> 0x75D22E(obj, 1), RW 0x941C16 image refresh
 				return true;
 			}
 			// lane HORDE-2: the logic case (RW 0x77BE83) reads argument 0 as the horde's object id: the control bar's source object
 			ClientMessage &m = m_ctx.stream.append(MSG_HORDE_TOGGLE_FORMATION);
 			m.appendObjectID(m_source);
-			updateToggleIndex(b, obj, true); // RW 0x941A22 -> 0x75D22E(obj, 1)
+			applyPredictedToggle(b, obj); // PORT-189: RW 0x941A22 -> 0x75D22E(obj, 1), RW 0x941C16 image refresh
 			return true;
 		}
 		case GUI_COMMAND_ATTACK_MOVE:
@@ -463,10 +468,11 @@ bool ControlBar::pressButton(int slot, bool inPalantir)
 		}
 		case GUI_COMMAND_TOGGLE_NO_AUTO_ACQUIRE:
 		{
-			// lane FACT-A / PORT-169: RW 0x940435 case 0x30: MSG_TOGGLE_NO_AUTO_ACQUIRE { objectID the context object }, then RW 0x941367 -> 0x75D366(id, 1)
+			// lane FACT-A / PORT-169 / PORT-189: RW 0x940435 case 0x30: MSG_TOGGLE_NO_AUTO_ACQUIRE { objectID the context object },
+			// then RW 0x941367 -> 0x75D366(id, 1) -> RW 0x75D22E(obj, 1) and RW 0x941C16 refreshes the button image.
 			ClientMessage &m = m_ctx.stream.append(MSG_TOGGLE_NO_AUTO_ACQUIRE);
 			m.appendObjectID(obj->getID());
-			updateToggleIndex(b, obj, true);
+			applyPredictedToggle(b, obj);
 			return true;
 		}
 		case GUI_COMMAND_FIRE_WEAPON:
@@ -525,7 +531,7 @@ bool ControlBar::pressButton(int slot, bool inPalantir)
 					tm.appendObjectID(obj->getID());
 				}
 			}
-			updateToggleIndex(b, obj, true); // RW 0x9414E7 -> 0x75D22E(obj, 1)
+			applyPredictedToggle(b, obj); // PORT-189: RW 0x9414E7 -> 0x75D22E(obj, 1), RW 0x941C16 image refresh
 			return true;
 		}
 		case GUI_COMMAND_CASTLE_UNPACK:

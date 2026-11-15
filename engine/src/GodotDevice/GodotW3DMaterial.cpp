@@ -586,7 +586,10 @@ Ref<Texture2D> W3DMaterialFactory::Load_Texture(const std::string &name, std::ve
 	}
 	if (!res.Found)
 	{
-		if (!quietWhenMissing)
+		// A name without an extension (the W3D data's `None`, GBFARM_BIB / ANGPORTER.BUCKET / CAH_skull) is never opened by
+		// retail's loader (RW 0x530D59: no dot, no candidate), so its 1 x 1 texture (RW 0x53193E) is the whole story and
+		// retail logs nothing. The caller still draws W3D_MISSING_TEXTURE_COLOR, as before.
+		if (!quietWhenMissing && res.Probed)
 		{
 			errors.push_back("texture not found: " + name
 				+ (res.TerrainFolderPath.empty() ? std::string() : " (a file of that name exists only as " + res.TerrainFolderPath + ", which retail's texture lookup does not search: RW 0x477D1C)"));
@@ -1117,8 +1120,8 @@ W3DMaterialResult W3DMaterialFactory::Create(const MeshRenderData &mesh, const M
 	}
 	if (key.NormalMap) mat->set_shader_parameter("w3d_normal", normalTex);
 	if (key.HouseColor) mat->set_shader_parameter("w3d_hc_tex", hcTex);
-	// P-103: floor decals draw after Roads (kRoadRenderPriority = -125, offset 0) via instancer sorting_offset = 100000, and before Scorches (-124)
-	const int priority = FloorBlend ? -125 : std::clamp(surf.Pass - std::min(surf.SortLevel, 31) * 4, -128, 127);
+	// P-103 / P-100 (Local 50 + Local 52): floor decals take kFloorRenderPriority (-124): after Roads (-125), before Scorches (-123), RW 0x4E2F3A -> 0x4E53D3 RenderFloors
+	const int priority = W3D_Surface_Render_Priority(surf.SortLevel, surf.Pass, FloorBlend);
 	mat->set_render_priority(priority);
 
 	for (int s = 0; s < 2; ++s)

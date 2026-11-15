@@ -154,7 +154,10 @@ InGameHud::InGameHud(Config config)
 	m_radar = std::make_unique<Radar>(m_input->context());
 	m_input->commandTranslator().setRadar(m_radar.get()); // lane HUD-4: Space (VIEW_LAST_RADAR_EVENT)
 	// lane INPUT-1: a hotkey presses its command button as a click on it would (ControlBar::processCommandUI through pressButton)
-	m_input->hotKeyTranslator().setPress([this](int slot, bool inPalantir) { return m_bar->pressButton(slot, inPalantir); });
+	// PORT-426: the hotkey's Shift is the same Keyboard::isShift (RW 0x940BB3) the button's own press reads.
+	m_input->hotKeyTranslator().setPress([this](int slot, bool inPalantir) {
+		return m_bar->pressButton(slot, inPalantir, (m_keyState & KEY_STATE_SHIFT) != 0);
+	});
 	// AUDIO-2: ZH CommandXlat / SelectionXlat play the unit voice when a command or a selection leaves the translators (RotWK RW 0x8DEDBB)
 	m_voice = std::make_unique<UnitVoiceResponse>(m_config.game.logic(), m_voiceSink);
 	// the crowd responses of the voices (S-700): Data\INI\CrowdResponse.ini; a missing or malformed file is an error of the HUD, the voices still work.
@@ -325,9 +328,10 @@ bool InGameHud::boot(std::string *error)
 	// update) may come while the logic worker runs a frame: the press then waits, in order, for the next update the logic is held in (whenHeld)
 	m_palantirRef->setBfme1(isBfme1Data(m_config.fs));
 	m_palantirRef->setButtonHandler([this](int slot, bool inPalantir) {
-		whenHeld([this, slot, inPalantir]() {
+		const bool shift = (m_keyState & KEY_STATE_SHIFT) != 0; // PORT-426: RW 0x940BB3
+		whenHeld([this, slot, inPalantir, shift]() {
 			const auto worldContext = enterContext(); // the movie's own update and invoke_at reach this outside the scoped entry points (BuildAssistant reads TheCommandStore)
-			m_bar->pressButton(slot, inPalantir);
+			dispatchPalantirButtonPress(m_helpBox, *m_bar, slot, inPalantir, shift); // PORT-189 drops the hovered tooltip, PORT-426 passes Shift
 		});
 	});
 	// lane CAMPUI-1: a stance item of the stance toggle's radial (RW 0x96F53C: MSG_CHANGE_STANCE with the item's stance)
@@ -344,7 +348,7 @@ bool InGameHud::boot(std::string *error)
 		const bool shift = (m_keyState & KEY_STATE_SHIFT) != 0;
 		whenHeld([this, slot, inPalantir, shift]() {
 			const auto worldContext = enterContext();
-			m_bar->rightPressButton(slot, inPalantir, shift);
+			dispatchPalantirRightButtonPress(m_helpBox, *m_bar, slot, inPalantir, shift);
 		});
 	});
 	// lane SPELL-2: the spell book's press and the store button of the Palantir
@@ -1428,6 +1432,22 @@ bool InGameHud::pressSpell(int buttonIndex)
 	const bool ok = m_spellBar.press(buttonIndex, local->getPlayerIndex(), out);
 	send(out);
 	return ok;
+}
+
+// lane PORT-189 (issue #455): ParasiticInGameCommandButton::Impl left/right click notifications
+// (RW 0x9D2814 -> 0x9D282D / RW 0x9D288A -> 0x9D28A3 -> RW 0x8079BB -> RW 0x8076CD; DONOR BFME2 Rva005C33DDWindowNotification.cpp).
+// Disabled/unready clicks are already rejected in AptPalantir before these callbacks (RW 0x9D285E / 0x9D28D4),
+// and TOGGLE_STANCE routes to pressToggleStance (RW 0x96FAC6) without reaching this path.
+bool InGameHud::dispatchPalantirButtonPress(InGameHelpBox &helpBox, ControlBar &bar, int slot, bool inPalantir, bool shift)
+{
+	helpBox.dropProvider();
+	return bar.pressButton(slot, inPalantir, shift);
+}
+
+bool InGameHud::dispatchPalantirRightButtonPress(InGameHelpBox &helpBox, ControlBar &bar, int slot, bool inPalantir, bool shift)
+{
+	helpBox.dropProvider();
+	return bar.rightPressButton(slot, inPalantir, shift);
 }
 
 // lane OWNERFIX-1: RW 0x7BC586 (DISABLE_INPUT) / RW 0x7BC5E9 (ENABLE_INPUT); see InGameUI::applyScriptInput

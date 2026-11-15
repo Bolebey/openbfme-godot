@@ -25,11 +25,13 @@
 #include "GameLogic/Module/InvisibilityModules.h"
 #include "GameLogic/Object/Contain/HordeContainRuntime.h"
 #include "GameLogic/Object/Object.h"
+#include "GameLogic/ObjectFilterMatch.h"
 #include "GameLogic/System/InvisibilityManager.h"
 #include "GameLogic/SimMath.h"
 #include "GameLogic/System/ShroudManager.h"
 #include "GameLogic/Weapon.h"
 #include "GameLogic/WeaponNugget.h"
+#include "GameLogic/ObjectFilterMatch.h"
 #include "GameLogic/WeaponSet.h"
 #include "GameLogic/Module/SiegeModules.h"
 
@@ -133,12 +135,43 @@ public:
 	float rateOfFireAttributeProduct() override { return 1.0f; }              // the attribute modifiers (S-320)
 	// lane PERF-WS: the two reads below run on the logic job pool (computeWeaponStatusConditions through Weapon::getStatus): keep them reads when
 	// S-320 is ported
-	bool containedAmmo(const ObjectFilter &, unsigned &count) override
+	// ProjectileFilterInContainer (Weapon template + 0x120), RW 0x6CD298: the owner (RW 0x449681 of [weapon + 8]) whose template's filter is set
+	// (RW 0x762977) is asked its contain ([object + 0x258]) with the filter through contain slot 0x114 (OpenContain RW 0x865CE3: the contained count
+	// whose rider the filter allows, ObjectFilterMatch RW 0x7640C1 with the container's player). Without a container, or with an unset filter, the
+	// weapon's clip answers instead, at the caller
+	bool containedAmmo(const ObjectFilter &filter, unsigned &count) override
 	{
 		count = 0;
+		if (!ObjectFilterMatch::isValid(&filter)) // RW 0x762977
+		{
+			return false;
+		}
+		ContainModuleInterface *contain = m_w.owner().getContain(); // RW 0x6CD2BF
+		if (!contain)
+		{
+			return false; // RW 0x6CD2C9 -> RW 0x6CD2E1: no container, the clip's status
+		}
+		count = contain->countContainedMatching(filter); // RW 0x6CD2D9, slot 0x114
+		return true;
+	}
+	// RW 0x6CD11F: the owner's weapon in a slot (WeaponSet + 0x34C, RW 0x8F1149 of the slot record's + 0x24) whose template's filter is set; its
+	// caller RW 0x6CD1BF is the third gate of Weapon::getStatus (an owner that holds container ammo is ready to fire)
+	bool ownerHasContainAmmo(const ObjectFilter &filter) override
+	{
+		if (!m_w.owner().getWeapons() || !ObjectFilterMatch::isValid(&filter))
+		{
+			return false;
+		}
+		for (int slot = 0; slot < WEAPONSLOT_COUNT; ++slot)
+		{
+			const Weapon *w = m_w.owner().getWeapons()->weaponInSlot(slot);
+			if (w && w->getTemplate() && w->getTemplate()->m_projectileFilterInContainer.flag)
+			{
+				return true;
+			}
+		}
 		return false;
 	}
-	bool ownerHasContainAmmo(const ObjectFilter &) override { return false; }
 	int barrelCount(int) override { return 1; } // the drawable's barrel count (S-320)
 	int firingTrackerShotsAtTarget(bool hasVictim, unsigned victimID, const Coord3D &pos) override { return m_w.m_tracker.getShotsAtTarget(hasVictim, victimID, pos); }
 	bool ownerPositionMatchesLastShot() override
@@ -1726,9 +1759,15 @@ bool ObjectWeapons::fireCurrentWeapon(Object *victim, const Coord3D *pos)
 	}
 	ObjectWeaponDelivery delivery(*m_owner, *this, t, *w);
 	const bool reloaded = w->privateFireWeapon(host(), delivery, args);
-	if (reloaded || t.m_idleAfterFiringDelay == 0xFFFFFFFFu)
+	// RW 0x6920AD .. 0x69212B (disassembled): after 0x6CF34B -> 0x6CEF6D (privateFireWeapon) the release (0x68DF11(1) at RW 0x69212B) is gated
+	// only by that call's reloaded answer (`cmp [ebp-1], bl; je` at RW 0x692122). The ZH-era `|| IdleAfterFiringDelay == -1` clause is not in
+	// RW's function: it released the ordered FIRE_WEAPON lock at the strike's shot, the next chooseBestWeaponForTarget re-picked the SECONDARY
+	// (a ready weapon while the fired one reloads), and the attack left at RW 0x751482's weapon-changed gate before the run-through could run
+	// (fork issue 395 Q2: "the charge does not happen"). ClipSize 0 is unlimited (0x7FFFFFFF at reloadWithBonus), so a clipless weapon never
+	// answers reloaded and keeps its lock until the state releases it (RW 0x74D8D2 at the charge exit).
+	if (reloaded)
 	{
-		releaseWeaponLock(LOCKED_TEMPORARILY); // ZH: unlock when loaded; RW: IdleAfterFiringDelay == -1 releases it after every shot
+		releaseWeaponLock(LOCKED_TEMPORARILY);
 	}
 	m_tracker.shotFired(*m_trackerHost, *w, victim ? victim->getID() : 0u, args.target.victimPosition, false);
 	// RW 0x8E3411 .. 0x8E34DD (inside FiringTracker::shotFired): the weapon's FireSound (template + 0xC8) attached to the shooter, looped while it keeps

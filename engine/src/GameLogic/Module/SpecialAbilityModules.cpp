@@ -242,7 +242,8 @@ const FieldParse kSpecialAbility[] = { // RW 0xC55F40
 	{ "ChargeAttackSpeedBoost", INI::parseBool, nullptr, SA_OFF(m_chargeAttackSpeedBoost) },
 	{ "CustomAnimAndDuration", parseAnimAndDuration<0>, nullptr, 0 },
 	{ "GrabPassengerAnimAndDuration", parseAnimAndDuration<1>, nullptr, 0 },
-	{ "GrabPassengerHealGainPercent", INI::parsePercentToReal, nullptr, SA_OFF(m_grabPassengerHealGainPercent) },
+	// RW 0xC561C0: parser RW 0x42ED6F (no 0.01 scale: the INI number is the percentage added to the health ratio), offset + 0x30
+	{ "GrabPassengerHealGainPercent", INI::parseNonNegativeReal, nullptr, SA_OFF(m_grabPassengerHealGainPercent) },
 	{ "UnpackingVariation", INI::parseInt, nullptr, SA_OFF(m_unpackingVariation) },
 	{ "MustFinishAbility", INI::parseBool, nullptr, SA_OFF(m_mustFinishAbility) },
 	{ "FreezeAfterTriggerDuration", INI::parseDurationUnsignedInt, nullptr, SA_OFF(m_freezeAfterTriggerFrames) },
@@ -607,11 +608,12 @@ void SpecialAbilityUpdate::initiateIntentToDoSpecialPower(const SpecialPowerTemp
 	}
 	m_active = true;
 	m_approachCounter = 0;
-	// RW 0x852FF9: every other active special power update of the object is finished
+	// PORT-188 (issue #454): RW 0x853062 .. 0x8530A4 (BFME2 1.06 0x004500A3, SpecialAbilityUpdateInitiateIntent.cpp): every other special ability update of
+	// the object whose isPowerCurrentlyInUse(nullptr) (vslot +0x18, RW 0x851C92) answers yes is finished
 	for (const std::unique_ptr<BehaviorModule> &m : obj->modules())
 	{
 		SpecialAbilityUpdate *other = dynamic_cast<SpecialAbilityUpdate *>(m.get());
-		if (other && other != this && other->isActive())
+		if (other && other != this && other->isPowerCurrentlyInUse())
 		{
 			other->finishAbility(false, true);
 		}
@@ -1297,11 +1299,33 @@ void SpecialAbilityUpdate::startPreparation()
 		{
 			return;
 		}
+		// Donor BFME2 0x (SpecialAbilityUpdate.cpp:1347): a target the LOCAL player controls hears BuildingBeingStolen at once — the
+		// enemy is taking one of its buildings. The event is the name of predefined index 16 (table RW 0xBF2168, Common/Audio/EvaEvents.cpp)
+		// and it goes to TheEva by name (RW 0x5DD9EE). INFERENCE: the RW 2.01 instruction inside RW 0x853D31 .. 0x853ED0 was not read in
+		// this session's sandbox; the guard is the donor's isLocallyControlled.
+		const Player *local = obj->logic().players().getLocalPlayer();
+		if (t && local && t->getControllingPlayer() == local)
+		{
+			AudioApi::reportEva("BuildingBeingStolen", t->getPosition());
+		}
 		ModelConditionBitsHelper::clearAndSet(*obj, { kMcUnpacking }, { kMcRaisingFlag });
 	}
-	else if (prepType == 0x15 || prepType == 0x1A)
+	else if (prepType == 0x15)
 	{
-		++m_unported; // RW 0x853CF4 / 0x853DB2 (S-860)
+		++m_unported; // RW 0x853CF4 (S-860)
+	}
+	else if (prepType == 0x1A)
+	{
+		// Donor BFME2 0x (SpecialAbilityUpdate.cpp:1364): the black lotus's capture warns the local owner of the target the same way the
+		// infantry capture does (see the 0x1D branch above): BuildingBeingStolen, index 16 of RW 0xBF2168, by name to RW 0x5DD9EE.
+		// INFERENCE: the RW 2.01 instruction inside RW 0x853DB2's branch was not read in this session's sandbox.
+		++m_unported; // RW 0x853DB2 (S-860)
+		Object *t = target();
+		const Player *local = obj->logic().players().getLocalPlayer();
+		if (t && local && t->getControllingPlayer() == local)
+		{
+			AudioApi::reportEva("BuildingBeingStolen", t->getPosition());
+		}
 	}
 	if (SpecialPowerModule *spm = mySpecialPowerModule())
 	{
@@ -1733,6 +1757,14 @@ bool SpecialAbilityUpdate::captureTarget(SpecialPowerModule *spm)
 	}
 	Player *owner = obj->getControllingPlayer();
 	Team *team = owner ? owner->getDefaultTeam() : nullptr; // Player + 0x30C
+	// Donor BFME2 0x (SpecialAbilityUpdateTriggerAbilityEffect.cpp:784): before the team changes, a target the LOCAL player controls hears
+	// BuildingStolen (predefined index 17 of RW 0xBF2168) at its own position, through RW 0x5DD9EE. INFERENCE: the RW 2.01 instruction
+	// inside RW 0x8544F2 .. 0x854772 was not read in this session's sandbox; the guard is the donor's isLocallyControlled.
+	const Player *local = obj->logic().players().getLocalPlayer();
+	if (t && local && t->getControllingPlayer() == local)
+	{
+		AudioApi::reportEva("BuildingStolen", t->getPosition());
+	}
 	ContainModuleInterface *contain = building->getContain() ? building->getContain() : t->getContain();
 	if (contain && contain->isGarrisonable())
 	{
