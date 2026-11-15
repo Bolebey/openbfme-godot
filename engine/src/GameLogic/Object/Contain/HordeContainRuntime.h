@@ -189,6 +189,15 @@ public:
 	virtual bool notComboFormation() const = 0;
 	// ---- lane PORT-169 (issue #398, RW HordeContainInterface slot 0xEC, RW 0x872B69): true when this horde formation is its main formation
 	virtual bool isMainFormation() const = 0;
+	// ---- lane PORT-205 (fork issue 472): the two member picks the HordeAttackNugget's isApplicable asks (RW 0x9119CB, RW 0x911A09 .. 0x911A27) ----
+	// slot 0x114(0xA4) (RW 0x8705A6): the first contained member whose template is not KindOf BANNER (bit 0xA4), else the first contained member; with the
+	// contain list empty the same pick over the members on their way into a garrison (interface + 0x54, by id); null when there is none. A dead member is
+	// picked like a living one (the body is never asked).
+	virtual Object *firstMemberNotKindOf(unsigned kindOfBit) const = 0;
+	// slot 0x50 (RW 0x86FEEC): the member (the contain list, then the members on their way) whose current weapon reaches furthest -- RW 0x6CA8BD with a
+	// dz of 0 -- the smallest range drawn when the first candidate is scored (a zero range is a candidate: 0.0 < the -1.0 start); null when no member
+	// has a weapon. `closestMemberOnly` is not an input: the pick is always the longest-reaching one.
+	virtual Object *memberWithLongestAttackRange() const = 0;
 };
 
 class HordeContain : public UpdateModule, public ContainModuleInterface, public CreateModuleInterface, public HordeContainInterface
@@ -484,7 +493,9 @@ public:
 	unsigned payloadCount() const; ///< RW interface slot 0x188: members, including those entering a garrison, without the banner.
 	// lane NECRODIE-1: RW 0x8705A6 (interface slot 0x114): the first contained member whose template lacks KindOf `kindOfBit`, else the first contained member;
 	// with nothing contained, the same pick over the members on their way into a garrison (interface + 0x54, by id); null when there is none
-	Object *firstMemberNotKindOf(unsigned kindOfBit) const;
+	Object *firstMemberNotKindOf(unsigned kindOfBit) const override;
+	// RW 0x86FEEC (interface slot 0x50): the member with the longest current attack range (a member without a current weapon is passed over)
+	Object *memberWithLongestAttackRange() const override;
 	unsigned lastMemberDamageFrame() const; ///< RW 0x86EB60, interface slot 0x26C.
 	// RW HordeContainInterface slot 0x18C (RW 0x873AE3): a new member of the payload template joins at `pos` facing `orientation` (the matrix), with the horde's
 	// weapon set flags, experience pool, attribute modifiers and lifetime (null when the horde is full or has no single payload template)

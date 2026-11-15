@@ -818,6 +818,47 @@ Object *HordeContain::firstMemberNotKindOf(unsigned kindOfBit) const
 	return m_garrisonEntering.empty() ? nullptr : logic.findObjectByID(*m_garrisonEntering.begin()); // RW 0x87062E .. 0x87064C
 }
 
+// RW 0x86FEEC (HordeContainInterface slot 0x50): best = the first candidate's range with the start -1.0 (RW 0x86FEFA / 0x86FF0A store 0.0f and
+// 0x86FF1C skips the list by comparing against the first node, so the first scored candidate always wins the first comparison: 0.0 > -1.0), then every
+// later candidate replaces it only when its range is greater (RW 0x86FF4B `fcompi` / 0x86FF4F `jbe`, strict). The range is RW 0x6CA8BD(member, 0)
+// (member + 4 the template), so a member holding no weapon is passed over (RW 0x86FF2B / 0x86FF32 `test eax, eax; je`), and an effectively dead member is
+// scored like any other. The contain list (slot 0x118, RW 0x86FF0F) is walked first, then the members on their way into a garrison (interface + 0x54, by id,
+// RW 0x86FF67 .. 0x86FFC8).
+Object *HordeContain::memberWithLongestAttackRange() const
+{
+	GameLogic &logic = getObject()->logic();
+	Object *best = nullptr;
+	float bestRange = -1.0f; // RW 0x86FEFA: and [ebp - 8], 0 (a fresh float slot is +0.0, which wins only against the -1 start)
+	bool scored = false;
+	auto consider = [&](Object *m) {
+		if (!m)
+		{
+			return;
+		}
+		ObjectWeapons *w = m->getWeapons();
+		if (!w || !w->currentWeapon()) // RW 0x68B58C then RW 0x6CA8BD's template test
+		{
+			return;
+		}
+		const float range = w->currentAttackRange();
+		if (!scored || range > bestRange)
+		{
+			bestRange = range;
+			best = m;
+			scored = true;
+		}
+	};
+	for (Object *m : m_members)
+	{
+		consider(m);
+	}
+	for (ObjectID id : m_garrisonEntering)
+	{
+		consider(logic.findObjectByID(id));
+	}
+	return best;
+}
+
 unsigned HordeContain::lastMemberDamageFrame() const
 {
 	unsigned last = 0xFFFFFFFFu;
