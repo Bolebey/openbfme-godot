@@ -205,9 +205,11 @@ def cmd_collect(a) -> None:
         cats = collections.Counter(d["buttons"].values())
         # the stance button (S-289: it opens the radial) is on every unit: a known stop, not counted as a button of the matrix
         total, ok = sum(cats.values()) - cats.get("STANCE", 0), cats.get("PASS", 0)
-        red = total - ok
-        cells[fac] = (f"[{total} кнопок: ✓{ok} ✗{red}](MATRIX.tsv) ({stamp})", str(ok))
-        print(f"{fac}: {total} buttons, {ok} pass, {red} red: " + ", ".join(f"{k} {v}" for k, v in cats.most_common() if k != "PASS"))
+        # a greyed button is mostly a requirement the test does not meet (a forge the faction's objects do not have here): counted apart
+        grey = cats.get("DISABLED", 0)
+        red = total - ok - grey
+        cells[fac] = (f"[{total} кнопок: ✓{ok} ✗{red} серых {grey}](MATRIX.tsv) ({stamp})", str(ok))
+        print(f"{fac}: {total} buttons, {ok} pass, {red} red, {grey} grey: " + ", ".join(f"{k} {v}" for k, v in cats.most_common() if k != "PASS"))
     update_readme(cells)
     print(f"wrote {MATRIX.relative_to(REPO)} ({len(rows)} lines) and the table of {README.relative_to(REPO)}")
 
