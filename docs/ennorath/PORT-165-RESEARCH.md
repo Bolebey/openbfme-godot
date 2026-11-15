@@ -1,6 +1,6 @@
 # Port 165: horde position-attack machine investigation
 
-Issue #394. The kind-7 machine is now connected; full projectile/FX acceptance and in-game verification remain outstanding.
+Issue #394. The kind-7 machine is connected and synthetic projectile/FX coverage passes; in-game verification remains outstanding.
 Addresses are RotWK 2.01 (RW), with BFME2 donor paths under
 `Code/GameEngine/Source/GameLogic/AI`.
 
@@ -59,19 +59,19 @@ behavioural proof, not just matching the transition graph.
 
 * Port these states and selection precedence against the RW routines, not
   a generic-state substitute; include each new simulation field in xfer.
-* Recreate synthetic PORT-165 coverage, including in-range and out-of-range
-  position attacks, non-position horde attacks, save/load, the toggle,
-  projectile impact/FX, and an archer regression. The previous diagnostic
-  reproduction saw the corsair leave state 9 without a shot; it was not
-  the required full projectile/FX acceptance test.
+* Complete full-build and in-game validation; repeat the archer guard and
+  check actual audio/visual playback with the installed mod.
 * Check other owners of the shared states and finish the issue's review
   and upstream eligibility requirements. No game or mod data is committed.
 
 ## Integration progress
 
-The synthetic `PORT-165` suite exercises both in-range and out-of-range
-position orders, member shots, the kind-6 object-attack guard, transition
-rows and kind-7 save/load. This is not yet a projectile-impact or FX test.
+The synthetic `PORT-165` suite exercises the command-set toggle, in-range and
+out-of-range position orders, melee members switching to tertiary projectiles,
+member shots, detonation, impact FX and sound requests, the kind-6 object-attack
+guard, transition rows and kind-7 save/load. The synthetic FX playback checks a
+light pulse and recorded sound request, not actual audible playback. Existing
+`PORT-115` synthetic archer tests also pass in the standalone guard build.
 The approach state's projectile precise-Z flag and the turret mood-target
 flag (AI +0x3C7, S-1189) remain explicitly unsupported rather than silently
 approximated; these are not exercised by the synthetic corsair-like horde.

@@ -5,6 +5,12 @@
 #include "Common/XferLoad.h"
 #include "Common/XferSave.h"
 #include "CombatTestUtil.h"
+#include "GameEngineDevice/Win32Device/Common/Win32BIGFileSystem.h"
+#include "GameClient/ControlBar.h"
+#include "GameClient/ControlBarCommands.h"
+#include "GameClient/HudInput.h"
+#include "GameClient/FXPlayback.h"
+#include "GameLogic/FXEvents.h"
 #include "GameLogic/AI/AIAttack.h"
 #include "GameLogic/AI/AIAttackHordePosition.h"
 #include "GameLogic/AI/AIHunt.h"
@@ -50,6 +56,7 @@ const char kSynthetic[] =
 	"End\n"
 	"Weapon P165BowBombard\n"
 	"  AttackRange = 350\n"
+	"  WeaponSpeed = 100\n"
 	"  MinimumAttackRange = 25\n"
 	"  DelayBetweenShots = 800\n"
 	"  ClipSize = 1\n"
@@ -57,9 +64,34 @@ const char kSynthetic[] =
 	"  NoVictimNeeded = Yes\n"
 	"  BombardType = Yes\n"
 	"  ProjectileNugget\n"
-	"    ProjectileTemplateName = Arrow\n"
-	"    WarheadTemplateName = BowWarhead\n"
+	"    ProjectileTemplateName = P165Bomb\n"
+	"    WarheadTemplateName = P165BombWarhead\n"
 	"  End\n"
+	"End\n"
+	"Weapon P165BombWarhead\n"
+	"  DamageNugget\n"
+	"    Damage = 5\n"
+	"    Radius = 80\n"
+	"    DamageType = FLAME\n"
+	"    DeathType = BURNED\n"
+	"  End\n"
+	"End\n"
+	"Object P165Bomb\n"
+	"  KindOf = PROJECTILE NO_COLLIDE\n"
+	"  Body = ActiveBody ModuleTag_Body\n"
+	"    MaxHealth = 1\n"
+	"  End\n"
+	"  Behavior = DestroyDie ModuleTag_Destroy\n"
+	"  End\n"
+	"  Behavior = BezierProjectileBehavior ModuleTag_Projectile\n"
+	"    FirstHeight = 30\n"
+	"    SecondHeight = 12\n"
+	"    FirstPercentIndent = 30%\n"
+	"    SecondPercentIndent = 80%\n"
+	"    GroundHitFX = FX_P165BombExplosion\n"
+	"  End\n"
+	"  Geometry = Sphere\n"
+	"  GeometryMajorRadius = 1\n"
 	"End\n"
 	"Object P165Archer\n"
 	"  KindOf = INFANTRY SELECTABLE CAN_ATTACK SCORE\n"
@@ -74,11 +106,11 @@ const char kSynthetic[] =
 	"  End\n"
 	"  WeaponSet\n"
 	"    Conditions = None\n"
-	"    Weapon = PRIMARY P165Bow\n"
+	"    Weapon = PRIMARY SwordWeapon\n"
 	"  End\n"
 	"  WeaponSet\n"
 	"    Conditions = WEAPONSET_TOGGLE_1\n"
-	"    Weapon = PRIMARY P165Bow\n"
+	"    Weapon = PRIMARY SwordWeapon\n"
 	"    Weapon = TERTIARY P165BowBombard\n"
 	"    AutoChooseSources = PRIMARY FROM_PLAYER FROM_SCRIPT FROM_AI\n"
 	"    AutoChooseSources = TERTIARY FROM_PLAYER FROM_SCRIPT\n"
@@ -98,6 +130,7 @@ const char kSynthetic[] =
 	"End\n"
 	"Object P165ArcherHorde\n"
 	"  KindOf = HORDE MELEE_HORDE LARGE_RECTANGLE_PATHFIND SELECTABLE CAN_ATTACK\n"
+	"  CommandSet = P165CommandSet\n"
 		"  VisionRange = 250\n"
 	"  Geometry = BOX\n"
 	"  GeometryMajorRadius = 30\n"
@@ -133,7 +166,7 @@ const char kSynthetic[] =
 
 struct TestWorld : CombatWorld
 {
-	TestWorld() : CombatWorld(kSynthetic) { WeaponCommands::registerHandlers(dispatcher); }
+	TestWorld() : CombatWorld(kSynthetic) { WeaponCommands::registerHandlers(dispatcher); WeaponSetToggle::registerHandlers(dispatcher); }
 };
 
 }
@@ -397,4 +430,104 @@ TEST_CASE("PORT-165: horde object attack retains the existing kind-6 machine (RW
     REQUIRE(attack);
     REQUIRE(attack->attackMachine());
     CHECK(attack->attackMachine()->findState(0x2BC) == nullptr);
+}
+
+namespace {
+struct P165FxSink : FXEventSink
+{
+    FXPlayback &playback;
+    int impacts = 0;
+    int played = 0;
+    std::vector<Coord3D> positions;
+    explicit P165FxSink(FXPlayback &p) : playback(p) {}
+    void onFXEvent(const FXEvent &event) override
+    {
+        if (std::string(event.site) == "GroundHitFX" && event.fxList && *event.fxList == "FX_P165BombExplosion")
+        {
+            ++impacts;
+            positions.push_back(event.position);
+            if (playback.playFXList(*event.fxList, event.position, false)) ++played;
+        }
+    }
+};
+}
+
+TEST_CASE("PORT-165: command-set toggle sends the horde bomb volley through detonation and sound FX")
+{
+    TestWorld w;
+    w.combat().setAutoAcquireEnabled(false);
+    Object *horde = w.unit("P165ArcherHorde", 'A', 300, 300);
+    Object *target = w.unit("Dummy", 'B', 300, 150);
+    REQUIRE(horde);
+    REQUIRE(target);
+    w.frames(12);
+    const auto members = w.membersOf(horde);
+    REQUIRE(members.size() == 6);
+    REQUIRE(horde->getWeapons()->weaponInSlot(2) == nullptr);
+    for (Object *member : members) REQUIRE(member->getWeapons()->weaponInSlot(2) == nullptr);
+
+    // Synthetic command set and button: ControlBar RW 0x9412C8 posts the toggle,
+    // which RW 0x77B529 propagates to the members' WEAPONSET_TOGGLE_1.
+    CommandStore commands;
+    CommandButton toggle;
+    toggle.m_name = "P165Toggle";
+    toggle.m_command = GUI_COMMAND_TOGGLE_WEAPONSET;
+    toggle.m_inPalantir = true;
+    CommandSet *set = commands.newDynamicCommandSet("P165CommandSet");
+    set->setDynamicButton(0, &toggle);
+    MouseSettings mouse;
+    MetaMap meta;
+    PinholeView view{{0,-300,400},{300,300,0},1024,768,0.7f};
+    HudInput input(*w.logic, w.ai.get(), view, w.commands, mouse, meta);
+    input.context().commands = &commands;
+    ControlBar bar(input.context());
+    w.players.setLocalPlayer(w.players.findPlayerWithName("Alice"));
+    input.ui().selectObject(horde->getID());
+    GameMessage selection(MSG_CREATE_SELECTED_GROUP, w.playerIndex("Alice"));
+    selection.appendBooleanArgument(true);
+    selection.appendObjectIDArgument(horde->getID());
+    input.submit(selection);
+    input.flush();
+    w.frames(1);
+    bar.update();
+    REQUIRE(bar.palantirButtons().size() == 1);
+    REQUIRE(bar.palantirButtons()[0].button == &toggle);
+    REQUIRE(bar.pressButton(0, true));
+    CHECK(input.update() == 1);
+    w.frames(1);
+    REQUIRE(horde->getWeapons()->weaponInSlot(2));
+    for (Object *member : members) REQUIRE(member->getWeapons()->weaponInSlot(2));
+
+    Win32BIGFileSystem fs;
+    FXPlayback playback(fs, RandomAlgorithm::RotWK_GameDat_LCG);
+    REQUIRE(playback.loadIniText("p165fx.ini", "FXList FX_P165BombExplosion\n  Sound\n    Name = P165ExplosionSound\n  End\n  LightPulse\n    Color = R:255 G:100 B:0\n    Radius = 25\n    IncreaseTime = 0\n    DecreaseTime = 500\n  End\nEnd\n").empty());
+    P165FxSink sink(playback);
+    w.logic->fxEvents().setSink(&sink);
+    const int player = w.playerIndex("Alice");
+    const Coord3D spot{300.0f, 150.0f, w.logic->getGroundHeight(300.0f, 150.0f)};
+    GameMessage click(MSG_DO_WEAPON_AT_LOCATION, player);
+    click.appendIntegerArgument(2);
+    click.appendLocationArgument(spot);
+    click.appendIntegerArgument(0x7fffffff);
+    w.send(click);
+    const int elapsed = w.runUntil([&] { return w.combat().counters().projectilesDetonated >= members.size(); }, 300);
+    CHECK(elapsed < 300); // tolerance: individual projectile flight and weapon timing are asynchronous
+    CHECK(w.combat().counters().projectilesLaunched >= members.size()); // tolerance: repeats may launch while other bombs are in flight
+    CHECK(w.combat().counters().projectilesDetonated >= members.size()); // tolerance: multiple landings can occur in one update
+    CHECK(sink.impacts >= (int)members.size()); // tolerance: multiple landings can occur in one update
+    CHECK(sink.played == sink.impacts);
+    CHECK(playback.lightPulses().additions() == (unsigned long long)sink.played);
+    for (const Coord3D &position : sink.positions)
+    {
+        const float dx = position.x - spot.x, dy = position.y - spot.y;
+        CHECK(dx * dx + dy * dy <= 40.01f * 40.01f); // tolerance: horde ScatterRadius 40 plus floating-point rounding
+    }
+    CHECK(playback.events().size() == (size_t)sink.played);
+    for (const auto &event : playback.events())
+    {
+        CHECK(event.kind == "sound");
+        CHECK(event.detail == "P165ExplosionSound");
+    }
+    CHECK(w.health(target) < 100.0f); // tolerance: hits depend on projectile scatter and impact order
+    w.logic->fxEvents().setSink(nullptr);
 }
