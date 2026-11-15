@@ -26,9 +26,7 @@ entry, read as a pointer from the PE image. No retail data is reproduced here.
   template +4 and template FX +0xB8 must all be non-null (0x895FC7–0x895FE9).
   Speed +0x68 and the owner's drawable position/matrix/position are passed to
   0x494615 at 0x895FEB–0x896026. It is the owner's drawable, not the target.
-* The port already has Local 22's `FXEventLog::drawablePositionEvent`, but
-  neither reader emits it. The special weapon is made lazily in
-  `WeaponFireSpecialAbilityUpdate::specialWeapon`, and its creation is hashed
-  and saved; moving that creation to unpacking only for this FX would change
-  simulation state. The constructor/host lifetime mismatch needs careful
-  treatment rather than an FX-only workaround.
+* Local 22 supplies `FXEventLog::drawablePositionEvent` for the client pose.
+  Local 59 (#418) changed the special weapon from lazy creation to construction
+  in `WeaponFireSpecialAbilityUpdate`, allowing this reader to use `m_weapon`
+  without constructing or modifying simulation state during unpacking.
