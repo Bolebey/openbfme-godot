@@ -1208,6 +1208,7 @@ add_executable(openbfme_tests
     ${OPENBFME_PORT172_TESTS}
     ${OPENBFME_PORT430_TESTS}
     ${OPENBFME_PORT433_TESTS}
+    ${OPENBFME_PORT199_TESTS}
     tests/test_main.cpp
     tests/test_big_archive.cpp
     tests/test_parser_fuzz_regressions.cpp

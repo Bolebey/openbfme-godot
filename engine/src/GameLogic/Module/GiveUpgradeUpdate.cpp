@@ -253,7 +253,9 @@ void GiveUpgradeUpdate::triggerAbilityEffect()
 	else if (recipient->affectedByUpgrade(u)) // RW 0x8A0262 -> RW 0x694914
 	{
 		recipient->giveUpgrade(u); // RW 0x8A0287 -> RW 0x69388B
-		if (ObjectClientHooks *client = recipient->clientHooks()) // RW 0x8A028E -> RW 0x70E013
+		// RW 0x8A028E -> RW 0x70E013: the recipient's drawable; the port reaches it through the logic's client hooks
+		// (the same bridge SlavedUpdate and AODHordeContain use), which is where the client's drawable flash hangs.
+		if (ObjectClientHooks *client = owner->logic().clientHooks())
 		{
 			client->flashAsSelected(*recipient, &kGiveUpgradeFlash); // RW 0x8A02A3 -> RW 0x675749
 		}

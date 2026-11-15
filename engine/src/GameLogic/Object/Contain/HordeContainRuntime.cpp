@@ -1454,10 +1454,11 @@ void HordeContain::giveUpgrade(const UpgradeTemplate *upgrade, bool allMembers)
 	{
 		if (!member) continue;
 		if (!allMembers && !member->affectedByUpgrade(upgrade)) continue; // RW 0x871AF5
-		member->giveUpgrade(upgrade);                                     // RW 0x871B08 -> RW 0x69388B
-		if (ObjectClientHooks *client = member->clientHooks())            // RW 0x871B0F -> RW 0x70E013
+		member->giveUpgrade(upgrade);                                              // RW 0x871B08 -> RW 0x69388B
+		// RW 0x871B0F -> RW 0x70E013 asks the member's drawable; the port reaches it through the logic's client hooks.
+		if (ObjectClientHooks *client = self->logic().clientHooks())
 		{
-			client->flashAsSelected(*member, &flash);                     // RW 0x871B23 -> RW 0x675749
+			client->flashAsSelected(*member, &flash);                              // RW 0x871B23 -> RW 0x675749
 		}
 	}
 }
