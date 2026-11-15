@@ -464,6 +464,8 @@ std::string Generate_W3D_Shader_Code(const W3DShaderKey &k, W3DSamplerPolicy sam
 	line("\tNORMAL = normalize(w3d_to_godot(n));");
 	if (k.Tangents)
 	{
+		line("\tif (dot(tg, tg) < 1e-12) tg = abs(n.y) < 0.9 ? cross(vec3(0.0, 1.0, 0.0), n) : cross(vec3(1.0, 0.0, 0.0), n);");
+		line("\tif (dot(bn, bn) < 1e-12) bn = cross(n, tg);");
 		line("\tTANGENT = normalize(w3d_to_godot(tg));");
 		line("\tBINORMAL = normalize(w3d_to_godot(bn));");
 	}

@@ -3143,9 +3143,9 @@ std::vector<std::string> SpecialAbilityModules::hero2StopLines()
 		"client)",
 		"[S-1225] the capture (lane HERO-2): SPECIAL_INFANTRY_CAPTURE_BUILDING's preparation, unpack, trigger (RW 0x8544F2: the closest LINKED_TO_FLAG within 150, "
 		"RW 0x6996DC setCapturedTeam), end and the update's captured / ruined target tests run; the target's and the building's upgrades reset (RW 0x8546F4 / "
-		"0x854717 -> RW 0x68E083) and setCapturedTeam cancels the previous owner's production queue (production slot 0x40, RW 0x8A1666 -> slot 0x3C, RW "
-		"0x8A05B2); not ported (noted): a garrisonable contain's passengers (vslots "
-		"\"0xA8 / 0x54), an UNDER_CONSTRUCTION building's production cancel and score counts, the skirmish AI's object "
+		"0x854717 -> RW 0x68E083) and setCapturedTeam cancels and releases the previous owner's production (production slot 0x40, RW 0x8A1666: slot 0x3C "
+		"RW 0x8A05B2, the doorway unit and releaseLastExit; lane LOCAL-62); not ported (noted): a garrisonable contain's passengers (vslots "
+		"0xA8 / 0x54), an UNDER_CONSTRUCTION building's production cancel and score counts, the skirmish AI's object "
 		"events RW 0x6A99CB / 0x6A9D9C, RW 0x6996DC's score counts, RW 0x68B303 / 0x8E3ABB and a captured container's passengers; "
 		"SPECIAL_BLACKLOTUS_CAPTURE_BUILDING (0x1A)'s special objects; DoCaptureFX's flash (client); INFERENCE: a target that is gone ends any ability (HERO-1's "
 		"reading; retail only tests a live target)",

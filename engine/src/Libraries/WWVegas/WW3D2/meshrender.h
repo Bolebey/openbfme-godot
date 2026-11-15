@@ -137,6 +137,7 @@ bool Subdivide_Floor_Mesh_Data(MeshRenderData &mesh, float maxEdgeXY = 10.0f);
 // World*normal): the generated shader reads BINORMAL as the file's bitangent and negates it itself. The sign is per vertex: mirrored UV islands
 // give the file's bitangent either handedness against cross(normal, tangent) (S-023).
 float Godot_Tangent_Sign(const float normal[3], const float tangent[3], const float bitangent[3]);
+void Godot_Tangent_Basis(const float normal[3], const float tangent[3], const float bitangent[3], float outTangent[3], float outBitangent[3]);
 
 // CPU reference of the skinning the vertex shader performs: M[b0] p0 w0 + M[b1] p1 w1 (rigid meshes: M[bone] p).
 // pose.Transform holds the world matrices of the hierarchy's pivots.

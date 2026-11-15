@@ -20,6 +20,7 @@
 #include "GameLogic/Module/CollideModule.h"
 #include "GameLogic/Module/EmotionModules.h"
 #include "GameLogic/Module/PhysicsBehavior.h"
+#include "GameLogic/Module/ProductionUpdate.h"
 #include "GameLogic/ScriptEngine/ScriptEngine.h"
 #include "GameLogic/ScriptEngine/ScriptConditions.h"
 #include "GameClient/MapChunks.h"
@@ -1218,11 +1219,12 @@ void Object::setCapturedTeam(Team *team)
 	{
 		return;
 	}
-	// RW 0x69973D .. 0x699750: the object's production interface (RW 0x68C327(0): the modules' slot 0x70) takes its slot 0x40 (RW 0x8A1666), which
-	// first calls its own slot 0x3C (RW 0x8A05B2): every entry the previous owner queued is cancelled, not handed over (the owner's P-122)
+	// RW 0x69973D .. 0x69974D (DONOR BFME2 0x00298C76 in ObjectDefect.cpp:133, lane LOCAL-62): the object's production interface (RW 0x68C327(0)) takes
+	// its slot 0x40 (RW 0x8A1666) before the team changes: slot 0x3C (RW 0x8A05B2) cancels every entry the previous owner queued with its refund (the
+	// owner's P-122), the unit in the doorway leaves for the old team and releaseLastExit frees a partial horde
 	if (ProductionUpdateInterface *production = getProductionUpdate())
 	{
-		production->cancelAllProduction(); // RW 0x8A05B2, called from RW 0x8A1676
+		production->cancelAndReleaseAllProduction(); // RW 0x69974D -> RW 0x8A1666
 	}
 	// S-1225, still unported: RW 0x699750 .. 0x6997A7 counts the structure in the old and the new player's score keeper (RW 0x79F0E1 on Player + 0x3DC,
 	// for two active players) and tells the client (RW 0x6D9A71, a local player only); RW 0x699792 sets the undetected-defector bit (+ 0x458 bit 1,
