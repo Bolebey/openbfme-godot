@@ -44,6 +44,7 @@
 #include "GameLogic/WeaponState.h"
 
 #include <algorithm>
+#include <cstdint>
 
 namespace ModelCondition
 {
@@ -911,6 +912,52 @@ void ControlBar::noteUpgradeCompleted(const UpgradeTemplate *upgrade)
 	}
 }
 
+Object *ControlBar::selectMultiSelectHero() const
+{
+	// PORT-213 (issue #503): ControlBar::populateMultiSelect (RW 0x94475A..0x944839; DONOR BFME2 ControlBarMultiSelect.cpp:427):
+	// scan selected objects for HERO (KindOf bit 90, template +0x113 & 4, RW 0x94479A), !IGNORED_IN_GUI (KindOf bit 47,
+	// template +0x10D & 0x80 == 0, RW 0x9447A6), and a valid current ExperienceLevel in the active game mode
+	// (RW 0x79D12A -> 0x689024, RW 0x9447D3), picking highest rank (RW 0x9447FA) and breaking ties by lowest signed
+	// ObjectID (RW 0x94480A..0x94480D).
+	static const int kHero = ObjectTemplateInfoBuilder::kindOfIndex("HERO");
+	static const int kIgnoredInGui = ObjectTemplateInfoBuilder::kindOfIndex("IGNORED_IN_GUI");
+	if (kHero < 0)
+	{
+		return nullptr;
+	}
+	Object *best = nullptr;
+	int bestRank = 0;
+	for (ObjectID selId : m_ctx.ui.selected())
+	{
+		Object *candidate = m_ctx.logic.findObjectByID(selId);
+		if (!candidate || candidate->isDestroyed())
+		{
+			continue;
+		}
+		if (!candidate->isKindOf(static_cast<unsigned>(kHero)))
+		{
+			continue;
+		}
+		if (kIgnoredInGui >= 0 && candidate->isKindOf(static_cast<unsigned>(kIgnoredInGui)))
+		{
+			continue;
+		}
+		const ExperienceTracker *xp = candidate->getExperienceTracker();
+		int rank = 0;
+		if (!xp || !xp->currentLevelRank(rank))
+		{
+			continue;
+		}
+		if (!best || rank > bestRank
+			|| (rank == bestRank && static_cast<std::int32_t>(candidate->getID()) < static_cast<std::int32_t>(best->getID())))
+		{
+			best = candidate;
+			bestRank = rank;
+		}
+	}
+	return best;
+}
+
 void ControlBar::update()
 {
 	(void)kPaletteSize;
@@ -928,15 +975,38 @@ void ControlBar::update()
 	m_money = local && local->getMoney() ? local->getMoney()->countMoney() : 0;
 	m_cpUsed = local ? local->commandPoints().getUsage() : 0;
 	m_cpLimit = local ? m_cpUsed + local->commandPointsAvailable() : 0;
-	Object *obj = m_ctx.logic.findObjectByID(m_ctx.ui.firstSelected());
-	if (obj && obj->isDestroyed())
+	Object *obj = nullptr;
+	ObjectID contextId = INVALID_ID;
+	if (m_ctx.ui.selected().size() > 1)
 	{
-		obj = nullptr;
+		// PORT-213 (issue #503): ControlBar::evaluateContextUI (RW 0x71ECDD -> 0x71ED9D) routes multi-selection to
+		// ControlBar::populateMultiSelect (RW 0x94475A). A qualifying HERO becomes m_source and AptPalantir's context
+		// drawable (RW 0x94482B -> 0x943D6F -> 0x9443BD -> 0x6D4671); otherwise contextObject is INVALID_ID (RW 0x9448FC)
+		// while m_source keeps the first-selected fallback until non-hero addCommonCommands (S-7388) is ported.
+		obj = selectMultiSelectHero();
+		contextId = obj ? obj->getID() : (ObjectID)INVALID_ID;
+		if (!obj)
+		{
+			obj = m_ctx.logic.findObjectByID(m_ctx.ui.firstSelected());
+			if (obj && obj->isDestroyed())
+			{
+				obj = nullptr;
+			}
+		}
+	}
+	else
+	{
+		obj = m_ctx.logic.findObjectByID(m_ctx.ui.firstSelected());
+		if (obj && obj->isDestroyed())
+		{
+			obj = nullptr;
+		}
+		contextId = obj ? obj->getID() : (ObjectID)INVALID_ID;
 	}
 	const ObjectID id = obj ? obj->getID() : (ObjectID)INVALID_ID;
 	// PORT-189 (issue #455): clear click-predicted toggle indices whenever ControlBar would re-populate
 	// (selection, command set, under-construction context, or m_UIDirty RW 0x71FD81).
-	const bool contextChanged = wasDirty || id != m_source || m_ctx.ui.selected() != m_pendingSelection
+	const bool contextChanged = wasDirty || id != m_source || contextId != m_contextSource || m_ctx.ui.selected() != m_pendingSelection
 		|| !obj || isUnderConstructionContext(*obj) || obj->getCommandSetName() != m_setName;
 	if (contextChanged)
 	{
@@ -949,6 +1019,7 @@ void ControlBar::update()
 		m_setName.clear();
 		resetRanges();
 	}
+	m_contextSource = contextId;
 	m_palantir.clear();
 	m_side.clear();
 	m_offBar.clear();
@@ -1116,8 +1187,10 @@ void ControlBar::update()
 				}
 				else
 				{
-					// PORT-169 (issue #398, RW 0x943E91 / 0x944603 / 0x9446A5): keep CommandButton +0xFC synchronized with object/multi-select state
-					if (m_ctx.ui.selected().size() > 1)
+					// PORT-169 (issue #398, RW 0x943E91 / 0x944603 / 0x9446A5): keep CommandButton +0xFC synchronized with object/multi-select state.
+					// PORT-213 (issue #503, RW 0x944834 -> 0x943D6F -> 0x943E91): when populateMultiSelect picks a HERO,
+					// it delegates to populateCommand(best, false) -> updateToggleIndex rather than updateMultiSelectToggleIndex.
+					if (m_ctx.ui.selected().size() > 1 && m_contextSource == (ObjectID)INVALID_ID)
 					{
 						updateMultiSelectToggleIndex(*b, obj);
 					}
@@ -1565,7 +1638,7 @@ void ControlBar::populateUnderConstruction(Object &obj, bool mine)
 void ControlBar::emitStateKey()
 {
 	// the version moves when the picture of the bar changes
-	std::string key = std::to_string(m_source) + "|" + m_setName + (m_underConstruction ? "|uc" : "") + "|" + std::to_string(m_rangeStack.size()) + "|" + std::to_string(m_rangeStack.back().first) + "|" + std::to_string(m_money) + "|"
+	std::string key = std::to_string(m_source) + ":" + std::to_string(m_contextSource) + "|" + m_setName + (m_underConstruction ? "|uc" : "") + "|" + std::to_string(m_rangeStack.size()) + "|" + std::to_string(m_rangeStack.back().first) + "|" + std::to_string(m_money) + "|"
 		+ std::to_string(m_cpUsed) + "/" + std::to_string(m_cpLimit);
 	for (const auto *v : { &m_palantir, &m_side, &m_offBar })
 	{

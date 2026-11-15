@@ -95,6 +95,10 @@ public:
 
 	// ---- the evaluated state ----
 	ObjectID sourceObject() const { return m_source; }
+	// PORT-213 (issue #503): the drawable passed to AptPalantir::setDrawable (RW 0x9443BD / 0x9448FC -> 0x6D4671).
+	// Single-select sets it to the selected object; multi-select sets it to the winning HERO from
+	// ControlBar::populateMultiSelect (RW 0x94475A) or INVALID_ID when no qualifying HERO is selected.
+	ObjectID contextObject() const { return m_contextSource; }
 	const std::string &commandSetName() const { return m_setName; }
 	const std::vector<ControlBarButton> &palantirButtons() const { return m_palantir; }
 	const std::vector<ControlBarButton> &sideButtons() const { return m_side; }
@@ -260,6 +264,10 @@ private:
 	// preClickIndex or the bar's context/dirty state changes.
 	static bool usesToggleIndex(const CommandButton &b);
 	void applyPredictedToggle(const CommandButton &b, const Object *obj);
+	// PORT-213 (issue #503): ControlBar::populateMultiSelect hero scan (RW 0x94475A..0x944839):
+	// KindOf HERO (+0x113 & 4), !IGNORED_IN_GUI (+0x10D & 0x80 == 0), valid current ExperienceLevel
+	// (RW 0x79D12A -> 0x689024), highest rank (RW 0x9447FA), lowest signed ObjectID tie-break (RW 0x94480D).
+	Object *selectMultiSelectHero() const;
 	struct PendingToggle
 	{
 		int preClickIndex = 0;
@@ -268,6 +276,7 @@ private:
 
 	HudContext &m_ctx;
 	ObjectID m_source = INVALID_ID;
+	ObjectID m_contextSource = INVALID_ID;
 	std::string m_setName;
 	std::vector<ControlBarButton> m_palantir, m_side, m_offBar;
 	std::map<const CommandButton *, PendingToggle> m_pendingToggles;
