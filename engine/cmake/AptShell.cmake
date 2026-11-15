@@ -9,6 +9,7 @@ list(APPEND OPENBFME_APT_SOURCES
     src/GameClient/GUI/StillImageLoadScreen.cpp
     src/GameClient/GUI/AptScreens/AptMainMenu.cpp
     src/GameClient/GUI/AptScreens/AptSimpleScreens.cpp
+    src/GameClient/GUI/AptScreens/AptMapPreview.cpp
     src/GameClient/GUI/AptScreens/AptSkirmish.cpp
     src/GameClient/GUI/Skirmish/SkirmishPreferences.cpp
     src/GameClient/GUI/AptScreens/AptScreenFactories.cpp
