@@ -33,6 +33,7 @@
 #include "GameLogic/System/EmotionSystem.h"
 #include "GameLogic/System/ShroudManager.h"
 #include "GameLogic/Module/UpgradeModule.h"
+#include "GameLogic/Module/ProductionUpdate.h"
 #include "GameLogic/ObjectFilter.h"
 #include "GameLogic/ObjectFilterMatch.h"
 #include "GameLogic/SimMath.h"
@@ -1217,9 +1218,16 @@ void Object::setCapturedTeam(Team *team)
 	{
 		return;
 	}
-	// RW 0x699733 .. 0x6997A7: the production module's vslot 0x40 (its queue cancelled), the score keeper's structure counts, RW 0x68B303 and the firing tracker
-	// RW 0x8E3ABB are not ported (S-1225); the selection, radar and EVA messages after the change are the client's
-	m_logic.noteStop("[S-1225] Object::setCapturedTeam: the production cancel, score counts and RW 0x68B303 / 0x8E3ABB of a capture are not ported");
+	// RW 0x69973D .. 0x699750: the object's production interface (RW 0x68C327(0): the modules' slot 0x70) takes its slot 0x40 (RW 0x8A1666), which
+	// first calls its own slot 0x3C (RW 0x8A05B2): every entry the previous owner queued is cancelled, not handed over (the owner's P-122)
+	if (ProductionUpdateInterface *production = getProductionUpdate())
+	{
+		production->cancelAllProduction(); // RW 0x8A05B2, called from RW 0x8A1676
+	}
+	// S-1225, still unported: RW 0x699750 .. 0x6997A7 counts the structure in the old and the new player's score keeper (RW 0x79F0E1 on Player + 0x3DC,
+	// for two active players) and tells the client (RW 0x6D9A71, a local player only); RW 0x699792 sets the undetected-defector bit (+ 0x458 bit 1,
+	// RW 0x68B303) and RW 0x8E3ABB its stealth countdown, which this port cannot set: no defection is ported (S-141)
+	m_logic.noteStop("[S-1225] Object::setCapturedTeam: the score keeper's structure count and RW 0x68B303 / 0x8E3ABB are not ported");
 	setTeam(team); // RW 0x69954A
 	if (AIUpdateInterface *ai = getAIUpdateInterface())
 	{
