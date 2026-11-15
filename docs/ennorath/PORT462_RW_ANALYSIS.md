@@ -83,3 +83,33 @@ at 0x8200FA sets receiver +0x8B0, 0x82011D clears it (read this range).
 No new simulation state is needed for these services. Live HUD creates
 one UnitVoiceResponse and uses it for translator, stance and object voices;
 new state must not be refreshed only on one of those routes.
+
+## Third checkpoint: getter and scope confirmation
+
+RW 0x70E013 read directly: `mov eax,[ecx+0x84]; ret`.
+Together with the picker/choice-constructor chain above, this establishes
+that the charge helper is reached through the object's drawable, and then
+checks the drawable's back-reference. The port's Object-based candidate
+path already rejects missing/destroyed objects. Do not add a clientHooks
+presence condition merely to make a test fail: that is not this RW gate.
+
+RW enter branch read linearly from 0x8DF40A through 0x8DF56F: planning
+replacement precedes VoiceEnterUnit and all enter-kind dispatch. RW
+0x8DF4FF skips the rest once the choice is complete. The stance-button
+planning case is already separately recorded as S-703 in this port; it is
+not one of the move/attack/enter helper gates assigned here.
+
+Implementation plan: use existing Player::orderMode; query live
+InGameUI::isInWaypointMode rather than introduce a GameData INI field;
+movement predicate is AIUpdate::isMoving OR AIMover::isWaitingForPath.
+Read the planning MiscAudio slot through the audio service and the same
+existing choice/collection path, never play an extra sound alongside it.
+Keep empty/NoSound planning slots silent, without falling through to the
+unit voice. Cover command versus enter-state, moving versus stationary,
+planning precedence, neighboring selection/attack, and charge timeout.
+
+Blocked before data validation/implementation: Google Drive download of
+ennorath-ini-1.9.8.3.zip returned auth_error: the connection is no longer
+valid. No further connector request was made. The archive is not present
+in this sandbox. Owner must reconnect Google Drive before the required
+mod-first validation can proceed.
