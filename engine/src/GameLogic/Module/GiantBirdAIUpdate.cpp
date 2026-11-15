@@ -286,7 +286,8 @@ public:
 	int currentWeaponStatusWriteBack() override { return base().currentWeaponStatusWriteBack(); }
 	bool aiStateActive() const override { return base().aiStateActive(); }
 	float gravity() const override { return base().gravity(); }
-	bool hasStealthModule() const override { return base().hasStealthModule(); }
+	void revealDisguisedClimber() override { base().revealDisguisedClimber(); }                                          // Port 202, RW 0x5E7C08
+	bool wadingWaterAt(float x, float y, WadingWater &out) const override { return base().wadingWaterAt(x, y, out); } // Port 202, RW 0x5E5785
 
 	GiantBirdFlight *aerialFlight() override { return &m_ai.m_flight; }
 	bool aerialQuery(float distance, Coord3D &out) override { return AerialPathfinder::query(m_ai.m_spline, distance, out); }
