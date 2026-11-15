@@ -41,6 +41,9 @@ MATRIX = REPO / "docs" / "ennorath" / "MATRIX.tsv"
 README = REPO / "docs" / "ennorath" / "README.md"
 TEST_CASE = "ENNORATH sweep units*"
 DEFAULT_MAP = "map mp fall back 8p"
+# graph edges (field names, lower case) that name an object as a requirement, a price rule or a label: the object is not the faction's content
+NOT_CONTENT = {"requiredobject", "buildingrequired", "displaynameinvisibleforenemy", "useobjecttemplateforcostdiscount", "beaconname",
+               "objecttodestroyforringentry", "workername"}
 
 # what a FAIL line means, first match wins (the words are unitsOf's)
 CATEGORIES = [
@@ -89,6 +92,9 @@ def cmd_seeds(a) -> None:
             kinds = g.kinds_of(db, name)
             # what a player can click: a selectable object, not a projectile or an effect object
             if "SELECTABLE" not in kinds or "PROJECTILE" in kinds:
+                continue
+            # reached only through a field that names an object as a condition or a label, not as something the player gets
+            if all(key.rsplit("/", 1)[-1].lower() in NOT_CONTENT for _src, key in reached[node]):
                 continue
             via = ",".join(f"{src[1]}.{key}" for src, key in reached[node][:2])
             rows.append(f"{name}\t{via}")
