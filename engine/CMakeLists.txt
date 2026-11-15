@@ -1389,6 +1389,8 @@ add_executable(openbfme_tests
     tests/test_local_51.cpp
     # lane LOCAL-52 (W3D transparent/floor render priority order below particles, issue #408 / P-100)
     tests/test_local_52.cpp
+    # lane LOCAL-65 (Isengard building foundations under black ground and multi-faction terrain fitting, issue #510 / P-130)
+    tests/test_local_65.cpp
     # lane LOCAL-62 (capturing a production building cancels its production queue, issue #483 / P-122)
     tests/test_local_62.cpp
     # lane LOCAL-59 (WeaponFireSpecialAbilityUpdate makes and loads weapon in ctor, fork issue #418)
