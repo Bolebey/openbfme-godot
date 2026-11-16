@@ -150,6 +150,33 @@ def linked_modules(db: eg.Db, obj: str, refs: set[str]):
     return out
 
 
+def class_gaps(fs: dict[int, tuple[str, int]], reach=None, sizes=None, skip=None):
+    """(none count, [(depth, address)] of the specific none functions, smallest depth first, partial count) of one class's map rows."""
+    reach = reach or {}
+    sizes = sizes or {}
+    skip = skip or {}
+    none = [(d, a) for a, (s, d) in fs.items() if s == "none"]
+    specific = sorted((d, a) for d, a in none if reach.get(a, 1) <= SPECIFIC_CLASSES and sizes.get(a, TRIVIAL_BYTES + 1) > TRIVIAL_BYTES
+                      and a not in skip)
+    return len(none), specific, sum(1 for s, _d in fs.values() if s == "partial")
+
+
+def format_functions(specific) -> str:
+    return " ".join(f"0x{a:08X}@{d}" for d, a in specific[:TOP_FUNCTIONS])
+
+
+def load_filters(inventory: Path, game: Path | None):
+    """(sizes, boilerplate) from rw_function_map.py's function inventory and, with game.dat, the recognised boilerplate."""
+    sizes, skip = {}, {}
+    if inventory and inventory.exists():
+        import json
+        functions = json.loads(inventory.read_text(encoding="utf-8"))["functions"]
+        sizes = {f["address"]: sum(n for _s, n in f["blocks"]) for f in functions}
+        if game:
+            skip = boilerplate(game, sizes, {f["address"]: f["blocks"] for f in functions})
+    return sizes, skip
+
+
 def join(db: eg.Db, matrix_rows, gaps, map_classes, reach=None, sizes=None, skip=None):
     reach = reach or {}
     sizes = sizes or {}
@@ -167,13 +194,8 @@ def join(db: eg.Db, matrix_rows, gaps, map_classes, reach=None, sizes=None, skip
             if cls not in map_classes:
                 rows.append(base + [o, tag, cls, "", "", "", "class not in the function map"])
                 continue
-            fs = gaps.get(cls, {})
-            none = [(d, a) for a, (s, d) in fs.items() if s == "none"]
-            specific = sorted((d, a) for d, a in none if reach.get(a, 1) <= SPECIFIC_CLASSES and sizes.get(a, TRIVIAL_BYTES + 1) > TRIVIAL_BYTES
-                              and a not in skip)
-            partial = sum(1 for s, _d in fs.values() if s == "partial")
-            top = " ".join(f"0x{a:08X}@{d}" for d, a in specific[:TOP_FUNCTIONS])
-            rows.append(base + [o, tag, cls, str(len(none)), str(len(specific)), str(partial), top])
+            none, specific, partial = class_gaps(gaps.get(cls, {}), reach, sizes, skip)
+            rows.append(base + [o, tag, cls, str(none), str(len(specific)), str(partial), format_functions(specific)])
     return rows
 
 
@@ -239,13 +261,7 @@ def main(argv=None):
         raise SystemExit(f"{len(set(eg.MISSING))} missing INI includes, first: {sorted(set(eg.MISSING))[0]}")
     matrix_rows = read_matrix(a.matrix)
     gaps, classes, reach = read_map(a.map)
-    sizes, skip = {}, {}
-    if a.inventory.exists():
-        import json
-        inventory = json.loads(a.inventory.read_text(encoding="utf-8"))["functions"]
-        sizes = {f["address"]: sum(n for _s, n in f["blocks"]) for f in inventory}
-        if a.game:
-            skip = boilerplate(a.game, sizes, {f["address"]: f["blocks"] for f in inventory})
+    sizes, skip = load_filters(a.inventory, a.game)
     rows = join(db, matrix_rows, gaps, classes, reach, sizes, skip)
     shown = ["tools/mod/matrix_gaps.py", "--base", "<ROTWK_INSTALL>", "--overlay", "<mod install>",
              "--matrix", str(a.matrix).replace("\\", "/"), "--map", str(a.map).replace("\\", "/"), "--out", str(a.out).replace("\\", "/")]
