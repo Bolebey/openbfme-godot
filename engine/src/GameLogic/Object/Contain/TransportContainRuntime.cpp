@@ -526,33 +526,29 @@ void TransportContain::letRidersUpgradeWeaponSet()
 			two = true; // data + 0xCC
 		}
 	}
-	ObjectWeapons *w = getObject()->getWeapons();
-	if (!w)
-	{
-		return;
-	}
-	const auto has = [w](int bit) { return ((w->weaponSetFlags()[(size_t)bit >> 5] >> (bit & 31)) & 1u) != 0; };
+	Object *container = getObject();
+	const auto has = [container](int bit) { return ((container->getWeaponSetFlags()[(size_t)bit >> 5] >> (bit & 31)) & 1u) != 0; };
 	if (one)
 	{
 		if (!has(PASSENGER_TYPE_ONE))
 		{
-			w->setWeaponSetFlag(PASSENGER_TYPE_ONE, true); // RW 0x691059(4)
+			container->setWeaponSetFlag(PASSENGER_TYPE_ONE, true); // RW 0x691059(4) on the OBJECT
 		}
 	}
 	else if (has(PASSENGER_TYPE_ONE))
 	{
-		w->setWeaponSetFlag(PASSENGER_TYPE_ONE, false); // RW 0x691106(4)
+		container->setWeaponSetFlag(PASSENGER_TYPE_ONE, false); // RW 0x691106(4) on the OBJECT
 	}
 	if (two)
 	{
 		if (!has(PASSENGER_TYPE_TWO))
 		{
-			w->setWeaponSetFlag(PASSENGER_TYPE_TWO, true);
+			container->setWeaponSetFlag(PASSENGER_TYPE_TWO, true);
 		}
 	}
 	else if (has(PASSENGER_TYPE_TWO))
 	{
-		w->setWeaponSetFlag(PASSENGER_TYPE_TWO, false);
+		container->setWeaponSetFlag(PASSENGER_TYPE_TWO, false);
 	}
 }
 
@@ -941,7 +937,7 @@ bool HordeTransportContain::addToContain(Object *obj)
 		ObjectWeapons *w = o->getWeapons();
 		if (w && w->hasWeaponSetFor(CONTAINED))
 		{
-			w->setWeaponSetFlag(CONTAINED, true);
+			o->setWeaponSetFlag(CONTAINED, true);
 			return true;
 		}
 		return false;
@@ -1016,10 +1012,7 @@ void HordeTransportContain::removeFromContain(Object *obj, bool exposeStealthUni
 		return;
 	}
 	const auto clearContainedWeaponSet = [](Object *o) {
-		if (ObjectWeapons *w = o->getWeapons())
-		{
-			w->setWeaponSetFlag(CONTAINED, false); // RW 0x691106(0x14)
-		}
+		o->setWeaponSetFlag(CONTAINED, false); // RW 0x691106(0x14) on the OBJECT
 	};
 	// RW 0x87A361: OpenContain's removal (false), CONTAINED cleared, RW 0x990EE6: back into the world, not UNSELECTABLE
 	const auto removeRider = [this, &clearContainedWeaponSet](Object *o) {

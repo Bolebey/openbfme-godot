@@ -1238,17 +1238,14 @@ void WeaponModeSpecialPowerUpdate::doSpecialPowerAtLocation(const Coord3D &, uns
 void WeaponModeSpecialPowerUpdate::initiate()
 {
 	Object *obj = getObject();
-	ObjectWeapons *weapons = obj->getWeapons();
 	if (m_data->m_lockWeaponSlot == 5)
 	{
-		if (weapons) // RW 0x68FDF7
+		// RW 0x89843E .. 0x898470: the mask's bits, each through RW 0x691059 on the OBJECT (the object's word exists whether or not it has a weapon set)
+		for (int bit = 0; bit < 0x68; ++bit)
 		{
-			for (int bit = 0; bit < 0x68; ++bit)
+			if ((m_data->m_weaponSetFlags[(size_t)bit >> 5] >> (bit & 31)) & 1u)
 			{
-				if ((m_data->m_weaponSetFlags[(size_t)bit >> 5] >> (bit & 31)) & 1u)
-				{
-					weapons->setWeaponSetFlag(bit, true); // RW 0x691059
-				}
+				obj->setWeaponSetFlag(bit, true); // RW 0x691059
 			}
 		}
 	}
@@ -1272,14 +1269,12 @@ UpdateSleepTime WeaponModeSpecialPowerUpdate::update()
 	Object *obj = getObject();
 	// P-141 (RW 0x8983C1 -> 0x68DF11, Both editions): release lock through Contain/HordeContain even when a horde container itself has no weapons
 	ObjectWeapons::releaseObjectWeaponLock(*obj, LOCKED_PERMANENTLY);
-	if (ObjectWeapons *weapons = obj->getWeapons())
+	// RW 0x8983C8 .. 0x8983EC: the mask's bits, each through RW 0x691106 on the OBJECT
+	for (int bit = 0; bit < 0x68; ++bit)
 	{
-		for (int bit = 0; bit < 0x68; ++bit)
+		if ((m_data->m_weaponSetFlags[(size_t)bit >> 5] >> (bit & 31)) & 1u)
 		{
-			if ((m_data->m_weaponSetFlags[(size_t)bit >> 5] >> (bit & 31)) & 1u)
-			{
-				weapons->setWeaponSetFlag(bit, false); // RW 0x691106
-			}
+			obj->setWeaponSetFlag(bit, false); // RW 0x691106
 		}
 	}
 	if (!m_data->m_attributeModifier.empty())
@@ -1333,17 +1328,13 @@ DualWeaponBehavior::DualWeaponBehavior(Thing *thing, const DualWeaponBehaviorMod
 UpdateSleepTime DualWeaponBehavior::setClose(bool close)
 {
 	Object *obj = getObject();
-	ObjectWeapons *weapons = obj->getWeapons();
 	static const int kMcClose = modelConditionIndex("WEAPONSTATE_CLOSE_RANGE");
-	const bool isClose = weapons && MaskTest(weapons->weaponSetFlags(), (unsigned)kWeaponSetCloseRange);
+	const bool isClose = MaskTest(obj->getWeaponSetFlags(), (unsigned)kWeaponSetCloseRange); // RW 0x668303 reads the OBJECT's word
 	if (close == isClose)
 	{
 		return (UpdateSleepTime)LOGICFRAMES_PER_SECOND; // RW 0x85E119 / 0x85E16B
 	}
-	if (weapons)
-	{
-		weapons->setWeaponSetFlag(kWeaponSetCloseRange, close); // RW 0x691059 / 0x691106 (7)
-	}
+	obj->setWeaponSetFlag(kWeaponSetCloseRange, close); // RW 0x691059 / 0x691106 (7) on the OBJECT
 	if (obj->testModelCondition(kMcClose) != close) // Object + 0x120 bit 0, then RW 0x68B53C
 	{
 		Object::ModelConditionBits clearBits{}, setBits{};
@@ -1363,8 +1354,7 @@ UpdateSleepTime DualWeaponBehavior::update()
 		return UPDATE_SLEEP_FOREVER;
 	}
 	const int fps = LOGICFRAMES_PER_SECOND;
-	ObjectWeapons *weapons = obj->getWeapons();
-	const bool rampage = weapons && MaskTest(weapons->weaponSetFlags(), (unsigned)kWeaponSetRampage);
+	const bool rampage = MaskTest(obj->getWeaponSetFlags(), (unsigned)kWeaponSetRampage);
 	if (rampage)
 	{
 		return (UpdateSleepTime)fps;
@@ -1377,7 +1367,7 @@ UpdateSleepTime DualWeaponBehavior::update()
 	}
 	if (m_data->m_useHordeRangeWeapon && hordeContainer)
 	{
-		return setClose(weapons && MaskTest(weapons->weaponSetFlags(), (unsigned)kWeaponSetCloseRange)); // RW 0x85E003 .. 0x85E019
+		return setClose(MaskTest(obj->getWeaponSetFlags(), (unsigned)kWeaponSetCloseRange)); // RW 0x85E003 .. 0x85E019
 	}
 	static const int kUsingAbility = modelConditionIndex("USING_SPECIAL_ABILITY"), kMounted = modelConditionIndex("MOUNTED");
 	if (obj->testModelCondition(kUsingAbility))
