@@ -720,6 +720,26 @@ struct EffectProbe
 		}
 	}
 
+	// lane TAINTAREA-1 (main, merged into Local 78's probe 2026-11-16): Taint / Elven Wood paint TheTaintManager's grid under their area object,
+	// whose AttributeModifierAuraUpdate (RequiredConditions TAINT / ELVEN_WOOD) gives its BonusName to the caster's allies standing on the painted
+	// ground: that list is the power's effect
+	static void areaAura(Object &holder, const std::string &cls, const std::string &areaName, EffectProbe &p)
+	{
+		const ThingTemplate *area = holder.logic().things().findTemplate(areaName);
+		std::string bonus;
+		for (const ThingTemplate::Nugget &n : area ? area->behaviorModules().nuggets() : std::vector<ThingTemplate::Nugget>{})
+		{
+			const AttributeModifierAuraUpdateModuleData *ad = dynamic_cast<const AttributeModifierAuraUpdateModuleData *>(n.data.get());
+			bonus = ad && bonus.empty() ? ad->m_bonusName : bonus;
+		}
+		if (bonus.empty())
+		{
+			p.unasserted.push_back(cls);
+			return;
+		}
+		p.expects.push_back({ MODIFIER, cls + " area " + areaName + " aura " + bonus, bonus });
+	}
+
 	static void expectFrom(BehaviorModule *m, Object &holder, const SpecialPowerTemplate *t, EffectProbe &p, int depth, const Object *target = nullptr)
 	{
 		const std::string cls = m->getModuleClassName();
@@ -921,6 +941,14 @@ struct EffectProbe
 		if (dynamic_cast<const WeaponChangeSpecialPowerModule *>(m))
 		{
 			p.expects.push_back({ WEAPON_FLAGS, cls });
+		}
+		else if (const TaintSpecialPower *tp = dynamic_cast<const TaintSpecialPower *>(m))
+		{
+			areaAura(holder, cls, tp->data()->m_taintObject, p); // lane TAINTAREA-1
+		}
+		else if (const ElvenWoodSpecialPower *ep = dynamic_cast<const ElvenWoodSpecialPower *>(m))
+		{
+			areaAura(holder, cls, ep->data()->m_elvenGroveObject, p); // lane TAINTAREA-1
 		}
 		else if (const OCLSpecialPower *op = dynamic_cast<const OCLSpecialPower *>(m))
 		{
