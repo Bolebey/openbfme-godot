@@ -2,16 +2,16 @@
 """Static candidate primitives for top-level INI fields, not proof of a reader.
 
 A tracked value is a pointer loaded from a specified absolute global. The
-analysis is deliberately local to a recovered basic block: no claims are made
-about register values across CFG joins, calls or unmodelled transformations.
+analysis propagates possible values over direct CFG edges within each function;
+indirect edges, stack spills and unmodelled transformations are not followed.
 The input is an address/size inventory and the loaded image; no game bytes are
 written by this module.
 """
-from collections import defaultdict
+from collections import defaultdict, deque
 import struct
 
 from capstone import Cs, CS_ARCH_X86, CS_MODE_32, CS_AC_READ
-from capstone.x86 import X86_OP_MEM, X86_OP_REG, X86_REG_INVALID
+from capstone.x86 import X86_OP_IMM, X86_OP_MEM, X86_OP_REG, X86_REG_INVALID
 
 # Aliases are normalized before killing values: writing AL invalidates EAX.
 FAMILIES = {
@@ -26,60 +26,81 @@ VOLATILE = {'eax', 'ecx', 'edx'}
 
 
 def global_reads(data, base, blocks, globals_by_address, pointer_paths=()):
-    """Return (function, global address, offset, instruction) candidate tuples.
+    """Return (function, global address, pointer path, offset, instruction).
 
-    globals_by_address is a set of absolute pointer addresses. A load and the
-    field access must occur in the same basic block; register copies propagate.
-    Calls kill volatile aliases; arbitrary writes and partial writes kill their
-    destination. Memory stores and indexed addresses are not field reads.
+    Propagate possible pointer values along direct CFG edges. Union at joins is
+    a may-analysis, not a guarantee that a candidate is a reachable read.
+    Calls kill volatile registers, partial or other writes kill aliases; stack
+    spills, indirect branches, indexed addresses and address-only LEAs are not
+    followed. Each load and access belongs to the same recovered function.
     """
     decoder = Cs(CS_ARCH_X86, CS_MODE_32)
     decoder.detail = True
     result = set()
     pointer_paths = set(pointer_paths)
     for function, spans in sorted(blocks.items()):
+        decoded = {}
         for start, size in sorted(spans):
             if size <= 0 or start < base or start + size > base + len(data):
                 raise ValueError(f'invalid block at {start:#x}')
             instructions = list(decoder.disasm(data[start-base:start-base+size], start))
             if not instructions or instructions[-1].address + instructions[-1].size != start + size:
                 raise ValueError(f'truncated block at {start:#x}')
-            tracked = {}
-            for ins in instructions:
+            decoded[start] = instructions
+        if function not in decoded:
+            raise ValueError(f'function has no entry block at {function:#x}')
+        states = {function: {}}
+        pending = deque([function])
+        while pending:
+            start = pending.popleft()
+            tracked = {reg: set(values) for reg, values in states[start].items()}
+            for ins in decoded[start]:
                 for op in ins.operands:
-                    if ins.mnemonic == 'lea':
-                        continue  # computes an address; does not read the field
-                    if op.type != X86_OP_MEM or not (op.access & CS_AC_READ) or op.mem.index != X86_REG_INVALID:
+                    if ins.mnemonic == 'lea' or op.type != X86_OP_MEM or not (op.access & CS_AC_READ) or op.mem.index != X86_REG_INVALID:
                         continue
                     reg = FAMILIES.get(ins.reg_name(op.mem.base))
-                    if reg in tracked:
-                        pointer, path = tracked[reg]
+                    for pointer, path in tracked.get(reg, ()):
                         result.add((function, pointer, path, op.mem.disp, ins.address))
-                copied = None
+                copied = set()
                 if ins.mnemonic == 'mov' and len(ins.operands) == 2:
                     dst, src = ins.operands
                     if dst.type == X86_OP_REG and dst.size == 4:
                         if src.type == X86_OP_MEM and src.size == 4 and src.mem.base == X86_REG_INVALID and src.mem.index == X86_REG_INVALID:
                             absolute = src.mem.disp & 0xffffffff
                             if absolute in globals_by_address:
-                                copied = (absolute, ())
+                                copied.add((absolute, ()))
                         elif src.type == X86_OP_MEM and src.size == 4 and src.mem.index == X86_REG_INVALID:
-                            parent = tracked.get(FAMILIES.get(ins.reg_name(src.mem.base)))
-                            if parent is not None:
-                                pointer, path = parent
+                            for pointer, path in tracked.get(FAMILIES.get(ins.reg_name(src.mem.base)), ()):
                                 nested = path + (src.mem.disp,)
                                 if (pointer, nested) in pointer_paths:
-                                    copied = (pointer, nested)
+                                    copied.add((pointer, nested))
                         elif src.type == X86_OP_REG and src.size == 4:
-                            copied = tracked.get(FAMILIES.get(ins.reg_name(src.reg)))
+                            copied.update(tracked.get(FAMILIES.get(ins.reg_name(src.reg)), ()))
                 _, writes = ins.regs_access()
                 for reg in writes:
                     tracked.pop(FAMILIES.get(ins.reg_name(reg)), None)
                 if ins.mnemonic == 'call':
                     for reg in VOLATILE:
                         tracked.pop(reg, None)
-                if copied is not None:
+                if copied:
                     tracked[FAMILIES[ins.reg_name(ins.operands[0].reg)]] = copied
+            last = decoded[start][-1]
+            successors = set()
+            if last.mnemonic.startswith('j'):
+                if last.operands and last.operands[0].type == X86_OP_IMM:
+                    successors.add(last.operands[0].imm)
+                if last.mnemonic != 'jmp':
+                    successors.add(last.address + last.size)
+            elif not (last.mnemonic.startswith('ret') or last.mnemonic in {'int3', 'ud2', 'hlt'}):
+                successors.add(last.address + last.size)
+            for target in sorted(successors & decoded.keys()):
+                previous = states.get(target)
+                merged = {reg: set(values) for reg, values in (previous or {}).items()}
+                for reg, values in tracked.items():
+                    merged.setdefault(reg, set()).update(values)
+                if previous is None or merged != previous:
+                    states[target] = merged
+                    pending.append(target)
     return sorted(result)
 
 

@@ -62,3 +62,11 @@ def test_getter_offsets_with_receiver_copy_and_overwrite():
     # mov esi,ecx; mov eax,[esi+0x3c]; xor esi,esi; mov eax,[esi+0x40]; ret
     code = bytes.fromhex('89ce 8b463c 31f6 8b4640 c3')
     assert br.getter_offsets(code, 0x1000, {0x1000: ((0x1000, len(code)),)}, {0x1000}) == {0x1000: {0x3c}}
+
+
+def test_global_pointer_across_branch_and_clobber():
+    # Two arms join: one preserves EBX, the other overwrites it. A may-read at
+    # the join is a candidate; after both arms overwrite EBX it is not.
+    code = bytes.fromhex('a100200000 89c3 7404 31db eb02 90 90 8b4b3c 31db 8b4b40 c3')
+    blocks = {0x1000: ((0x1000, 9), (0x1009, 4), (0x100d, 2), (0x100f, 9))}
+    assert br.global_reads(code, 0x1000, blocks, {0x2000}) == [(0x1000, 0x2000, (), 0x3c, 0x100f)]
