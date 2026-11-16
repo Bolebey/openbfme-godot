@@ -913,13 +913,19 @@ int FiringTracker::getShotsAtTarget(bool hasVictim, unsigned victimID, const Coo
 // RW 0x8E326D
 void FiringTracker::shotFired(FiringTrackerHost &host, const Weapon &weapon, unsigned victimID, const Coord3D &victimPos, bool hard)
 {
+	const std::uint32_t now = host.currentFrame();
+	// DONOR BFME2 0x004DEECB (Code/GameEngine/Source/GameLogic/Object/FiringTrackerXfer.cpp, the unit's retail-matched body; RW
+	// 0x8E326D is this function in game.dat 2.01): the shot records its frame and the owner's position BEFORE the forced-reset
+	// branch, so a forced shot leaves its frame behind too (the AI wait check reads it, Object RW 0x68B645). The forced reset zeroes
+	// only the position, through coolDown(true)'s else arm, which is what reset(host, true) does below.
+	m_lastShotFrame = now;
+	m_lastOwnerPosition = host.ownerPosition();
 	if (hard)
 	{
 		m_count = 1;
 		reset(host, true);
 		return;
 	}
-	const std::uint32_t now = host.currentFrame();
 	const bool idShot = victimID != 0;
 	if (idShot)
 	{
@@ -962,8 +968,6 @@ void FiringTracker::shotFired(FiringTrackerHost &host, const Weapon &weapon, uns
 		m_autoReloadDeadline = now + t.m_autoReloadWhenIdle;
 	}
 	m_coastEnd = t.m_continuousFireCoastFrames != 0 ? weapon.whenWeCanFireAgain() + t.m_continuousFireCoastFrames : 0;
-	m_lastShotFrame = now;
-	m_lastOwnerPosition = host.ownerPosition();
 	const int one = t.m_continuousFireOneShotsNeeded;
 	const int two = t.m_continuousFireTwoShotsNeeded;
 	const std::uint32_t mask = host.weaponBonusConditionMask();
@@ -991,26 +995,34 @@ void FiringTracker::shotFired(FiringTrackerHost &host, const Weapon &weapon, uns
 	}
 }
 
-// RW 0x8E30DD
+// DONOR BFME2 0x004DED3B (Code/GameEngine/Source/GameLogic/Object/FiringTrackerXfer.cpp, the unit's retail-matched body; RW 0x8E30DD
+// is this function in game.dat 2.01). Retail runs four steps in this order: (1) the owner left the last shot position -> a hard
+// coolDown; (2) the forced auto-reload (frame + 0x40), which clears its own frame; (3) the looped fire sound (+ 0x54; the port keeps
+// that state on its audio side, S-712); (4) ONLY while a cooldown frame is pending (+ 0x3C != 0) and the frame is past it -> push the
+// frame LogicFramesPerSecond ahead, coolDown(false), and sleep exactly that many frames. The earlier body ran step 4 without the gate
+// (so a weapon with ContinuousFireCoast = 0, whose + 0x3C stays 0, had its consecutive shot count wiped within a few frames), ran it
+// before the reload, and reported UPDATE_SLEEP_FOREVER unless the reload was pending (so a pending cooldown never woke it, unlike
+// calcTimeToSleep, DONOR 0x004DEAB0: FOREVER only when none of the three frames is pending).
 std::uint32_t FiringTracker::update(FiringTrackerHost &host)
 {
 	const std::uint32_t now = host.currentFrame();
 	const Coord3D pos = host.ownerPosition();
 	if (pos.x != m_lastOwnerPosition.x || pos.y != m_lastOwnerPosition.y || pos.z != m_lastOwnerPosition.z)
 	{
-		reset(host, true); // the owner moved
-	}
-	if (now > m_coastEnd)
-	{
-		m_coastEnd = now + COAST_POLL_FRAMES;
-		reset(host, false);
+		reset(host, true); // step 1: the owner moved off the last shot position
 	}
 	if (m_autoReloadDeadline != 0 && now >= m_autoReloadDeadline)
 	{
-		host.reloadAllWeapons();
+		host.reloadAllWeapons(); // step 2: reloadAllAmmo(false), before the cooldown step
 		m_autoReloadDeadline = 0;
 	}
-	return m_autoReloadDeadline != 0 ? 1u : 0x3FFFFFFFu;
+	if (m_coastEnd != 0 && now > m_coastEnd)
+	{
+		m_coastEnd = now + COAST_POLL_FRAMES; // step 4: now + LogicFramesPerSecond
+		reset(host, false);
+		return COAST_POLL_FRAMES; // UPDATE_SLEEP(LogicFramesPerSecond)
+	}
+	return (m_autoReloadDeadline != 0 || m_coastEnd != 0) ? 1u : 0x3FFFFFFFu; // calcTimeToSleep (DONOR 0x004DEAB0)
 }
 
 // =============================================================================================================================

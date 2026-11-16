@@ -504,6 +504,7 @@ include(cmake/Port202.cmake)    # PORT-202: the locomotor's wading updater and t
 include(cmake/Port204.cmake)    # PORT-204: crush warning path gate and horde +0x170 member list (issue #471; OPENBFME_PORT204_TESTS)
 include(cmake/Port464.cmake)    # PORT-464: the per-frame steering of a summoned helper (issue #464; OPENBFME_PORT464_TESTS)
 include(cmake/Port203.cmake)    # PORT-203: tunnel nemesis, removeFromContain(exposeStealthUnits), TunnelContain ExitInterface, AITNGuard (issue #470; OPENBFME_PORT203_TESTS)
+include(cmake/Port225.cmake)    # PORT-225: the FiringTracker's frame steps (issue #548; OPENBFME_PORT225_TESTS)
 add_library(openbfme_core STATIC
     ${OPENBFME_PLAY2_SOURCES}
     ${OPENBFME_APT_SOURCES}
@@ -1235,6 +1236,7 @@ add_executable(openbfme_tests
     ${OPENBFME_PORT433_TESTS}
     ${OPENBFME_PORT202_TESTS}
     ${OPENBFME_PORT204_TESTS}
+    ${OPENBFME_PORT225_TESTS}
     ${OPENBFME_PORT464_TESTS}
     ${OPENBFME_PORT203_TESTS}
     tests/test_main.cpp
