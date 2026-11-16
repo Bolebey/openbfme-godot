@@ -6,6 +6,11 @@ contains game/mod data: keep it outside Git (for example in workspace/).
 Conditions are data references, not proof that a sweep fixture satisfies them.
 This is an initial inventory: model-condition setters are only partially resolved
 and nested prerequisite blocks are not resolved; none is not a complete verdict.
+
+--md writes MATRIX_GREY.md: the counts and the comparison of ControlBar::evaluate's
+common gates with retail getCommandAvailability (RW 0x942733). The report holds
+counts and retail addresses only, never the mod's names or values, so it can be
+committed while the TSV cannot.
 """
 from __future__ import annotations
 
@@ -31,6 +36,41 @@ BUTTON_FIELDS = {
 UPGRADE_FIELDS = {'requiredobjectfilter': 'object', 'prerequisites': 'object',
                   'buildcost': 'other'}
 POWER_FIELDS = {'requiredsciences': 'science', 'preventactivationconditions': 'other'}
+
+
+# ControlBar::evaluate's common gates against retail getCommandAvailability (RW 0x942733), in retail order.
+# Addresses were read this session with `tools/mod/rw.py dis 0x942733` (RotWK 2.01 game.dat, MD5 daed3668...);
+# "availability" integers are retail's: 0 disabled, 1 enabled, 2 active, 3 hidden, 6 unaffordable.
+BRANCHES = (
+    ('0x942756 .. 0x94276E', 'the controlling player (RW 0x6A8839); none -> 3',
+     'ported: evaluate returns Hidden without a player', 'dis this session'),
+    ('0x942778 .. 0x942795', 'command 0x20 substitutes the natural command center (RW 0x6AD0D9), 0x26 the other center (RW 0x6AD0F8); no object -> 3',
+     'not in evaluate: its callers pass the object (the substitution is S-850\'s)', 'dis this session'),
+    ('0x9427A0 .. 0x9427A8', 'Object + 0x457 bits 0/1 (script disabled / unpowered) -> 3',
+     'ported: obj.scriptStatus() & 3', 'dis this session'),
+    ('0x9427AE .. 0x9427B7', 'Object + 0x1C8 byte & 0x20 (DISABLED_UNMANNED) -> 3',
+     'ported: obj.isDisabledByType(DISABLED_UNMANNED)', 'dis this session'),
+    ('0x9427BD .. 0x9427E5', 'MOUNTED_ONLY (0x4000000) without the model condition, UNMOUNTED_ONLY (0x8000000) with it -> 0 (RW 0x9438C8)',
+     'ported (lane FACT-A): ModelCondition MOUNTED', 'dis this session'),
+    ('0x9427EB .. 0x942807', 'ON_GROUND_ONLY (0x40000000) and the AI (Object + 0x260) vslot 0x228 = RW 0x66288A true -> 0',
+     'NOT ported: stop S-7386 (AI + 0x1F0 / + 0x1FC / + 0x140 and RW 0x5E2DF4 / 0x661E50 have no counterpart)', 'dis this session'),
+    ('0x94280D .. 0x942820', 'command != 0x18: RW 0x942490 (the Enable/DisableOnModelCondition masks); its result 3 -> 0',
+     'ported: modelConditionsAllow, with the documented SPECIAL_POWER deferral (RW 0x9435C3 / 0x9435DC)', 'dis this session'),
+    ('0x942826 .. 0x94282D', 'Object + 0x45B (the single-use command flag) set -> 0, for every command',
+     'PORTED BY PORT-220 (this issue): Object::hasSingleUseCommandBeenUsed, writer RW 0x94066B in pressButton', 'dis this session'),
+    ('0x942833 .. 0x94284E', 'no experience tracker (Object + 0x26C) -> 3; RequireLevel (button + 0x108) above the rank -> 3',
+     'ported: getExperienceTracker / m_requireLevel', 'dis this session'),
+    ('0x942854 .. 0x9428C6', 'the disabled mask: TEMPORARILY_BUSY alone ignored, otherwise recurse with forceDisabled and hide only if the recursion hides; commands 0x11 / 0x28 / 0x10 / 0x14 / 0x15 / 0x1B exempt',
+     'ported: evaluate\'s ignoreDisabled recursion', 'dis this session'),
+    ('0x9428A3 .. 0x942993', 'NEED_UPGRADE (0x40): every NeededUpgrade (+ 0x28), or any with NeededUpgradeAny (+ 0x34); PLAYER -> RW 0x6AC2AF, OBJECT -> RW 0x691421; missing -> 0, except a missing OBJECT entry hides a build button whose template is Buildable = No / Only_By_AI for a human -> 3',
+     'ported (lane FACT-B)', 'port comment + docs/re/rotwk/RW_0x942733.md'),
+    ('0x942993 .. 0x942A1B', 'NEEDS_CASTLE_KINDOF (0x800) through the callback RW 0x942348: no owned object of AffectsKindOf -> 3',
+     'ported (PORT-130) as castleKindOfAllows; the callback\'s receiver and ordered scan stay in the RW doc\'s unresolved list', 'port comment + docs/re/rotwk/RW_0x942733.md'),
+    ('0x942A2B .. 0x942A58', 'the production interface with NOT_QUEUEABLE (0x10000) and a first production -> 0',
+     'ported: getProductionUpdate()->firstProduction()', 'port comment + docs/re/rotwk/RW_0x942733.md'),
+    ('0x9438CF ..', 'the per-command jump table (every GUI_COMMAND arm)',
+     'partly ported; the arm inventory and the remaining arms are docs/re/rotwk/RW_0x942733.md\'s, not re-verified this session', 'docs/re/rotwk/RW_0x942733.md'),
+)
 
 
 class IniVfs(graph.Vfs):
@@ -210,6 +250,66 @@ class Explainer:
         return result
 
 
+def markdown(rows, result, matrix_name, ini_name):
+    """The committable half of the report: counts and the retail comparison, never a mod name or value."""
+    counts = Counter(r['condition'] for r in result)
+    options = Counter(r['value'] for r in result if r['condition'] == 'option')
+    details = Counter(r.get('detail', '') for r in rows)
+    none_buttons = sorted({r['button'] for r in result if r['condition'] == 'none'})
+    out = [
+        '# MATRIX_GREY: why the DISABLED buttons of the matrix are gray',
+        '',
+        f'Generated by `tools/mod/matrix_grey.py` from `{matrix_name}` and a mounted INI snapshot',
+        f'(`{ini_name}`). The per-condition rows carry the mod\'s names and values, so they stay in the',
+        'TSV outside Git; this report holds counts and retail addresses only.',
+        '',
+        '## Counts',
+        '',
+        '| measure | value |',
+        '|---|---|',
+        f'| matrix rows with result DISABLED | {len(rows)} |',
+        f'| unique buttons behind them | {len({r["button"] for r in rows})} |',
+        f'| condition rows in the TSV | {len(result)} |',
+        f'| buttons with no recognized gating field (`none`) | {len(none_buttons)} |',
+        '',
+        '| condition | rows |',
+        '|---|---|',
+    ]
+    out += [f'| {k} | {counts[k]} |' for k in sorted(counts)]
+    out += ['', '| Options bit seen (retail names, RW 0xDA4C88) | rows |', '|---|---|']
+    out += [f'| {k} | {options[k]} |' for k in sorted(options)]
+    if any(details):
+        out += ['', '| matrix `detail` | rows |', '|---|---|']
+        out += [f'| {k or "(empty)"} | {v} |' for k, v in sorted(details.items())]
+    out += [
+        '',
+        '`none` is not "unexplained gray": it says the button carries no INI field this tool',
+        'recognizes as a gate. Retail\'s common gates below still apply to it (its object may be',
+        'disabled, unpowered, out of rank, single-use spent), and the sweep fixture\'s own state',
+        '(upgrades researched, sciences owned, buildings present) decides the rest.',
+        '',
+        '## ControlBar::evaluate against RW getCommandAvailability (0x942733): the common gates',
+        '',
+        'Retail\'s availability integers are not the port\'s ButtonState ordinals: 0 disabled,',
+        '1 enabled, 2 active, 3 hidden, 6 unaffordable; the port shows 0 as Restricted and 3 as Hidden.',
+        '',
+        '| RW | retail rule | port | evidence |',
+        '|---|---|---|---|',
+    ]
+    out += [f'| {rw} | {rule} | {port} | {ev} |' for rw, rule, port, ev in BRANCHES]
+    out += [
+        '',
+        'The single-use gate (Object + 0x45B) is this issue\'s port; its writers are the constructor',
+        'RW 0x699C88, the setter RW 0x940397 and processCommandUI\'s inline RW 0x94066B, and a linear',
+        'scan of the whole `.text` finds no other access and nothing that clears it again.',
+        'ON_GROUND_ONLY stays a stop (S-7386). The deeper analysis, the census and the remaining',
+        'unresolved branches are `docs/ennorath/PORT220_ANALYSIS.md`; the arm inventory of the',
+        'per-command switch is `docs/re/rotwk/RW_0x942733.md`.',
+        '',
+    ]
+    return '\n'.join(out)
+
+
 def read_matrix(path):
     with path.open(encoding='utf-8', newline='') as f:
         reader = csv.DictReader((line for line in f if not line.startswith('#')), delimiter='\t')
@@ -223,6 +323,7 @@ def main(argv=None):
     ap.add_argument('--ini', type=Path, required=True, help='mounted INI snapshot directory or zip')
     ap.add_argument('--matrix', type=Path, default=ROOT / 'docs/ennorath/MATRIX.tsv')
     ap.add_argument('--out', type=Path, required=True, help='TSV output (keep mod-derived values out of Git)')
+    ap.add_argument('--md', type=Path, help='Markdown report (counts and the retail comparison; no mod values, so it may be committed)')
     args = ap.parse_args(argv)
     rows = read_matrix(args.matrix)
     explainer = Explainer(load(args.ini))
@@ -233,6 +334,9 @@ def main(argv=None):
         writer.writeheader()
         writer.writerows(result)
     counts = Counter(r['condition'] for r in result)
+    if args.md:
+        args.md.parent.mkdir(parents=True, exist_ok=True)
+        args.md.write_text(markdown(rows, result, args.matrix.name, args.ini.name), encoding='utf-8')
     print(f'{len(rows)} disabled matrix rows; {len(result)} condition rows; ' + ', '.join(f'{k}={counts[k]}' for k in sorted(counts)))
     return 0
 

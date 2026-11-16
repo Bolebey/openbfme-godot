@@ -124,3 +124,27 @@ def test_model_setters_only_for_the_selected_object(tmp_path):
     assert e.model_producers('Workshop', 'WEAPONSET_TOGGLE_1') == 'ToggleWeapon (weapon-set toggle)'
     assert e.model_producers('Workshop', 'USER_9') == '-'
     assert e.model_producers('Unknown', 'USER_1') == '-'
+
+def test_markdown_report_counts_and_branches_without_mod_values(tmp_path):
+    archive = tmp_path / 'ini.zip'
+    with zipfile.ZipFile(archive, 'w') as z:
+        z.writestr('data/ini/commands.ini', INI)
+    matrix = tmp_path / 'matrix.tsv'
+    matrix.write_text('# header\nfaction\tobject\tbutton\tresult\tdetail\n'
+                      'F\tO\tNoGate\tDISABLED\tstate 2\nF\tO\tNeedsModel\tDISABLED\tstate 4\n'
+                      'F\tO\tNeedsUpgrade\tPASS\tstate 1\n', encoding='utf-8')
+    out, md = tmp_path / 'out.tsv', tmp_path / 'MATRIX_GREY.md'
+    assert m.main(['--ini', str(archive), '--matrix', str(matrix), '--out', str(out), '--md', str(md)]) == 0
+    text = md.read_text(encoding='utf-8')
+    assert '| matrix rows with result DISABLED | 2 |' in text
+    assert '| buttons with no recognized gating field (`none`) | 1 |' in text
+    assert '| none | 1 |' in text and '| model | 1 |' in text
+    assert '| state 2 | 1 |' in text and '| state 1 | 0 |' not in text  # only the DISABLED rows are counted
+    assert '`none` is not "unexplained gray"' in text
+    # the retail comparison: the gate this issue ported, the stop it left, and retail's order
+    assert '0x942826' in text and 'PORTED BY PORT-220' in text
+    assert '0x9427EB' in text and 'S-7386' in text
+    assert text.index('0x9427BD') < text.index('0x942826') < text.index('0x942833')
+    # the committable half carries no fixture name or value
+    for leaked in ('NoGate', 'NeedsModel', 'NeedsUpgrade', 'Upgrade_Fictional', 'Workshop', 'FakeFaction'):
+        assert leaked not in text
