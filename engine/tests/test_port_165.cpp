@@ -543,3 +543,37 @@ TEST_CASE("PORT-165: command-set toggle sends the horde bomb volley through deto
     }
     w.logic->fxEvents().setSink(nullptr);
 }
+
+TEST_CASE("PORT-165: active position horde survives a full game snapshot")
+{
+    TestWorld w;
+    w.combat().setAutoAcquireEnabled(false);
+    Object *horde = w.unit("P165ArcherHorde", 'A', 300, 600);
+    REQUIRE(horde);
+    const ObjectID id = horde->getID();
+    w.frames(12);
+    WeaponSetToggle::setObjectWeaponSetFlag(*horde, WeaponSetToggle::WEAPONSET_TOGGLE_1, true);
+    for (Object *member : w.membersOf(horde)) WeaponSetToggle::setObjectWeaponSetFlag(*member, WeaponSetToggle::WEAPONSET_TOGGLE_1, true);
+    REQUIRE(horde->getWeapons()->setWeaponLock(2, LOCKED_TEMPORARILY));
+    const Coord3D spot{300.0f, 150.0f, w.logic->getGroundHeight(300.0f, 150.0f)};
+    horde->getAIUpdateInterface()->aiAttackPosition(spot, 0x7fffffff, CMD_FROM_PLAYER);
+    auto *attack = dynamic_cast<AIAttackState *>(horde->getAIUpdateInterface()->stateMachine().currentState());
+    REQUIRE(attack);
+    REQUIRE(attack->attackMachine());
+    REQUIRE(attack->attackMachine()->currentStateId() == 0x2BC);
+    const auto hash = w.logic->computeStateHash();
+    std::vector<std::uint8_t> saved;
+    std::string error;
+    REQUIRE_MESSAGE(w.logic->saveSnapshot(saved, &error), error);
+    w.frames(2);
+    REQUIRE_MESSAGE(w.logic->loadSnapshot(saved, &error), error);
+    horde = w.logic->findObjectByID(id);
+    REQUIRE(horde);
+    attack = dynamic_cast<AIAttackState *>(horde->getAIUpdateInterface()->stateMachine().currentState());
+    REQUIRE(attack);
+    REQUIRE(attack->attackMachine());
+    CHECK(attack->attackMachine()->currentStateId() == 0x2BC);
+    CHECK(w.logic->computeStateHash() == hash);
+    const int frames = w.runUntil([&] { return w.hordeOf(horde)->attackStats().positionOrders > 0; }, 600);
+    CHECK(frames < 600); // tolerance: the restored horde's pathfinding and travel are asynchronous
+}
