@@ -563,3 +563,21 @@ def decode_inventory(data: bytes, base: int, bounds: dict[int, int], threshold: 
     functions = {start: decode_function(data, base, start, end, entries) for start, end in sorted(bounds.items())}
     counts = Counter(target for function in functions.values() for _, target in function.callsites)
     return functions, {target: count for target, count in counts.items() if count > threshold}
+
+
+def overridden_slots(child: dict[int, tuple[int, ...]], parent: dict[int, tuple[int, ...]]):
+    """Compare independently bounded, corresponding interface tables by offset.
+
+    Result: (interface offset, slot index, target). Never infer table lengths,
+    parent types or match an unrelated interface by position. A child may add
+    slots or interfaces; shared slots are retained only when their target differs.
+    """
+    result = []
+    for offset, slots in sorted(child.items()):
+        if offset < 0 or offset % 4 or not slots or any(target <= 0 for target in slots):
+            raise ValueError('invalid child vtable')
+        base_slots = parent.get(offset, ())
+        for index, target in enumerate(slots):
+            if index >= len(base_slots) or target != base_slots[index]:
+                result.append((offset, index, target))
+    return result

@@ -241,3 +241,13 @@ def test_inventory_counts_sites_not_calling_functions():
     assert stops == {0x1010: 2}
     with pytest.raises(ValueError, match='overlapping'):
         decode_inventory(blob, 0x1000, {0x1000: 0x1010, 0x100f: 0x1011})
+
+
+def test_compare_confirmed_parent_interfaces_and_new_slots():
+    import pytest
+    from rw_function_map import overridden_slots
+    assert overridden_slots({0: (1, 2, 30, 4), 16: (8, 9), 32: (12,)},
+                            {0: (1, 2, 3), 16: (8, 7)}) == [
+                                (0, 2, 30), (0, 3, 4), (16, 1, 9), (32, 0, 12)]
+    with pytest.raises(ValueError, match='vtable'):
+        overridden_slots({1: (3,)}, {})
