@@ -1523,6 +1523,10 @@ void LiveFX::createSystems(Drawable &d, Attached &a)
 				else if (!info.boneName.empty() && info.boneName != kNoneBone)
 				{
 					++m_stats.boneMisses;
+					if (f.model && m_stats.missingBones.size() < 200)
+					{
+						m_stats.missingBones.insert(f.model->Name + ":" + info.boneName);
+					}
 				}
 				if (info.followBone && (source != BoneSource::NONE || attachedEntry))
 				{

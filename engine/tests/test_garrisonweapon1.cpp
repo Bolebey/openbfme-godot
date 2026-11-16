@@ -116,8 +116,11 @@ TEST_CASE("garrisonweapon1: a unit with only default weapons gets CONTAINED flag
 	Object *tower = w.unit("WatchTower", 'A', 300, 300);
 	Object *slasher = w.unit("Slasher", 'A', 330, 300);
 	Object *dummy = w.unit("Dummy", 'A', 340, 300);
-	CHECK_FALSE(dummy->getWeapons()->hasWeaponSetFor(kContained));
+	CHECK(dummy->getWeapons() == nullptr);
 	ContainModuleInterface *c = tower->getContain();
+	REQUIRE(c->addToContain(dummy));
+	CHECK(dummy->getWeapons() == nullptr);
+	c->removeFromContain(dummy);
 	// pin: RW 0x691014(20) calls ThingTemplate::findWeaponTemplateSet({CONTAINED}) (RW 0x73D89F), which returns Slasher's None set; SlowSword still wins updateWeaponSet
 	REQUIRE(c->addToContain(slasher));
 	CHECK(containedFlag(slasher));
