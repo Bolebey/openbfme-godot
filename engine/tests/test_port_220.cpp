@@ -91,7 +91,9 @@ struct SingleUseRig
 
 	void select(Object *o)
 	{
-		ui.selectObject(o->getID());
+		// PORT-221 (issue #531) gives a selection of two live controllable objects its own context (populateMultiSelect RW 0x94475A), which shows only
+		// the OK_FOR_MULTI_SELECT buttons; this rig reads one object's command set, so the selection is replaced, not extended.
+		ui.mirrorSelection({ o->getID() });
 		bar.update();
 	}
 	ButtonState stateOf(const CommandButton &b) const
