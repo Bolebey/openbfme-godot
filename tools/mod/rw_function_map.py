@@ -344,3 +344,89 @@ def add_module(entries: tuple[ModuleEntry, ...], entry: ModuleEntry, *, child: b
         current = [old for old in current if old.tag != entry.tag]
     current.append(replace(entry, copied=False))
     return tuple(current)
+
+
+@dataclass(frozen=True)
+class ModuleEvent:
+    action: str
+    tag: str = ''
+    name: str = ''
+    category: str = ''
+    inheritable: bool = False
+    source: str = ''
+
+
+def parse_module_events(lines: list[tuple[str, str]], start: int, grammar):
+    """Extract object-level module edits using the retail field-table grammar.
+
+    `start` is the first line inside an Object/ChildObject/ObjectReskin. Other
+    object sub-blocks and module data are skipped using field_audit's grammar;
+    arbitrary tags are supported. Return (events, index after the closing End).
+    Unknown module classes or unclosed blocks are errors, not empty modules.
+    """
+    import sys
+    local = str(Path(__file__).resolve().parent)
+    if local not in sys.path:
+        sys.path.insert(0, local)
+    import field_audit as fa
+
+    classes = {name.lower(): (name, node) for name, node in grammar.classes.items()}
+
+    def walk(i, mode):
+        events = []
+        while i < len(lines):
+            text, source = lines[i]
+            key, value = fa.field_key(text)
+            low = key.lower()
+            if low == 'end':
+                return events, i + 1
+            if low in {'addmodule', 'inheritablemodule', 'replacemodule'}:
+                args = value.replace('=', ' ').split()
+                if mode != 'normal':
+                    raise ValueError(f'{source}: nested module editing mode')
+                if low == 'replacemodule':
+                    if len(args) != 1:
+                        raise ValueError(f'{source}: ReplaceModule requires a tag')
+                    events.append(ModuleEvent('replace_begin', tag=args[0], source=source))
+                child, i = walk(i + 1, low)
+                events.extend(child)
+                if low == 'replacemodule':
+                    events.append(ModuleEvent('replace_end', tag=args[0], source=source))
+                continue
+            if low == 'removemodule':
+                args = value.replace('=', ' ').split()
+                if mode != 'normal' or len(args) != 1:
+                    raise ValueError(f'{source}: invalid RemoveModule')
+                events.append(ModuleEvent('remove', tag=args[0], source=source))
+            elif low in fa.MODULE_KEYS:
+                args = value.replace('=', ' ').split()
+                if len(args) < 2:
+                    raise ValueError(f'{source}: {key} requires class and tag')
+                found = classes.get(args[0].lower())
+                if not found:
+                    raise ValueError(f'{source}: unknown module class {args[0]}')
+                end = fa.module_end(lines, i + 1, found[1])
+                if end < 0:
+                    raise ValueError(f'{source}: unclosed module {args[0]}')
+                category = 'behavior' if low == 'body' else low
+                events.append(ModuleEvent('add', tag=args[1], name=found[0], category=category,
+                                          inheritable=mode == 'inheritablemodule', source=source))
+                i = end + 1
+                continue
+            else:
+                kind = fa.row_kind(grammar.object, low)
+                if kind and kind[0] == 'script':
+                    i += 1
+                    while i < len(lines) and fa.field_key(lines[i][0])[0].lower() != 'endscript':
+                        i += 1
+                    if i == len(lines):
+                        raise ValueError(f'{source}: unclosed script')
+                elif kind and kind[0] == 'block' and fa.opens_block(lines, i + 1, kind[1], grammar.object, grammar.classes):
+                    end = fa.block_end(lines, i + 1, kind[1], grammar.classes)
+                    if end < 0:
+                        raise ValueError(f'{source}: unclosed object block {key}')
+                    i = end
+            i += 1
+        raise ValueError('object or module edit block is not closed')
+
+    return walk(start, 'normal')

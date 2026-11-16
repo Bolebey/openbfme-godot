@@ -146,3 +146,28 @@ def test_replay_module_inheritance_and_replacements():
     draw = ModuleEntry('DrawA', 'draw', 'draw', 4, False, False)
     with pytest.raises(ValueError, match='duplicate'):
         add_module((draw,), ModuleEntry('DrawB', 'draw', 'draw', 4, False, False), child=True)
+
+
+def test_parse_module_events_uses_any_tag_and_skips_nested_blocks():
+    import pytest
+    from types import SimpleNamespace
+    from rw_function_map import parse_module_events
+    grammar = SimpleNamespace(classes={'A': {}, 'B': {}}, object={'armorset': ('block', {'armor': ('line', None)}), 'behavior': ('line', None)})
+    text = [
+        'ArmorSet', 'Armor = X', 'End',
+        'Behavior = A CustomTag', 'SomeField = 1', 'End',
+        'RemoveModule CustomTag',
+        'ReplaceModule OldTag', 'Behavior = B NewTag', 'End', 'End',
+        'InheritableModule', 'Draw = A DrawTag', 'End', 'End', 'End',
+    ]
+    lines = [(line, str(i)) for i, line in enumerate(text)]
+    events, end = parse_module_events(lines, 0, grammar)
+    assert end == len(lines)
+    assert [(x.action, x.name, x.tag, x.inheritable) for x in events] == [
+        ('add', 'A', 'CustomTag', False), ('remove', '', 'CustomTag', False),
+        ('replace_begin', '', 'OldTag', False), ('add', 'B', 'NewTag', False),
+        ('replace_end', '', 'OldTag', False), ('add', 'A', 'DrawTag', True)]
+    with pytest.raises(ValueError, match='unknown module class'):
+        parse_module_events([('Behavior = Unknown tag', '1'), ('End', '2')], 0, grammar)
+    with pytest.raises(ValueError, match='not closed'):
+        parse_module_events([('foo = bar', '1')], 0, grammar)
