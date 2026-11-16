@@ -797,6 +797,23 @@ FXParticleSystem::ParticleAttachInfo LiveFX::attachedDrawable(std::uint32_t draw
 	return info;
 }
 
+FXParticleSystem::ParticleAttachInfo LiveFX::swirlInfluence(std::uint32_t drawableId, const Coord3D &pos)
+{
+	// P-149 (RW 0x5F2EBC -> 0x678BF2 -> 0x676C7D; DONOR BFME2 0x00276952)
+	FXParticleSystem::ParticleAttachInfo info;
+	const Drawable *d = m_game.drawables().find(drawableId);
+	if (!d)
+	{
+		return info;
+	}
+	info.found = true;
+	if (d->swirlInfluence(pos, m_game.clientFrame(), info.swirlTangent))
+	{
+		info.hasInfluence = true;
+	}
+	return info;
+}
+
 FXParticleSystem::ParticleAttachInfo LiveFX::attachedObject(std::uint32_t objectId, const std::string &boneName, int)
 {
 	FXParticleSystem::ParticleAttachInfo info;
