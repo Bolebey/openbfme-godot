@@ -807,7 +807,7 @@ FXParticleSystem::ParticleAttachInfo LiveFX::swirlInfluence(std::uint32_t drawab
 		return info;
 	}
 	info.found = true;
-	if (d->swirlInfluence(pos, m_game.clientFrame(), info.swirlTangent))
+	if (d->swirlInfluence(pos, clientFrame(), info.swirlTangent))
 	{
 		info.hasInfluence = true;
 	}
