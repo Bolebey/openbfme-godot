@@ -65,3 +65,14 @@ geometry by reference to the collision filter and by copy to the sampler;
 GeometryInfo consumers can inspect isSmall. It remains necessary to trace
 actual callers of slot 0, not assume the field is unused globally from the
 local collision and sampler paths.
+
+The interface chain is now tied to the actual instance: the class constructor
+RW 0x886FB1 installs primary vtable 0xC6073C, behavior-interface vtable
+0xC60680 at +0xC and geometry-interface vtable 0xC60650 at +0x50. Primary
+slot +0x34 points to RW 0x886EE6; behavior-interface slot +0x60 points to
+RW 0x886EF2; both return the +0x50 subobject. Its slot 0 RW 0x887013 returns
+data +0x190. DONOR BFME2 `ClearanceTestingSlowDeathBehavior.cpp`, slot-13
+function BFME2 0x483C69 and geometry getter 0x483D9B, confirms the shape of
+the interface. A raw search of virtual call instructions is only a lead, not
+a complete proof of indirect call targets. In particular no claim is made that
+the returned GeometryInfo has no external consumer.
