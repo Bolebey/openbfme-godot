@@ -292,7 +292,7 @@ public:
 
 private:
 	const ObjectCreationList *pickOCL() const; // RW 0x8C7393
-	void createOCL(const ObjectCreationList *ocl, const Coord3D &where, bool hasSecondary);
+	void createOCL(const ObjectCreationList *ocl, const Coord3D &where, const Coord3D *secondary = nullptr);
 	const OCLSpecialPowerModuleData *m_data;
 	std::vector<ObjectID> m_created; // the objects of the last cast (tests, the HUD)
 	ObjectID m_secondaryUsed = INVALID_ID; // USE_SECONDARY_OBJECT_LOCATION: the object found by the last cast (tests)

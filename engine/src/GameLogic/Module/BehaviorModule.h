@@ -112,6 +112,8 @@ public:
 		(void)changeType;
 		++bodyMaxHealthCallsIgnored();
 	}
+	// PORT-237: RW vt[0x6C] (ActiveBody RW 0x8C329F): multiplies body damage scalar (+ 4) by scalar.
+	virtual void applyDamageScalar(float scalar) { (void)scalar; }
 	static unsigned long long &bodyMaxHealthCallsIgnored()
 	{
 		static unsigned long long n = 0;

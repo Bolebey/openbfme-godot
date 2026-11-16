@@ -194,8 +194,14 @@ public:
 	// condition and the SWAPPING_TO_WEAPONSET_n special model condition
 	void setWeaponSetFlag(int bit, bool on);
 	bool hasAnyWeapon() const;
-	// ZH Object::getRelationship: this object's team toward the other's (NEUTRAL when either has no team)
+	// ZH Object::getRelationship: this object's team toward the other's (NEUTRAL when either has no team or is undetectable RW 0x68D850)
 	Relationship getRelationship(const Object &other) const;
+	// PORT-237: Object + 0x458 bit 1 (RW 0x68B303 / 0x68ACDF) and InvulnerableTime (RW 0x68C6C8 -> DefectionHelper RW 0x8E3ABB)
+	void setTemporarilyUndetectable(bool on);
+	bool isUndetectable() const { return m_undetectable; }
+	void setInvulnerableTime(UnsignedInt frames);
+	// PORT-237: Thing::isSignificantlyAboveTerrain (RW 0x70C55D -> 0x70C50C(0.0f))
+	bool isSignificantlyAboveTerrain() const;
 	// RW 0x698E7D Object::attemptDamage: a hit with a delay waits in the pending list (RW obj + 0x460), a hit made while this object runs its AI waits one frame (delay = 1.0);
 	// else RW 0x697E50 doAttemptDamage: the body's attemptDamage when this object is not dead, then (lane COMBAT-4) the shockwave handler RW 0x6968BC when the object
 	// is still alive or the hit carries a shockwave amount
@@ -221,6 +227,7 @@ public:
 	// shroud record is marked dirty, forced (RW 0x68C213 -> 0xB4E2A0); RW 0x68C7E9 updateShroudNow: the record leaves the dirty list and is processed at once
 	// (RW 0xB4F410 -> 0xB4EF50). BFME2 decomp ObjectSetShroudClearingRange.cpp / Object_updateShroudNow.cpp, tier A for both
 	void setShroudClearingRange(float range);
+	float getBaseShroudClearingRange() const;
 	void updateShroudNow();
 	bool hasShroudClearingRange() const { return m_hasShroudClearingRange; }
 	float shroudClearingRangeOverride() const { return m_shroudClearingRange; }
@@ -698,6 +705,7 @@ private:
 	ObjectID m_speechLeader = INVALID_ID; ///< lane HERO-2: + 0x46C
 	bool m_receivingDifficultyBonus = false; ///< lane CAMP-1H: + 0x45C (hashed)
 	std::int8_t m_legendaryFactor = 1;       ///< lane RULES-1 (OpenBFME; hashed when not 1). One byte in the padding after + 0x45C: sizeof(Object) stays as it was (a larger Object changed the move3 crossing games: some code depends on the allocation layout, reported)
+	bool m_undetectable = false;             ///< PORT-237: RW + 0x458 bit 1 (RW 0x68B303 / 0x68C6C8; in padding after m_legendaryFactor: sizeof(Object) unchanged)
 	ObjectID m_capturerID = INVALID_ID;   ///< lane HERO-2: + 0x80
 	unsigned m_undeadKillFrame = 0;       ///< lane HERO-2: + 0x450
 	bool m_constructed = false;           ///< the constructor has finished: setTeam may run the owner change

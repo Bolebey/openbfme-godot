@@ -1195,18 +1195,14 @@ const ObjectCreationList *OCLSpecialPower::pickOCL() const
 	return TheObjectCreationListStore ? TheObjectCreationListStore->findObjectCreationList(oclName) : nullptr;
 }
 
-void OCLSpecialPower::createOCL(const ObjectCreationList *ocl, const Coord3D &where, bool hasSecondary)
+void OCLSpecialPower::createOCL(const ObjectCreationList *ocl, const Coord3D &where, const Coord3D *secondary)
 {
 	if (!ocl)
 	{
 		return; // RW 0x8C7690: no list, nothing made
 	}
-	if (hasSecondary)
-	{
-		++m_unported; // the OCL's secondary position (RW 0x5F00CA's third argument) is not handed to the CreateObject port (S-530)
-	}
 	Object *obj = getObject();
-	for (Object *o : ocl->create(obj->logic(), obj, where))
+	for (Object *o : ocl->create(obj->logic(), obj, where, secondary))
 	{
 		m_created.push_back(o->getID());
 	}
@@ -1218,7 +1214,7 @@ void OCLSpecialPower::doSpecialPower(unsigned options)
 	m_created.clear();
 	const Coord3D pos = *getObject()->getPosition();
 	baseDo(&pos, nullptr, options);
-	createOCL(pickOCL(), pos, false);
+	createOCL(pickOCL(), pos);
 }
 
 // RW 0x8C73D7: doSpecialPowerAtLocation at the target's position (vslot 0x30)
@@ -1241,23 +1237,23 @@ void OCLSpecialPower::doSpecialPowerAtLocation(const Coord3D &loc, unsigned opti
 	switch (m_data->m_createLocation)
 	{
 	case 3: // CREATE_AT_LOCATION
-		createOCL(ocl, loc, false);
+		createOCL(ocl, loc);
 		break;
 	case 4: // USE_OWNER_OBJECT (RW 0x8C7660: RW 0x5F006B with the object, the location twice)
-		createOCL(ocl, loc, true);
+		createOCL(ocl, loc, &loc);
 		break;
 	case 5: // CREATE_ABOVE_LOCATION: z + 300.0f (RW 0xBD9E90; an SSE single add)
 	{
 		Coord3D p = loc;
 		p.z = SimMath::addf32(p.z, 300.0f);
-		createOCL(ocl, p, false);
+		createOCL(ocl, p);
 		break;
 	}
 	case 8: // USE_SECONDARY_OBJECT_LOCATION (RW 0x8C78A4)
 	{
 		if (!m_data->m_nearestSecondaryObjectFilter)
 		{
-			createOCL(ocl, loc, false); // RW 0x8C78B6: no valid filter: at the location
+			createOCL(ocl, loc); // RW 0x8C78B6: no valid filter: at the location
 			break;
 		}
 		// RW 0x8C7988 .. 0x8C79BB: ThePartitionManager's closest object to the location (range FLT_MAX, RW 0xBD1910; distance type 0) that the filter allows
@@ -1265,7 +1261,7 @@ void OCLSpecialPower::doSpecialPowerAtLocation(const Coord3D &loc, unsigned opti
 		Player *p = obj->getControllingPlayer();
 		PartitionFilterFn allowed([&](Object &o) { return ObjectFilterMatch::allows(obj->logic(), *m_data->m_nearestSecondaryObjectFilter, o, p); });
 		Object *best = obj->logic().partition().getClosestObject(loc, std::numeric_limits<float>::max(), FROM_CENTER_2D, { &allowed });
-		createOCL(ocl, loc, best != nullptr); // RW 0x8C76A0: at the location, the found object's position as the secondary
+		createOCL(ocl, loc, best ? best->getPosition() : nullptr); // RW 0x8C76A0: at the location, the found object's position as the secondary
 		m_secondaryUsed = best ? best->getID() : (ObjectID)INVALID_ID;
 		break;
 	}
