@@ -138,10 +138,11 @@ public:
 		m_nameKey = key;
 		m_displayName = displayName;
 	}
-	void setPlayerType(PlayerType type, bool skirmish)
+	// RW 0x6AA450: type == PLAYER_COMPUTER (1) upgrades to AISkirmishPlayer when skirmish || AIData.ForceSkirmishAI (+ 0x65)
+	void setPlayerType(PlayerType type, bool skirmish, bool forceSkirmishAI = false)
 	{
 		m_type = type;
-		m_skirmish = skirmish;
+		m_skirmish = skirmish || (type == PLAYER_COMPUTER && forceSkirmishAI);
 	}
 	void setMultiplayerStartIndex(int i) { m_mpStartIndex = i; }
 
