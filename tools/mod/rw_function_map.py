@@ -287,3 +287,60 @@ def discover_module_tables(image, registry: list[dict], constructor_finder, tabl
             raise ValueError(f'{name}: primary vtable not found for 0x{ctor:X}')
         result.append(ModuleTables(name, create, ctor, int(record['vtable'], 0), tuple(sorted(stores.items()))))
     return result
+
+
+@dataclass(frozen=True)
+class ModuleEntry:
+    name: str
+    tag: str
+    category: str
+    mask: int
+    ai: bool
+    slot7: bool
+    inheritable: bool = False
+    copied: bool = False
+
+
+def copy_module_state(entries: tuple[ModuleEntry, ...]) -> tuple[ModuleEntry, ...]:
+    """Mark all copied modules, as ThingTemplate::setCopiedFromDefault does."""
+    from dataclasses import replace
+    return tuple(replace(entry, copied=True) for entry in entries)
+
+
+def remove_module(entries: tuple[ModuleEntry, ...], tag: str) -> tuple[tuple[ModuleEntry, ...], ModuleEntry]:
+    """Remove the tag from all categories (RW 0x73E782 / 0x73E2B3)."""
+    removed = [entry for entry in entries if entry.tag == tag]
+    if len(removed) != 1:
+        raise ValueError(f'module tag {tag!r}: expected one entry, found {len(removed)}')
+    return tuple(entry for entry in entries if entry.tag != tag), removed[0]
+
+
+def add_module(entries: tuple[ModuleEntry, ...], entry: ModuleEntry, *, child: bool,
+               replacing: ModuleEntry | None = None) -> tuple[ModuleEntry, ...]:
+    """Replay the module-list effects, given actual registry mask/predicate facts.
+
+    This does not parse INI, classify unknown classes, or relax invalid tags.
+    Non-child declarations clear copied, non-inheritable entries with matching
+    interface masks across all lists (RW 0x73F33D..0x73F375). Data predicates
+    clear AI or slot-7 entries within the same list (RW 0x73F496..0x73F4B9).
+    A child can replace an existing tag, except a different Draw class.
+    """
+    from dataclasses import replace
+    if not entry.name or not entry.tag or entry.category not in {'behavior', 'draw', 'clientupdate', 'clientbehavior'}:
+        raise ValueError('invalid module name, tag or category')
+    if replacing and (replacing.name != entry.name or replacing.tag == entry.tag):
+        raise ValueError('ReplaceModule requires the same class and a new tag')
+    current = list(entries)
+    if not child:
+        current = [old for old in current if not (old.copied and not old.inheritable and old.mask & entry.mask)]
+    if entry.ai:
+        current = [old for old in current if not (old.category == entry.category and old.ai)]
+    if child and entry.slot7:
+        current = [old for old in current if not (old.category == entry.category and old.slot7)]
+    matching = [old for old in current if old.tag == entry.tag]
+    if matching:
+        if not child or any(old.category == 'draw' and old.name != entry.name for old in matching):
+            raise ValueError(f'duplicate tag {entry.tag!r}')
+        current = [old for old in current if old.tag != entry.tag]
+    current.append(replace(entry, copied=False))
+    return tuple(current)

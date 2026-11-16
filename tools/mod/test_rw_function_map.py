@@ -116,3 +116,33 @@ def test_module_tables_use_constructor_not_module_data():
         discover_module_tables(image, records, constructor_finder, lambda *_: {0x10: 0x3100})
     with pytest.raises(ValueError, match='duplicate module'):
         discover_module_tables(image, records * 2, constructor_finder, table_finder)
+
+
+def test_replay_module_inheritance_and_replacements():
+    import pytest
+    from rw_function_map import ModuleEntry, add_module, copy_module_state, remove_module
+    make = lambda n, t, **kw: ModuleEntry(n, t, 'behavior', kw.get('mask', 1), kw.get('ai', False), kw.get('slot7', False), kw.get('inheritable', False))
+    parent = (make('A', 'custom_tag'), make('OldAI', 'ai', ai=True), make('OldBody', 'body', slot7=True),
+              make('Keep', 'keep', mask=2, inheritable=True))
+    copied = copy_module_state(parent)
+    # RW 0x73F49B: new AI removes the parent's AI even with a different tag.
+    child = add_module(copied, make('NewAI', 'new_ai', ai=True), child=True)
+    assert {x.name for x in child} == {'A', 'NewAI', 'OldBody', 'Keep'}
+    # RW 0x73F4B4: slot 7 clears only in child mode.
+    child = add_module(child, make('NewBody', 'new_body', slot7=True), child=True)
+    assert {x.name for x in child} == {'A', 'NewAI', 'NewBody', 'Keep'}
+    child = add_module(child, make('B', 'custom_tag'), child=True)
+    assert {x.name for x in child} == {'B', 'NewAI', 'NewBody', 'Keep'}
+    child, old = remove_module(child, 'custom_tag')
+    child = add_module(child, make('B', 'new_tag'), child=True, replacing=old)
+    assert any(x.tag == 'new_tag' for x in child)
+    with pytest.raises(ValueError, match='same class'):
+        add_module(child, make('Wrong', 'other'), child=True, replacing=old)
+    with pytest.raises(ValueError, match='expected one'):
+        remove_module(child, 'missing')
+    # RW 0x73F33D: non-child mask clears copied entries, except inheritable.
+    plain = add_module(copied, make('C', 'new', mask=1), child=False)
+    assert {x.name for x in plain} == {'Keep', 'C'}
+    draw = ModuleEntry('DrawA', 'draw', 'draw', 4, False, False)
+    with pytest.raises(ValueError, match='duplicate'):
+        add_module((draw,), ModuleEntry('DrawB', 'draw', 'draw', 4, False, False), child=True)
