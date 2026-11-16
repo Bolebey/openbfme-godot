@@ -106,10 +106,7 @@ const char kSyntheticLocal73Ini[] =
 	"  WeaponSet\n"
 	"    Conditions = None\n"
 	"    Weapon = PRIMARY SlowSword\n"
-	"  End\n"
-	"  WeaponSet\n"
-	"    Conditions = WEAPONSET_HERO_MODE\n"
-	"    Weapon = PRIMARY BowWeapon\n"
+	"    Weapon = SECONDARY BowWeapon\n"
 	"  End\n"
 	"  Body = ActiveBody ModuleTag_Body\n"
 	"    MaxHealth = 200\n"
@@ -123,8 +120,7 @@ const char kSyntheticLocal73Ini[] =
 	"    SpecialPowerTemplate = SpecialPower_HeroWeaponMode\n"
 	"    Duration = 2000\n"
 	"    AttributeModifier = None\n"
-	"    LockWeaponSlot = PRIMARY\n"
-	"    WeaponSetFlags = WEAPONSET_HERO_MODE\n"
+	"    LockWeaponSlot = SECONDARY\n"
 	"  End\n"
 	"  LocomotorSet\n"
 	"    Locomotor = WalkerLoco\n"
@@ -169,10 +165,7 @@ const char kSyntheticLocal73Ini[] =
 	"  WeaponSet\n"
 	"    Conditions = None\n"
 	"    Weapon = PRIMARY SlowSword\n"
-	"  End\n"
-	"  WeaponSet\n"
-	"    Conditions = WEAPONSET_HERO_MODE\n"
-	"    Weapon = PRIMARY BowWeapon\n"
+	"    Weapon = SECONDARY BowWeapon\n"
 	"  End\n"
 	"  Body = ActiveBody ModuleTag_Body\n"
 	"    MaxHealth = 100\n"
@@ -194,6 +187,7 @@ const char kSyntheticLocal73Ini[] =
 	"  WeaponSet\n"
 	"    Conditions = None\n"
 	"    Weapon = PRIMARY HordeRangefinder\n"
+	"    Weapon = SECONDARY HordeRangefinder\n"
 	"  End\n"
 	"  WeaponSet\n"
 	"    Conditions = WEAPONSET_HERO_MODE\n"
@@ -214,8 +208,7 @@ const char kSyntheticLocal73Ini[] =
 	"  Behavior = WeaponModeSpecialPowerUpdate ModuleTag_HWMU\n"
 	"    SpecialPowerTemplate = SpecialPower_HeroWeaponMode\n"
 	"    Duration = 2000\n"
-	"    LockWeaponSlot = PRIMARY\n"
-	"    WeaponSetFlags = WEAPONSET_HERO_MODE\n"
+	"    LockWeaponSlot = SECONDARY\n"
 	"  End\n"
 	"  LocomotorSet\n"
 	"    Locomotor = HordeLoco\n"
@@ -297,7 +290,7 @@ TEST_CASE("LOCAL-73 P-139: ObjectShadow::buildDrawableDecalShadows emits per vis
 	CHECK(out[0].texture == "maindecal.tga");
 	CHECK(out[0].position.x == 100.0f);
 	CHECK(out[1].texture == "childdecal.tga");
-	CHECK((out[1].style & 0x200u) != 0u); // SHADOW_ADDITIVE_DECAL
+	CHECK((out[1].style & 0x40u) != 0u); // SHADOW_ADDITIVE_DECAL
 	CHECK(out[1].position.x == 112.0f);
 	CHECK(out[2].texture == "invisdecal.tga");
 	CHECK(((out[2].color >> 24) & 0xFFu) == 100u);
@@ -358,7 +351,7 @@ TEST_CASE("LOCAL-73 P-141 & P-144: WeaponModeSpecialPowerUpdate locks weapons an
 	wmHero->initiateIntentToDoSpecialPower(spHero->getSpecialPowerTemplate(), hero, hero->getPosition(), 0u, 0);
 	CHECK(wmHero->active());
 	CHECK(hero->getWeapons()->isCurWeaponLocked());
-	CHECK(hero->getWeapons()->weaponInSlot(0)->getTemplate()->getName() == "BowWeapon");
+	CHECK(hero->getWeapons()->currentWeapon()->getTemplate()->getName() == "BowWeapon");
 
 	Object *horde = w.unit("ModeHorde", 'A', 400, 200);
 	const ContainModuleInterface::ContainedItemsList *members = horde->getContain()->getContainedItemsList();
@@ -375,7 +368,7 @@ TEST_CASE("LOCAL-73 P-141 & P-144: WeaponModeSpecialPowerUpdate locks weapons an
 	for (const Object *m : *members)
 	{
 		CHECK(m->getWeapons()->isCurWeaponLocked());
-		CHECK(m->getWeapons()->weaponInSlot(0)->getTemplate()->getName() == "BowWeapon");
+		CHECK(m->getWeapons()->currentWeapon()->getTemplate()->getName() == "BowWeapon");
 	}
 	// Run past 2000 ms (10 logic frames) to verify unlock
 	w.runUntil([]() { return false; }, 15);
