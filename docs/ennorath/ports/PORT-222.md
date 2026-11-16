@@ -96,6 +96,6 @@ already went through `HordeContain::addExperience` or the tracker).
 
 - `AwardXPForTriggering` (RW 0x853EDF) still lands on the caster's own tracker, not through the contain interface
   (RW 0x79D833): a hero in a horde is awarded on its own tracker. Not caused by this button and not the reported symptom;
-  it is the same class of reader in `SpecialAbilityUpdate`, a separate step.
+  it is the same class of reader in `SpecialAbilityUpdate`, a separate step. Recorded as stop **S-7426**.
 - The `NO-FIRE` row of `docs/ennorath/MATRIX.tsv` is the targeting refusal (`ActionManager::canDoSpecialPowerAtLocation`),
   not the grant; it stays as it is.
