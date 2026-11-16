@@ -80,7 +80,7 @@ End
 )";
 
 // the powers: Well has a cost (3 members), Screech has none; SpecialAbilityP250NoTemplate is deliberately not defined
-const char powers[] = R"(
+const char powerIni[] = R"(
 SpecialPower SpecialAbilityP250Well
   Enum = SPECIAL_GENERAL_TARGETLESS
   ReloadTime = 10000
@@ -97,13 +97,13 @@ End
 // (the way Ennorath's Harad slave and HobbitPikeman hordes do), the Screech button has no module anywhere (the NO-MODULE row of the matrix)
 const char objects[] = R"(
 Object P250Member
-  KindOf = SELECTABLE INFANTRY HORDE_MEMBER
+  KindOf = SELECTABLE INFANTRY
+  Body = ActiveBody ModuleTag_Body
+    MaxHealth = 100
+  End
   Geometry = CYLINDER
   GeometryMajorRadius = 5
   GeometryHeight = 10
-  Behavior = ActiveBody ModuleTag_Body
-    MaxHealth = 100
-  End
 End
 Object P250HordeOne
   KindOf = SELECTABLE HORDE INFANTRY
@@ -153,7 +153,7 @@ struct Fixture
 		game.w.fx.env.blocks.registerBlock("SpecialPower", [](INI *ini) { SpecialPowerStore::parseSpecialPowerDefinitionGlobal(ini); });
 		game.w.fx.env.blocks.registerBlock("CommandButton", [](INI *ini) { CommandStore::parseCommandButtonDefinitionGlobal(ini); });
 		game.w.fx.env.blocks.registerBlock("CommandSet", [](INI *ini) { CommandStore::parseCommandSetDefinitionGlobal(ini); });
-		const std::string powerErr = game.w.load(powers);
+		const std::string powerErr = game.w.load(powerIni);
 		REQUIRE_MESSAGE(powerErr.empty(), powerErr);
 		const std::string buttonErr = game.w.load(buttons);
 		REQUIRE_MESSAGE(buttonErr.empty(), buttonErr);
@@ -236,9 +236,11 @@ TEST_CASE("PORT-250 a button whose power is no SpecialPowerTemplate at all is hi
 	Fixture f;
 	Object *horde = f.game.makeAt("P250HordeFour", "Alice", 100.0f, 100.0f);
 	REQUIRE(horde);
-	// the button is in the campaign's CommandSet, and RW hides it: + 0x44 is null, so the arm hides before any module search
-	CHECK(f.onBar(horde, "SpecialAbilityP250NoTemplate"));
-	CHECK(f.stateOf(horde, "SpecialAbilityP250NoTemplate") == ButtonState::Hidden);
-	// the same object, the same bar: the two buttons whose power exists are not hidden by that
+	// the button is in the CommandSet and RW answers 3 for it: + 0x44 is null, so the arm hides before any module search. The port's arc does not
+	// carry a hidden button (ControlBar::update skips ButtonState::Hidden when it fills the Palantir), so the button is not on it at all
+	CHECK(!f.onBar(horde, "SpecialAbilityP250NoTemplate"));
+	// the same object, the same bar: the two buttons whose power exists are on it, the NO-MODULE one live
+	CHECK(f.onBar(horde, "SpecialAbilityP250Screech"));
 	CHECK(f.stateOf(horde, "SpecialAbilityP250Screech") == ButtonState::Enabled);
+	CHECK(f.stateOf(horde, "SpecialAbilityP250Well") == ButtonState::Enabled);
 }
