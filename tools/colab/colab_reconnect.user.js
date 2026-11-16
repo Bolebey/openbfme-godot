@@ -11,14 +11,11 @@
 // The OpenBFME sandboxes run in the owner's Colab Pro notebooks (tools/colab/autostart.sh). Colab drops an idle runtime and shows the dialog
 // "Подключение к среде выполнения прервано" with the buttons "Закрыть" and "Подключиться повторно" ("Close" / "Reconnect" in English). The dialog
 // and the toolbar's connect button live inside web components (shadow roots), so a plain document.querySelector does not see them: the search walks
-// every open shadow root.
+// every open shadow root. "Reconnect" continues the same session (the owner, 2026-11-16): nothing is re-run after it.
 (function () {
   "use strict";
 
   const CHECK_MINUTES = 15; // how often to look (the owner's choice, 2026-11-16); 1 reconnects sooner
-  // a reconnect after an idle drop usually gets a NEW machine: the sandbox comes back only when the setup cell runs again (its last lines start
-  // tools/colab/autostart.sh). true: a minute after a press, "Run all" (Ctrl+F9) is sent to the notebook
-  const RUN_ALL_AFTER_RECONNECT = true;
   // the dialog's button and the toolbar's connect button, in Russian and English; matched on the button's whole visible text
   const PRESS = [/^подключиться повторно$/i, /^reconnect$/i, /^подключиться$/i, /^connect$/i];
 
@@ -60,14 +57,6 @@
     if (hit) {
       console.log(`[colab-reconnect] ${now}: pressing "${hit.text}"`);
       hit.el.click();
-      if (RUN_ALL_AFTER_RECONNECT) {
-        setTimeout(() => {
-          console.log(`[colab-reconnect] ${new Date().toLocaleTimeString()}: Run all (Ctrl+F9)`);
-          const ev = { key: "F9", code: "F9", keyCode: 120, which: 120, ctrlKey: true, bubbles: true, cancelable: true };
-          (document.activeElement || document.body).dispatchEvent(new KeyboardEvent("keydown", ev));
-          document.dispatchEvent(new KeyboardEvent("keydown", ev));
-        }, 60 * 1000);
-      }
     } else {
       console.log(`[colab-reconnect] ${now}: connected, nothing to press`);
     }
