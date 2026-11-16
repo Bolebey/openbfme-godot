@@ -18,29 +18,29 @@ DRIVE=/content/drive/MyDrive
 INI=$DRIVE/for-arena/ennorath-ini-1.9.8.3.zip
 INV=$DRIVE/openbfme-audit/rw_function_blocks.json
 RUNS=$DRIVE/openbfme-runs/maps
-LOG=/content/nightly_maps.log
+mkdir -p "$RUNS"
+LOG=$RUNS/nightly_maps.log   # every log on the Drive: /content dies with the runtime (owner 2026-11-16)
 
 run() {
   local day; day=$(date -u +%F)
-  mkdir -p "$RUNS"
   echo "== $day $(date -u +%T) start" >> "$LOG"
   [ -d "$T" ] || git -C "$REPO" worktree add -q --detach "$T" origin/main || return 1
   cd "$T" || return 1
   git fetch -q origin && git checkout -q -f --detach origin/main || return 1
   local rev; rev=$(git rev-parse --short=8 HEAD)
-  bash tools/colab/build_tests.sh > /content/nightly_build.log 2>&1 || { echo "build failed at $rev" >> "$LOG"; return 1; }
-  python3 tools/matrix_run.py all --jobs 5 > /content/nightly_matrix.log 2>&1 || { echo "matrix failed at $rev" >> "$LOG"; return 1; }
+  bash tools/colab/build_tests.sh > "$RUNS/nightly_build.log" 2>&1 || { echo "build failed at $rev" >> "$LOG"; return 1; }
+  python3 tools/matrix_run.py all --jobs 5 > "$RUNS/nightly_matrix.log" 2>&1 || { echo "matrix failed at $rev" >> "$LOG"; return 1; }
   [ -d /content/py219/angr ] || python3 -m pip install -q --target /content/py219 angr==9.2.213 bitstring==4.4.0 pycparser==3.0 > /dev/null 2>&1
   export PYTHONPATH=/content/py219
   cp -f "$INV" workspace/rebuild_inventory.json 2>/dev/null
   python3 tools/mod/rw_function_map.py --game "$RW_GAME_DAT" --ini "$INI" --inventory workspace/rebuild_inventory.json \
-      --out docs/ennorath/RW_FUNCTION_MAP > /content/nightly_map.log 2>&1 || { echo "map failed at $rev" >> "$LOG"; return 1; }
+      --out docs/ennorath/RW_FUNCTION_MAP > "$RUNS/nightly_map.log" 2>&1 || { echo "map failed at $rev" >> "$LOG"; return 1; }
   cmp -s workspace/rebuild_inventory.json "$INV" || cp -f workspace/rebuild_inventory.json "$INV"   # a new game.dat: share the new cache
   python3 tools/mod/matrix_gaps.py --base "$ROTWK_INSTALL" --overlay "$OPENBFME_ENNORATH_INSTALL" --inventory workspace/rebuild_inventory.json \
-      --game "$RW_GAME_DAT" > /content/nightly_gaps.log 2>&1 || { echo "matrix_gaps failed at $rev" >> "$LOG"; return 1; }
+      --game "$RW_GAME_DAT" > "$RUNS/nightly_gaps.log" 2>&1 || { echo "matrix_gaps failed at $rev" >> "$LOG"; return 1; }
   local audit; audit=$(ls -d "$DRIVE"/openbfme-audit/field-audit-v* 2>/dev/null | sort -V | tail -1)/field-audit.tsv
   python3 tools/mod/field_gaps.py --audit "$audit" --inventory workspace/rebuild_inventory.json --game "$RW_GAME_DAT" \
-      > /content/nightly_fgaps.log 2>&1 || { echo "field_gaps failed at $rev" >> "$LOG"; return 1; }
+      > "$RUNS/nightly_fgaps.log" 2>&1 || { echo "field_gaps failed at $rev" >> "$LOG"; return 1; }
   rm -f workspace/rebuild_inventory.json
   git checkout -q -B auto/maps
   git add docs/ennorath/MATRIX.tsv docs/ennorath/README.md docs/ennorath/RW_FUNCTION_MAP.tsv docs/ennorath/RW_FUNCTION_MAP.md \
@@ -54,8 +54,8 @@ run() {
     git push -q -f origin auto/maps || { echo "push failed at $rev" >> "$LOG"; return 1; }
   fi
   { echo "# Nightly maps $day (main $rev, sandbox $SB)"; echo; echo "red buttons / specific gaps: $red"; echo
-    echo '## Function map'; tail -3 /content/nightly_map.log; echo; echo '## MATRIX_GAPS'; tail -2 /content/nightly_gaps.log
-    echo; echo '## FIELD_GAPS'; tail -2 /content/nightly_fgaps.log; echo; echo '## Matrix'; tail -5 /content/nightly_matrix.log; } > "$RUNS/$day.md"
+    echo '## Function map'; tail -3 "$RUNS/nightly_map.log"; echo; echo '## MATRIX_GAPS'; tail -2 "$RUNS/nightly_gaps.log"
+    echo; echo '## FIELD_GAPS'; tail -2 "$RUNS/nightly_fgaps.log"; echo; echo '## Matrix'; tail -5 "$RUNS/nightly_matrix.log"; } > "$RUNS/$day.md"
   echo "== $day $(date -u +%T) done ($red)" >> "$LOG"
 }
 
