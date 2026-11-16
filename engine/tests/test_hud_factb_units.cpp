@@ -1391,13 +1391,41 @@ void unitsSweep(const std::string &faction, Results &res, bool sweep)
 					const bool playerUpgrade = up->getUpgradeType() == UPGRADE_TYPE_PLAYER;
 					const int cost = up->calcCostToBuild(g.rig.local, u);
 					const int expect = (int)std::ceil(up->getBuildTimeSeconds() * 5.0f);
-					bool got = false;
-					for (int f = 0; f < expect + 60 && !got; ++f)
+					bool got = false, gone = false;
+					for (int f = 0; f < expect + 60 && !got && !gone; ++f)
 					{
 						g.step(1);
 						u = g.logic().findObjectByID(uid);
+						gone = !playerUpgrade && !u;
 						// UPGRADE_TYPE_PLAYER (e.g. ImladrisLoremaster Tome upgrades) lands on Player (RW 0x6AEE22), not the Object
 						got = playerUpgrade ? g.rig.local->hasUpgradeComplete(up) : (u && u->hasUpgrade(up));
+					}
+					if (gone)
+					{
+						// the unit left the world once the upgrade landed: ReplaceObjectUpgrade (a wall segment's gate / tower / hub, MordorBattleTower ->
+						// Ungol) makes a new object of the player at the spot, as the special powers' replacement above (2026-11-16: the by-id lookup of
+						// Local 75 no longer sees the destroyed unit's upgrade)
+						Object *after = nullptr;
+						for (Object *o = g.logic().getFirstObject(); o; o = o->getNextObject())
+						{
+							if (o->getID() > uid && o->getControllingPlayer() == g.rig.local && o->getTemplate() && o->getTemplate()->getName() != e->name
+								&& dist2d(*o->getPosition(), c) < 600.0f
+								&& (factb::hasKindOf(*o->getTemplate(), "SELECTABLE") || factb::hasKindOf(*o->getTemplate(), "STRUCTURE")))
+							{
+								after = o;
+							}
+						}
+						if (after)
+						{
+							res.pass(item, str("%s replaced the unit with %s after %u frames, cost %d", cb->m_upgradeName.c_str(),
+											   after->getTemplate()->getName().c_str(), g.frame() - pressFrame, cost));
+						}
+						else
+						{
+							res.fail(item, str("%s: the unit left the world %u frames after the press, nothing replaced it", cb->m_upgradeName.c_str(),
+											   g.frame() - pressFrame));
+						}
+						continue;
 					}
 					if (!got)
 					{

@@ -4,6 +4,7 @@
 #
 #   bash tools/colab/nightly_maps.sh          # wait for 01:00 UTC, run, repeat every night (autostart.d)
 #   bash tools/colab/nightly_maps.sh --now    # one run now
+# The result goes to the branch auto/maps; without push rights in the sandbox it waits on the Drive as openbfme-runs/maps/<date>.patch.
 #
 # Runs in Claude's station-3 tree of this sandbox (workspace/wt/local-sb<N>-st3, made from origin/main when missing). Inputs: the game files
 # of /root/.agent_env, the Ennorath INI archive and the function inventory on the Drive (for-arena/, openbfme-audit/), the newest field audit
@@ -51,7 +52,9 @@ run() {
   else
     git commit -q -m "Nightly maps $day on main $rev: matrix, function map, MATRIX_GAPS, FIELD_GAPS (red buttons / specific gaps: $red)" \
         -m "tools/colab/nightly_maps.sh (sandbox $SB); land with the next batch." || { echo "commit refused at $rev" >> "$LOG"; return 1; }
-    git push -q -f origin auto/maps || { echo "push failed at $rev" >> "$LOG"; return 1; }
+    # the sandbox shell may have no GitHub credentials: the commit then waits on the Drive as a patch (Claude applies it on the PC, 2026-11-16)
+    git format-patch -1 --stdout HEAD > "$RUNS/$day.patch"
+    git push -q -f origin auto/maps 2>/dev/null && rm -f "$RUNS/$day.patch" || echo "push failed at $rev: the commit is $RUNS/$day.patch" >> "$LOG"
   fi
   { echo "# Nightly maps $day (main $rev, sandbox $SB)"; echo; echo "red buttons / specific gaps: $red"; echo
     echo '## Function map'; tail -3 "$RUNS/nightly_map.log"; echo; echo '## MATRIX_GAPS'; tail -2 "$RUNS/nightly_gaps.log"
