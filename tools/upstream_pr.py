@@ -34,6 +34,8 @@ FORK_OWNER = "Gleb302596555"
 FORK_ONLY = ("docs/ennorath/", "workspace/", "tools/colab/", "tools/mod/", ".clinerules/")
 VISUAL = re.compile(r"^engine/src/(GameClient/|W3DDevice/|GodotDevice/.*(Draw|Shader|Render))|\.(gdshader|glsl)$")
 TEST_FILE = re.compile(r"^engine/tests/|^engine/cmake/|^engine/CMakeLists\.txt$")
+# the full ref: a clone can also hold refs/upstream/main (a stale copy), which "upstream/main" would name first
+UP = "refs/remotes/upstream/main"
 JOBS = os.environ.get("OPENBFME_BUILD_JOBS", "3")  # 16 GB RAM: 3 jobs (owner, 2026-11-10)
 
 
@@ -86,10 +88,10 @@ def text_checks(branch: str) -> tuple[list[str], dict]:
     """Problems found without a build, and facts for the PR body."""
     ref = f"origin/{branch}"
     problems: list[str] = []
-    base = git("merge-base", "upstream/main", ref)
+    base = git("merge-base", UP, ref)
     files = git("diff", "--name-only", f"{base}..{ref}").split()
-    msgs = git("log", "--format=%s%n%b%x00", f"upstream/main..{ref}")
-    subjects = git("log", "--reverse", "--format=%s", f"upstream/main..{ref}").splitlines()
+    msgs = git("log", "--format=%s%n%b%x00", f"{UP}..{ref}")
+    subjects = git("log", "--reverse", "--format=%s", f"{UP}..{ref}").splitlines()
     if not files:
         problems.append("no change against upstream/main (already upstream?)")
     bad = [f for f in files if f.startswith(FORK_ONLY) or f.endswith(".hashes")]
@@ -102,8 +104,8 @@ def text_checks(branch: str) -> tuple[list[str], dict]:
     added = git("diff", f"{base}..{ref}", "--", "engine")
     if "docs/ennorath" in added:
         problems.append("a code comment cites docs/ennorath (fork-only)")
-    tree = git("merge-tree", "--write-tree", "--name-only", "upstream/main", ref, check=False)
-    conflict = sh(["git", "merge-tree", "--write-tree", "upstream/main", ref], cwd=TREE).returncode != 0
+    tree = git("merge-tree", "--write-tree", "--name-only", UP, ref, check=False)
+    conflict = sh(["git", "merge-tree", "--write-tree", UP, ref], cwd=TREE).returncode != 0
     if conflict:  # --name-only: the tree id, the conflicted paths, a blank line, the messages
         paths = []
         for l in tree.splitlines()[1:]:
@@ -112,7 +114,7 @@ def text_checks(branch: str) -> tuple[list[str], dict]:
             paths.append(l.strip())
         problems.append("conflicts with upstream/main: " + ", ".join(paths[:6]))
     if "docs/STOPS.md" in files:  # upstream's CI wants unique stop ids: a new row's id must be free there
-        up_ids = set(re.findall(r"^\| (S-\d+) \|", git("show", "upstream/main:docs/STOPS.md"), re.M))
+        up_ids = set(re.findall(r"^\| (S-\d+) \|", git("show", f"{UP}:docs/STOPS.md"), re.M))
         new_ids = re.findall(r"^\+\| (S-\d+) \|", git("diff", "-U0", f"{base}..{ref}", "--", "docs/STOPS.md"), re.M)
         base_ids = set(re.findall(r"^\| (S-\d+) \|", git("show", f"{base}:docs/STOPS.md", check=False), re.M))
         taken = [i for i in new_ids if i in up_ids and i not in base_ids]  # an edit of an existing row keeps its id
@@ -124,7 +126,7 @@ def text_checks(branch: str) -> tuple[list[str], dict]:
     if not tests and not visual:
         problems.append("no new TEST_CASE (upstream wants a test that fails without the change)")
     facts = {"files": files, "logic": logic, "tests": tests, "subjects": subjects, "visual": visual,
-             "behind": int(git("rev-list", "--count", f"{base}..upstream/main"))}
+             "behind": int(git("rev-list", "--count", f"{base}..{UP}"))}
     return problems, facts
 
 
@@ -158,7 +160,7 @@ def run_tests(names: list[str]) -> dict[str, str]:
 
 def build_checks(branch: str, facts: dict) -> list[str]:
     problems: list[str] = []
-    git("checkout", "-q", "-f", "--detach", "upstream/main")
+    git("checkout", "-q", "-f", "--detach", UP)
     r = sh(["git", "-c", "user.name=upstream-pr", "-c", "user.email=upstream-pr@localhost", "merge", "-q", "--no-edit", "--no-verify",
             f"origin/{branch}"], cwd=TREE)
     if r.returncode:
@@ -170,9 +172,9 @@ def build_checks(branch: str, facts: dict) -> list[str]:
     with_fix = run_tests(facts["tests"])
     problems += [f'"{t}" {st} with the change' for t, st in with_fix.items() if st != "pass"]
     if facts["logic"] and not problems:
-        git("checkout", "upstream/main", "--", *[f for f in facts["logic"] if git("cat-file", "-t", f"upstream/main:{f}", check=False)])
+        git("checkout", UP, "--", *[f for f in facts["logic"] if git("cat-file", "-t", f"{UP}:{f}", check=False)])
         for f in facts["logic"]:  # files the branch added go too
-            if not git("cat-file", "-t", f"upstream/main:{f}", check=False) and (TREE / f).exists():
+            if not git("cat-file", "-t", f"{UP}:{f}", check=False) and (TREE / f).exists():
                 (TREE / f).unlink()
         ok, err = build()
         if ok:
@@ -185,7 +187,7 @@ def build_checks(branch: str, facts: dict) -> list[str]:
                 print(f"   guard tests (pass without the change, upstream may drop them): {', '.join(guards)}", flush=True)
         else:  # the test calls the change's new API: it cannot pass without it, which is what upstream asks
             print("   (the tests do not build without the change: they need its API)", flush=True)
-    git("checkout", "-q", "-f", "--detach", "upstream/main")
+    git("checkout", "-q", "-f", "--detach", UP)
     return problems
 
 
@@ -193,24 +195,33 @@ def check(names: list[str], do_build: bool) -> None:
     OUT.mkdir(parents=True, exist_ok=True)
     branches = names or ready_branches()
     results = {}
+    seen = json.loads((OUT / "report.json").read_text(encoding="utf-8")) if (OUT / "report.json").exists() else {}
+    up = git("rev-parse", UP)
     for b in branches:
+        sha = git("rev-parse", f"origin/{b}")
+        if not names and seen.get(b, {}).get("sha") == sha and seen[b].get("up") == up and seen[b]["verdict"] != "text-ok":
+            continue  # the loop (sandbox 4): neither the branch nor upstream moved since its last full check
         print(f"== {b}", flush=True)
-        problems, facts = text_checks(b)
-        if facts["visual"]:
-            verdict = "visual"
-        elif problems:
-            verdict = "fail"
-        elif do_build:
-            problems = build_checks(b, facts)
-            verdict = "fail" if problems else "ready"
-        else:
-            verdict = "text-ok"
-        results[b] = {"verdict": verdict, "problems": problems, **facts, "sha": git("rev-parse", f"origin/{b}")}
+        try:
+            problems, facts = text_checks(b)
+            if facts["visual"]:
+                verdict = "visual"
+            elif problems:
+                verdict = "fail"
+            elif do_build:
+                problems = build_checks(b, facts)
+                verdict = "fail" if problems else "ready"
+            else:
+                verdict = "text-ok"
+        except Exception as e:  # one branch's failure does not stop the others
+            git("checkout", "-q", "-f", "--detach", UP, check=False)
+            problems, facts, verdict = [f"error: {e}"[:300]], {"files": [], "logic": [], "tests": [], "subjects": [], "visual": False, "behind": 0}, "fail"
+        results[b] = {"verdict": verdict, "problems": problems, **facts, "sha": sha, "up": up}
         print(f"   {verdict}: " + ("; ".join(problems) or "ok"), flush=True)
     old = json.loads((OUT / "report.json").read_text(encoding="utf-8")) if (OUT / "report.json").exists() else {}
     old.update(results)
     (OUT / "report.json").write_text(json.dumps(old, indent=1), encoding="utf-8")
-    lines = ["# Upstream PR check", "", f"upstream/main {git('rev-parse', '--short', 'upstream/main')}", "",
+    lines = ["# Upstream PR check", "", f"upstream/main {git('rev-parse', '--short', UP)}", "",
              "| branch | verdict | behind | tests | problems |", "|---|---|---|---|---|"]
     for b, r in sorted(old.items()):
         lines.append(f"| `{b}` | {r['verdict']} | {r['behind']} | {len(r['tests'])} | {'; '.join(r['problems']).replace('|', '/')[:300]} |")
@@ -228,7 +239,7 @@ ROW_KEY = re.compile(r"^\| (S-\d+) \|")
 
 
 def add_branch_lines(path: str, base: str, ref: str) -> str:
-    up = git("show", f"upstream/main:{path}", check=False).split("\n")
+    up = git("show", f"{UP}:{path}", check=False).split("\n")
     mine = git("show", f"{ref}:{path}").split("\n")
     added = set()
     for l in git("diff", "-U0", f"{base}..{ref}", "--", path).split("\n"):
@@ -264,6 +275,50 @@ def clean_message(text: str) -> str:
     return re.sub(r"(?<![\w/])#(\d+)", r"fork issue \1", text).strip()
 
 
+def _rebase_one(b: str) -> None:
+    ref = f"origin/{b}"
+    problems, facts = text_checks(b)
+    hard = [p for p in problems if not p.startswith(("conflicts with", '"#N"'))]
+    if hard:
+        print(f"{b}: left alone: {'; '.join(hard)}")
+        return
+    if not problems:
+        print(f"{b}: nothing to fix")
+        return
+    base = git("merge-base", UP, ref)
+    git("checkout", "-q", "-f", "--detach", UP)
+    sh(["git", "merge", "--squash", "-q", ref], cwd=TREE)
+    conflicted = git("diff", "--name-only", "--diff-filter=U").split()
+    other = [f for f in conflicted if not LIST_FILES.search(f) and f != "README.md"]
+    if other:
+        git("reset", "-q", "--hard", UP)
+        print(f"{b}: left alone: source conflict in {', '.join(other)}")
+        return
+    try:
+        texts = {f: git("show", f"{UP}:{f}") if f == "README.md" else add_branch_lines(f, base, ref) for f in conflicted}
+    except ValueError as e:
+        git("reset", "-q", "--hard", UP)
+        print(f"{b}: left alone: {e}")
+        return
+    for f, text in texts.items():
+        (TREE / f).write_text(text + "\n", encoding="utf-8", newline="")
+        git("add", f)
+    if any(f == "docs/STOPS.md" for f in conflicted) and (TREE / "tools" / "stops_count.py").exists():
+        sh([sys.executable, "-I", "tools/stops_count.py", "--write"], cwd=TREE)
+        git("add", "-A", "docs", "README.md")
+    msg = clean_message(git("log", "--reverse", "--format=%s%n%n%b", f"{base}..{ref}"))
+    subjects = [clean_message(s) for s in git("log", "--reverse", "--format=%s", f"{base}..{ref}").splitlines()]
+    title = subjects[0] if subjects else b
+    body = "\n".join(f"- {s}" for s in subjects[1:]) if len(subjects) > 1 else re.sub(r"^.*\n*", "", msg, count=1)
+    sh(["git", "commit", "-q", "--no-verify", "-m", title + ("\n\n" + body if body.strip() else "")], cwd=TREE, check=True)
+    old = git("rev-parse", ref)
+    if not git("ls-remote", "origin", f"refs/up-orig/{b}", check=False):  # the first original head stays
+        git("push", "-q", "origin", f"{old}:refs/up-orig/{b}", check=False)
+    r = sh(["git", "push", "-q", f"--force-with-lease={b}:{old}", "origin", f"HEAD:refs/heads/{b}"], cwd=TREE)
+    git("checkout", "-q", "-f", "--detach", UP)
+    print(f"{b}: {'squashed onto upstream/main' + (' (resolved ' + ', '.join(conflicted) + ')' if conflicted else '') if r.returncode == 0 else 'push failed: ' + r.stderr.strip()[:200]}")
+
+
 def rebase(names: list[str]) -> None:
     """Squash each branch onto the current upstream/main with the list-file conflicts resolved, the "#N" in its text rewritten, and push it
     back over the same up/ branch (the old head is kept at refs/up-orig/<branch>). A branch with another conflict, a non-English text or
@@ -271,51 +326,16 @@ def rebase(names: list[str]) -> None:
     git("fetch", "-q", "origin", cwd=REPO)
     git("fetch", "-q", "upstream", cwd=REPO)
     for b in names or ready_branches():
-        ref = f"origin/{b}"
-        problems, facts = text_checks(b)
-        hard = [p for p in problems if not p.startswith(("conflicts with", '"#N"'))]
-        if hard:
-            print(f"{b}: left alone: {'; '.join(hard)}")
-            continue
-        if not problems:
-            print(f"{b}: nothing to fix")
-            continue
-        base = git("merge-base", "upstream/main", ref)
-        git("checkout", "-q", "-f", "--detach", "upstream/main")
-        sh(["git", "merge", "--squash", "-q", ref], cwd=TREE)
-        conflicted = git("diff", "--name-only", "--diff-filter=U").split()
-        other = [f for f in conflicted if not LIST_FILES.search(f) and f != "README.md"]
-        if other:
-            git("reset", "-q", "--hard", "upstream/main")
-            print(f"{b}: left alone: source conflict in {', '.join(other)}")
-            continue
         try:
-            texts = {f: git("show", f"upstream/main:{f}") if f == "README.md" else add_branch_lines(f, base, ref) for f in conflicted}
-        except ValueError as e:
-            git("reset", "-q", "--hard", "upstream/main")
-            print(f"{b}: left alone: {e}")
-            continue
-        for f, text in texts.items():
-            (TREE / f).write_text(text + "\n", encoding="utf-8", newline="")
-            git("add", f)
-        if any(f == "docs/STOPS.md" for f in conflicted) and (TREE / "tools" / "stops_count.py").exists():
-            sh([sys.executable, "-I", "tools/stops_count.py", "--write"], cwd=TREE)
-            git("add", "-A", "docs", "README.md")
-        msg = clean_message(git("log", "--reverse", "--format=%s%n%n%b", f"{base}..{ref}"))
-        subjects = [clean_message(s) for s in git("log", "--reverse", "--format=%s", f"{base}..{ref}").splitlines()]
-        title = subjects[0] if subjects else b
-        body = "\n".join(f"- {s}" for s in subjects[1:]) if len(subjects) > 1 else re.sub(r"^.*\n*", "", msg, count=1)
-        sh(["git", "commit", "-q", "--no-verify", "-m", title + ("\n\n" + body if body.strip() else "")], cwd=TREE, check=True)
-        old = git("rev-parse", ref)
-        git("push", "-q", "origin", f"{old}:refs/up-orig/{b}")
-        r = sh(["git", "push", "-q", f"--force-with-lease={b}:{old}", "origin", f"HEAD:refs/heads/{b}"], cwd=TREE)
-        git("checkout", "-q", "-f", "--detach", "upstream/main")
-        print(f"{b}: {'squashed onto upstream/main' + (' (resolved ' + ', '.join(conflicted) + ')' if conflicted else '') if r.returncode == 0 else 'push failed: ' + r.stderr.strip()[:200]}")
+            _rebase_one(b)
+        except Exception as e:  # one branch's failure does not stop the others
+            print(f"{b}: error: {e}"[:400], flush=True)
+            git("checkout", "-q", "-f", "--detach", UP, check=False)
     git("fetch", "-q", "origin", cwd=REPO)
 
 
 def pr_body(b: str, r: dict) -> str:
-    log = git("log", "--reverse", "--format=%s%n%n%b", f"upstream/main..origin/{b}")
+    log = git("log", "--reverse", "--format=%s%n%n%b", f"{UP}..origin/{b}")
     log = re.sub(r"\n*Co-Authored-By:.*", "", log).strip()
     tests = "\n".join(f"- `{t}`: fails without the change, passes with it" for t in r["tests"])
     return (f"## What this changes\n\n{log}\n\n## How it was checked\n\n{tests}\n\n"
