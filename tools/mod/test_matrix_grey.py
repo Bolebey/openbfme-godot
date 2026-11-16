@@ -46,11 +46,21 @@ End
 CommandButton NoGate
   Command = STOP
 End
+CommandButton ToggleWeapon
+  Command = TOGGLE_WEAPONSET
+End
 CommandSet FactoryCommands
   1 = BuyUpgrade
+  2 = ToggleWeapon
 End
 Object Workshop
   CommandSet = FactoryCommands
+  Behavior = SpecialPowerModule ModuleTag_Pulse
+    SetModelCondition = ModelConditionState:USER_1
+    SetModelConditionTime = 2
+  End
+  Behavior = ToggleMountedSpecialAbilityUpdate ModuleTag_Mount
+  End
 End
 '''
 
@@ -105,3 +115,12 @@ def test_bad_references_and_missing_includes_fail_loudly(tmp_path):
     ini.write_text('#include "missing.inc"\n', encoding='ascii')
     with pytest.raises(ValueError, match='missing includes'):
         m.load(tmp_path)
+
+
+def test_model_setters_only_for_the_selected_object(tmp_path):
+    e = fixture(tmp_path)
+    assert e.model_producers('Workshop', 'USER_1') == 'Workshop:ModuleTag_Pulse'
+    assert e.model_producers('Workshop', 'MOUNTED') == 'Workshop:ModuleTag_Mount (mount replacement)'
+    assert e.model_producers('Workshop', 'WEAPONSET_TOGGLE_1') == 'ToggleWeapon (weapon-set toggle)'
+    assert e.model_producers('Workshop', 'USER_9') == '-'
+    assert e.model_producers('Unknown', 'USER_1') == '-'

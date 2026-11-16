@@ -4,8 +4,8 @@
 Uses ennorath_graph's include/define/inheritance handling. The generated TSV
 contains game/mod data: keep it outside Git (for example in workspace/).
 Conditions are data references, not proof that a sweep fixture satisfies them.
-This is an initial inventory: model-condition setters and nested prerequisite
-blocks are not yet resolved; do not interpret a none row as a complete verdict.
+This is an initial inventory: model-condition setters are only partially resolved
+and nested prerequisite blocks are not resolved; none is not a complete verdict.
 """
 from __future__ import annotations
 
@@ -138,6 +138,36 @@ class Explainer:
             return ', '.join(sorted(objects)) or '-'
         return '-'
 
+    def model_producers(self, object_name, value):
+        """Only identify explicit setters on this object; animation states are readers."""
+        name = self.names.get(('object', object_name.lower()))
+        if not name:
+            return '-'
+        fields = graph.effective_fields(self.db, 'object', name)
+        wanted = {token.upper() for token in graph.tokens_of(value)}
+        setters = set()
+        for key, val, _src, tag in fields:
+            if tag and key.lower() == 'setmodelcondition':
+                # SpecialPowerModule::trigger RW 0x897987: this field sets the
+                # condition only when its duration is positive and it triggers.
+                if wanted.intersection(t.upper() for t in graph.tokens_of(val)):
+                    setters.add(object_name + ':' + tag)
+            elif tag and key.lower() == 'behavior' and 'MOUNTED' in wanted:
+                if val.split() and val.split()[0].lower() == 'togglemountedspecialabilityupdate':
+                    setters.add(object_name + ':' + tag + ' (mount replacement)')
+        if 'WEAPONSET_TOGGLE_1' in wanted:
+            # RW 0x77B529 / WeaponSetToggle::registerHandlers: this command
+            # toggles weapon-set flag 1, mirrored to the model condition.
+            sets = {token.lower() for key, val, _src, tag in fields
+                    if not tag and key.lower() == 'commandset' for token in graph.tokens_of(val)}
+            for (typ, button), _definition in self.db.defs.items():
+                if typ != 'commandbutton' or not (self.button_sets.get(button.lower(), set())
+                                                   and any(s.lower() in sets for s in self.button_sets[button.lower()])):
+                    continue
+                if any(k.lower() == 'command' and v.upper() == 'TOGGLE_WEAPONSET' for k, v in self.fields(typ, button)):
+                    setters.add(button + ' (weapon-set toggle)')
+        return ', '.join(sorted(setters)) or '-'
+
     def explain(self, row):
         button = row['button']
         if ('commandbutton', button.lower()) not in self.names:
@@ -146,12 +176,16 @@ class Explainer:
         result = []
         def emit(kind, value, note):
             result.append({**{k: row[k] for k in ('faction', 'object', 'button')},
-                           'condition': kind, 'value': value, 'satisfied by': self.producers(kind, value), 'note': note})
+                           'condition': kind, 'value': value,
+                           'satisfied by': self.model_producers(row['object'], value) if kind == 'model' else self.producers(kind, value), 'note': note})
         upgrades, powers = [], []
         for key, value in fields:
             low = key.lower()
             if low in BUTTON_FIELDS:
-                emit(BUTTON_FIELDS[low], value, 'CommandButton.' + key)
+                note = 'CommandButton.' + key
+                if BUTTON_FIELDS[low] == 'model':
+                    note += ' (candidate setters; activation and duration not verified)'
+                emit(BUTTON_FIELDS[low], value, note)
                 if low == 'neededupgrade':
                     upgrades.extend(graph.tokens_of(value))
             elif low == 'options':
