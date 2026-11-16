@@ -9,7 +9,9 @@
 #include "GameLogic/GameLogic.h"
 #include "GameLogic/Map/TerrainLogic.h"
 #include "GameLogic/Module/CastleModules.h"
+#include "GameLogic/Module/NotifyCrushModules.h"
 #include "GameLogic/Object/Object.h"
+#include "GameLogic/Object/ObjectGeometry.h"
 #include "GameLogic/Object/PartitionManager.h"
 #include "GameLogic/SimMath.h"
 #include "GameLogic/WallSpan.h"
@@ -315,57 +317,172 @@ bool BuildPlacement::footprintsOf(GameLogic &logic, const Object &obj, std::vect
 
 bool BuildPlacement::isLocationClearOfObjects(GameLogic &logic, const Coord3D &pos, const ThingTemplate &build, float angle, Object *builder, unsigned options)
 {
-	std::vector<Footprint> mine, other;
-	if (!footprintsOf(logic, build, pos, angle, mine))
+	// PORT-231: RotWK BuildAssistant::isLocationClearOfObjects (RW 0x00796D37), PartitionManager::iterateObjectsInRange (FROM_BOUNDINGSPHERE_3D, ITER_FASTEST),
+	// GlobalData::m_maxCastleRadius (+0x1220), rangeFilter (RW 0x00661C13), collideFilter (RW 0x00661A02) and isRemovableForConstruction (RW 0x007940A6).
+	const std::vector<ObjectGeometry::Shape> &buildShapes = ObjectGeometry::cachedShapesOf(*build.getFinalOverride());
+	if (buildShapes.empty())
 	{
 		return true; // no geometry known: nothing to collide with (stop S-301 counts it)
 	}
-	const bool onlyCheckEnemies = (options & ~(unsigned)LLF_CASTLE_MEMBERS_CLEAR) == LLF_NO_ENEMY_OBJECT_OVERLAP;
+	const bool onlyCheckEnemies = (options & LLF_NO_ENEMY_OBJECT_OVERLAP) != 0 && (options & LLF_NO_OBJECT_OVERLAP) == 0;
+	const bool checkEnemyStructuresOnly = (options & 0x200u) != 0;
 	static const int immobile = ObjectTemplateInfoBuilder::kindOfIndex("IMMOBILE");
-	static const int mine_ = ObjectTemplateInfoBuilder::kindOfIndex("MINE");
+	static const int structure = ObjectTemplateInfoBuilder::kindOfIndex("STRUCTURE");
+	static const int aircraft = ObjectTemplateInfoBuilder::kindOfIndex("AIRCRAFT");
 	static const int inert = ObjectTemplateInfoBuilder::kindOfIndex("INERT");
+	static const int shrubbery = ObjectTemplateInfoBuilder::kindOfIndex("SHRUBBERY");
 	static const int clearedByBuild = ObjectTemplateInfoBuilder::kindOfIndex("CLEARED_BY_BUILD");
 	static const int baseSite = ObjectTemplateInfoBuilder::kindOfIndex("BASE_SITE");
+	static const int baseFoundation = ObjectTemplateInfoBuilder::kindOfIndex("BASE_FOUNDATION");
 	static const int dozerKind = ObjectTemplateInfoBuilder::kindOfIndex("DOZER");
+	static const int wallSegment = ObjectTemplateInfoBuilder::kindOfIndex("WALL_SEGMENT");
+	static const int wallHub = ObjectTemplateInfoBuilder::kindOfIndex("WALL_HUB");
+	static const int taintKind = ObjectTemplateInfoBuilder::kindOfIndex("TAINT");
+	static const int blockingGate = ObjectTemplateInfoBuilder::kindOfIndex("BLOCKING_GATE");
+	static const int attachedStatus = ObjectTemplateInfoBuilder::objectStatusIndex("ATTACHED");
+
+	const CastleBehaviorModuleData *buildCastle = nullptr;
+	for (const auto &n : build.getFinalOverride()->behaviorModules().nuggets())
+	{
+		if (const auto *cb = dynamic_cast<const CastleBehaviorModuleData *>(n.data.get()))
+		{
+			buildCastle = cb;
+			break;
+		}
+	}
+
+	float searchRadius = 0.0f;
+	if (buildCastle)
+	{
+		// RW 0x796DBD .. 0x796DD3: 2.0f * TheGlobalData->m_maxCastleRadius
+		searchRadius = SimMath::mulf32(logic.settings().maxCastleRadius, 2.0f);
+	}
+	else
+	{
+		// RW 0x796DEE .. 0x796E07: build->getTemplateGeometryInfo().getBoundingSphereRadius() + TheGlobalData->m_maxCastleRadius
+		float buildSphere = 0.0f;
+		if (AIWorld *ai = logic.aiWorld())
+		{
+			buildSphere = ai->movementInfo(*build.getFinalOverride()).geometry.boundingSphereRadius();
+		}
+		else
+		{
+			PathfindGeometry pg;
+			ObjectGeometry::fillPathfindGeometry(buildShapes, pg);
+			buildSphere = pg.boundingSphereRadius();
+		}
+		searchRadius = SimMath::addf32(logic.settings().maxCastleRadius, buildSphere);
+	}
+
+	const bool checkThemCastle = !buildCastle && !(wallSegment >= 0 && templateKindOf(logic, build, "WALL_SEGMENT"));
+	const float castleMaxRadius = buildCastle ? buildCastle->m_maxCastleRadius : 0.0f;
+	static const float kCastleHeight = 20.0f; // RW 0xBDBC6C
+
+	PartitionFilterFn filter([&](Object &them) -> bool {
+		if (buildCastle)
+		{
+			// rangeFilter RW 0x00661C13
+			if (const CastleBehavior *themCastle = CastleBehavior::of(them))
+			{
+				const float dx = SimMath::pc24Sub(them.getPosition()->x, pos.x);
+				const float dy = SimMath::pc24Sub(them.getPosition()->y, pos.y);
+				const float distSq = SimMath::pc24Add(SimMath::pc24Mul(dx, dx), SimMath::pc24Mul(dy, dy));
+				const float sumR = SimMath::pc24Add(castleMaxRadius, themCastle->data()->m_maxCastleRadius);
+				return distSq < SimMath::pc24Mul(sumR, sumR);
+			}
+			ObjectGeometry::Shape cyl;
+			cyl.type = ObjectGeometry::SHAPE_CYLINDER;
+			cyl.height = kCastleHeight;
+			cyl.majorRadius = castleMaxRadius;
+			cyl.minorRadius = castleMaxRadius;
+			return NotifyCrushModules::geometriesOverlap({ cyl }, pos, 0.0f, them.geometryShapes(), *them.getPosition(), them.getOrientation());
+		}
+
+		// collideFilter RW 0x00661A02
+		if (checkThemCastle)
+		{
+			if (const CastleBehavior *themCastle = CastleBehavior::of(them))
+			{
+				ObjectGeometry::Shape cyl;
+				cyl.type = ObjectGeometry::SHAPE_CYLINDER;
+				cyl.height = kCastleHeight;
+				cyl.majorRadius = themCastle->data()->m_maxCastleRadius;
+				cyl.minorRadius = themCastle->data()->m_maxCastleRadius;
+				if (NotifyCrushModules::geometriesOverlap(buildShapes, pos, angle, { cyl }, *them.getPosition(), 0.0f))
+				{
+					return true;
+				}
+			}
+		}
+		if (NotifyCrushModules::geometriesOverlap(buildShapes, pos, angle, them.geometryShapes(), *them.getPosition(), them.getOrientation()))
+		{
+			return true;
+		}
+		if (blockingGate >= 0 && them.isKindOf((unsigned)blockingGate) && them.getTemplate())
+		{
+			float r = 0.0f;
+			if (AIWorld *ai = logic.aiWorld())
+			{
+				r = ai->movementInfo(*static_cast<const ThingTemplate *>(them.getTemplate())->getFinalOverride()).geometry.boundingCircleRadius();
+			}
+			else
+			{
+				PathfindGeometry pg;
+				ObjectGeometry::fillPathfindGeometry(them.geometryShapes(), pg);
+				r = pg.boundingCircleRadius();
+			}
+			const float dx = SimMath::pc24Sub(them.getPosition()->x, pos.x);
+			const float dy = SimMath::pc24Sub(them.getPosition()->y, pos.y);
+			const float distSq = SimMath::pc24Add(SimMath::pc24Mul(dx, dx), SimMath::pc24Mul(dy, dy));
+			const float limit = SimMath::pc24Mul(SimMath::pc24Mul(r, r), 0.66f); // RW 0xC0F1C4
+			if (!(distSq > limit))
+			{
+				return true;
+			}
+		}
+		return false;
+	});
+
 	// P-77, RW 0x796D63 .. 0x796D68 (options bit 8) and RW 0x796E9A .. 0x796EB1: the castle's members clear only for a BASE_SITE builder (template KindOf 120,
 	// + 0x117 & 1)
 	const bool castleMembersClear = (options & LLF_CASTLE_MEMBERS_CLEAR) && builder && baseSite >= 0 && builder->isKindOf((unsigned)baseSite);
-	for (Object *them = logic.getFirstObject(); them; them = them->getNextObject())
+	const bool wallSegOnHub = !(baseFoundation >= 0 && templateKindOf(logic, build, "BASE_FOUNDATION")) &&
+		(wallSegment >= 0 && templateKindOf(logic, build, "WALL_SEGMENT"));
+	const PartitionHits hits = logic.partition().iterateObjectsInRange(pos, searchRadius, FROM_BOUNDINGSPHERE_3D, { &filter }, ITER_FASTEST);
+	for (const PartitionHit &hit : hits)
 	{
-		if (them == builder || them->isDestroyed() || !them->getTemplate() || !them->isInWorld())
+		Object *them = hit.object;
+		if (!them || them->isDestroyed() || them->isEffectivelyDead() || !them->getTemplate() || !them->isInWorld())
 		{
-			continue; // lane GARRISON-1: a contain's rider out of the world (RW 0x68C18F) is not in the partition
+			continue; // RW 0x7940A6 (dead), lane GARRISON-1 (out of world)
 		}
-		if ((clearedByBuild >= 0 && them->isKindOf((unsigned)clearedByBuild)) || (mine_ >= 0 && them->isKindOf((unsigned)mine_)) ||
-			(inert >= 0 && them->isKindOf((unsigned)inert)))
+		// isRemovableForConstruction (RW 0x007940A6) skips SHRUBBERY / CLEARED_BY_BUILD unless INERT / TAINT; AIRCRAFT / INERT / TAINT are skipped right below
+		if ((shrubbery >= 0 && them->isKindOf((unsigned)shrubbery)) || (clearedByBuild >= 0 && them->isKindOf((unsigned)clearedByBuild)) ||
+			(aircraft >= 0 && them->isKindOf((unsigned)aircraft)) || (inert >= 0 && them->isKindOf((unsigned)inert)) ||
+			(taintKind >= 0 && them->isKindOf((unsigned)taintKind)))
 		{
 			continue;
 		}
+		if (attachedStatus >= 0 && them->testStatus((unsigned)attachedStatus))
+		{
+			continue; // RW 0x796F0F: OBJECT_STATUS_98 (ATTACHED)
+		}
 		if (castleMembersClear)
 		{
-			// RW 0x796EB3 .. 0x796EC7: a member of this castle (its CastleMemberBehavior, found by RW 0x797BEF, holds the castle's ID at + 0x18, written by
-			// registerOwnedObject RW 0x79AC87) does not block; RW 0x796ECD .. 0x796ED3 the builder itself; RW 0x796ED9 .. 0x796EE3 a DOZER (template + 0x109 & 0x40)
-			const CastleMemberBehavior *member = dynamic_cast<const CastleMemberBehavior *>(them->findModule("CastleMemberBehavior"));
-			if ((member && member->castleId() == builder->getID()) || (dozerKind >= 0 && them->isKindOf((unsigned)dozerKind)))
+			// RW 0x796EB3 .. 0x796EE3: own castle members, builder itself, and DOZER do not block
+			const CastleMemberBehavior *member = CastleMemberBehavior::of(*them);
+			if ((member && member->castleId() == builder->getID()) || them == builder || (dozerKind >= 0 && them->isKindOf((unsigned)dozerKind)))
 			{
 				continue;
 			}
 		}
-		if (!footprintsOf(logic, *them, other))
+		if (wallSegOnHub && wallHub >= 0 && them->isKindOf((unsigned)wallHub) && them == builder)
 		{
-			continue; // an object without a geometry (props, markers) takes no ground
+			continue; // RW 0x796EE9 .. 0x796F0A
 		}
-		bool collide = false;
-		for (size_t i = 0; i < mine.size() && !collide; ++i)
+		if (them == builder)
 		{
-			for (size_t j = 0; j < other.size() && !collide; ++j)
-			{
-				collide = footprintsCollide(mine[i], other[j]);
-			}
-		}
-		if (!collide)
-		{
-			continue;
+			continue; // non-castle builder overlapping its own build site (e.g. a Plot / Dozer)
 		}
 		const Relationship rel = builder && builder->getControllingPlayer() && them->getTeam() ? builder->getControllingPlayer()->getRelationship(them->getTeam()) : NEUTRAL;
 		if (immobile >= 0 && them->isKindOf((unsigned)immobile))
@@ -378,7 +495,10 @@ bool BuildPlacement::isLocationClearOfObjects(GameLogic &logic, const Coord3D &p
 		}
 		if (builder && rel == ENEMIES)
 		{
-			return false;
+			if (!checkEnemyStructuresOnly || (structure >= 0 && them->isKindOf((unsigned)structure)))
+			{
+				return false;
+			}
 		}
 	}
 	return true;
@@ -759,6 +879,6 @@ const char *BuildPlacement::codeName(LegalBuildCode code)
 std::vector<std::string> BuildPlacement::stopLines()
 {
 	return {
-		"[S-301] building placement: the template Geometry is tested with the existing 2D footprint helper; cliff/water/height checks, positive MinDistFromEdgeOfMapForBuild (boundary 0; equality allowed), and the disassembled missing-cell / bit-18 / type-4 INERT rule (missing object or template +0x113 & 2; HERO +0x113 & 4 does not block) is ported; CANNOT_BUILD_NEAR_SUPPLIES searches the closest SUPPLY_SOURCE and expands its geometry by SupplyBuildBorder. Still not ported: active-boundary script selection (S-921), the WALL_SEGMENT / obstacle sample layer (RW 0x680B70, taken as the ground: S-161), remaining cell-type cases, shroud (VIS-1), the builder's clear-path query, factory exit width / bib checks, cleared-by-build objects, and byte-exact 3D overlap",
+		"[S-301] building placement: object overlap follows RW 0x00796D37 (PartitionManager::iterateObjectsInRange with MaxCastleRadius, rangeFilter RW 0x00661C13, collideFilter RW 0x00661A02, 3D geometriesOverlap, and isRemovableForConstruction RW 0x007940A6); cliff/water/height checks, positive MinDistFromEdgeOfMapForBuild (boundary 0; equality allowed), and the disassembled missing-cell / bit-18 / type-4 INERT rule (missing object or template +0x113 & 2; HERO +0x113 & 4 does not block) are ported; CANNOT_BUILD_NEAR_SUPPLIES searches the closest SUPPLY_SOURCE and expands its geometry by SupplyBuildBorder. Still not ported: active-boundary script selection (S-921), the WALL_SEGMENT / obstacle sample layer (RW 0x680B70, taken as the ground: S-161), remaining cell-type cases, shroud (VIS-1), the builder's clear-path query, and factory exit width / bib checks",
 	};
 }

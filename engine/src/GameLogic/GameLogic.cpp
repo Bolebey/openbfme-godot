@@ -747,6 +747,7 @@ void GameLogic::update(int phase)
 		for (int i = 0; i < m_players.getPlayerCount(); ++i)
 		{
 			Player *p = m_players.getNthPlayer(i);
+			p->updateProductionSpeedBonuses(); // PORT-231 (RW 0x006AF269 -> 0x006AF28E)
 			// lane CAMP-1H: RW 0x6AF2FA .. 0x6AF32B, before the score: the player's teams run their generic scripts (Team::updateGenericScripts RW 0x7A267D;
 			// a game without map scripts has none)
 			if (m_scriptEngine->loaded())

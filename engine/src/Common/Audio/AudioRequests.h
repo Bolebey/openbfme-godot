@@ -59,7 +59,11 @@ enum HeldSoundSlot
 	HELD_ABILITY_LOOP = 3,
 	// PORT-103: FlammableUpdate data +0x18, handle +0x34; RW 0x88FE86 / 0x88FBDD.
 	HELD_FLAMMABLE_LOOP = 4,
-	HELD_SOUND_SLOTS = 5
+	// PORT-231: CastleMemberBehavior BeingBuiltSound (data +0x14, handle +0x20; RW 0x798057 / 0x797C40) and
+	// ProductionUpdate SpeedBonusAudioLoop (data +0x48, handle +0x11C; RW 0x8A1C7C / 0x8A1D45).
+	HELD_CASTLE_BEING_BUILT = 5,
+	HELD_PRODUCTION_SPEED_BONUS = 6,
+	HELD_SOUND_SLOTS = 7
 };
 void postHeldSound(int slot, const std::string &eventName, std::uint32_t holderId, std::uint32_t objectId);
 // lane PORT-93: RW 0x854008 .. 0x85405B (the trigger of every special ability): when the data's ActiveLoopSound (data + 0x34) is set and the manager says the

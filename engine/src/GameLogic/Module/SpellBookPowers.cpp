@@ -433,6 +433,7 @@ void ProductionSpeedBonus::doSpecialPower(unsigned options)
 	// RW 0x8C7191 .. 0x8C71B7: fld mult; fsub 1.0 (double); fld mult; fmul -1.0 (double); fdivp; fstp single
 	const float mult = m_data->m_speedMultiplier;
 	const float factor = SimMath::fstpDword(SimMath::pc24DivW(SimMath::pc24SubW((double)mult, 1.0), SimMath::pc24MulW((double)mult, -1.0)));
+	Player *player = getObject()->getControllingPlayer();
 	for (const std::string &type : m_data->m_types)
 	{
 		bool found = false;
@@ -449,7 +450,10 @@ void ProductionSpeedBonus::doSpecialPower(unsigned options)
 		{
 			m_bonuses.push_back({ type, { m_data->m_numberOfFrames, factor } });
 		}
-		++m_unported; // the player's production bonus is not read by production (S-921)
+		if (player)
+		{
+			player->setProductionSpeedBonus(type, factor, m_data->m_numberOfFrames); // PORT-231 (RW 0x008C7171 -> 0x006AF3C8)
+		}
 	}
 	if (getObject()->getDisabledMask() == 0)
 	{
@@ -615,7 +619,7 @@ std::vector<std::string> SpellBookPowers::stopLines()
 		"constructor and sendObjectCreated draw, TWO logic random draws each for the retail CloudBreakSunbeam (LifetimeUpdate's lifetime and the seed), "
 		"2 * N per cast for N grid points); not ported (counted per cast): the fire grid burn rate (RW 0x687C4C), CloudBreak's fire put-out (RW 0x68F383) "
 		"and the sunbeams' Lua terror (their panic gameplay), the terrain's taint / elven wood tree areas (RW 0x67F6F0, 0x67D4CE; TheTaintManager's paint RW 0xAD4C10 runs, TaintManager.h), RW "
-		"0x69954A on the area object, the production speed bonus consumer (RW 0x6AF3C8 is stored only), the defect side effects (RW 0x699368 / 0x6938BD), "
+		"0x69954A on the area object, the defect side effects (RW 0x699368 / 0x6938BD), "
 		"Devastate's FireWeapon (lane DECOMP-1) and its trees, FX and money (lane SPELL-3, S-930) run",
 	};
 	for (const std::string &s : GlobalWeatherSystem::stopLines())

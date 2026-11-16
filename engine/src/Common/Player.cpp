@@ -113,8 +113,18 @@ void Player::init(const PlayerTemplate *pt, std::uint32_t defaultStartingCash)
 	m_costModifiers.clear();
 	m_upgradeDiscounts.clear();
 	m_heroes.clear(); // HERO-1: the list is filled at the game start (RW 0x6B16EC)
+	// PORT-231 (RW 0x6B05C9 .. 0x6B0634): seed production speed bonuses and backup from PlayerTemplate::m_productionTimeChanges
+	m_productionSpeedBonuses.clear();
+	m_productionSpeedBonusBackup.clear();
+	m_productionSpeedBonusFrames.clear();
 	if (pt)
 	{
+		m_productionSpeedBonuses = pt->m_productionTimeChanges;
+		m_productionSpeedBonusBackup = m_productionSpeedBonuses;
+		for (const auto &kv : m_productionSpeedBonuses)
+		{
+			m_productionSpeedBonusFrames[kv.first] = 0;
+		}
 		m_side = pt->m_side;
 		// ZH RGBColor::getAsInt: each channel (Int)(c * 255.0f), then | 0xff000000
 		const RGBColor &c = pt->m_preferredColor;
@@ -216,6 +226,28 @@ void Player::crc(StateHasher &h) const
 	{
 		h.addU32(0x338);
 		m_lightPoints.crc(h); // PORT-113: hashed only while the player holds points or a level (a game without light points keeps its hash)
+	}
+	if (!m_productionSpeedBonuses.empty() || !m_productionSpeedBonusBackup.empty() || !m_productionSpeedBonusFrames.empty())
+	{
+		h.addU32(0x2B4);
+		h.addU32((std::uint32_t)m_productionSpeedBonuses.size());
+		for (const auto &kv : m_productionSpeedBonuses)
+		{
+			h.addString(kv.first);
+			h.addFloat(kv.second);
+		}
+		h.addU32((std::uint32_t)m_productionSpeedBonusBackup.size());
+		for (const auto &kv : m_productionSpeedBonusBackup)
+		{
+			h.addString(kv.first);
+			h.addFloat(kv.second);
+		}
+		h.addU32((std::uint32_t)m_productionSpeedBonusFrames.size());
+		for (const auto &kv : m_productionSpeedBonusFrames)
+		{
+			h.addString(kv.first);
+			h.addI32(kv.second);
+		}
 	}
 	h.addU32((std::uint32_t)m_upgradeRecords.size()); // UPGRADE-1: the records in list order, then both masks
 	for (const UpgradeRecord &r : m_upgradeRecords)
@@ -723,9 +755,10 @@ void Player::checkLoadedIndices(int playerCount) const
 void Player::xfer(Xfer &x, TeamFactory &teams)
 {
 	// lane LUMBER1: version 2 adds the ResourceGatheringManager (RW + 0x304) at the end. PORT-113: version 3 adds the light points (RW + 0x338) after it;
-	// a player that holds none (no points, no level) saves version 2, so the streams of games without light points stay as they were (the
-	// obfme:GameLogic pattern)
-	XferVersion v{ 1, (std::uint8_t)(x.isLoading() || !m_lightPoints.isUntouched() ? 3 : 2) };
+	// PORT-231: version 4 adds the production speed bonus maps (RW + 0x2B4 / + 0x2C8 / + 0x2DC) when any are non-empty; a player without keeps version 2 / 3.
+	const bool hasSpeedBonuses = !m_productionSpeedBonuses.empty() || !m_productionSpeedBonusBackup.empty() || !m_productionSpeedBonusFrames.empty();
+	const std::uint8_t writeVersion = hasSpeedBonuses ? 4 : (!m_lightPoints.isUntouched() ? 3 : 2);
+	XferVersion v{ 1, (std::uint8_t)(x.isLoading() ? 4 : writeVersion) };
 	x.xferVersion(v);
 	// the identity the START made: checked, never overwritten
 	std::int32_t index = m_index;
@@ -888,6 +921,118 @@ void Player::xfer(Xfer &x, TeamFactory &teams)
 	else if (x.isLoading())
 	{
 		m_lightPoints.reset(); // a player saved without light points
+	}
+	if (v.current >= 4)
+	{
+		auto xferFloatMap = [&](std::map<std::string, float> &m, const char *what) {
+			std::uint32_t count = x.isLoading() ? 0u : (std::uint32_t)m.size();
+			x.xferCount(&count, 1 + 4, sizeof(float) + Xfer::kNodeBytes);
+			if (!x.isLoading())
+			{
+				for (auto &kv : m)
+				{
+					std::string key = kv.first;
+					x.xferAsciiString(&key);
+					x.xferReal(&kv.second);
+				}
+			}
+			else
+			{
+				m.clear();
+				for (std::uint32_t i = 0; i < count; ++i)
+				{
+					std::string key;
+					float val = 0.0f;
+					x.xferAsciiString(&key);
+					x.xferReal(&val);
+					if (m.count(key))
+					{
+						throw XferException("player '" + m_name + "': duplicate " + what + " entry '" + key + "'");
+					}
+					m[key] = val;
+				}
+			}
+		};
+		xferFloatMap(m_productionSpeedBonuses, "production speed bonus");
+		xferFloatMap(m_productionSpeedBonusBackup, "production speed bonus backup");
+		std::uint32_t count = x.isLoading() ? 0u : (std::uint32_t)m_productionSpeedBonusFrames.size();
+		x.xferCount(&count, 1 + 4, sizeof(std::int32_t) + Xfer::kNodeBytes);
+		if (!x.isLoading())
+		{
+			for (auto &kv : m_productionSpeedBonusFrames)
+			{
+				std::string key = kv.first;
+				std::int32_t frames = kv.second;
+				x.xferAsciiString(&key);
+				x.xferInt(&frames);
+			}
+		}
+		else
+		{
+			m_productionSpeedBonusFrames.clear();
+			for (std::uint32_t i = 0; i < count; ++i)
+			{
+				std::string key;
+				std::int32_t frames = 0;
+				x.xferAsciiString(&key);
+				x.xferInt(&frames);
+				if (m_productionSpeedBonusFrames.count(key))
+				{
+					throw XferException("player '" + m_name + "': duplicate production speed bonus frame entry '" + key + "'");
+				}
+				m_productionSpeedBonusFrames[key] = frames;
+			}
+		}
+	}
+	else if (x.isLoading())
+	{
+		m_productionSpeedBonuses.clear();
+		m_productionSpeedBonusBackup.clear();
+		m_productionSpeedBonusFrames.clear();
+		if (m_template)
+		{
+			m_productionSpeedBonuses = m_template->m_productionTimeChanges;
+			m_productionSpeedBonusBackup = m_productionSpeedBonuses;
+			for (const auto &kv : m_productionSpeedBonuses)
+			{
+				m_productionSpeedBonusFrames[kv.first] = 0;
+			}
+		}
+	}
+}
+
+// PORT-231: RW 0x006AF3C8
+void Player::setProductionSpeedBonus(const std::string &templateName, float factor, int frames)
+{
+	if (m_productionSpeedBonusBackup.find(templateName) == m_productionSpeedBonusBackup.end())
+	{
+		m_productionSpeedBonusBackup[templateName] = 0.0f;
+	}
+	m_productionSpeedBonusFrames[templateName] = frames;
+	m_productionSpeedBonuses[templateName] = factor;
+}
+
+// PORT-231: RW 0x006AF484
+float Player::getProductionSpeedBonus(const std::string &templateName) const
+{
+	auto it = m_productionSpeedBonuses.find(templateName);
+	return it != m_productionSpeedBonuses.end() ? it->second : 0.0f;
+}
+
+// PORT-231: RW 0x006AF269 -> 0x006AF28E
+void Player::updateProductionSpeedBonuses()
+{
+	for (auto &kv : m_productionSpeedBonusFrames)
+	{
+		if (kv.second != 0)
+		{
+			--kv.second;
+			if (kv.second == 0)
+			{
+				auto it = m_productionSpeedBonusBackup.find(kv.first);
+				m_productionSpeedBonuses[kv.first] = it != m_productionSpeedBonusBackup.end() ? it->second : 0.0f;
+			}
+		}
 	}
 }
 

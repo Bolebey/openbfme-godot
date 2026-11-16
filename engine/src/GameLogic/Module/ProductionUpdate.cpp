@@ -118,7 +118,7 @@ const FieldParse kProductionUpdateFieldParse[] = {
 	{ "VeteranUnitsFromVeteranFactory", INI::parseBool, nullptr, PU_OFF(m_veteranUnitsFromVeteranFactory) },
 	{ "SetBonusModelConditionOnSpeedBonus", INI::parseBool, nullptr, PU_OFF(m_setBonusModelConditionOnSpeedBonus) },
 	{ "BonusForType", INI::parseAsciiString, nullptr, PU_OFF(m_bonusForType) },
-	{ "SpeedBonusAudioLoop", INI::parseAsciiString, nullptr, PU_OFF(m_speedBonusAudioLoop) }, // RW 0x73B217 resolves an audio event (S-203)
+	{ "SpeedBonusAudioLoop", INI::parseAsciiString, nullptr, PU_OFF(m_speedBonusAudioLoop) }, // RW 0x73B217 resolves an audio event (PORT-231)
 	{ "SecondaryQueue", INI::parseBool, nullptr, PU_OFF(m_secondaryQueue) },
 	{ nullptr, nullptr, nullptr, 0 }
 };
@@ -205,6 +205,31 @@ ProductionUpdate::ProductionUpdate(Thing *thing, const ProductionUpdateModuleDat
 	: UpdateModule(thing, data)
 	, m_data(data)
 {
+}
+
+ProductionUpdate::~ProductionUpdate()
+{
+	if (m_speedBonusSoundActive && getObject())
+	{
+		AudioApi::stopHeldSound(AudioApi::HELD_PRODUCTION_SPEED_BONUS, speedBonusSoundKey());
+		m_speedBonusSoundActive = false;
+	}
+}
+
+void ProductionUpdate::onDelete()
+{
+	if (m_speedBonusSoundActive && getObject())
+	{
+		AudioApi::stopHeldSound(AudioApi::HELD_PRODUCTION_SPEED_BONUS, speedBonusSoundKey());
+		m_speedBonusSoundActive = false;
+	}
+}
+
+std::uint32_t ProductionUpdate::speedBonusSoundKey() const
+{
+	const Object *obj = getObject();
+	const std::uint32_t id = obj ? (std::uint32_t)obj->getID() : 0u;
+	return m_data->m_secondaryQueue ? (id | 0x80000000u) : id;
 }
 
 void ProductionUpdate::setBit(Flags &f, int bit, bool on)
@@ -976,7 +1001,38 @@ UpdateSleepTime ProductionUpdate::update()
 	pauseHeroEntries(); // RW 0x8A0669 (lane HERO-1)
 	ProductionEntry *entry = currentEntry();
 	Player *player = us->getControllingPlayer();
-	// RW 0x8A1C25 .. 0x8A1D4F: the speed bonus model condition and audio loop belong to the player bonus map and the audio lane (S-203)
+	// PORT-231 (RW 0x008A1B9F -> 0x8A1C1C .. 0x8A1D4F): SetBonusModelConditionOnSpeedBonus + SpeedBonusAudioLoop against player->getProductionSpeedBonus(BonusForType)
+	if (player)
+	{
+		static const int kUpgradeEconomyBonus = mcBit("UPGRADE_ECONOMY_BONUS");
+		static const unsigned kUnderConstruction = statusBit("UNDER_CONSTRUCTION");
+		const bool hasSpeedBonus = player->getProductionSpeedBonus(m_data->m_bonusForType) < 0.0f;
+		if (m_data->m_setBonusModelConditionOnSpeedBonus)
+		{
+			if (hasSpeedBonus != us->testModelCondition(kUpgradeEconomyBonus))
+			{
+				us->setModelConditionState(kUpgradeEconomyBonus, hasSpeedBonus);
+			}
+		}
+		if (!m_data->m_speedBonusAudioLoop.empty() && AsciiStringUtil::compareNoCase(m_data->m_speedBonusAudioLoop, "NoSound") != 0)
+		{
+			if (hasSpeedBonus && !us->isEffectivelyDead() && !us->testStatus(kUnderConstruction))
+			{
+				AudioApi::resumeHeldSound(AudioApi::HELD_PRODUCTION_SPEED_BONUS, m_data->m_speedBonusAudioLoop, speedBonusSoundKey(), us->getID());
+				m_speedBonusSoundActive = true;
+			}
+			else if (m_speedBonusSoundActive)
+			{
+				AudioApi::stopHeldSound(AudioApi::HELD_PRODUCTION_SPEED_BONUS, speedBonusSoundKey());
+				m_speedBonusSoundActive = false;
+			}
+		}
+	}
+	else if (m_speedBonusSoundActive)
+	{
+		AudioApi::stopHeldSound(AudioApi::HELD_PRODUCTION_SPEED_BONUS, speedBonusSoundKey());
+		m_speedBonusSoundActive = false;
+	}
 	if (m_data->m_numDoorAnimations > 0)
 	{
 		updateDoors();
@@ -1115,6 +1171,85 @@ void ProductionUpdate::awardProductionExperience(Object *newObj, const Productio
 	}
 }
 
+// PORT-231 (RW 0x008A253B .. 0x008A25D7 / 0x008A2624 .. 0x008A26BC): register script name on a newly produced unit
+namespace
+{
+void applyProducedScriptName(GameLogic &logic, Object &newObj, const std::string &name)
+{
+	if (name.empty())
+	{
+		return;
+	}
+	newObj.friend_setNameUncached(name);
+	ScriptEngine &se = logic.scriptEngine();
+	if (se.getUnitNamed(name) != nullptr || se.didUnitExist(name))
+	{
+		se.transferObjectName(name, newObj); // RW 0x00759467
+	}
+	else
+	{
+		se.nameInCache(name, newObj); // RW 0x0060A1D5
+	}
+}
+
+// PORT-231 (RW 0x008A171F -> 0x008A07E0): migrate entry->hordeTarget (and its HORDE members) from its container into the newly built container
+void migrateHordeTarget(GameLogic &logic, const ProductionEntry &entry, Object &newObj)
+{
+	if (entry.hordeTarget == INVALID_ID)
+	{
+		return;
+	}
+	Object *target = logic.findObjectByID(entry.hordeTarget);
+	ContainModuleInterface *dstContain = newObj.getContain();
+	if (!target || !dstContain)
+	{
+		return;
+	}
+	Object *oldContainer = target->getContainedBy();
+	auto moveItem = [&](Object *item) {
+		if (!item)
+		{
+			return;
+		}
+		Object *itemContainer = item->getContainedBy();
+		const bool itemInHorde = itemContainer && itemContainer->isKindOfName("HORDE");
+		if (oldContainer)
+		{
+			if (ContainModuleInterface *oc = oldContainer->getContain())
+			{
+				oc->removeFromContain(item, false); // RW 0x008A07FF / 0x008A082B
+			}
+		}
+		if (itemInHorde)
+		{
+			if (ContainModuleInterface *hc = itemContainer->getContain())
+			{
+				if (HordeContainInterface *hci = hc->getHordeContainInterface())
+				{
+					hci->releaseMemberForGarrison(item); // RW 0x008A0823 -> slot 0xA8 RW 0x0086EBF4
+				}
+			}
+		}
+		dstContain->addToContain(item); // RW 0x008A083D
+	};
+	moveItem(target);
+	if (target->isKindOfName("HORDE"))
+	{
+		if (ContainModuleInterface *tc = target->getContain())
+		{
+			if (const ContainModuleInterface::ContainedItemsList *items = tc->getContainedItemsList())
+			{
+				const std::vector<Object *> members(items->begin(), items->end());
+				for (Object *m : members)
+				{
+					moveItem(m);
+				}
+			}
+		}
+	}
+}
+} // namespace
+
 // RW 0x8A1F8A .. 0x8A2EC4
 void ProductionUpdate::completeUnit(ProductionEntry *entry, Player *player, UnsignedInt now)
 {
@@ -1207,6 +1342,7 @@ void ProductionUpdate::completeUnit(ProductionEntry *entry, Player *player, Unsi
 					removeFromProductionQueue(entry); // RW 0x8A2513 -> 0x8A2EF6
 					return;
 				}
+				applyProducedScriptName(logic, *newObj, entry->name); // RW 0x008A253B .. 0x008A25D7
 				newObj->setProducer(us); // RW 0x8A2788 (RW 0x625E0A, the object's group, is not ported)
 			}
 			else
@@ -1221,6 +1357,7 @@ void ProductionUpdate::completeUnit(ProductionEntry *entry, Player *player, Unsi
 					removeFromProductionQueue(entry);
 					return;
 				}
+				applyProducedScriptName(logic, *newObj, entry->name); // RW 0x008A2624 .. 0x008A26BC
 				// lane MODCOMPAT-MOD1: RW 0x8A26BD .. 0x8A270E: an entry with its + 0x44 flag (ObjectCreationUpgrade's UseBuildingProduction queue) hands the new
 				// object to the producer's SlaveWatcherBehavior (RW 0x68BDA5 by name key, RW 0x887AF5)
 				if (entry->flag44)
@@ -1324,6 +1461,8 @@ void ProductionUpdate::completeUnit(ProductionEntry *entry, Player *player, Unsi
 			{
 				AudioApi::postUnitVoice(0x7DA, newObj->getID(), getObject()->getID());
 			}
+			// PORT-231 (RW 0x008A2A67 -> 0x008A171F): migrate entry->hordeTarget into newObj's contain
+			migrateHordeTarget(logic, *entry, *newObj);
 			// RW 0x8A2A8C: BuildFadeInOnCreateTime (tt + 0x354, read above) times 5 frames delays the exit and holds the unit disabled
 			m_postExitDelay = (unsigned)SimMath::truncToInt32(SimMath::mulf32(fade, (float)LOGICFRAMES_PER_SECOND));
 			newObj->setSpecialModelConditionState(kJustBuilt, m_postExitDelay);

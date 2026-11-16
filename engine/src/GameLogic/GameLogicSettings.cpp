@@ -334,6 +334,8 @@ const FieldParse kGameDataFields[] = {
 	{ "SupplyBuildBorder", parseNoting<INI::parseReal>, SEEN_DATA(SEEN_SUPPLYBORDER), (int)offsetof(BlockState, values.supplyBuildBorder) },
 	{ "MinDistFromEdgeOfMapForBuild", parseMinDistFromEdgeOfMapForBuild, nullptr, (int)offsetof(BlockState, values.minDistFromEdgeOfMapForBuild) },
 	{ "MaxLineBuildObjects", parseNoting<INI::parseInt>, SEEN_DATA(SEEN_LINEBUILD), (int)offsetof(BlockState, values.maxLineBuildObjects) },
+	// PORT-231: MaxCastleRadius (row RW 0xC011C0, parseReal RW 0x42ED00, GlobalData + 0x1220): read by BuildAssistant::isLocationClearOfObjects (RW 0x00796D37)
+	{ "MaxCastleRadius", INI::parseReal, nullptr, (int)offsetof(BlockState, values.maxCastleRadius) },
 	// lane BUILD-3: BuilderMoveFromNewStructureDistance (row RW 0xC010D0, parseReal, GlobalData + 0x11E4): the walk of a porter out of the structure it built (RW 0x88D6AE)
 	{ "BuilderMoveFromNewStructureDistance", parseNoting<INI::parseReal>, SEEN_DATA(SEEN_BUILDERMOVE), (int)offsetof(BlockState, values.builderMoveFromNewStructureDistance) },
 	// lane PORTERFOG-1: BuilderFadeOutTime / BuilderFadeInTime (BFME2 decomp GlobalData.cpp:1199-1200: parseDurationUnsignedInt, GlobalData + 0x11DC / + 0x11E0): the porter's
@@ -935,6 +937,7 @@ void GameLogicSettings::crc(StateHasher &h) const
 	h.addFloat(supplyBuildBorder); // PORT-12: always hash the placement rule, including zero
 	h.addI32(maxLineBuildObjects);
 	h.addFloat(minDistFromEdgeOfMapForBuild); // RotWK GameData +0xA68: always hash this simulation input, including zero
+	h.addFloat(maxCastleRadius); // PORT-231: GameData +0x1220 always hashed, including zero
 	h.addBool(builderMoveLoaded);
 	h.addFloat(builderMoveFromNewStructureDistance);
 	h.addBool(sellPercentageLoaded); // lane FACT-A

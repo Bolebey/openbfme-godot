@@ -345,6 +345,14 @@ public:
 	void giveLightPointLevel(const std::string &levelName);
 	void removeLightPointLevel(const std::string &levelName);
 
+	// PORT-231 (RW 0x006AF3C8 / 0x006AF484 / 0x006AF269 -> 0x006AF28E): per-template production speed bonuses (seeded from
+	// PlayerTemplate::ProductionTimeChange in init, written by ProductionSpeedBonus::doSpecialPower, ticked down in phase 6).
+	void setProductionSpeedBonus(const std::string &templateName, float factor, int frames);
+	float getProductionSpeedBonus(const std::string &templateName) const;
+	void updateProductionSpeedBonuses();
+	const std::map<std::string, float> &productionSpeedBonuses() const { return m_productionSpeedBonuses; }
+	const std::map<std::string, std::int32_t> &productionSpeedBonusFrames() const { return m_productionSpeedBonusFrames; }
+
 	void setEconomyHost(PlayerEconomyHost *host) { m_host = host; }
 	PlayerEconomyHost *economyHost() const { return m_host; }
 
@@ -402,4 +410,8 @@ private:
 	std::shared_ptr<TunnelTracker> m_tunnelTracker; ///< lane GARRISON-2 (RW + 0x308)
 	ResourceGatheringManager m_resourceGathering; ///< lane LUMBER1 (RW + 0x304)
 	LightPointTracker m_lightPoints;              ///< PORT-113 (RW + 0x338)
+	// PORT-231 (RW +0x2B4 / +0x2C8 / +0x2DC): active bonus, template baseline backup, remaining frames
+	std::map<std::string, float> m_productionSpeedBonuses;
+	std::map<std::string, float> m_productionSpeedBonusBackup;
+	std::map<std::string, std::int32_t> m_productionSpeedBonusFrames;
 };

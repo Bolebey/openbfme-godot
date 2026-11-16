@@ -351,6 +351,8 @@ struct GameLogicSettings
 	float supplyBuildBorder = 0.0f;
 	int maxLineBuildObjects = 0;
 	float minDistFromEdgeOfMapForBuild = 0.0f;
+	// PORT-231: GameData MaxCastleRadius (row RW 0xC011C0, GlobalData + 0x1220, ctor 0.0f): search/castle clearance radius in BuildAssistant::isLocationClearOfObjects (RW 0x00796D37)
+	float maxCastleRadius = 0.0f;
 	// lane BUILD-3 (GameData, RW GlobalData + 0x11E4): BuilderMoveFromNewStructureDistance, the walk of a porter out of the structure it built (RW 0x88D6AE); loaded when a block read it
 	bool builderMoveLoaded = false;
 	float builderMoveFromNewStructureDistance = 0.0f;
@@ -362,9 +364,9 @@ struct GameLogicSettings
 	// RW GlobalData +0xA88, parseUnsignedInt (seconds).
 	bool repairDamageDelayLoaded = false;
 	unsigned timeAfterDamageUntilRepairAllowed = 0;
-	// lane FACT-A (GameData SellPercentage, RW GlobalData + 0xB94): a sold structure's refund share (BuildAssistant::update RW 0x79468B); loaded when a block read it
+	// lane FACT-A (GameData SellPercentage, RW GlobalData + 0xB94): a sold structure's refund share (BuildAssistant::update RW 0x79468B); GlobalData ctor defaults it to 1.0f (RW 0x006429AD -> 0x643160 / 0x643222)
 	bool sellPercentageLoaded = false;
-	float sellPercentage = 0.0f;
+	float sellPercentage = 1.0f;
 	// lane LOCAL-1 (GameData AttributeModifierArmorMaxBonus, row RW 0xC00490, parsePercentToReal RW 0x42EEFA, GlobalData + 0xAE8): cap on active ARMOR modifiers in AdjustDamage (RW 0x5D893C, asm RW 0x5D8B02..0x5D8B3D); retail 2.01 gamedata.ini sets 75%
 	float attributeModifierArmorMaxBonus = 0.75f;
 	// lane LOCAL-1 (GameData DamageRadiusMinimumForSplash, row RW 0xC00580, parseReal RW 0x42ED00, GlobalData + 0xB40): minimum radius for splash in WeaponDelivery::radiusDamage (RW 0x90DEF0, asm RW 0x90E24F); radius <= threshold hurts only first victim; retail 2.01 sets 4.0

@@ -25,10 +25,9 @@
 // countdown 4 * LOGICFRAMES_PER_SECOND, NO_COLLISIONS RW 0x6907D7), cancel by index (RW 0x8A047B / 0x8A03EC) and the record's cancel (RW 0x8A1460).
 // Lane PRODUCTION1: the producer's experience from a made unit and a finished upgrade (RW 0x8A27F9 / 0x8A2015), VeteranUnitsFromVeteranFactory (RW 0x8A27D4),
 // the PRODUCTION rate (RW 0x8A1EBC), the entry's upgrade bit and the upgrade modules of the new unit (RW 0x8A2922 .. 0x8A2946).
-// NOT PORTED (stop S-203): audio (speed bonus loop, voices), the EVA messages, the speed bonus model condition (a player bonus map), the entry name /
-// script naming (RW +0x40), the BuildFadeInOnCreateList extra objects' drawables, SecondaryQueue selection of the
-// dispatcher is ported but hero queues are not. Entry + 0x3C horde target: the setter (slot 14, RW 0x8A03A0) is ported (LOCAL-23); its reader
-// (the made unit joining that horde) is not ported and was not located in RW (Ennorath's EvilPort has no DestinationTemplate, so it never queues).
+// NOT PORTED (stop S-203): audio (voices), the EVA messages, the BuildFadeInOnCreateList extra objects' drawables, SecondaryQueue selection of the
+// dispatcher is ported but hero queues are not, the pending template name set (RW +0x130) and the score keeper. PORT-231 ported the speed bonus model condition
+// and audio loop (RW 0x8A1C25 .. 0x8A1D4F), script naming of a produced object (RW 0x8A253B / 0x8A2624), and the horde join of entry + 0x3C (RW 0x8A2A67 -> 0x8A171F -> 0x8A07E0).
 
 #pragma once
 
@@ -172,10 +171,12 @@ class ProductionUpdate : public UpdateModule, public ProductionUpdateInterface
 public:
 	OBFME_MODULE_XFER(ProductionUpdate) // lane SAVE-4b
 	ProductionUpdate(Thing *thing, const ProductionUpdateModuleData *data);
+	~ProductionUpdate() override;
 
 	static void registerClass(ModuleFactory &modules);
 
 	ProductionUpdateInterface *getProductionUpdateInterface() override { return this; }
+	void onDelete() override;
 	UpdateSleepTime update() override;
 	DisabledMaskType getDisabledTypesToProcess() const override { return m_data->m_disabledTypesToProcess; }
 	void crc(StateHasher &hasher) const override;
@@ -257,4 +258,6 @@ private:
 	bool m_cancellingAll = false;                          ///< RW +0x11D
 	bool m_factoryDisabled = false;                        ///< RW +0x13C
 	unsigned m_heroCountdown = 0;                          ///< RW +0x128 (lane HERO-1: frames between two revives, RW 0x8A2C1E)
+	bool m_speedBonusSoundActive = false;                  ///< PORT-231: audio-side held handle tracking for HELD_PRODUCTION_SPEED_BONUS
+	std::uint32_t speedBonusSoundKey() const;
 };
