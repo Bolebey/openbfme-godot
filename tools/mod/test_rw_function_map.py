@@ -251,3 +251,23 @@ def test_compare_confirmed_parent_interfaces_and_new_slots():
                                 (0, 2, 30), (0, 3, 4), (16, 1, 9), (32, 0, 12)]
     with pytest.raises(ValueError, match='vtable'):
         overridden_slots({1: (3,)}, {})
+
+
+def test_ini_archive_inventory_with_includes_default_child_and_duplicates(tmp_path):
+    import zipfile
+    from types import SimpleNamespace
+    from rw_function_map import inventory_from_ini
+    grammar = SimpleNamespace(classes={'A': {}, 'B': {}}, object={'behavior': ('line', None)})
+    reg = [dict(name=x, type=0, mask=0, isAiModuleData=False, slot7=False) for x in ('A', 'B')]
+    path = tmp_path / 'ini.zip'
+    with zipfile.ZipFile(path, 'w') as z:
+        z.writestr('data/ini/default/object.ini', 'Object DefaultThingTemplate\nBehavior = A tag_a\nEnd\nEnd\n')
+        z.writestr('data/ini/object/one.ini', 'Object Base\n#include "part.inc"\nEnd\n'
+                   'Object Base\nBehavior = B tag_c\nEnd\nEnd\n'
+                   'ChildObject Child Base\nRemoveModule tag_b\nEnd\n')
+        z.writestr('data/ini/object/part.inc', 'Behavior = B tag_b\nEnd\n')
+    objects, counts, defs = inventory_from_ini(path, grammar, reg)
+    assert len(defs) == 4
+    assert {x.tag for x in objects['Base']} == {'tag_a', 'tag_b', 'tag_c'}
+    assert {x.tag for x in objects['Child']} == {'tag_a', 'tag_c'}
+    assert counts == {'A': 3, 'B': 2}

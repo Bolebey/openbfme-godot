@@ -515,7 +515,7 @@ def resolve_objects(definitions: list[ObjectDefinition], registry: list[dict]):
 
     Counting is per distinct object, not number of declarations or instances of
     a module within an object. This function does not infer the archive's load
-    order or a map's override load type. Duplicate object definitions are not
+    order or a map's override load type. Duplicate Object definitions are
     replayed into the existing template for normal load (type 1), as in
     ThingFactory::parseObjectDefinition. All keys are case-sensitive like the port.
     """
@@ -581,3 +581,75 @@ def overridden_slots(child: dict[int, tuple[int, ...]], parent: dict[int, tuple[
             if index >= len(base_slots) or target != base_slots[index]:
                 result.append((offset, index, target))
     return result
+
+
+class IniZip:
+    """Case-insensitive, read-only VFS for an INI archive (including includes)."""
+    def __init__(self, path: Path):
+        import zipfile
+        self.archive = zipfile.ZipFile(path)
+        self.files = {}
+        for info in self.archive.infolist():
+            name = info.filename.replace('\\', '/').lower()
+            if info.is_dir() or not name.startswith('data/ini/'):
+                continue
+            if name in self.files:
+                raise ValueError(f'duplicate case-insensitive INI path: {name}')
+            self.files[name] = info
+
+    def read(self, name: str):
+        info = self.files.get(name.replace('\\', '/').lower())
+        if info is None:
+            return None
+        # splitlines on latin1 would split at 0x85, a printable ANSI byte.
+        return self.archive.read(info).decode('cp1252', errors='replace')
+
+    def close(self):
+        self.archive.close()
+
+
+def inventory_from_ini(path: Path, grammar, registry: list[dict]):
+    """Read default and object INIs in case-insensitive retail file order.
+
+    Loads includes via ennorath_graph.expand and replays effective modules.
+    Only Object headers in the object/default files are considered; any missing
+    include, unclosed block or unresolved parent/tag is fatal. #defines use the
+    existing audit's per-file semantics; map-specific overrides are not loaded.
+    """
+    import sys
+    local = str(Path(__file__).resolve().parent)
+    if local not in sys.path:
+        sys.path.insert(0, local)
+    import ennorath_graph as eg
+    vfs = IniZip(path)
+    definitions = []
+    previous_missing = len(eg.MISSING)
+    try:
+        default = 'data/ini/default/object.ini'
+        names = ([default] if default in vfs.files else []) + sorted(
+            n for n in vfs.files if n.startswith('data/ini/object/') and n.endswith('.ini'))
+        if not names:
+            raise ValueError('archive contains no default or object INI files')
+        for name in names:
+            lines = eg.expand(vfs, name, {})
+            i = 0
+            while i < len(lines):
+                text, source = lines[i]
+                tokens = text.split()
+                kind = tokens[0].lower() if tokens else ''
+                if '=' not in text and kind in {'object', 'childobject', 'objectreskin'} and len(tokens) >= 2:
+                    if kind != 'object' and len(tokens) < 3:
+                        raise ValueError(f'{source}: {kind} has no parent')
+                    events, end = parse_module_events(lines, i + 1, grammar)
+                    definitions.append(ObjectDefinition(tokens[1], kind, tokens[2] if kind != 'object' else '', tuple(events), source))
+                    i = end
+                else:
+                    i += 1
+        missing = eg.MISSING[previous_missing:]
+        if missing:
+            raise ValueError(f'{len(missing)} missing INI includes, first: {missing[0]}')
+        objects, counts = resolve_objects(definitions, registry)
+        return objects, counts, definitions
+    finally:
+        vfs.close()
+        del eg.MISSING[previous_missing:]
