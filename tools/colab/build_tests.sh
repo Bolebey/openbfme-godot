@@ -6,6 +6,12 @@ set -euo pipefail
 [ -f /root/.agent_env ] && source /root/.agent_env
 # /root/.agent_env is rebuilt on every Colab restart without it
 export RW_GAME_DAT="${RW_GAME_DAT:-${OPENBFME_GAME_DAT:-}}"
+# OPENBFME_CCACHE_DIR (pr_checker.py, 2026-11-16): a cache on the sandbox's own disk, the Drive one (agent_env's CCACHE_DIR) read-only behind it:
+# Drive serves ccache's many small files slowly, and a restart still starts warm
+if [ -n "${OPENBFME_CCACHE_DIR:-}" ]; then
+  [ -n "${CCACHE_DIR:-}" ] && [ "$CCACHE_DIR" != "$OPENBFME_CCACHE_DIR" ] && export CCACHE_REMOTE_STORAGE="file:$CCACHE_DIR|read-only"
+  export CCACHE_DIR="$OPENBFME_CCACHE_DIR" CCACHE_MAXSIZE="${CCACHE_MAXSIZE:-25G}"
+fi
 cd "$(git rev-parse --show-toplevel)"
 git submodule update --init --depth 1 engine/thirdparty/godot-cpp
 cmake -S engine -B engine/build -G Ninja -DCMAKE_BUILD_TYPE=Release -DOPENBFME_BUILD_GODOT=ON \
