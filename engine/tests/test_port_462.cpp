@@ -1,6 +1,6 @@
 // OpenBFME. GPL-3.0. Synthetic data only; expectations from RotWK 2.01.
 #include "doctest.h"
-#include "LogicTestUtil.h"
+#include "MoveTestUtil.h"
 #include "GameClient/InGameUI.h"
 #include "GameClient/UnitVoiceResponse.h"
 #include "GameLogic/GameMessage.h"
@@ -19,7 +19,7 @@ struct Sink462 : UnitVoiceResponse::Sink
 };
 struct Rig462
 {
-	logictest::LogicWorld f;
+	movetest::MoveWorld f;
 	Sink462 sink;
 	InGameUI ui;
 	UnitVoiceResponse voice{*f.logic, sink};
