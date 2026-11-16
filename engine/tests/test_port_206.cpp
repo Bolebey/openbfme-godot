@@ -26,6 +26,7 @@
 
 #include "LogicTestUtil.h"
 
+#include "Common/Player.h"
 #include "Common/StateHash.h"
 #include "Common/Team.h"
 #include "GameLogic/GameLogic.h"
@@ -87,6 +88,7 @@ struct BonusWorld
 		LogicModules::registerAll(f.w.modules);
 		f.logic->settings().unitDamagedThreshold = 0.5f; // ActiveBody needs GameData's thresholds
 		f.logic->settings().unitReallyDamagedThreshold = 0.25f;
+		f.logic->settings().bodyThresholdsLoaded = true; // an ActiveBody refuses the default thresholds otherwise
 		const std::string err = f.w.load(upgradeObjects(), INI_LOAD_OVERWRITE, "port206.ini");
 		REQUIRE_MESSAGE(err.empty(), err);
 	}
@@ -124,7 +126,7 @@ TEST_CASE("PORT-206 a WeaponBonusUpgrade puts PLAYER_UPGRADE into the object's m
 	CHECK(o->weaponBonusConditionMask() == ((1u << kPlayerUpgrade) | 1u)); // 0x21: RW 0x8B980D ORs 0x20 into RW 0x6CA7C4's mask
 
 	// the removal is retail's no-op RW 0x63F3BF: taking the upgrade away leaves the bit
-	o->removeUpgrade("Upgrade_Port206Bonus");
+	o->removeUpgrade(Player::resolveUpgrade("Upgrade_Port206Bonus", true));
 	CHECK(o->weaponBonusConditionMask() == ((1u << kPlayerUpgrade) | 1u));
 }
 
@@ -154,7 +156,7 @@ TEST_CASE("PORT-206 the neighbouring behaviour holds: an object without the modu
 	second->giveUpgrade("Upgrade_Port206Bonus");
 	StateHasher h2;
 	second->crc(h2);
-	CHECK(h1.hash() != h2.hash());
+	CHECK(h1.value() != h2.value());
 }
 
 // What the three conditions this port still cannot set would need, recorded as the test that keeps the verdict honest: the mask has room for

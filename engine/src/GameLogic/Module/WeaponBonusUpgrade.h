@@ -35,6 +35,7 @@ public:
 	                                      // object's mask, which Object::crc RW-hashes and Object::xfer carries
 	WeaponBonusUpgrade(Thing *thing, const UpgradeModuleData *data) : UpgradeModule(thing, data) {}
 	static void registerModule(ModuleFactory &modules); // RW 0x64FF7C -> ctor RW 0x8B97C0 (registered twice in retail, one class)
+	void crc(StateHasher &h) const override; // UpgradeModule's: the mux's executed flag; the bit lives in the object's mask
 
 protected:
 	void upgradeImplementation() override; // RW 0x8B980D: `or dword [object+0x39C], 0x20`

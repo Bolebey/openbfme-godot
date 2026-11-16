@@ -14,6 +14,7 @@ void WeaponBonusUpgrade::upgradeImplementation()
 	getObject()->setWeaponBonusCondition(kPlayerUpgradeCondition, true);
 }
 
+// RW 0x8B980D keeps no state of its own: the bit lives in the object's mask (Object::crc hashes it), so the module hashes its base's state only.
 void WeaponBonusUpgrade::crc(StateHasher &h) const
 {
 	UpgradeModule::crc(h);
