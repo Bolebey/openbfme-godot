@@ -372,6 +372,26 @@ def parse_module_events(lines: list[tuple[str, str]], start: int, grammar):
 
     classes = {name.lower(): (name, node) for name, node in grammar.classes.items()}
 
+    def module_end(i, node, source):
+        while i < len(lines):
+            key, _ = fa.field_key(lines[i][0])
+            if key.lower() == 'end':
+                return i
+            kind = fa.row_kind(node, key) if node is not None else None
+            if kind and kind[0] == 'script':
+                i += 1
+                while i < len(lines) and fa.field_key(lines[i][0])[0].lower() != 'endscript':
+                    i += 1
+                if i == len(lines):
+                    raise ValueError(f'{source}: unclosed module script')
+            elif kind and kind[0] == 'block' and fa.opens_block(lines, i + 1, kind[1], node, grammar.classes):
+                end = fa.block_end(lines, i + 1, kind[1], grammar.classes)
+                if end < 0:
+                    raise ValueError(f'{source}: unclosed nested module block')
+                i = end
+            i += 1
+        raise ValueError(f'{source}: unclosed module')
+
     def walk(i, mode):
         events = []
         while i < len(lines):
@@ -405,9 +425,7 @@ def parse_module_events(lines: list[tuple[str, str]], start: int, grammar):
                 found = classes.get(args[0].lower())
                 if not found:
                     raise ValueError(f'{source}: unknown module class {args[0]}')
-                end = fa.module_end(lines, i + 1, found[1])
-                if end < 0:
-                    raise ValueError(f'{source}: unclosed module {args[0]}')
+                end = module_end(i + 1, found[1], source)
                 category = 'behavior' if low == 'body' else low
                 events.append(ModuleEvent('add', tag=args[1], name=found[0], category=category,
                                           inheritable=mode == 'inheritablemodule', source=source))

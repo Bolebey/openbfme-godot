@@ -171,3 +171,15 @@ def test_parse_module_events_uses_any_tag_and_skips_nested_blocks():
         parse_module_events([('Behavior = Unknown tag', '1'), ('End', '2')], 0, grammar)
     with pytest.raises(ValueError, match='not closed'):
         parse_module_events([('foo = bar', '1')], 0, grammar)
+
+
+def test_module_field_that_can_be_one_line_does_not_eat_object_end():
+    from types import SimpleNamespace
+    from rw_function_map import parse_module_events
+    grammar = SimpleNamespace(
+        classes={'A': {'optional': ('block', {'subfield': ('line', None)})}},
+        object={'geometry': ('line', None)})
+    text = ['Behavior = A Arbitrary', 'Optional = value', 'End', 'Geometry = X', 'End']
+    events, end = parse_module_events([(line, str(i)) for i, line in enumerate(text)], 0, grammar)
+    assert end == len(text)
+    assert [(e.name, e.tag) for e in events] == [('A', 'Arbitrary')]
