@@ -183,6 +183,7 @@ include(cmake/Spell.cmake)      # OPENBFME_SPELL_SOURCES / OPENBFME_SPELL_TESTS 
 include(cmake/Port438.cmake) # PORT-438: the forbidden-objects distance of a summon is the 2D bounding circle (fork issue 438; OPENBFME_PORT438_TESTS)
 include(cmake/Port43.cmake)     # PORT-43: GameData/PowerLimit -> GameLogic + 0x118 (issue #128; OPENBFME_PORT43_TESTS)
 include(cmake/Port51.cmake)     # PORT-51: Object/InstanceScaleFuzziness, parsed and never read by RotWK (issue #155; OPENBFME_PORT51_TESTS)
+include(cmake/Port228.cmake)    # PORT-228: the Locomotor rudder, swoop and thrust fields, parsed, copied and never read (fork issue 551; OPENBFME_PORT228_TESTS)
 include(cmake/Port99.cmake)     # PORT-99: PlayerTemplate/LightPointsUpSound, its only reader is the light-point (WOTR) action (issue #259; OPENBFME_PORT99_TESTS)
 include(cmake/Port214.cmake) # PORT-214: a hero's voice volume is his own Volume / MinVolume pair (fork issue 504; OPENBFME_PORT214_TESTS)
 include(cmake/Port119.cmake)   # PORT-119: AttachToBoneInAnotherModule, the two figures of a two-in-one hero (issue #303; OPENBFME_PORT119_TESTS)
@@ -919,6 +920,7 @@ endif()
 if(OPENBFME_BUILD_TESTS)
 include(cmake/AudioFixtures.cmake)
 add_executable(openbfme_tests
+    ${OPENBFME_PORT228_TESTS}
     ${OPENBFME_WIN1_TESTS}
     ${OPENBFME_DEP2_TESTS}
     ${OPENBFME_SMOOTH_TESTS}
