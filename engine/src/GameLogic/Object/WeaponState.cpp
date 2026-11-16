@@ -855,21 +855,44 @@ bool WeaponIsWithinTargetPitch(const WeaponTemplate &t, bool pitchLimited, float
 // =============================================================================================================================
 // FiringTracker
 // =============================================================================================================================
-// RW 0x8E302A
+namespace
+{
+// PORT-225: one bit of the 19-word model condition set the tracker's coolDown / speedUp clear and set.
+void setModelConditionBit(ModelConditionBits &bits, int bit)
+{
+	if (bit >= 0 && bit < (int)(bits.size() * 32))
+	{
+		bits[(size_t)bit >> 5] |= 1u << (bit & 31);
+	}
+}
+}
+
+// RW 0x8E302A (DONOR BFME2 0x004DEC88, coolDown(forceReset); the RW address is the port's record, not re-read here)
 void FiringTracker::reset(FiringTrackerHost &host, bool hard)
 {
 	const std::uint32_t bits = (1u << CONDITION_CONTINUOUS_FIRE_MEAN) | (1u << CONDITION_CONTINUOUS_FIRE_FAST);
 	const std::uint32_t mask = host.weaponBonusConditionMask();
-	if (hard || (mask & bits) == 0)
+	ModelConditionBits clr{}, set{};
+	if (!hard && (mask & bits) != 0)
 	{
+		// DONOR 0x004DEC88, the `!forceReset && (FAST || MEAN)` arm: straight to zero from wherever it is — CONTINUOUS_FIRE_SLOW is
+		// set, MEAN and FAST are cleared, and the cooldown frame the tracker holds stays where it is.
+		setModelConditionBit(set, MODELCOND_CONTINUOUS_FIRE_SLOW);
+		setModelConditionBit(clr, MODELCOND_CONTINUOUS_FIRE_MEAN);
+		setModelConditionBit(clr, MODELCOND_CONTINUOUS_FIRE_FAST);
+		host.setWeaponBonusConditionMask(mask & ~bits);
+	}
+	else
+	{
+		// DONOR 0x004DEC88, the else arm: all three conditions cleared, the cooldown frame and the last shot position dropped.
+		setModelConditionBit(clr, MODELCOND_CONTINUOUS_FIRE_FAST);
+		setModelConditionBit(clr, MODELCOND_CONTINUOUS_FIRE_MEAN);
+		setModelConditionBit(clr, MODELCOND_CONTINUOUS_FIRE_SLOW);
 		host.setWeaponBonusConditionMask(mask & ~bits);
 		m_coastEnd = 0;
 		m_lastOwnerPosition = Coord3D{};
 	}
-	else
-	{
-		host.setWeaponBonusConditionMask(mask & ~bits);
-	}
+	host.clearAndSetModelConditions(clr, set); // DONOR 0x004DEC88: one clearAndSet at the end of coolDown
 	m_count = 0;
 	m_victimID = 0;
 }
@@ -885,19 +908,29 @@ void FiringTracker::speedUp(FiringTrackerHost &host)
 		// RW 0x8E31AD .. 0x8E31B8: already in CONTINUOUS_FIRE_FAST
 		return;
 	}
+	ModelConditionBits clr{}, set{};
 	if (mask & mean)
 	{
-		// RW 0x8E31C8 .. 0x8E3205: transition MEAN -> FAST posts 0x7DC (VoiceRapidFire) for { self->getDrawable() }
+		// RW 0x8E31C8 .. 0x8E3205: transition MEAN -> FAST posts 0x7DC (VoiceRapidFire) for { self->getDrawable() }, and DONOR
+		// 0x004DEDD2 sets CONTINUOUS_FIRE_FAST while clearing MEAN and SLOW.
 		if (const std::uint32_t ownerId = host.ownerObjectID())
 		{
 			AudioApi::postUnitVoice(0x7DC, ownerId);
 		}
 		host.setWeaponBonusConditionMask((mask & ~mean) | fast);
+		setModelConditionBit(set, MODELCOND_CONTINUOUS_FIRE_FAST);
+		setModelConditionBit(clr, MODELCOND_CONTINUOUS_FIRE_MEAN);
+		setModelConditionBit(clr, MODELCOND_CONTINUOUS_FIRE_SLOW);
 	}
 	else
 	{
+		// DONOR 0x004DEDD2: none -> MEAN (FAST and SLOW cleared).
 		host.setWeaponBonusConditionMask(mask | mean);
+		setModelConditionBit(set, MODELCOND_CONTINUOUS_FIRE_MEAN);
+		setModelConditionBit(clr, MODELCOND_CONTINUOUS_FIRE_FAST);
+		setModelConditionBit(clr, MODELCOND_CONTINUOUS_FIRE_SLOW);
 	}
+	host.clearAndSetModelConditions(clr, set); // DONOR 0x004DEDD2: one clearAndSet at the end of speedUp
 }
 
 // RW 0x8E2E12

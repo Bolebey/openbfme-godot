@@ -19,10 +19,12 @@
 #include "IniTestUtil.h"
 #include "RetailTestMount.h"
 
+#include "GameLogic/BitFlags.h"
 #include "GameLogic/Weapon.h"
 #include "GameLogic/WeaponState.h"
 #include "GameLogic/WeaponStores.h"
 
+#include <array>
 #include <cstdint>
 #include <string>
 
@@ -61,6 +63,22 @@ struct Port225TrackerHost : FiringTrackerHost
 	std::uint32_t weaponBonusConditionMask() override { return mask; }
 	void setWeaponBonusConditionMask(std::uint32_t m) override { mask = m; }
 	void reloadAllWeapons() override { ++reloads; }
+	// The owner's model condition bits (Object::clearAndSetModelConditionFlags, RW 0x68D607), recorded the way the object applies
+	// them: the clear words first, then the set words.
+	std::array<std::uint32_t, 19> conditions{};
+	int conditionCalls = 0;
+	void clearAndSetModelConditions(const ModelConditionBits &clr, const ModelConditionBits &set) override
+	{
+		++conditionCalls;
+		for (std::size_t w = 0; w < conditions.size(); ++w)
+		{
+			conditions[w] = (conditions[w] & ~clr[w]) | set[w];
+		}
+	}
+	bool conditionSet(int bit) const
+	{
+		return bit >= 0 && bit < 19 * 32 && ((conditions[(std::size_t)bit >> 5] >> (bit & 31)) & 1u) != 0;
+	}
 };
 }
 
@@ -180,4 +198,61 @@ TEST_CASE("PORT-225 FiringTracker: a moving owner still hard-resets the tracker 
 	// The hard reset also clears the cooldown frame (coolDown(true)'s else arm), so nothing is pending: the module may sleep
 	// until it is woken (DONOR 0x004DEAB0).
 	CHECK(sleep == 0x3FFFFFFFu);
+}
+
+TEST_CASE("PORT-225 FiringTracker: the model condition name table carries the continuous-fire bits the tracker drives")
+{
+	// The tracker's coolDown / speedUp write bits 115 / 116 / 117 of the binary's model condition table (DONOR BFME2's
+	// ModelConditionFlagType); the port's own name table (RW 0xD9FAD8) must agree, or the animations of every unit would be driven
+	// by the wrong bits.
+	CHECK(std::string(TheModelConditionNames[FiringTracker::MODELCOND_CONTINUOUS_FIRE_SLOW]) == "CONTINUOUS_FIRE_SLOW");
+	CHECK(std::string(TheModelConditionNames[FiringTracker::MODELCOND_CONTINUOUS_FIRE_MEAN]) == "CONTINUOUS_FIRE_MEAN");
+	CHECK(std::string(TheModelConditionNames[FiringTracker::MODELCOND_CONTINUOUS_FIRE_FAST]) == "CONTINUOUS_FIRE_FAST");
+}
+
+TEST_CASE("PORT-225 FiringTracker: speedUp and coolDown set and clear the owner's continuous-fire model conditions")
+{
+	Port225World w;
+	// One and one: the second shot is already past ContinuousFireTwo, so the third shot speeds the owner up again.
+	const WeaponTemplate *t = w.make("  ContinuousFireOne = 1\n  ContinuousFireTwo = 1\n  ContinuousFireCoast = 2000\n  DelayBetweenShots = 200\n");
+	REQUIRE(t != nullptr);
+	Weapon weapon(t, 0, 0);
+	weapon.setWhenWeCanFireAgain(3);
+	Port225TrackerHost host;
+	FiringTracker tracker;
+	const int slow = (int)FiringTracker::MODELCOND_CONTINUOUS_FIRE_SLOW;
+	const int mean = (int)FiringTracker::MODELCOND_CONTINUOUS_FIRE_MEAN;
+	const int fast = (int)FiringTracker::MODELCOND_CONTINUOUS_FIRE_FAST;
+
+	host.frame = 1;
+	tracker.shotFired(host, weapon, 7, Coord3D{ 1, 2, 3 }, false);
+	// One shot is not past ContinuousFireOne yet, so the tracker leaves the owner's conditions alone.
+	CHECK(!host.conditionSet(mean));
+	CHECK(host.conditionCalls == 0);
+
+	host.frame = 2;
+	tracker.shotFired(host, weapon, 7, Coord3D{ 1, 2, 3 }, false);
+	// DONOR 0x004DEDD2, the none -> MEAN arm: MEAN set, FAST and SLOW cleared.
+	CHECK(host.conditionSet(mean));
+	CHECK(!host.conditionSet(fast));
+	CHECK(!host.conditionSet(slow));
+
+	host.frame = 3;
+	tracker.shotFired(host, weapon, 7, Coord3D{ 1, 2, 3 }, false);
+	// DONOR 0x004DEDD2, the MEAN -> FAST arm: FAST set, MEAN and SLOW cleared.
+	CHECK(host.conditionSet(fast));
+	CHECK(!host.conditionSet(mean));
+	CHECK(!host.conditionSet(slow));
+
+	// DONOR 0x004DEC88, the `!forceReset && (FAST || MEAN)` arm: the owner drops to CONTINUOUS_FIRE_SLOW.
+	tracker.reset(host, false);
+	CHECK(host.conditionSet(slow));
+	CHECK(!host.conditionSet(mean));
+	CHECK(!host.conditionSet(fast));
+
+	// DONOR 0x004DEC88, the else arm (a forced reset, or no continuous-fire condition): all three cleared.
+	tracker.reset(host, true);
+	CHECK(!host.conditionSet(slow));
+	CHECK(!host.conditionSet(mean));
+	CHECK(!host.conditionSet(fast));
 }
