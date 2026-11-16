@@ -121,3 +121,44 @@ def field_table(data, base, address):
             raise ValueError(f'duplicate field name {name}')
         rows[name.lower()] = offset
         address += 16
+
+
+def getter_offsets(data, base, blocks, getters):
+    """Read offsets reached from ECX at entry to named thiscall getters.
+
+    Deliberately inspect only each entry basic block: branch joins and indirect
+    calls need type/flow information not present in the inventory. An offset
+    is only a hint: named BFME2 matches can be wrong, especially tier B.
+    """
+    decoder = Cs(CS_ARCH_X86, CS_MODE_32)
+    decoder.detail = True
+    result = defaultdict(set)
+    for address in getters:
+        spans = blocks.get(address, ())
+        entry = next((size for start, size in spans if start == address), None)
+        if entry is None:
+            continue
+        if entry <= 0 or address < base or address + entry > base + len(data):
+            raise ValueError(f'invalid getter block at {address:#x}')
+        instructions = list(decoder.disasm(data[address-base:address-base+entry], address))
+        if not instructions or instructions[-1].address + instructions[-1].size != address + entry:
+            raise ValueError(f'truncated getter block at {address:#x}')
+        tracked = {'ecx'}
+        for ins in instructions:
+            for op in ins.operands:
+                if (ins.mnemonic != 'lea' and op.type == X86_OP_MEM and op.access & CS_AC_READ
+                        and op.mem.index == X86_REG_INVALID and FAMILIES.get(ins.reg_name(op.mem.base)) in tracked):
+                    result[address].add(op.mem.disp)
+            copied = False
+            if ins.mnemonic == 'mov' and len(ins.operands) == 2:
+                dst, src = ins.operands
+                copied = (dst.type == X86_OP_REG and dst.size == 4 and src.type == X86_OP_REG and src.size == 4
+                          and FAMILIES.get(ins.reg_name(src.reg)) in tracked)
+            _, writes = ins.regs_access()
+            for reg in writes:
+                tracked.discard(FAMILIES.get(ins.reg_name(reg)))
+            if ins.mnemonic == 'call':
+                tracked.difference_update(VOLATILE)
+            if copied:
+                tracked.add(FAMILIES[ins.reg_name(ins.operands[0].reg)])
+    return dict(result)

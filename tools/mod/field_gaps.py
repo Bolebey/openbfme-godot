@@ -11,6 +11,7 @@ a function ported without a citation, or a function of another class that reads 
 `stop` may already carry a verdict ("RotWK does not read it", TOP20 / docs/STOPS.md): read it first. The task still proves the reader
 (parser -> offset -> every reader, PROCESS 5 step 4). Only block, class and field names, counts and RW addresses are written: no values.
 With --game and --inventory, GameData, AIData and AudioSettings get same-basic-block global-pointer read candidates. Other blocks remain unimplemented.
+With --xmap, named template getters add direct-caller candidates (entry-block reads only).
 These are heuristic leads, not no-reader verdicts; register state is not propagated across blocks or indirect calls.
 """
 from __future__ import annotations
@@ -80,7 +81,19 @@ SINGLETONS = {
 }
 
 
-def top_level_candidates(game, inventory):
+# Table addresses are arguments to initFromINI: Object (RW 0x73BEC3),
+# Weapon (RW 0x6CED65, 0x6CEDE9), Locomotor (RW 0x5E8276, 0x5E83DC),
+# Upgrade (RW 0x66FCDA, 0x66FD7B); ExperienceLevel table RW 0xC11BF0.
+TEMPLATES = {
+    "object": ("ThingTemplate", 0xDA3DF8),
+    "weapon": ("WeaponTemplate", 0xC16DD8),
+    "locomotor": ("LocomotorTemplate", 0xBF4478),
+    "upgrade": ("UpgradeTemplate", 0xC107F8),
+    "experiencelevel": ("ExperienceLevel", 0xC11BF0),
+}
+
+
+def top_level_candidates(game, inventory, xmap=None):
     import json
     import pefile
     import hashlib
@@ -104,6 +117,32 @@ def top_level_candidates(game, inventory):
             note = ", ".join(f"0x{function:08X} ({citations.get(function, 'none')}; read 0x{instruction:08X})"
                              for function, instruction in candidates)
             output[(block, field)] = (route, note or "no candidate in recovered basic blocks; not a no-reader verdict")
+    if xmap is not None:
+        with xmap.open(encoding="utf-8", newline="") as stream:
+            named = {}
+            for row in csv.DictReader(stream):
+                name = row.get("decomp_qualname", "")
+                if row.get("tier") not in {"A", "B"}:
+                    continue
+                for block, (cls, _) in TEMPLATES.items():
+                    if name.startswith(cls + "::get"):
+                        address = int(row["rotwk_rva"], 16) + base
+                        named[address] = (block, name)
+        offsets = br.getter_offsets(data, base, blocks, named)
+        graph, _ = rm.decode_block_inventory(data, base, blocks)
+        callers = br.getter_callers(graph, set(named))
+        for block, (_, table) in TEMPLATES.items():
+            for field, offset in br.field_table(data, base, table).items():
+                matching = sorted((addr, name) for addr, (owner, name) in named.items()
+                                  if owner == block and offset in offsets.get(addr, ()))
+                if matching:
+                    route = "; ".join(f"getter 0x{addr:08X} {name}" for addr, name in matching)
+                    candidates = sorted({(caller, addr) for addr, _ in matching for caller in callers[addr]})
+                    note = ", ".join(f"0x{caller:08X} ({citations.get(caller, 'none')}; getter 0x{getter:08X})"
+                                     for caller, getter in candidates)
+                    output[(block, field)] = (route, note or "getter has no direct caller in recovered inventory")
+                else:
+                    output[(block, field)] = ("getter", "no named getter candidate in entry blocks; not a no-reader verdict")
     return output
 
 
@@ -113,13 +152,16 @@ def main(argv=None):
     ap.add_argument("--map", type=Path, default=Path("docs/ennorath/RW_FUNCTION_MAP.tsv"))
     ap.add_argument("--inventory", type=Path, default=Path("workspace/rebuild/rw_function_blocks.json"))
     ap.add_argument("--game", type=Path)
+    ap.add_argument("--xmap", type=Path, help="rw_map.csv from Port 240; enables named template getters")
     ap.add_argument("--out", type=Path, default=Path("docs/ennorath/FIELD_GAPS.tsv"))
     a = ap.parse_args(argv)
     with a.audit.open(encoding="utf-8", newline="") as stream:
         audit_rows = list(csv.DictReader(stream, delimiter="\t"))
     gaps, classes, reach = mg.read_map(a.map)
     sizes, skip = mg.load_filters(a.inventory, a.game)
-    candidates = top_level_candidates(a.game, a.inventory) if a.game else {}
+    if a.xmap and not a.game:
+        ap.error("--xmap requires --game")
+    candidates = top_level_candidates(a.game, a.inventory, a.xmap) if a.game else {}
     rows = join(audit_rows, gaps, classes, reach, sizes, skip, candidates)
     write(rows, a.out)
     in_map = sum(1 for r in rows if r[7] == "yes")

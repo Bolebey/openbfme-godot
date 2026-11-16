@@ -56,3 +56,9 @@ def test_nested_singleton_pointer():
                             {0x2000}, {(0x2000, (0x18,))})
     assert reads == [(0x1000, 0x2000, (), 0x18, 0x1005),
                      (0x1000, 0x2000, (0x18,), 0x3c, 0x1008)]
+
+
+def test_getter_offsets_with_receiver_copy_and_overwrite():
+    # mov esi,ecx; mov eax,[esi+0x3c]; xor esi,esi; mov eax,[esi+0x40]; ret
+    code = bytes.fromhex('89ce 8b463c 31f6 8b4640 c3')
+    assert br.getter_offsets(code, 0x1000, {0x1000: ((0x1000, len(code)),)}, {0x1000}) == {0x1000: {0x3c}}
