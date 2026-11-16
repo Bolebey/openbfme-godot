@@ -897,7 +897,7 @@ void FiringTracker::reset(FiringTrackerHost &host, bool hard)
 	m_victimID = 0;
 }
 
-// RW 0x8E3174
+// RW 0x8E3174 (the port's record) / RW 0x8E31A4 (where the function begins: the MEAN -> FAST transition cited inside is 0x8E31C8 ..)
 void FiringTracker::speedUp(FiringTrackerHost &host)
 {
 	const std::uint32_t mean = 1u << CONDITION_CONTINUOUS_FIRE_MEAN;
@@ -911,7 +911,8 @@ void FiringTracker::speedUp(FiringTrackerHost &host)
 	ModelConditionBits clr{}, set{};
 	if (mask & mean)
 	{
-		// RW 0x8E31C8 .. 0x8E3205: transition MEAN -> FAST posts 0x7DC (VoiceRapidFire) for { self->getDrawable() }, and DONOR
+		// RW 0x8E31C8 .. 0x8E3205 (inside the function RW 0x8E31A4; the port's earlier record 0x8E3174): transition MEAN -> FAST posts
+		// 0x7DC (VoiceRapidFire) for { self->getDrawable() }, and DONOR
 		// 0x004DEDD2 sets CONTINUOUS_FIRE_FAST while clearing MEAN and SLOW.
 		if (const std::uint32_t ownerId = host.ownerObjectID())
 		{
