@@ -56,8 +56,9 @@ End
 		std::string data = ini;
 		for (const char *weapon : {"Port53Weapon", "Port53NoFX", "Port53NoDelay"})
 		{
-			for (const char *enabled : {"Yes", "No"})
+			for (const char *enabled : {"Yes", "No", "Missing"})
 			{
+				const bool missing = std::string(enabled) == "Missing";
 				data += std::string("Object ") + weapon + enabled + R"ini(
  KindOf = HERO INFANTRY SELECTABLE CAN_ATTACK
  Geometry = CYLINDER
@@ -78,13 +79,13 @@ End
  End
  Behavior = WeaponFireSpecialAbilityUpdate AbilityTag
   SpecialPowerTemplate = Port53Power
-  SpecialWeapon = )ini" + weapon + R"ini(
+  SpecialWeapon = )ini" + (missing ? "Port53UnknownWeapon" : weapon) + R"ini(
   WhichSpecialWeapon = 1
   StartAbilityRange = 160
   UnpackTime = 200
   PackTime = 200
   IgnoreFacingCheck = Yes
-  PlayWeaponPreFireFX = )ini" + enabled + R"ini(
+  PlayWeaponPreFireFX = )ini" + (missing ? "Yes" : enabled) + R"ini(
  End
 End
 )ini";
@@ -144,12 +145,13 @@ TEST_CASE("PORT-53 special unpack requires the flag and weapon FX and uses the c
 	Object *target = f.unit("Dummy", 'B', 320, 300);
 	const SpecialPowerTemplate *power = f.powers.findSpecialPowerTemplate("Port53Power");
 	REQUIRE(power);
-	for (const char *name : {"Port53WeaponYes", "Port53WeaponNo", "Port53NoFXYes"})
+	for (const char *name : {"Port53WeaponYes", "Port53WeaponNo", "Port53NoFXYes", "Port53WeaponMissing"})
 	{
 		Object *caster = f.unit(name, 'A', 300, 300);
 		auto *ability = dynamic_cast<WeaponFireSpecialAbilityUpdate *>(caster->findModule("WeaponFireSpecialAbilityUpdate"));
 		REQUIRE(ability);
-		REQUIRE(ability->ownedWeapon());
+		if (std::string(name) == "Port53WeaponMissing") CHECK(ability->ownedWeapon() == nullptr);
+		else REQUIRE(ability->ownedWeapon());
 		const size_t before = rec.events.size();
 		ability->initiateIntentToDoSpecialPower(power, target, nullptr, 0, 0);
 		f.frames(3);
