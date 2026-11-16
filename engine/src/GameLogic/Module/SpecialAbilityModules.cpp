@@ -2672,45 +2672,68 @@ LevelGrantSpecialPower::LevelGrantSpecialPower(Thing *thing, const LevelGrantSpe
 {
 }
 
-// RW 0x8C6E82 -> RW 0x8C6D43: Experience points to the object (RW 0x79D833(xp, 1, 1, 1, 0) when its tracker can still level, RW 0x79D322) with LevelFX;
-// a horde's members share them (Experience / member count each, HordeContain vslot 0x110)
+// RW 0x8C6E82 -> RW 0x8C6D43 (the per-object grant: it is the routine the partition walk of RW 0x8C6FA4 hands each hit to, as
+// RW 0x8C6F97 push esi; mov ecx, ebx; call 0x8c6e82): with a source object (grant + 0x08 == the object's contain interface, set only on the
+// horde branch below) the points go to that interface's vslot 0xC0 with the object and the amount (RW 0x8C6D4F .. 0x8C6D5E: fld [esi];
+// mov ecx,[esi+8]; call [eax+0xC0]); otherwise to the object's own tracker (RW 0x8C6D6A: Object + 0x26C) when it still accepts experience
+// (RW 0x8C6D76 -> RW 0x79D322) — addExperiencePoints(amount, 1, 1, 1, 0) (RW 0x8C6D8F -> RW 0x79D833). LevelFX on that object after either
+// path (RW 0x8C6D94 .. 0x8C6DA2 -> RW 0x4B1B5A). The horde branch of the grant itself (RW 0x8C6E9F .. 0x8C6F07): the object's template has
+// KindOf HORDE (template + 0x114 bit 13, RW 0x8C6EA2 test byte ptr [ecx+0x115], 0x20), its contain interface (RW 0x8C6EAD -> RW 0x694BF8 ->
+// RW 0x68C866: Object + 0x258, vslot 0x7C) answers a member count (vslot 0x180, RW 0x8C6EBD; 0 -> nothing granted), and the pool takes
+// Experience / count with a guard for a negative count (RW 0x8C6EC9 .. 0x8C6EFC -> vslot 0x110 with the routine above), not Experience to each
+// member: HordeContain::addExperience (RW 0x873A02) keeps one pool per member template (a new pool starts at amount + 1.0, RW 0x873A49), sets
+// every member of that template and the horde itself to the pool (RW 0x86BC09 -> RW 0x79D8EF), and a rank the pool raised runs the banner
+// check (RW 0x873ACF -> RW 0x8719E4). So a King's Favor on a Lindon horde (Experience 100 per 6-member horde: L2 needs 100) fills the bar as
+// retail does; dividing the 100 six ways left every member below the next level
 void LevelGrantSpecialPower::grant(Object &o)
 {
 	if (m_lg->m_experience <= 0)
 	{
-		return;
+		return; // RW 0x8C6E92: jle 0x8C6F2C
 	}
-	auto one = [this](Object &victim, float xp) {
-		ExperienceTracker *t = victim.getExperienceTracker();
-		if (!t || !t->isAcceptingExperiencePoints())
+	const int experience = m_lg->m_experience;
+	HordeContainInterface *source = nullptr; // the grant source at + 0x08: only the horde branch sets it
+	float amount = (float)experience;
+	if (isHorde(o)) // RW 0x8C6EA2: template + 0x115 bit 5
+	{
+		ContainModuleInterface *contain = o.getContain(); // RW 0x8C6EAD: Object + 0x258
+		HordeContainInterface *horde = contain ? contain->getHordeContainInterface() : nullptr; // RW 0x68C866: vslot 0x7C
+		const unsigned count = horde ? horde->countWithEntering() : 0; // RW 0x8C6EBD: vslot 0x180(0)
+		if (count == 0)
 		{
-			return;
+			return; // RW 0x8C6EC7: je 0x8C6F2B
 		}
-		t->addExperiencePoints(xp, true, true, true, false);
-		++m_granted;
-		if (FXEventLog::isFXName(m_lg->m_levelFX))
+		source = horde;
+		amount = SimMath::divf32((float)experience, (float)count); // RW 0x8C6EC9 .. 0x8C6EFC: fild amount; fild count; fdivp
+	}
+	if (source)
+	{
+		// RW 0x8C6EFC -> vslot 0x110 of the object's contain (iterateContained) runs the per-object grant for every member, and each call
+		// goes to the pool (RW 0x8C6D5E: call [eax+0xC0] with the member and the share)
+		const ContainModuleInterface::ContainedItemsList *items = o.getContain()->getContainedItemsList();
+		if (items)
 		{
-			GameLogic &logic = victim.logic();
-			logic.fxEvents().emit(FXEventLog::objectEvent(FXEvent::OBJECT_FX, "LevelGrantSpecialPower LevelFX", logic.getFrame(), m_lg->m_levelFX, victim)); // RW 0x4B1B5A
+			const std::vector<Object *> members(items->begin(), items->end());
+			for (Object *m : members)
+			{
+				source->addExperience(m, amount); // RW 0x873A02
+			}
 		}
-	};
-	if (!isHorde(o))
-	{
-		one(o, (float)m_lg->m_experience);
-		return;
 	}
-	ContainModuleInterface *c = o.getContain();
-	const ContainModuleInterface::ContainedItemsList *items = c ? c->getContainedItemsList() : nullptr;
-	const unsigned n = c ? c->getContainCount() : 0;
-	if (!items || n == 0)
+	else
 	{
-		return;
+		ExperienceTracker *t = o.getExperienceTracker(); // RW 0x8C6D6A: Object + 0x26C
+		if (!t || !t->isAcceptingExperiencePoints())      // RW 0x8C6D76 -> RW 0x79D322
+		{
+			return; // RW 0x8C6D7D: je 0x8C6DAA (no LevelFX either)
+		}
+		t->addExperiencePoints(amount, true, true, true, false); // RW 0x8C6D8F -> RW 0x79D833(amount, 1, 1, 1, 0)
 	}
-	const float share = SimMath::divf32((float)m_lg->m_experience, (float)n);
-	std::vector<Object *> members(items->begin(), items->end());
-	for (Object *m : members)
+	++m_granted;
+	if (FXEventLog::isFXName(m_lg->m_levelFX))
 	{
-		one(*m, share);
+		GameLogic &logic = o.logic();
+		logic.fxEvents().emit(FXEventLog::objectEvent(FXEvent::OBJECT_FX, "LevelGrantSpecialPower LevelFX", logic.getFrame(), m_lg->m_levelFX, o)); // RW 0x4B1B5A
 	}
 }
 
