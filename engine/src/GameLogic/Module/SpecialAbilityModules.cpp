@@ -2692,48 +2692,64 @@ void LevelGrantSpecialPower::grant(Object &o)
 		return; // RW 0x8C6E92: jle 0x8C6F2C
 	}
 	const int experience = m_lg->m_experience;
-	HordeContainInterface *source = nullptr; // the grant source at + 0x08: only the horde branch sets it
+	// the per-object grant of RW 0x8C6D43, the routine the iteration (contain vslot 0x110) and the single-object branch both call
+	auto one = [this](Object &victim, HordeContainInterface *source, float amount) {
+		if (source)
+		{
+			source->addExperience(&victim, amount); // RW 0x8C6D4F .. 0x8C6D5E: mov ecx,[esi+8]; call [eax+0xC0]
+		}
+		else
+		{
+			ExperienceTracker *t = victim.getExperienceTracker(); // RW 0x8C6D6A: Object + 0x26C
+			if (!t || !t->isAcceptingExperiencePoints())          // RW 0x8C6D76 -> RW 0x79D322
+			{
+				return; // RW 0x8C6D7D: je 0x8C6DAA, and no LevelFX either
+			}
+			t->addExperiencePoints(amount, true, true, true, false); // RW 0x8C6D8F -> RW 0x79D833(amount, 1, 1, 1, 0)
+		}
+		++m_granted;
+		// RW 0x8C6D94 .. 0x8C6DA2: the LevelFX of the context (grant + 0xDC, the module data's LevelFX) on the object just granted
+		if (FXEventLog::isFXName(m_lg->m_levelFX))
+		{
+			GameLogic &logic = victim.logic();
+			logic.fxEvents().emit(FXEventLog::objectEvent(FXEvent::OBJECT_FX, "LevelGrantSpecialPower LevelFX", logic.getFrame(), m_lg->m_levelFX, victim)); // RW 0x4B1B5A
+		}
+	};
+	// RW 0x8C6EA2: the object's template has KindOf HORDE (template + 0x115 bit 5)
+	HordeContainInterface *source = nullptr;
+	ContainModuleInterface *contain = nullptr;
 	float amount = (float)experience;
-	if (isHorde(o)) // RW 0x8C6EA2: template + 0x115 bit 5
+	if (isHorde(o))
 	{
-		ContainModuleInterface *contain = o.getContain(); // RW 0x8C6EAD: Object + 0x258
-		HordeContainInterface *horde = contain ? contain->getHordeContainInterface() : nullptr; // RW 0x68C866: vslot 0x7C
-		const unsigned count = horde ? horde->countWithEntering() : 0; // RW 0x8C6EBD: vslot 0x180(0)
+		contain = o.getContain();                                                                // RW 0x8C6EAD: RW 0x694BF8 -> RW 0x68C866 (Object + 0x258, vslot 0x7C)
+		HordeContainInterface *horde = contain ? contain->getHordeContainInterface() : nullptr;
+		const unsigned count = horde ? horde->countWithEntering() : 0;                            // RW 0x8C6EBD: vslot 0x180(0)
 		if (count == 0)
 		{
 			return; // RW 0x8C6EC7: je 0x8C6F2B
 		}
 		source = horde;
-		amount = SimMath::divf32((float)experience, (float)count); // RW 0x8C6EC9 .. 0x8C6EFC: fild amount; fild count; fdivp
+		amount = SimMath::divf32((float)experience, (float)count);                                // RW 0x8C6EC9 .. 0x8C6EDD: fild amount; fild count; fdivp
 	}
-	if (source)
+	if (!source)
 	{
-		// RW 0x8C6EFC -> vslot 0x110 of the object's contain (iterateContained) runs the per-object grant for every member, and each call
-		// goes to the pool (RW 0x8C6D5E: call [eax+0xC0] with the member and the share)
-		const ContainModuleInterface::ContainedItemsList *items = o.getContain()->getContainedItemsList();
-		if (items)
+		one(o, nullptr, amount); // RW 0x8C6F09 .. 0x8C6F24: source null, cvtsi2ss Experience, call 0x8C6D43
+		return;
+	}
+	// RW 0x8C6EE5 .. 0x8C6F01: the object's contain vslot 0x110 iterates the members with RW 0x8C6D43 and the context
+	// { amount, LevelFX, source } — so the pool is fed once per member and the LevelFX lands on the members
+	const ContainModuleInterface::ContainedItemsList *items = contain->getContainedItemsList();
+	if (!items)
+	{
+		return;
+	}
+	const std::vector<Object *> members(items->begin(), items->end());
+	for (Object *m : members)
+	{
+		if (m)
 		{
-			const std::vector<Object *> members(items->begin(), items->end());
-			for (Object *m : members)
-			{
-				source->addExperience(m, amount); // RW 0x873A02
-			}
+			one(*m, source, amount);
 		}
-	}
-	else
-	{
-		ExperienceTracker *t = o.getExperienceTracker(); // RW 0x8C6D6A: Object + 0x26C
-		if (!t || !t->isAcceptingExperiencePoints())      // RW 0x8C6D76 -> RW 0x79D322
-		{
-			return; // RW 0x8C6D7D: je 0x8C6DAA (no LevelFX either)
-		}
-		t->addExperiencePoints(amount, true, true, true, false); // RW 0x8C6D8F -> RW 0x79D833(amount, 1, 1, 1, 0)
-	}
-	++m_granted;
-	if (FXEventLog::isFXName(m_lg->m_levelFX))
-	{
-		GameLogic &logic = o.logic();
-		logic.fxEvents().emit(FXEventLog::objectEvent(FXEvent::OBJECT_FX, "LevelGrantSpecialPower LevelFX", logic.getFrame(), m_lg->m_levelFX, o)); // RW 0x4B1B5A
 	}
 }
 

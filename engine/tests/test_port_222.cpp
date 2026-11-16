@@ -48,19 +48,20 @@ namespace
 // The mod's two levels for the Lindon horde: level 1 at 1 point, level 2 at 100 (the King's Favor amount)
 const char kPort222Levels[] =
 	"ExperienceLevel LindonTroopsLevel1\n"
-	"  TargetNames = Port222Pikeman Port222PikemanHorde Port222PikemanHordePorcupine\n"
+	"  TargetNames = Port222Pikeman Port222PikemanHorde Port222PikemanHordePorcupine Port222Cirdan\n"
 	"  RequiredExperience = 1\n"
 	"  ExperienceAward = 10\n"
 	"  Rank = 1\n"
 	"End\n"
 	"ExperienceLevel LindonTroopsLevel2\n"
-	"  TargetNames = Port222Pikeman Port222PikemanHorde Port222PikemanHordePorcupine\n"
+	"  TargetNames = Port222Pikeman Port222PikemanHorde Port222PikemanHordePorcupine Port222Cirdan\n"
 	"  RequiredExperience = 100\n"
 	"  ExperienceAward = 15\n"
 	"  Rank = 2\n"
 	"End\n";
 
-// Cirdan's ModuleTag_KingsFavorSpecialPowerModule and ModuleTag_KingsFavor on a synthetic six-member horde
+// Cirdan's SpecialPowerModule + LevelGrantSpecialPower on a synthetic caster, a six-member horde and the horde's member template. Ennorath's own
+// AcceptanceFilter names the Lindon hordes only; the fixture adds the member template so one module can reach either branch of RW 0x8C6E9F
 const char kPort222Fixture[] =
 	"SpecialPower Port222KingsFavor\n"
 	"  Enum = SPECIAL_KINGS_FAVOR\n"
@@ -88,6 +89,19 @@ const char kPort222Fixture[] =
 	"    Slots = 6\n"
 	"    InitialPayload = Port222Pikeman 6\n"
 	"  End\n"
+	"End\n"
+	"Object Port222Cirdan\n"
+	"  KindOf = INFANTRY SELECTABLE HERO\n"
+	"  VisionRange = 200\n"
+	"  Geometry = CYLINDER\n"
+	"  GeometryMajorRadius = 10\n"
+	"  GeometryMinorRadius = 10\n"
+	"  GeometryHeight = 30\n"
+	"  Body = ImmortalBody ModuleTag_Body\n"
+	"    MaxHealth = 500\n"
+	"  End\n"
+	"  Behavior = DestroyDie ModuleTag_Destroy\n"
+	"  End\n"
 	"  Behavior = SpecialPowerModule ModuleTag_KingsFavorSpecialPowerModule\n"
 	"    SpecialPowerTemplate = Port222KingsFavor\n"
 	"    StartsPaused = No\n"
@@ -98,7 +112,7 @@ const char kPort222Fixture[] =
 	"    StartAbilityRange = 200.0\n"
 	"    Experience = 100\n"
 	"    RadiusEffect = 120\n"
-	"    AcceptanceFilter = ANY +Port222PikemanHorde +Port222PikemanHordePorcupine\n"
+	"    AcceptanceFilter = ANY +Port222PikemanHorde +Port222PikemanHordePorcupine +Port222Pikeman\n"
 	"    PreparationTime = 0\n"
 	"  End\n"
 	"End\n"
@@ -184,12 +198,16 @@ int rankOf(const Object &o)
 } // namespace
 
 // The case that fails without the port: one King's Favor on a horde of six, as Cirdan casts it. RW 0x873A02 keeps the pool (a new one starts at
-// amount + 1.0, RW 0x873A49) and every member and the horde follow it, with amount = Experience / count (RW 0x8C6EC9) — 100 / 6 per member, so the
-// sixth grant reaches 100.0 and the horde holds LindonTroopsLevel2 (Rank 2, RequiredExperience 100).
+// amount + 1.0, RW 0x873A49) and every member and the horde follow it, with amount = Experience / count (RW 0x8C6EC9): the six members at 100 / 6
+// each leave the pool at 100 + 1.0, so the horde holds LindonTroopsLevel2 (Rank 2, RequiredExperience 100). The old per-member split left every
+// member at 100 / 6 = 16.67, below it.
 TEST_CASE("PORT-222 King's Favor fills a horde's experience through the pool (RW 0x8C6E82 -> RW 0x873A02)")
 {
 	Port222World f;
-	Object *horde = f.w.spawn("Port222PikemanHorde", 300.0f, 300.0f);
+	// RW 0x8C6FA4 skips the casting object itself (the filter at RW 0xC0F374), so Cirdan stands apart from the horde he fills
+	Object *caster = f.w.spawn("Port222Cirdan", 300.0f, 300.0f);
+	REQUIRE(caster);
+	Object *horde = f.w.spawn("Port222PikemanHorde", 340.0f, 300.0f); // inside RadiusEffect 120
 	REQUIRE(horde);
 	HordeContainInterface *contain = horde->getContain() ? horde->getContain()->getHordeContainInterface() : nullptr;
 	REQUIRE(contain);
@@ -197,12 +215,12 @@ TEST_CASE("PORT-222 King's Favor fills a horde's experience through the pool (RW
 	const float before = experienceOf(*horde);
 	CHECK(rankOf(*horde) == 1); // the fixture's first level: RequiredExperience 1, Rank 1
 
-	LevelGrantSpecialPower *grant = kingsFavorOf(*horde);
-	grant->triggerForTest();
+	LevelGrantSpecialPower *grant = kingsFavorOf(*caster);
+	grant->triggerAtForTest(*horde->getPosition()); // the cast lands on the horde's own ground point
 
 	// RW 0x873A02: a new pool of the members' template starts at amount + 1.0 and the horde follows a pool above its own experience
 	const float after = experienceOf(*horde);
-	CHECK(after == doctest::Approx(before + 100.0f));
+	CHECK(after == doctest::Approx(before + 100.0f).epsilon(0.001)); // the six shares plus the pool's +1.0 start
 	CHECK(rankOf(*horde) == 2);
 
 	// every member of the granted template follows the same pool (RW 0x86BC09 -> RW 0x79D8EF)
@@ -216,6 +234,8 @@ TEST_CASE("PORT-222 King's Favor fills a horde's experience through the pool (RW
 	}
 	CHECK(members == 6);
 	CHECK(atPool == 6);
+	// RW 0x8C6D43 runs once per member (contain vslot 0x110), and the counter and the LevelFX of the context are inside it: six grants
+	CHECK(grant->granted() == 6);
 }
 
 // The neighbour that must not move: a grant on an object that is not a horde still adds the whole amount to its own tracker
@@ -223,19 +243,21 @@ TEST_CASE("PORT-222 King's Favor fills a horde's experience through the pool (RW
 TEST_CASE("PORT-222 a level grant on a lone unit adds the whole amount to its tracker (RW 0x8C6D6A -> RW 0x79D833)")
 {
 	Port222World f;
-	Object *unit = f.w.spawn("Port222Pikeman", 300.0f, 300.0f);
+	Object *caster = f.w.spawn("Port222Cirdan", 300.0f, 300.0f);
+	REQUIRE(caster);
+	Object *unit = f.w.spawn("Port222Pikeman", 340.0f, 300.0f);
 	REQUIRE(unit);
 	REQUIRE(unit->getExperienceTracker());
 	const float before = experienceOf(*unit);
 	CHECK(rankOf(*unit) == 1);
 
-	// a level grant on the unit alone: the same module data, its effect on one object (the ordinary trigger of RW 0x8C6FA4 with the unit as the
-	// only hit would divide by the horde's count, so the single-object branch is what the wrapper of RW 0x8C6F32 hands a non-horde)
-	LevelGrantSpecialPower *grant = kingsFavorOf(*f.w.spawn("Port222PikemanHorde", 600.0f, 600.0f));
+	// the same module data, cast on a single object that is not a horde: RW 0x8C6F09 .. 0x8C6F24 hands it the whole Experience, no division
+	LevelGrantSpecialPower *grant = kingsFavorOf(*caster);
 	REQUIRE(grant);
-	grant->grantForTest(*unit);
+	grant->triggerAtForTest(*unit->getPosition());
 
 	const float after = experienceOf(*unit);
 	CHECK(after == doctest::Approx(before + 100.0f)); // RW 0x8C6D43 with no source: the whole Experience, no division
 	CHECK(rankOf(*unit) == 2);                       // RequiredExperience 100
+	CHECK(grant->granted() == 1);                    // one object, one per-object grant (RW 0x8C6D94)
 }

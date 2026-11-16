@@ -409,6 +409,8 @@ public:
 	// trigger of RW 0x8C6FA4 (the ordinary trigger plus the walk), which the ability's own update calls once its preparation ends
 	void grantForTest(Object &o) { grant(o); }
 	void triggerForTest() { triggerAbilityEffect(); }
+	// the walk reads the module's target position (+ 0x44, RW 0x8C6FF8); a test names the ground point of the cast
+	void triggerAtForTest(const Coord3D &pos) { m_targetPos = pos; triggerAbilityEffect(); }
 
 protected:
 	void triggerAbilityEffect() override; // RW 0x8C6FA4
