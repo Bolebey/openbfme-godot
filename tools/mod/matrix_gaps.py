@@ -33,7 +33,7 @@ TOP_FUNCTIONS = 8
 SPECIFIC_CLASSES = 3
 # with the map's function inventory (rw_function_map.py --inventory), a function of at most this many bytes is trivial: a class-name
 # getter (mov eax, <string>; ret), a one-field setter. The port has them implicitly, without a citation; they are not listed as gaps
-TRIVIAL_BYTES = 12
+TRIVIAL_BYTES = 16  # 16: an interface cast thunk (lea eax, [ecx - k]; neg; sbb; and; ret) is 13 bytes
 # with --game: per-class boilerplate every module has and the port writes without a citation, recognised by its code
 NAMEKEY_GENERATOR = 0x5487EC   # NameKeyGenerator::nameToKey: a short function that calls it is getModuleNameKey (a static key of the class name)
 NAMEKEY_MAX_BYTES = 80
@@ -55,8 +55,11 @@ def boilerplate(game: Path, sizes: dict[int, int], blocks: dict[int, list]) -> d
     for address, spans in blocks.items():
         first_indirect = None
         calls_namekey = calls_delete = False
+        first = last = None
         for start, size in sorted(spans):
             for ins in cs.disasm(image[start - base:start - base + size], start):
+                first = first or ins
+                last = ins
                 if ins.mnemonic != "call":
                     continue
                 op = ins.operands[0]
@@ -72,7 +75,22 @@ def boilerplate(game: Path, sizes: dict[int, int], blocks: dict[int, list]) -> d
             out[address] = "xfer"
         elif calls_delete and sizes.get(address, 0) <= DELETING_DTOR_MAX_BYTES:
             out[address] = "deleting destructor"
+        elif first is not None and is_vtable_store(first) and last is not None and last.mnemonic == "jmp" \
+                and last.operands and last.operands[0].type == X86_OP_IMM and sizes.get(address, 0) <= DTOR_MAX_BYTES:
+            out[address] = "destructor"  # mov [ecx], <vtable> ... jmp <the base destructor>: the vtable resets of a class destructor
     return out
+
+
+DTOR_MAX_BYTES = 64
+
+
+def is_vtable_store(ins) -> bool:
+    """`mov dword ptr [ecx], imm32`: a destructor's (or constructor's) first store of the class's vtable."""
+    from capstone.x86 import X86_OP_IMM, X86_OP_MEM, X86_REG_ECX
+    if ins.mnemonic != "mov" or len(ins.operands) != 2:
+        return False
+    dst, src = ins.operands
+    return dst.type == X86_OP_MEM and dst.mem.base == X86_REG_ECX and dst.mem.disp == 0 and src.type == X86_OP_IMM
 
 
 def read_matrix(path: Path):
@@ -255,7 +273,8 @@ def write(rows, out: Path, command_line: str, matrix_rows, trivial_dropped: bool
         if boilerplate_dropped:
             s.write(f"Recognised by their code with --game and left out of it too ({boilerplate_dropped} functions of the inventory): getModuleNameKey (a short call of "
                     f"NameKeyGenerator RW 0x{NAMEKEY_GENERATOR:X}) and xfer functions (first indirect call Xfer vslot 0x{XFER_VERSION_SLOT:X}, "
-                    f"xferVersion) and scalar deleting destructors (a short call of operator delete RW 0x{OPERATOR_DELETE:X}).\n\n")
+                    f"xferVersion), scalar deleting destructors (a short call of operator delete RW 0x{OPERATOR_DELETE:X}) and destructors "
+                    f"(a first `mov [ecx], <vtable>` and a tail jump to the base destructor, at most {DTOR_MAX_BYTES} bytes).\n\n")
         main: dict[str, set] = defaultdict(set)
         results: dict[str, dict[str, int]] = defaultdict(lambda: defaultdict(int))
         for x in rows:
