@@ -1,8 +1,12 @@
 #!/usr/bin/env python3
-"""Building blocks for the RotWK module call-graph audit.
+"""Repeatable RotWK module call-graph audit (Port 219).
 
-This is a work in progress: these routines operate on a bounded x86 function;
-there is not yet a retail inventory, module resolver, report generator or CLI.
+The CLI resolves create -> constructor -> module vtable, compares each interface
+with the direct base's tables, and walks only overridden slots. Functions and
+their basic blocks come from a cache produced by an independently seeded CFG;
+the tool decodes direct calls/tail jumps and virtual displacements without
+following virtual or other indirect targets. It matches exact RW citations in
+engine/src and writes TSV/Markdown reports of addresses, names and counts only.
 No bytes from retail images are emitted.
 """
 from __future__ import annotations
@@ -241,8 +245,11 @@ def write_reports(rows: list[MapRow], tsv: Path, markdown: Path, command: str,
         lines.append('- (empty)')
     lines.extend(['', '## How to read', '',
                   'A citation is evidence, not a proof of complete equivalence. An uncited address can be',
-                  'implemented under another address or inlined. Cited neighbours are leads, not proof.',
-                  'Indirect memory calls are candidates for virtual calls; their targets are not followed.', '',
+                  'a compiler thunk, an inlined helper, or logic implemented under another address.',
+                  'Conversely, an unmarked target-facts citation can make a function with a stop marker',
+                  'look ported: check the module\'s stop lines before treating `ported` as complete.',
+                  'Cited neighbours are leads, not proof. Indirect memory calls are candidates for virtual',
+                  'calls; their targets are not followed.', '',
                   '## None / partial, by importance', '',
                   '| Module | Objects | Depth | Function | Instructions | Status | Decomp |',
                   '|---|---:|---:|---|---:|---|---|'])
@@ -701,3 +708,341 @@ def decode_block_inventory(data: bytes, base: int,
         all_sites.update(sites)
     counts = Counter(target for _, target in all_sites)
     return functions, {target: count for target, count in counts.items() if count > threshold}
+
+
+def recover_module_layouts(game: Path, registry: list[dict]):
+    """Recover direct base calls with this==ecx before the derived table store.
+
+    This is static evidence, not a C++ type proof. Every ambiguity is fatal.
+    Table extents end at a known table start or first non-code pointer. These
+    machine-recovered extents must be included in the report's INFERENCE caveat.
+    """
+    import sys
+    from capstone.x86 import X86_OP_REG
+    directory = str(Path(__file__).resolve().parents[1] / 'rw_object_model')
+    if directory not in sys.path:
+        sys.path.insert(0, directory)
+    from rwimage import Image
+    import update_phases as up
+    image = Image(str(game))
+    stores, parents = {}, {}
+
+    def resolve(f):
+        if f in stores:
+            return stores[f]
+        tables = up.vtable_stores(image, f)
+        stores[f] = tables
+        seen, _, _ = image.reach(f)
+        aliases, candidates = {'ecx': 0}, []
+        wrote = False
+        for _, ins in sorted(seen.items()):
+            ops = ins.operands
+            if ins.mnemonic == 'call':
+                if ops[0].type == X86_OP_IMM:
+                    target = ops[0].imm
+                    if aliases.get('ecx') == 0 and target != f and target != up.mr.SEH_PROLOG and not wrote:
+                        if resolve(target).get(0):
+                            candidates.append(target)
+                    if target == up.mr.SEH_PROLOG:
+                        continue
+                for r in ('eax', 'ecx', 'edx'):
+                    aliases.pop(r, None)
+            elif ops and ins.mnemonic == 'mov' and ops[0].type == X86_OP_MEM:
+                mem = ops[0].mem
+                if (mem.base and aliases.get(ins.reg_name(mem.base)) == 0 and mem.disp == 0
+                        and len(ops) == 2 and ops[1].type == X86_OP_IMM and ops[1].imm == tables.get(0)):
+                    wrote = True
+            elif ops and ops[0].type == X86_OP_REG:
+                dst = ins.reg_name(ops[0].reg)
+                if (ins.mnemonic == 'mov' and len(ops) == 2 and ops[1].type == X86_OP_REG
+                        and ins.reg_name(ops[1].reg) in aliases):
+                    aliases[dst] = aliases[ins.reg_name(ops[1].reg)]
+                elif (ins.mnemonic == 'lea' and len(ops) == 2 and ops[1].type == X86_OP_MEM
+                      and ops[1].mem.base and not ops[1].mem.index and ins.reg_name(ops[1].mem.base) in aliases):
+                    aliases[dst] = aliases[ins.reg_name(ops[1].mem.base)] + ops[1].mem.disp
+                elif ins.mnemonic not in ('cmp', 'test', 'push'):
+                    aliases.pop(dst, None)
+        parents[f] = candidates
+        return tables
+
+    modules = discover_module_tables(image, registry, up.constructor, lambda _, f: resolve(f))
+    # Gate has a secondary UpdateModule base at +4, not a primary base call.
+    # RW 0x89C068 installs 0xC57388; RW 0x89C06E calls 0x653114 with ecx=this+4.
+    # Verify the actual instructions before accepting this exceptional layout.
+    gate = next((m for m in modules if m.name == 'GateOpenAndCloseBehavior'), None)
+    if gate:
+        seen, _, _ = image.reach(gate.constructor)
+        if (gate.constructor != 0x89C04B or 0x89C068 not in seen or 0x89C06E not in seen
+                or seen[0x89C068].op_str != 'dword ptr [esi], 0xc57388'
+                or seen[0x89C06E].op_str != '0x653114'):
+            raise ValueError('GateOpenAndCloseBehavior exceptional base evidence changed')
+        resolve(0x653114)
+    starts = {v for tables in stores.values() for v in tables.values()}
+    starts.add(0xC57388)
+    # All constructor-installed tables, not just those used by mod objects,
+    # delimit adjacent interfaces. Non-code data is a second terminating guard.
+    def slots(address):
+        result = []
+        for i in range(1024):
+            slot = address + 4 * i
+            if i and slot in starts:
+                break
+            if not image.in_data(slot):
+                raise ValueError(f'vtable escapes data at 0x{slot:X}')
+            value = image.u32(slot)
+            if not image.in_text(value):
+                break
+            result.append(value)
+        else:
+            raise ValueError(f'unterminated vtable at 0x{address:X}')
+        if not result:
+            raise ValueError(f'empty vtable at 0x{address:X}')
+        return tuple(result)
+
+    result, evidence = {}, []
+    for module in modules:
+        if gate and module.name == gate.name:
+            baseline = {offset + 4: value for offset, value in stores[0x653114].items()}
+            baseline[0] = 0xC57388
+            parent = 0x653114
+        else:
+            candidates = parents.get(module.constructor, [])
+            if len(candidates) != 1:
+                raise ValueError(f'{module.name}: ambiguous base constructors {candidates}')
+            parent = candidates[0]
+            baseline = stores[parent]
+        child = {offset: slots(v) for offset, v in module.tables}
+        base_tables = {offset: slots(v) for offset, v in baseline.items()}
+        result[module.name] = {target for _, _, target in overridden_slots(child, base_tables)}
+        evidence.append((module, parent, child, base_tables))
+    return result, evidence
+
+
+HAND_STOPS = {
+    0x42F6E0: 'operator new (RW allocation wrapper)',
+    0x42F6A0: 'operator delete (RW deallocation wrapper)',
+    0xA3CEF0: 'SEH prolog (compiler helper)',
+    0xA3CE04: '_CxxThrowException (noreturn compiler helper)',
+    0x42F3C1: 'AsciiString helper',
+    0x435D50: 'AsciiString destructor / release',
+    0x4374E0: 'AsciiString(const char *) constructor',
+    0x437B90: 'AsciiString::translate',
+    0x42DC9F: 'INI::getNextToken',
+    0x42EAAD: 'INI::scanReal',
+    0x42CE52: 'INI boolean-token helper',
+    0x42B710: 'MultiIniFieldParse constructor',
+    0x42B8D7: 'MultiIniFieldParse::add',
+    0x42D4B0: 'INI::initFromINIMulti',
+    0xA2D770: 'CRC-32 chained-byte helper',
+    0xA211DF: 'XferCRC transfer step',
+    0xA20DD0: 'XferSave::Open',
+    0xA2111A: 'XferSave::beginBlock',
+    0xA206EF: 'XferSave::endBlock',
+    0xA203D6: 'Xfer::skipBlock',
+}
+
+
+ANALYZER = ('angr CFGFast(normalize, tail-call detection, no symbols, no prologue scan, '
+            'no indirect-jump resolution, no data references)')
+
+
+def load_function_blocks(game: Path, inventory: Path, registry: list[dict],
+                         extra_starts: set[int] | None = None, refresh=False):
+    """Cache independently recovered blocks, bound to the exact input SHA256.
+
+    angr is needed only on a cache miss. The cache contains addresses and sizes,
+    never instructions or bytes. Keep it under ignored workspace/.
+    """
+    import hashlib
+    import json
+    import logging
+    digest = hashlib.sha256(game.read_bytes()).hexdigest()
+    seeds = {int(r[k], 0) for r in registry for k in ('create', 'createData')}
+    seeds.update(extra_starts or ())
+    if inventory.exists() and not refresh:
+        record = json.loads(inventory.read_text(encoding='utf-8'))
+        if record.get('sha256') != digest:
+            raise ValueError('function inventory SHA256 does not match game.dat')
+        if record.get('missing_seeds'):
+            raise ValueError('function inventory has unresolved seeded entries')
+        if record.get('seed_count') is not None and record['seed_count'] != len(seeds):
+            raise ValueError('function inventory was built from different vtable roots')
+    else:
+        try:
+            import angr
+        except ImportError as error:
+            raise ValueError('cache missing: install angr==9.2.213 bitstring==4.4.0 pycparser==3.0 to recover it') from error
+        logging.getLogger('angr').setLevel(logging.ERROR)
+        logging.getLogger('cle').setLevel(logging.ERROR)
+        project = angr.Project(str(game), auto_load_libs=False)
+        cfg = project.analyses.CFGFast(
+            normalize=True, function_starts=sorted(seeds), start_at_entry=False,
+            symbols=False, function_prologues=False, resolve_indirect_jumps=False,
+            data_references=False, cross_references=False, force_complete_scan=False,
+            force_smart_scan=False, detect_tail_calls=True, eh_frame=False,
+            exceptions=False, show_progressbar=False)
+        functions = []
+        for address, function in sorted(cfg.kb.functions.items()):
+            if not project.loader.main_object.contains_addr(address):
+                continue
+            spans = sorted({(block.addr, block.size) for block in function.blocks})
+            if spans:
+                functions.append(dict(address=address, blocks=spans))
+        missing = sorted(seeds - {function['address'] for function in functions})
+        if missing:
+            raise ValueError(f'CFG did not recover {len(missing)} seeded functions (first 0x{missing[0]:X})')
+        record = dict(sha256=digest, analyzer='angr ' + angr.__version__ + ' ' + ANALYZER,
+                      seed_count=len(seeds), missing_seeds=missing, functions=functions)
+        inventory.parent.mkdir(parents=True, exist_ok=True)
+        inventory.write_text(json.dumps(record, sort_keys=True) + '\n', encoding='utf-8')
+    result = {}
+    for function in record['functions']:
+        address = function['address']
+        if address in result:
+            raise ValueError(f'duplicate cached function 0x{address:X}')
+        result[address] = tuple(tuple(span) for span in function['blocks'])
+    if not result or seeds - result.keys():
+        raise ValueError('incomplete function inventory: a seeded root has no function')
+    return result, record['analyzer'], digest
+
+
+def display_command(argv: list[str]) -> str:
+    """A reproducible command without absolute developer-machine paths."""
+    import shlex
+    import sys
+    try:
+        executable = str(Path(sys.executable).resolve().relative_to(Path.cwd().resolve()))
+    except ValueError:
+        executable = 'python'
+    parts = [executable, 'tools/mod/rw_function_map.py', *argv]
+    shown = []
+    for item in parts:
+        path = Path(item)
+        if path.is_absolute():
+            try:
+                shown.append(str(path.resolve().relative_to(Path.cwd().resolve())))
+                continue
+            except ValueError:
+                pass
+        shown.append(item)
+    return shlex.join(shown)
+
+
+def verify_direct_calls(functions: dict[int, Function], text_start: int, text_end: int):
+    """Every direct call/tail-jump target in .text must have its own CFG entry."""
+    missing = {target for function in functions.values() for target in function.calls
+               if text_start <= target < text_end and target not in functions}
+    if missing:
+        first = min(missing)
+        raise ValueError(f'{len(missing)} direct call targets have no CFG function (first 0x{first:08X})')
+
+
+def build_rows(roots, counts, functions, citations, stops, decomp):
+    """Index cited reverse neighbours once, rather than once per report row."""
+    neighbours = {}
+    for caller, function in functions.items():
+        for callee in function.calls:
+            if callee in citations:
+                neighbours.setdefault(caller, set()).add(('callee', callee, citations[callee]))
+            if caller in citations:
+                neighbours.setdefault(callee, set()).add(('caller', caller, citations[caller]))
+    rows = []
+    for module in sorted(counts):
+        if module not in roots:
+            raise ValueError(f'mod module absent from registry: {module}')
+        missing = roots[module] - functions.keys()
+        if missing:
+            raise ValueError(f'{module}: vtable roots absent from CFG: {sorted(hex(x) for x in missing)}')
+        depths, incoming = walk_graph(roots[module], functions, stops)
+        for address, depth in sorted(depths.items()):
+            function = functions.get(address, Function(frozenset(), frozenset(), 0))
+            status = citations.get(address, 'none')
+            rows.append(MapRow(module, depth, address, status, tuple(sorted(incoming.get(address, ()))),
+                               tuple(sorted(function.vcalls)), tuple(sorted(neighbours.get(address, ()))) if status == 'none' else (),
+                               decomp.get(address), counts[module], function.instructions))
+    return rows
+
+
+def main(argv=None):
+    import argparse
+    import csv
+    import json
+    import sys
+    import time
+    import pefile
+    parser = argparse.ArgumentParser(description='Audit RotWK module call graphs; no game bytes are written.')
+    parser.add_argument('--game', type=Path, required=True)
+    parser.add_argument('--registry', type=Path, default=Path('engine/data/rotwk-201/module-registry.json'))
+    source = parser.add_mutually_exclusive_group(required=True)
+    source.add_argument('--ini', type=Path)
+    source.add_argument('--coverage', type=Path, help='module-coverage.tsv; object counts unknown (rank=0)')
+    parser.add_argument('--src', type=Path, default=Path('engine/src'))
+    parser.add_argument('--inventory', type=Path, default=Path('workspace/rebuild/rw_function_blocks.json'))
+    parser.add_argument('--refresh-inventory', action='store_true')
+    parser.add_argument('--decomp', type=Path, default=Path('workspace/rebuild/xmap/rw_map.csv'))
+    parser.add_argument('--threshold', type=int, default=200)
+    parser.add_argument('--out', type=Path, default=Path('docs/ennorath/RW_FUNCTION_MAP'))
+    args = parser.parse_args(argv)
+    if args.threshold < 0:
+        parser.error('--threshold must be nonnegative')
+    if not args.src.is_dir():
+        parser.error('--src must be an existing source directory')
+    start = time.monotonic()
+    registry = json.loads(args.registry.read_text(encoding='utf-8'))['classes']
+    if args.ini:
+        import field_audit
+        objects, counts, definitions = inventory_from_ini(args.ini, field_audit.Grammar(args.registry.parent), registry)
+        source_note = f'INI replay: {len(definitions)} declarations; {len(objects)} unique templates; {len(counts)} module classes.'
+    else:
+        with args.coverage.open(encoding='utf-8', newline='') as stream:
+            reader = csv.DictReader(stream, delimiter='\t')
+            if 'class' not in (reader.fieldnames or ()):
+                raise ValueError('coverage TSV lacks class column')
+            counts = {r['class']: 0 for r in reader}
+        source_note = 'Coverage TSV: object counts unavailable; importance object rank is zero, not an observed count.'
+    roots, evidence = recover_module_layouts(args.game, registry)
+    root_starts = set().union(*roots.values())
+    blocks, analyzer, digest = load_function_blocks(args.game, args.inventory, registry,
+                                                    root_starts, args.refresh_inventory)
+    pe = pefile.PE(str(args.game), fast_load=True)
+    image = pe.get_memory_mapped_image()
+    base = pe.OPTIONAL_HEADER.ImageBase
+    functions, frequent = decode_block_inventory(image, base, blocks, args.threshold)
+    text = next(section for section in pe.sections if section.Name.rstrip(b'\0') == b'.text')
+    text_start = base + text.VirtualAddress
+    text_end = text_start + max(text.Misc_VirtualSize, text.SizeOfRawData)
+    verify_direct_calls(functions, text_start, text_end)
+    citations = scan_citations(args.src)
+    rows = build_rows(roots, counts, functions, citations, set(HAND_STOPS) | set(frequent), DecompLookup(args.decomp))
+    invoked = sys.argv[1:] if argv is None else list(argv)
+    command = display_command(invoked)
+    tsv, markdown = args.out.with_suffix('.tsv'), args.out.with_suffix('.md')
+    write_reports(rows, tsv, markdown, command, HAND_STOPS, frequent, args.threshold)
+    seconds = time.monotonic() - start
+    with markdown.open('a', encoding='utf-8') as stream:
+        stream.write(f'\n## Provenance and limitations\n\nSHA256: `{digest}`. Analyzer: {analyzer}. '
+                     f'Functions: {len(functions)}.\n\n{source_note}\n\n'
+                     'INFERENCE: CFGFast and constructor register tracking are static recovery, not a proof of completeness. '
+                     'Table extent ends at a constructor-installed table start or the first non-code pointer; '
+                     'unreferenced adjacent tables can be merged. Base calls require ecx=this before the derived store; '
+                     'GateOpenAndCloseBehavior has a separately checked secondary UpdateModule base at +4. '
+                     'All table corrections are local to this report; the registry remains unchanged.\n\n'
+                     'INI paths use case-insensitive lexical order after default/object.ini; '
+                     'retail directory enumeration order and top-level parser completeness are not independently proven. '
+                     'Citation matching is exact-address only, not containing-function equivalence; '
+                     'an interior citation or inlined implementation can produce false none. '
+                     'No virtual targets or register-indirect calls are resolved by this audit.\n\n'
+                     '## Constructor and table evidence\n\n'
+                     '| Module | Create | Constructor | Parent constructor | Module tables (offset:address, slots) | Registry ModuleData table |\n'
+                     '|---|---|---|---|---|---|\n')
+        for module, parent, child, _ in evidence:
+            if module.name not in counts:
+                continue
+            table_text = ', '.join(f'+0x{o:X}:0x{a:08X} ({len(child[o])})' for o, a in module.tables)
+            stream.write(f'| {module.name} | 0x{module.create:08X} | 0x{module.constructor:08X} | '
+                         f'0x{parent:08X} | {table_text} | 0x{module.data_vtable:08X} |\n')
+    print(f'{len(rows)} rows, {len(functions)} functions, {seconds:.2f} seconds')
+
+
+if __name__ == '__main__':
+    main()

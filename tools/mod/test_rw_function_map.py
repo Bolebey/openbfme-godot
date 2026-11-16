@@ -295,3 +295,48 @@ def test_block_inventory_rejects_truncated_instruction_and_absent_entry():
         decode_block_inventory(b'\xe8\0\0\0\0', 0x1000, {0x1000: ((0x1000, 4),)})
     with pytest.raises(ValueError, match='entry has no'):
         decode_block_inventory(b'\xc3\xc3', 0x1000, {0x1000: ((0x1001, 1),)})
+
+
+def test_direct_call_targets_must_have_their_own_cfg_entry():
+    import pytest
+    from rw_function_map import Function, verify_direct_calls
+    functions = {0x401000: Function(frozenset({0x401010, 0x30000000}), frozenset(), 1),
+                 0x401010: Function(frozenset(), frozenset(), 1)}
+    verify_direct_calls(functions, 0x401000, 0x402000)  # imported target is outside .text
+    with pytest.raises(ValueError, match='direct call targets'):
+        functions[0x401000] = Function(frozenset({0x401020}), frozenset(), 1)
+        verify_direct_calls(functions, 0x401000, 0x402000)
+
+
+def test_cached_block_inventory_is_bound_to_roots_and_image(tmp_path):
+    import hashlib
+    import json
+    import pytest
+    from rw_function_map import load_function_blocks
+    game = tmp_path / 'fake.dat'
+    game.write_bytes(b'not retail bytes')
+    digest = hashlib.sha256(game.read_bytes()).hexdigest()
+    cache = tmp_path / 'blocks.json'
+    record = {'sha256': digest, 'analyzer': 'synthetic', 'seed_count': 1,
+              'missing_seeds': [], 'functions': [{'address': 0x401000, 'blocks': [[0x401000, 1]]}]}
+    cache.write_text(json.dumps(record), encoding='utf-8')
+    registry = [{'create': '0x401000', 'createData': '0x401000'}]
+    with pytest.raises(ValueError, match='different vtable roots'):
+        load_function_blocks(game, cache, registry, {0x402000})
+    blocks, analyzer, loaded_digest = load_function_blocks(game, cache, registry)
+    assert blocks == {0x401000: ((0x401000, 1),)}
+    assert analyzer == 'synthetic' and loaded_digest == digest
+    record['sha256'] = '0' * 64
+    cache.write_text(json.dumps(record), encoding='utf-8')
+    with pytest.raises(ValueError, match='SHA256'):
+        load_function_blocks(game, cache, registry)
+
+
+def test_display_command_has_no_developer_machine_prefix():
+    from pathlib import Path
+    from rw_function_map import display_command
+    absolute = str(Path.cwd() / 'workspace/RotWK/game.dat')
+    command = display_command(['--game', absolute, '--ini', '/tmp/ennorath-ini-1.9.8.3.zip'])
+    assert '/home/' not in command and '/Users/' not in command
+    assert 'workspace/RotWK/game.dat' in command
+    assert '/tmp/ennorath-ini-1.9.8.3.zip' in command
