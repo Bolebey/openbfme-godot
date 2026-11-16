@@ -162,6 +162,57 @@ const char kSynthetic[] =
 	"    Condition = SET_NORMAL\n"
 	"    Speed = 50\n"
 	"  End\n"
+	"End\n"
+	"Object P165SpecialApproach\n"
+	"  KindOf = PROJECTILE SELECTABLE CAN_ATTACK\n"
+	"  VisionRange = 250\n"
+	"  Geometry = CYLINDER\n"
+	"  GeometryMajorRadius = 8\n"
+	"  GeometryHeight = 20\n"
+	"  WeaponSet\n"
+	"    Conditions = None\n"
+	"    Weapon = PRIMARY BowWeapon\n"
+	"  End\n"
+	"  Body = ActiveBody BodyTag\n"
+	"    MaxHealth = 60\n"
+	"  End\n"
+	"  Behavior = AIUpdateInterface AITag\n"
+	"  End\n"
+	"  LocomotorSet\n"
+	"    Locomotor = WalkerLoco\n"
+	"    Condition = SET_NORMAL\n"
+	"    Speed = 55\n"
+	"  End\n"
+	"End\n"
+	"Object P165TurretApproach\n"
+	"  KindOf = INFANTRY SELECTABLE CAN_ATTACK SCORE\n"
+	"  VisionRange = 250\n"
+	"  Geometry = CYLINDER\n"
+	"  GeometryMajorRadius = 8\n"
+	"  GeometryHeight = 20\n"
+	"  ArmorSet\n"
+	"    Conditions = None\n"
+	"    Armor = PlainArmor\n"
+	"  End\n"
+	"  WeaponSet\n"
+	"    Conditions = None\n"
+	"    Weapon = PRIMARY SwordWeapon\n"
+	"  End\n"
+	"  Body = ActiveBody BodyTag\n"
+	"    MaxHealth = 60\n"
+	"  End\n"
+	"  Behavior = AIUpdateInterface AITag\n"
+	"    Turret\n"
+	"      TurretTurnRate = 360\n"
+	"      ControlledWeaponSlots = PRIMARY\n"
+	"      NaturalTurretAngle = 90\n"
+	"    End\n"
+	"  End\n"
+	"  LocomotorSet\n"
+	"    Locomotor = WalkerLoco\n"
+	"    Condition = SET_NORMAL\n"
+	"    Speed = 55\n"
+	"  End\n"
 	"End\n";
 
 struct TestWorld : CombatWorld
@@ -576,4 +627,56 @@ TEST_CASE("PORT-165: active position horde survives a full game snapshot")
     CHECK(w.logic->computeStateHash() == hash);
     const int frames = w.runUntil([&] { return w.hordeOf(horde)->attackStats().positionOrders > 0; }, 600);
     CHECK(frames < 600); // tolerance: the restored horde's pathfinding and travel are asynchronous
+}
+
+
+TEST_CASE("PORT-165: projectile approach records precise-Z stop and does not throw (RW 0x74E9EC)")
+{
+    TestWorld w;
+    w.combat().setAutoAcquireEnabled(false);
+    Object *unit = w.unit("P165SpecialApproach", 'A', 300, 300);
+    REQUIRE(unit);
+    w.frames(2);
+    auto *ai = unit->getAIUpdateInterface();
+    REQUIRE(ai);
+    REQUIRE(ai->curLocomotor());
+    AIStateMachine machine(*ai, "P165ProjectileApproach");
+    machine.setGoalPosition(Coord3D{300.0f, 200.0f, 0.0f});
+    AIHordePositionApproachState state(machine);
+    CHECK(state.onEnter() == STATE_SUCCESS);
+    const auto report = w.logic->report();
+    const std::string line = "[S-7387] position approach: projectile locomotor precise-Z flag is not ported (RW 0x74E9EC / 0x74A51B)";
+    REQUIRE(report.stopHits.count(line) == 1);
+    CHECK(report.stopHits.at(line) == 1);
+    CHECK_NOTHROW(state.onExit(EXIT_NORMAL));
+    CHECK(w.logic->report().stopHits.at(line) == 2);
+}
+
+TEST_CASE("PORT-165: turret mood approach records S-1189 and does not throw (RW 0x74A4DC)")
+{
+    TestWorld w;
+    w.combat().setAutoAcquireEnabled(false);
+    Object *unit = w.unit("P165TurretApproach", 'A', 300, 300);
+    Object *enemy = w.unit("Dummy", 'B', 305, 300);
+    REQUIRE(unit);
+    REQUIRE(enemy);
+    w.frames(2);
+    auto *ai = unit->getAIUpdateInterface();
+    REQUIRE(ai);
+    REQUIRE(ai->turretForCurWeapon());
+    REQUIRE(ai->aiAttackObject(enemy, CMD_FROM_PLAYER));
+    ai->aiIdle(CMD_FROM_PLAYER);
+    REQUIRE(ai->orderedMeleeTarget() == enemy->getID());
+    ai->setLastCommandSource(CMD_FROM_PLAYER);
+    AIStateMachine machine(*ai, "P165TurretApproach");
+    machine.setGoalPosition(Coord3D{300.0f, 600.0f, 0.0f});
+    AIHordePositionApproachState state(machine);
+    REQUIRE(state.onEnter() == STATE_CONTINUE);
+    w.combat().setAutoAcquireEnabled(true);
+    CHECK_NOTHROW(state.update());
+    const auto report = w.logic->report();
+    const std::string line = "[S-1189] position approach: turret mood-target update and AI +0x3C7 are not ported (RW 0x74A4DC)";
+    REQUIRE(report.stopHits.count(line) == 1);
+    CHECK(report.stopHits.at(line) == 1);
+    state.onExit(EXIT_NORMAL);
 }

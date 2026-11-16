@@ -12,6 +12,7 @@
 #include "GameLogic/AI/TurretAI.h"
 #include "GameLogic/Combat/CombatNames.h"
 #include "GameLogic/Combat/ObjectWeapons.h"
+#include "GameLogic/GameLogic.h"
 #include "GameLogic/Module/AIUpdate.h"
 #include "GameLogic/Weapon.h"
 #include "GameLogic/Object/Object.h"
@@ -19,6 +20,11 @@
 
 #include <algorithm>
 #include <stdexcept>
+
+namespace
+{
+constexpr const char *kProjectilePreciseZStop = "[S-7387] position approach: projectile locomotor precise-Z flag is not ported (RW 0x74E9EC / 0x74A51B)";
+}
 
 AIHordePositionWaitState::AIHordePositionWaitState(AIStateMachine &machine)
 	: AIState(machine, "AIHordePositionWaitState")
@@ -243,11 +249,11 @@ bool AIHordePositionApproachState::computeSpecialPath(AIMoveToState &move)
 StateReturnType AIHordePositionApproachState::onEnter()
 {
 	Object &obj = owner();
-	if (obj.isKindOfName("PROJECTILE"))
+	if (obj.isKindOfName("PROJECTILE") && ai().curLocomotor())
 	{
-		// RW 0x74E9EC toggles locomotor precise Z; its shared locomotor reader
-		// is not part of this state port, so never silently approximate it.
-		throw std::logic_error("AIHordePositionApproachState: projectile precise-Z locomotion is not ported");
+		// RW 0x74E9EC..0x74EA0A sets the shared locomotor precise-Z flag;
+		// preserve the port's prior movement and report the unsupported branch.
+		obj.logic().noteStop(kProjectilePreciseZStop);
 	}
 	m_ownerPosition = *obj.getPosition();
 	m_waiting = false;
@@ -289,13 +295,11 @@ StateReturnType AIHordePositionApproachState::update()
 	// mood target, separately from the machine's position goal.
 	if (m_initialApproach)
 	{
-		if (TurretAI *turret = ai().turretForCurWeapon())
+		if (ai().turretForCurWeapon() && ai().getNextMoodTarget(true, false))
 		{
-			if (ai().getNextMoodTarget(true, false))
-			{
-				// RW 0x74A4DC also sets AI + 0x3C7, unported shared state (S-1189).
-				throw std::logic_error("AIHordePositionApproachState: turret mood-target flag is not ported (S-1189)");
-			}
+			// RW 0x74A4DC..0x74A4E1 aims the turret and sets AI +0x3C7;
+			// leave the previous targeting behavior unchanged (Port 200 / S-1189).
+			owner().logic().noteStop("[S-1189] position approach: turret mood-target update and AI +0x3C7 are not ported (RW 0x74A4DC)");
 		}
 	}
 	return result;
@@ -307,6 +311,9 @@ void AIHordePositionApproachState::onExit(StateExitType)
 	ensureMove();
 	m_move->onExit(); // RW 0x748D8A
 	ai().mover().ignoreObstacle(PATHFIND_INVALID_ID);
+	// RW 0x74A51B..0x74A531 clears the same projectile locomotor flag on exit;
+	// note it here as well when loading directly into an active approach.
+	if (owner().isKindOfName("PROJECTILE") && ai().curLocomotor()) owner().logic().noteStop(kProjectilePreciseZStop);
 	if (ai().isDoingGroundMovement())
 	{
 		const Coord3D &goal = m_move->goal();

@@ -72,6 +72,7 @@ member shots, detonation, impact FX and sound requests, the kind-6 object-attack
 guard, transition rows and kind-7 save/load. The synthetic FX playback checks a
 light pulse and recorded sound request, not actual audible playback. Existing
 `PORT-115` synthetic archer tests also pass in the standalone guard build.
-The approach state's projectile precise-Z flag and the turret mood-target
-flag (AI +0x3C7, S-1189) remain explicitly unsupported rather than silently
-approximated; these are not exercised by the synthetic corsair-like horde.
+The shared projectile precise-Z flag (S-7387) and turret mood-target flag
+(AI +0x3C7, S-1189 / Port 200) remain unported. Owner decision: retain the
+previous behavior, record a counted runtime stop when each path is reached,
+and do not throw. Synthetic tests cover both diagnostic paths.
