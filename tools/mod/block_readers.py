@@ -25,7 +25,7 @@ FAMILIES = {
 VOLATILE = {'eax', 'ecx', 'edx'}
 
 
-def global_reads(data, base, blocks, globals_by_address):
+def global_reads(data, base, blocks, globals_by_address, pointer_paths=()):
     """Return (function, global address, offset, instruction) candidate tuples.
 
     globals_by_address is a set of absolute pointer addresses. A load and the
@@ -36,6 +36,7 @@ def global_reads(data, base, blocks, globals_by_address):
     decoder = Cs(CS_ARCH_X86, CS_MODE_32)
     decoder.detail = True
     result = set()
+    pointer_paths = set(pointer_paths)
     for function, spans in sorted(blocks.items()):
         for start, size in sorted(spans):
             if size <= 0 or start < base or start + size > base + len(data):
@@ -52,7 +53,8 @@ def global_reads(data, base, blocks, globals_by_address):
                         continue
                     reg = FAMILIES.get(ins.reg_name(op.mem.base))
                     if reg in tracked:
-                        result.add((function, tracked[reg], op.mem.disp, ins.address))
+                        pointer, path = tracked[reg]
+                        result.add((function, pointer, path, op.mem.disp, ins.address))
                 copied = None
                 if ins.mnemonic == 'mov' and len(ins.operands) == 2:
                     dst, src = ins.operands
@@ -60,7 +62,14 @@ def global_reads(data, base, blocks, globals_by_address):
                         if src.type == X86_OP_MEM and src.size == 4 and src.mem.base == X86_REG_INVALID and src.mem.index == X86_REG_INVALID:
                             absolute = src.mem.disp & 0xffffffff
                             if absolute in globals_by_address:
-                                copied = absolute
+                                copied = (absolute, ())
+                        elif src.type == X86_OP_MEM and src.size == 4 and src.mem.index == X86_REG_INVALID:
+                            parent = tracked.get(FAMILIES.get(ins.reg_name(src.mem.base)))
+                            if parent is not None:
+                                pointer, path = parent
+                                nested = path + (src.mem.disp,)
+                                if (pointer, nested) in pointer_paths:
+                                    copied = (pointer, nested)
                         elif src.type == X86_OP_REG and src.size == 4:
                             copied = tracked.get(FAMILIES.get(ins.reg_name(src.reg)))
                 _, writes = ins.regs_access()

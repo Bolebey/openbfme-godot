@@ -10,7 +10,7 @@ trivial, not getModuleNameKey / xfer / a deleting destructor). They are candidat
 a function ported without a citation, or a function of another class that reads the module's data. A row with `how` = manual or a
 `stop` may already carry a verdict ("RotWK does not read it", TOP20 / docs/STOPS.md): read it first. The task still proves the reader
 (parser -> offset -> every reader, PROCESS 5 step 4). Only block, class and field names, counts and RW addresses are written: no values.
-With --game and --inventory, GameData gets same-basic-block global-pointer read candidates. Other top-level blocks remain unimplemented.
+With --game and --inventory, GameData, AIData and AudioSettings get same-basic-block global-pointer read candidates. Other blocks remain unimplemented.
 These are heuristic leads, not no-reader verdicts; register state is not propagated across blocks or indirect calls.
 """
 from __future__ import annotations
@@ -72,7 +72,11 @@ def write(rows, path: Path):
 # (0x6441A5..AD). Names and offsets come from the
 # original mapped image because those tables are absent from field-tables.json.
 SINGLETONS = {
-    "gamedata": ("TheGlobalData", 0xDE4364, 0xBFF580),
+    "gamedata": ("TheGlobalData", 0xDE4364, (), 0xBFF580),
+    # RW 0x7017AA: TheAI [0xDE4B40], data [ecx+0x18], table 0xC1CB20.
+    "aidata": ("TheAI->data", 0xDE4B40, (0x18,), 0xC1CB20),
+    # RW 0x44107A: TheAudio [0xDE42FC], settings [eax+0x10], table 0xBD7698.
+    "audiosettings": ("TheAudio->settings", 0xDE42FC, (0x10,), 0xBD7698),
 }
 
 
@@ -87,15 +91,16 @@ def top_level_candidates(game, inventory):
     pe = pefile.PE(str(game), fast_load=True)
     data, base = pe.get_memory_mapped_image(), pe.OPTIONAL_HEADER.ImageBase
     citations = rm.scan_citations(Path("engine/src"))
-    matches = br.global_reads(data, base, blocks, {v[1] for v in SINGLETONS.values()})
+    matches = br.global_reads(data, base, blocks, {v[1] for v in SINGLETONS.values()},
+                              {(v[1], v[2]) for v in SINGLETONS.values() if v[2]})
     by_field = {}
-    for function, pointer, offset, instruction in matches:
-        by_field.setdefault((pointer, offset), set()).add((function, instruction))
+    for function, pointer, path, offset, instruction in matches:
+        by_field.setdefault((pointer, path, offset), set()).add((function, instruction))
     output = {}
-    for block, (name, pointer, table) in SINGLETONS.items():
+    for block, (name, pointer, path, table) in SINGLETONS.items():
         for field, offset in br.field_table(data, base, table).items():
             route = f"global {name} +0x{offset:X}"
-            candidates = sorted(by_field.get((pointer, offset), ()))
+            candidates = sorted(by_field.get((pointer, path, offset), ()))
             note = ", ".join(f"0x{function:08X} ({citations.get(function, 'none')}; read 0x{instruction:08X})"
                              for function, instruction in candidates)
             output[(block, field)] = (route, note or "no candidate in recovered basic blocks; not a no-reader verdict")

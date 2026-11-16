@@ -13,7 +13,7 @@ def test_global_copy_overwrite_store_and_partial_register():
     # mov al,1; mov edx,[eax+0x48]; ret
     code = bytes.fromhex('a100200000 89c3 8b4b3c bb07000000 8b5340 894844 b001 8b5048 c3')
     reads = br.global_reads(code, 0x1000, {0x1000: ((0x1000, len(code)),)}, {0x2000})
-    assert reads == [(0x1000, 0x2000, 0x3c, 0x1007)]
+    assert reads == [(0x1000, 0x2000, (), 0x3c, 0x1007)]
 
 
 def test_getter_two_callers():
@@ -28,7 +28,7 @@ def test_volatile_registers_killed_at_calls():
     # Saved EBX survives a call; EAX does not.
     code = bytes.fromhex('a100200000 89c3 e800000000 8b483c 8b4b40 c3')
     assert br.global_reads(code, 0x1000, {0x1000: ((0x1000, len(code)),)}, {0x2000}) == [
-        (0x1000, 0x2000, 0x40, 0x100f)]
+        (0x1000, 0x2000, (), 0x40, 0x100f)]
 
 
 def test_field_table_and_route_join():
@@ -47,3 +47,12 @@ def test_field_table_and_route_join():
 def test_lea_is_not_a_read():
     code = bytes.fromhex('a100200000 8d483c c3')
     assert br.global_reads(code, 0x1000, {0x1000: ((0x1000, len(code)),)}, {0x2000}) == []
+
+
+def test_nested_singleton_pointer():
+    # mov eax,[0x2000]; mov eax,[eax+0x18]; mov edx,[eax+0x3c]; ret
+    code = bytes.fromhex('a100200000 8b4018 8b503c c3')
+    reads = br.global_reads(code, 0x1000, {0x1000: ((0x1000, len(code)),)},
+                            {0x2000}, {(0x2000, (0x18,))})
+    assert reads == [(0x1000, 0x2000, (), 0x18, 0x1005),
+                     (0x1000, 0x2000, (0x18,), 0x3c, 0x1008)]
