@@ -114,7 +114,7 @@ rows; the rest stay `-`, and a `-` never means the button is ungated.
 ## What this session changed in the engine
 
 `ControlBar::evaluate` now carries the Object +0x45B gate at retail's position
-(commit `c58bff1`): after the script availability call (RW 0x942490) and before
+(commit `93589f8a`): after the script availability call (RW 0x942490) and before
 the experience tracker's gate (RW 0x942833), a set flag returns
 `ButtonState::Restricted` (RW 0x9438C8's availability 0) for every command. The
 flag itself is new simulation state — `Object::markSingleUseCommandUsed`
