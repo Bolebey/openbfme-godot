@@ -61,7 +61,7 @@ struct Portal230World : combattest::CombatWorld
 
 // RW 0x863D77 divides the transformed local X axis by max(abs(x), abs(y)), takes its 3D length (RW 0x403111),
 // scales only X and Y of TopAttackPos by that length, leaves Z unchanged, then applies RW 0x70BFD1's object transform.
-TEST_CASE("PORT-230 TopAttackPos: a tilted portal scales Z with the full 3D axis length (RW 0x863D77)")
+TEST_CASE("PORT-230 TopAttackPos: a tilted portal uses the full 3D axis length for X/Y only (RW 0x863D77)")
 {
 	Portal230World world;
 	Object *object = world.portal();
