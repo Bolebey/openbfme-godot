@@ -67,7 +67,7 @@ const char *const kStop =
 	"(ATTACK_HEAL_AOE RW 0x9E691D consumes the team's threat order, Team + 0x13C, written by the team's vslot 0x14 RW 0x7A59CB and erased RW 0x7A1C5E); the spell "
 	"book's ARMY_BREAKER is ported (lane PORT-196: RW 0x9E92CA over the brain's attacked-at records, AI + 0x164 -> + 0x20, with the taken-player timer RW 0x9E9222 "
 	"and the constructor RW 0x9E91EA). Not ported (it answers no, counted): the spell book's "
-	"HEAL (RW 0x9E85C6: the ZH AIPlayer's list, Player + 0x2FC -> + 0x4, entries of type 0x1A, whose producer is S-7366); the per-frame steering of a summoned "
+	"HEAL (RW 0x9E85C6: the ZH AIPlayer's list, Player + 0x2FC -> + 0x4, entries of type 0x1A, whose producer is S-7389); the per-frame steering of a summoned "
 	"helper of ASSIST_BATTLE_BUFF / _DEBUFF (slot 1 RW 0x9E8A42) and SHROUD_REVEAL (slot 1 RW 0x9E7F0F), counted: their prologue (the helper found through the "
 	"record's army and hero lists, RW 0x99316A) is shared with TARGETAOE_SUMMON, whose own steering (RW 0x9EB961: the caster's victim RW 0x668303, the move RW "
 	"0x66C4CA, the two thresholds RW 0xC69574 / RW 0xBE5AF8) is ported; INFERENCE: an unset "

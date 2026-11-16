@@ -516,7 +516,7 @@ TEST_CASE("AIPOW-1: the ActionManager's stops [S-1871] .. [S-1874] and the compu
 			CHECK_MESSAGE(spellBook, TheAISpecialPowerTypeNames[t]);
 		}
 	}
-	// pin: PORT-196 ported ARMY_BREAKER: 3 -> 2 (RAI-POW-4) -> 1; the remaining one is the spell book's HEAL (stop S-7366)
+	// pin: PORT-196 ported ARMY_BREAKER: 3 -> 2 (RAI-POW-4) -> 1; the remaining one is the spell book's HEAL (stop S-7389)
 	CHECK(unported == 1);
 	CHECK(AISpecialPowerDecision::decisionPorted(21));
 	CHECK(AISpecialPowerDecision::decisionPorted(25));

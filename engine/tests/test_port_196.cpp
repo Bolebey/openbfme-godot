@@ -398,7 +398,7 @@ TEST_CASE("PORT-196 ARMY_BREAKER: neighbouring behaviour — HEAL stays unported
 	Fixture f;
 	AISpecialPowerUpdate *u = f.initialisedBreaker();
 	f.advanceTo(10);
-	// S-1421's count: ARMY_BREAKER is ported, HEAL (RW 0x9E85C6, the ZH AIPlayer list whose producer is S-7366) is the one unported decision
+	// S-1421's count: ARMY_BREAKER is ported, HEAL (RW 0x9E85C6, the ZH AIPlayer list whose producer is S-7389) is the one unported decision
 	int unported = 0;
 	for (int t = 0; t < AI_SPECIAL_POWER_TYPE_COUNT; ++t)
 	{
