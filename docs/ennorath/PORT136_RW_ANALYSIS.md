@@ -154,3 +154,41 @@ Consequences for the fix:
   pathfinder's +0x0C search RW 0x6FDE38 (the same S-784 entry), or, if that search stays out of scope, the port's
   aerial spline wired into `AIMoveToState` for an aircraft with the RW 0x6668CA flying path (INFERENCE marker
   required). The neighbour check stays: a foot unit in guard must keep walking and attacking as it does now.
+
+---
+
+## 5. The fix this lane took (issue #338)
+
+Section 4 ruled out the move machine as the place to fix a flyer: RW 0x666D03's flying branch (the pathfinder's
++0x0C search RW 0x6FDE38) is still S-784, and wiring the port's aerial spline into `AIMoveToState` would have been an
+inference in the middle of every unit's move. The species-independent way out is the one RW itself gives the bird:
+**the attack state asks its AI for its own attack machine, and the bird's answer is the swoop-then-idle machine.**
+
+* RW 0x769C31 (the giant bird's state machine, its vslot 9) makes RW 0x769335 and hands it to the attack state. The
+  port keeps that factory on the AI — `AIUpdateInterface::makeAttackThenIdleMachine`, the same RW 0x769335 body the
+  bird's attack move already used (`GiantBirdAIUpdate.cpp:1307`) — and `AIAttackState::createAttackMachine`
+  (`engine/src/GameLogic/AI/AIAttack.cpp`) now asks for it first. Every other AI answers null, so every ground unit
+  keeps the generic / melee / horde machine it had. INFERENCE on the plumbing (the factory lives on the machine in RW,
+  on the AI in the port, because the port has no per-template state machine factory); the behaviour is the bird's.
+* The swoop machine ends a swoop in its idle state (state 0, `SwoopIdleState`, RW 0x769EA0). Idle is
+  `STATE_CONTINUE`, which `AIAttackState::updateAttackMachine` flattens to "the attack is still running", so the first
+  swoop that missed would hold the attack state for ever. The bird's own attack move polls the machine the same way
+  (idle → goal object → `setState(10)`), and `updateAttackMachine` now does the same while the victim lives: another
+  swoop instead of a hover.
+
+The eagle therefore swoops the victim it finds in guard, dives, fires its weapon and keeps swooping until the victim is
+dead — RW's own shape for a bird (the guard machine RW 0x76A6CC only decides *whom* to attack; its inner and outer
+states are ordinary `AIAttackState`s, section 1).
+
+The tests are `engine/tests/test_port_136.cpp` (lane `engine/cmake/Port136.cmake`):
+
+* `PORT-136: the eagle in the guard state takes off, closes in and hits its target` — the mod's eagle shape with its
+  StancesBehavior, an enemy 150 units away: the first hit lands at frame 13 and the enemy is dead by frame 50, with the
+  bird airborne (its own `makeAttackThenIdleMachine(10)` is non-null, the foot AI's is null);
+* `PORT-136: a foot unit in the guard state still walks to its target and hits it` — the neighbour: the same guard, the
+  same enemy distance, a walking unit; it hits at frame 13 too, on the ground.
+
+One measured guard rule the test has to respect (and the earlier probes did not): the guard's attack state leaves when
+the *owner* strays further from the guard post than `MaxRetaliateDistance` (`GuardExitConditions::shouldExit`, RW
+0x94BD19; 200 in this fixture's GameData). An enemy 400 units out therefore makes the guard attack, exit, return and
+re-acquire for ever — with any attack machine — so the guard test puts the enemy inside that range.

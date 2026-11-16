@@ -114,14 +114,15 @@ public:
 	bool usesMeleeMachine() const { return m_meleeMachine; }
 
 	// lane SAVE-4c: the sub machine's kind (0 none, 1 the generic machine, 2 the melee machine RW 0x744B71, 3 / 4 the horde machine with its melee / ranged
-	// states): a load makes the same machine again before it loads it (bookkeeping, not hashed: the machine's states say the same)
+	// states, 5 the bird's swoop-then-idle machine RW 0x769335, made because the AI answers makeAttackThenIdleMachine — see PORT136-AIRPATH)
 	enum AttackMachineMade
 	{
 		MADE_NONE = 0,
 		MADE_GENERIC = 1,
 		MADE_MELEE = 2,
 		MADE_HORDE_MELEE = 3,
-		MADE_HORDE_RANGED = 4
+		MADE_HORDE_RANGED = 4,
+		MADE_SWOOP = 5
 	};
 
 private:

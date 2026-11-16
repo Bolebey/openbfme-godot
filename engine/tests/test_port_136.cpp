@@ -1,16 +1,17 @@
 // OpenBFME unit tests. PORT-136: synthetic, no game installation. GPL-3.0.
-// Probe file (temporary diagnostics): the summoned giant bird of the spell book does not attack on its own.
+// The summoned giant bird of Ennorath's spell book (issue #338) must attack on its own. Its attack is the bird's swoop-then-idle
+// machine (RW 0x769C31 -> RW 0x769335), which the attack state now asks its AI for before it makes the ground machine: that
+// machine's move is the walk machine (RW 0x6668CA -> the pathfinder's ground search RW 0x6FC18E), which never gives a flyer a
+// path, so the eagle used to find its enemy, enter the attack states and sit at its spawn point.
 #include "doctest.h"
-
-#include <iomanip>
 
 #include "CombatTestUtil.h"
 #include "IniTestUtil.h"
-#include "GameLogic/AI/AIClosestEnemy.h"
 #include "GameLogic/AI/AIWorld.h"
 #include "GameLogic/Object/PartitionManager.h"
 #include "GameLogic/Module/GiantBirdAIUpdate.h"
 #include "GameLogic/Module/StancesBehavior.h"
+#include "GameLogic/Combat/ObjectWeapons.h"
 #include "GameLogic/Object/Object.h"
 
 namespace
@@ -103,367 +104,6 @@ End
 )ini";
 	return s;
 }
-
-struct Outcome
-{
-	unsigned state = 0;
-	float z = 0.0f;
-	float health = 0.0f;
-	bool withinRange = false;
-	bool canAttackFromHere = false;
-	std::string target;
-};
-
-Outcome probe(const char *label, bool extras, float horizontal, float birdZ, int frames)
-{
-	combattest::CombatWorld w;
-	const std::string error = w.w.load(eagleIni(extras), INI_LOAD_OVERWRITE, "port136-probe.ini");
-	REQUIRE_MESSAGE(error.empty(), error);
-	Object *bird = w.unit("Port136Eagle", 'A', 200.0f, 200.0f);
-	Object *enemy = w.unit("Swordsman", 'B', 200.0f + horizontal, 200.0f);
-	REQUIRE(bird);
-	REQUIRE(enemy);
-	auto *ai = dynamic_cast<GiantBirdAIUpdate *>(bird->getAIUpdateInterface());
-	REQUIRE(ai);
-	if (birdZ != 0.0f)
-	{
-		Coord3D p = *bird->getPosition();
-		p.z = birdZ;
-		bird->setPosition(&p);
-	}
-	Outcome out;
-	out.withinRange = bird->getWeapons()->isSlotWithinAttackRange(0, *enemy, 0.0f, true);
-	out.canAttackFromHere = AI::canAttackFromHere(*bird, *enemy);
-	Object *mood = ai->getNextMoodTarget(false, true);
-	out.target = mood ? mood->getTemplate()->getName() : std::string("none");
-	MESSAGE(label << ": playerTypeA=" << (int)w.playerOf('A')->getPlayerType() << " extras=" << extras << " horiz=" << horizontal << " z=" << birdZ << " withinRange=" << out.withinRange << " canAttackFromHere="
-		      << out.canAttackFromHere << " mood(no cadence)=" << out.target);
-	w.frames(frames);
-	out.state = ai->currentStateId();
-	out.z = bird->getPosition()->z;
-	out.health = w.health(enemy);
-	MESSAGE(label << ": after " << frames << " frames state=" << out.state << " z=" << out.z << " enemy health=" << out.health);
-	return out;
-}
-}
-
-TEST_CASE("PORT-136 probe D: the mod eagle shape, enemy at 20 horizontally")
-{
-	probe("D1", true, 20.0f, 100.0f, 60);
-	probe("D2", false, 20.0f, 100.0f, 60);
-	probe("D3", true, 20.0f, 0.0f, 60);
-	CHECK(false);
-}
-
-TEST_CASE("PORT-136 probe F: the eagle with a StancesBehavior takes Battle and sits in AI_GUARD (RW 0x8622E9 -> 0x86223F -> 0x662A21 -> AIGuardState 16)")
-{
-	combattest::CombatWorld w;
-	StanceTemplateStore store;
-	store.registerBlock(w.w.fx.env.blocks);
-	StanceTemplateStore *const saved = TheStanceTemplateStore;
-	TheStanceTemplateStore = &store;
-	struct Restore
-	{
-		StanceTemplateStore *v;
-		~Restore() { TheStanceTemplateStore = v; }
-	} restore{saved};
-	const std::string error = w.w.load(eagleIni(true), INI_LOAD_OVERWRITE, "port136-stance.ini");
-	REQUIRE_MESSAGE(error.empty(), error);
-	REQUIRE(store.find("Port136Hero"));
-	const float distances[] = { 400.0f, 300.0f, 200.0f, 100.0f };
-	for (float d : distances)
-	{
-		Object *bird = w.unit("Port136Eagle", 'A', 200.0f, 200.0f);
-		Object *enemy = w.unit("Swordsman", 'B', 200.0f + d, 200.0f);
-		REQUIRE(bird);
-		REQUIRE(enemy);
-		auto *ai = dynamic_cast<GiantBirdAIUpdate *>(bird->getAIUpdateInterface());
-		REQUIRE(ai);
-		StancesBehavior *sb = StancesBehavior::of(*bird);
-		REQUIRE(sb);
-		std::string trace;
-		unsigned states[10] = { 0 };
-		float hp[10] = { 0 };
-		for (int tick = 0; tick < 10; ++tick)
-		{
-			w.frames(30);
-			states[tick] = ai->currentStateId();
-			hp[tick] = w.health(enemy);
-			trace += std::to_string(states[tick]) + "/" + std::to_string(w.health(bird)) + " ";
-		}
-		{
-			const float vr = AI::adjustedVisionRange(*bird, 3u);
-			Object *closest = AI::findClosestEnemy(*bird, vr, AI::CAN_ATTACK | AI::AUTO_ACQUIRE, nullptr, nullptr, 0);
-			MESSAGE("F d=" << d << " adjustedVisionRange=" << vr << " findClosestEnemy=" << (closest ? closest->getTemplate()->getName() : std::string("none")) << " autoAcquireFlags=" << ai->autoAcquireFlags());
-		}
-		MESSAGE("F d=" << d << ": stance=" << (int)sb->getStance() << " state/hp(300 frames, every 30)=" << trace << " enemy hp=" << w.health(enemy) << " bird z=" << bird->getPosition()->z << " bird hp=" << w.health(bird));
-	}
-	CHECK(false);
-}
-
-TEST_CASE("PORT-136 probe E: the mod eagle shape, enemy at 100/400 horizontally")
-{
-	probe("E1", true, 100.0f, 100.0f, 60);
-	probe("E2", true, 400.0f, 100.0f, 120);
-	CHECK(false);
-}
-
-namespace
-{
-// the same weapon and vision as the eagle, on a foot unit: the reference for "is the search's reach object-specific?"
-const char *kFootIni = R"ini(
-Object Port136Foot
- KindOf = INFANTRY SELECTABLE CAN_ATTACK SCORE
- VisionRange = 450
- Geometry = CYLINDER
- GeometryMajorRadius = 8
- GeometryHeight = 20
- ArmorSet
-  Conditions = None
-  Armor = PlainArmor
- End
- WeaponSet
-  Conditions = None
-  Weapon = PRIMARY Port136EagleAttack
- End
- Body = ActiveBody ModuleTag_Body
-  MaxHealth = 1000
- End
- Behavior = AIUpdateInterface ModuleTag_AI
-  AutoAcquireEnemiesWhenIdle = Yes
-  MoodAttackCheckRate = 400
- End
- Behavior = PhysicsBehavior ModuleTag_Physics
- End
- LocomotorSet
-  Locomotor = WalkerLoco
-  Condition = SET_NORMAL
-  Speed = 55
- End
-End
-)ini";
-
-std::string searchOf(Object &me, float range, unsigned q)
-{
-	Object *found = AI::findClosestEnemy(me, range, q, nullptr, nullptr, 0);
-	return found ? found->getTemplate()->getName() : std::string("none");
-}
-} // namespace
-
-TEST_CASE("PORT-136 probe G: the reach of AI::findClosestEnemy for the eagle and the same weapon+vision on foot")
-{
-	combattest::CombatWorld w;
-	StanceTemplateStore store;
-	store.registerBlock(w.w.fx.env.blocks);
-	StanceTemplateStore *const saved = TheStanceTemplateStore;
-	TheStanceTemplateStore = &store;
-	struct Restore
-	{
-		StanceTemplateStore *v;
-		~Restore() { TheStanceTemplateStore = v; }
-	} restore{saved};
-	const std::string error = w.w.load(eagleIni(true) + kFootIni, INI_LOAD_OVERWRITE, "port136-search.ini");
-	REQUIRE_MESSAGE(error.empty(), error);
-	Object *bird = w.unit("Port136Eagle", 'A', 200.0f, 200.0f);
-	Object *enemy = w.unit("Swordsman", 'B', 300.0f, 200.0f);
-	Object *foot = w.unit("Port136Foot", 'A', 200.0f, 400.0f);
-	Object *enemy2 = w.unit("Swordsman", 'B', 300.0f, 400.0f);
-	REQUIRE(bird);
-	REQUIRE(enemy);
-	REQUIRE(foot);
-	REQUIRE(enemy2);
-	MESSAGE("G: vision bird=" << AI::adjustedVisionRange(*bird, 3u) << " foot=" << AI::adjustedVisionRange(*foot, 3u) << " ableToAttack bird=" << bird->isAbleToAttack()
-				 << " foot=" << foot->isAbleToAttack() << " canAttackObject bird=" << bird->getWeapons()->canAttackObject(*enemy, CMD_FROM_AI, false)
-				 << " foot=" << foot->getWeapons()->canAttackObject(*enemy2, CMD_FROM_AI, false));
-	const unsigned quals[] = { 0u, AI::CAN_ATTACK, AI::AUTO_ACQUIRE, AI::CAN_ATTACK | AI::AUTO_ACQUIRE, AI::CAN_ATTACK | AI::AUTO_ACQUIRE | AI::NO_VISION_TEST,
-		AI::CAN_ATTACK | AI::NO_VISION_TEST };
-	for (unsigned q : quals)
-	{
-		MESSAGE("G q=0x" << std::hex << q << std::dec << " bird(100)=" << searchOf(*bird, 460.0f, q) << " foot(100)=" << searchOf(*foot, 460.0f, q) << " bird(460)=" << searchOf(*bird, 1000.0f, q)
-				 << " foot(1000)=" << searchOf(*foot, 1000.0f, q));
-	}
-	CHECK(false);
-}
-
-TEST_CASE("PORT-136 probe H: is the candidate in the partition at all, and does its closest query see it?")
-{
-	combattest::CombatWorld w;
-	StanceTemplateStore store;
-	store.registerBlock(w.w.fx.env.blocks);
-	StanceTemplateStore *const saved = TheStanceTemplateStore;
-	TheStanceTemplateStore = &store;
-	struct Restore
-	{
-		StanceTemplateStore *v;
-		~Restore() { TheStanceTemplateStore = v; }
-	} restore{saved};
-	const std::string error = w.w.load(eagleIni(true) + kFootIni, INI_LOAD_OVERWRITE, "port136-part.ini");
-	REQUIRE_MESSAGE(error.empty(), error);
-	Object *bird = w.unit("Port136Eagle", 'A', 200.0f, 200.0f);
-	Object *enemy = w.unit("Swordsman", 'B', 300.0f, 200.0f);
-	REQUIRE(bird);
-	REQUIRE(enemy);
-	auto *ai = dynamic_cast<GiantBirdAIUpdate *>(bird->getAIUpdateInterface());
-	REQUIRE(ai);
-	PartitionManager &part = w.logic->partition();
-	int layerB = -99, layerE = -99;
-	std::uint32_t x = 0, y = 0, mask = 0;
-	const bool regB = part.entryCells(*bird, layerB, x, y, mask);
-	MESSAGE("H: bird registered=" << regB << " layer=" << layerB << " cell=" << x << "," << y);
-	const bool regE = part.entryCells(*enemy, layerE, x, y, mask);
-	MESSAGE("H: enemy registered=" << regE << " layer=" << layerE << " cell=" << x << "," << y << " entries=" << part.entryCount());
-	MESSAGE("H: layerOf bird=" << part.layerOf(*bird) << " enemy=" << part.layerOf(*enemy) << " dist=" << (enemy->getPosition()->x - bird->getPosition()->x));
-	Object *raw = part.getClosestObject(*bird->getPosition(), 1000.0f, FROM_CENTER_3D, PartitionFilterList());
-	MESSAGE("H: raw closest (no filters)=" << (raw ? raw->getTemplate()->getName() : std::string("none")));
-	const PartitionHits hits = part.iterateObjectsInRange(*bird->getPosition(), 1000.0f, FROM_CENTER_3D, PartitionFilterList(), ITER_FASTEST);
-	MESSAGE("H: iterateObjectsInRange(1000) count=" << hits.size());
-	MESSAGE("H: mood=" << (ai->getNextMoodTarget(false, true) ? ai->getNextMoodTarget(false, true)->getTemplate()->getName() : std::string("none")) << " canAttackFromHere=" << AI::canAttackFromHere(*bird, *enemy)
-			   << " q0=" << searchOf(*bird, 1000.0f, 0u) << " qCAN_ATTACK=" << searchOf(*bird, 1000.0f, AI::CAN_ATTACK));
-	CHECK(false);
-}
-
-TEST_CASE("PORT-136 probe I: does the partition's closest query continue past the searcher itself?")
-{
-	combattest::CombatWorld w;
-	StanceTemplateStore store;
-	store.registerBlock(w.w.fx.env.blocks);
-	StanceTemplateStore *const saved = TheStanceTemplateStore;
-	TheStanceTemplateStore = &store;
-	struct Restore
-	{
-		StanceTemplateStore *v;
-		~Restore() { TheStanceTemplateStore = v; }
-	} restore{saved};
-	const std::string error = w.w.load(eagleIni(true) + kFootIni, INI_LOAD_OVERWRITE, "port136-cont.ini");
-	REQUIRE_MESSAGE(error.empty(), error);
-	Object *bird = w.unit("Port136Eagle", 'A', 200.0f, 200.0f);
-	Object *near = w.unit("Swordsman", 'B', 220.0f, 200.0f);
-	Object *far = w.unit("Swordsman", 'B', 300.0f, 200.0f);
-	REQUIRE(bird);
-	REQUIRE(near);
-	REQUIRE(far);
-	auto *ai = dynamic_cast<GiantBirdAIUpdate *>(bird->getAIUpdateInterface());
-	REQUIRE(ai);
-	MESSAGE("I: bird position " << bird->getPosition()->x << "," << bird->getPosition()->y << " near " << near->getPosition()->x << " far " << far->getPosition()->x);
-	const unsigned qs[] = { 0u, (unsigned)AI::CAN_ATTACK, (unsigned)(AI::CAN_ATTACK | AI::AUTO_ACQUIRE), (unsigned)(AI::CAN_ATTACK | AI::AUTO_ACQUIRE | AI::NO_VISION_TEST),
-		(unsigned)(AI::CAN_ATTACK | AI::AUTO_ACQUIRE | AI::ATTACK_BUILDINGS) };
-	for (unsigned q : qs)
-	{
-		Coord3D at = *bird->getPosition();
-		Object *fromPos = AI::findClosestEnemy(*bird, at, 1000.0f, q, nullptr, nullptr, 0);
-		Coord3D nearEnemy{ near->getPosition()->x - 5.0f, near->getPosition()->y, 0.0f };
-		Object *fromNear = AI::findClosestEnemy(*bird, nearEnemy, 1000.0f, q, nullptr, nullptr, 0);
-		MESSAGE("I q=0x" << q << " fromBirdPos=" << (fromPos ? fromPos->getTemplate()->getName() + "@" + std::to_string((int)fromPos->getPosition()->x) : std::string("none"))
-				 << " fromNearPos=" << (fromNear ? fromNear->getTemplate()->getName() + "@" + std::to_string((int)fromNear->getPosition()->x) : std::string("none")) << " mood=" << (ai->getNextMoodTarget(false, true) ? "yes" : "none")
-				 << " flags=" << ai->autoAcquireFlags());
-	}
-	CHECK(false);
-}
-
-namespace
-{
-struct AllowAllButSelf : PartitionFilter
-{
-	explicit AllowAllButSelf(Object &self) : m_self(self) {}
-	bool allow(Object &obj) override { return &obj != &m_self; }
-	Object &m_self;
-};
-
-struct AllowOnly : PartitionFilter
-{
-	explicit AllowOnly(Object &self) : m_self(self) {}
-	bool allow(Object &obj) override { return &obj == &m_self; }
-	Object &m_self;
-};
-} // namespace
-
-TEST_CASE("PORT-136 probe J: the enemies filter's layer mask and the closest walk with a plain filter")
-{
-	combattest::CombatWorld w;
-	StanceTemplateStore store;
-	store.registerBlock(w.w.fx.env.blocks);
-	StanceTemplateStore *const saved = TheStanceTemplateStore;
-	TheStanceTemplateStore = &store;
-	struct Restore
-	{
-		StanceTemplateStore *v;
-		~Restore() { TheStanceTemplateStore = v; }
-	} restore{saved};
-	const std::string error = w.w.load(eagleIni(true) + kFootIni, INI_LOAD_OVERWRITE, "port136-mask.ini");
-	REQUIRE_MESSAGE(error.empty(), error);
-	Object *bird = w.unit("Port136Eagle", 'A', 200.0f, 200.0f);
-	Object *enemy = w.unit("Swordsman", 'B', 300.0f, 200.0f);
-	REQUIRE(bird);
-	REQUIRE(enemy);
-	const Player *pa = bird->getControllingPlayer();
-	const Player *pb = enemy->getControllingPlayer();
-	REQUIRE(pa);
-	REQUIRE(pb);
-	MESSAGE("J: players bird=" << pa->getPlayerIndex() << " enemy=" << pb->getPlayerIndex() << " rel(a->b team)=" << (int)pa->getRelationship(pb->getDefaultTeam())
-			   << " rel(b->a team)=" << (int)pb->getRelationship(pa->getDefaultTeam()));
-	PartitionManager &part = w.logic->partition();
-	AllowAllButSelf plain(*bird);
-	PartitionFilter *const oneList[] = { &plain };
-	PartitionFilterList one(oneList, 1);
-	Object *found = part.getClosestObject(*bird->getPosition(), 1000.0f, FROM_CENTER_3D, one);
-	MESSAGE("J: closest with a pass-all-but-self filter=" << (found ? found->getTemplate()->getName() : std::string("none")));
-	Object *raw = part.getClosestObject(*bird->getPosition(), 1000.0f, FROM_CENTER_3D, PartitionFilterList());
-	MESSAGE("J: closest with no filters=" << (raw ? raw->getTemplate()->getName() : std::string("none")));
-	auto *ai = dynamic_cast<GiantBirdAIUpdate *>(bird->getAIUpdateInterface());
-	REQUIRE(ai);
-	Object *mood = ai->getNextMoodTarget(false, true);
-	MESSAGE("J: mood=" << (mood ? mood->getTemplate()->getName() : std::string("none")) << " findClosest(q0)=" << searchOf(*bird, 1000.0f, 0u));
-	const PartitionHits walkAll = part.iterateObjectsInRange(*bird->getPosition(), 1000.0f, FROM_CENTER_3D, one, ITER_FASTEST);
-	MESSAGE("J: iterate allow-all-but-self count=" << walkAll.size());
-	AllowOnly onlyEnemy(*enemy);
-	PartitionFilter *const onlyList[] = { &onlyEnemy };
-	PartitionFilterList onlyOne(onlyList, 1);
-	Object *foundOnly = part.getClosestObject(*bird->getPosition(), 1000.0f, FROM_CENTER_3D, onlyOne);
-	MESSAGE("J: closest with allow-only-enemy=" << (foundOnly ? foundOnly->getTemplate()->getName() : std::string("none")));
-	const PartitionHits walkOnly = part.iterateObjectsInRange(*bird->getPosition(), 1000.0f, FROM_CENTER_3D, onlyOne, ITER_FASTEST);
-	MESSAGE("J: iterate allow-only-enemy count=" << walkOnly.size());
-	Object *found2 = part.getClosestObject(*bird->getPosition(), 5000.0f, FROM_CENTER_3D, one);
-	MESSAGE("J: closest allow-all-but-self with a 5000 range=" << (found2 ? found2->getTemplate()->getName() : std::string("none")));
-	CHECK(false);
-}
-
-TEST_CASE("PORT-136 probe J2: the fixture's partition region was never set; set it and repeat the filtered search")
-{
-	combattest::CombatWorld w;
-	StanceTemplateStore store;
-	store.registerBlock(w.w.fx.env.blocks);
-	StanceTemplateStore *const saved = TheStanceTemplateStore;
-	TheStanceTemplateStore = &store;
-	struct Restore
-	{
-		StanceTemplateStore *v;
-		~Restore() { TheStanceTemplateStore = v; }
-	} restore{saved};
-	const std::string error = w.w.load(eagleIni(true), INI_LOAD_OVERWRITE, "port136-region.ini");
-	REQUIRE_MESSAGE(error.empty(), error);
-	Object *bird = w.unit("Port136Eagle", 'A', 200.0f, 200.0f);
-	Object *enemy = w.unit("Swordsman", 'B', 600.0f, 200.0f);
-	REQUIRE(bird);
-	REQUIRE(enemy);
-	PartitionManager &part = w.logic->partition();
-	auto *ai = dynamic_cast<GiantBirdAIUpdate *>(bird->getAIUpdateInterface());
-	REQUIRE(ai);
-	MESSAGE("J2 before setRegion: findClosest(q0)=" << searchOf(*bird, 1000.0f, 0u));
-	part.setRegion(0.0f, 0.0f, 1000.0f, 1000.0f);
-	MESSAGE("J2 after setRegion: findClosest(q0)=" << searchOf(*bird, 1000.0f, 0u) << " findClosest(canAttack)=" << searchOf(*bird, 1000.0f, AI::CAN_ATTACK)
-			   << " mood=" << (ai->getNextMoodTarget(false, true) ? ai->getNextMoodTarget(false, true)->getTemplate()->getName() : std::string("none")));
-	std::string trace;
-	for (int i = 0; i < 10; ++i)
-	{
-		w.frames(30);
-		trace += std::to_string(ai->currentStateId()) + " ";
-	}
-	MESSAGE("J2 after 300 frames: enemy health=" << w.health(enemy) << " bird z=" << bird->getPosition()->z << " states=" << trace);
-	CHECK(false);
-}
-
-namespace
-{
 // the same foot object, but with a StancesBehavior: the fresh stance is Battle, so it guards like the eagle (RW 0x8622E9 -> 0x662A21)
 const char *kFootStanceIni = R"ini(
 Object Port136FootStance
@@ -501,7 +141,8 @@ End
 )ini";
 } // namespace
 
-TEST_CASE("PORT-136 probe K: the guard's own search (scored path) and a plain foot unit in the guard state")
+// the mod shape of GwaihirEagleSpell_Summoned (Ennorath 1.9.8.2) with its StancesBehavior: it spawns in the guard state
+TEST_CASE("PORT-136: the eagle in the guard state takes off, closes in and hits its target")
 {
 	combattest::CombatWorld w;
 	StanceTemplateStore store;
@@ -513,193 +154,63 @@ TEST_CASE("PORT-136 probe K: the guard's own search (scored path) and a plain fo
 		StanceTemplateStore *v;
 		~Restore() { TheStanceTemplateStore = v; }
 	} restore{saved};
-	const std::string error = w.w.load(eagleIni(true) + kFootStanceIni, INI_LOAD_OVERWRITE, "port136-guard.ini");
+	const std::string error = w.w.load(eagleIni(true), INI_LOAD_OVERWRITE, "port136-guard.ini");
 	REQUIRE_MESSAGE(error.empty(), error);
 	w.logic->partition().setRegion(0.0f, 0.0f, 1000.0f, 1000.0f);
 	Object *bird = w.unit("Port136Eagle", 'A', 200.0f, 200.0f);
-	Object *enemy = w.unit("Swordsman", 'B', 600.0f, 200.0f);
+	Object *enemy = w.unit("Swordsman", 'B', 350.0f, 200.0f);
+	REQUIRE(bird);
+	REQUIRE(enemy);
+	auto *ai = dynamic_cast<GiantBirdAIUpdate *>(bird->getAIUpdateInterface());
+	REQUIRE(ai);
+	REQUIRE(StancesBehavior::of(*bird));
+	// the machine the attack state asks its AI for is the bird's swoop machine (RW 0x769C31 -> RW 0x769335), not a ground machine
+	CHECK(ai->makeAttackThenIdleMachine(10) != nullptr);
+	const Coord3D from = *bird->getPosition();
+	const float startHealth = w.health(enemy);
+	const int hit = w.runUntil([&] { return w.health(enemy) < startHealth; }, 1500);
+	MESSAGE("PORT-136: hit after " << hit << " frames, bird at (" << bird->getPosition()->x << "," << bird->getPosition()->y << "," << bird->getPosition()->z << ") state=" << ai->currentStateId() << " enemy hp "
+				   << startHealth << " -> " << w.health(enemy));
+	REQUIRE(hit < 1500);
+	// it flew there: a bird 150 units out never walks, and the guard's approach only ever had the walk machine's path
+	CHECK(bird->getPosition()->x > from.x + 50.0f);
+	CHECK(bird->getPosition()->z > 1.0f);
+	const int killed = w.runUntil([&] { return w.health(enemy) <= 0.0f; }, 4000);
+	MESSAGE("PORT-136: enemy dead after " << (hit + killed) << " frames");
+	CHECK(killed < 4000);
+}
+
+// the neighbour: a foot unit of the same mod (StancesBehavior, the fresh Battle stance guards like the eagle) walks and kills as
+// before — the swoop machine is the bird's alone, every other AI answers null to the factory and keeps its ground machine
+TEST_CASE("PORT-136: a foot unit in the guard state still walks to its target and hits it")
+{
+	combattest::CombatWorld w;
+	StanceTemplateStore store;
+	store.registerBlock(w.w.fx.env.blocks);
+	StanceTemplateStore *const saved = TheStanceTemplateStore;
+	TheStanceTemplateStore = &store;
+	struct Restore
+	{
+		StanceTemplateStore *v;
+		~Restore() { TheStanceTemplateStore = v; }
+	} restore{saved};
+	const std::string error = w.w.load(eagleIni(true) + kFootStanceIni, INI_LOAD_OVERWRITE, "port136-guard-foot.ini");
+	REQUIRE_MESSAGE(error.empty(), error);
+	w.logic->partition().setRegion(0.0f, 0.0f, 1000.0f, 1000.0f);
 	Object *foot = w.unit("Port136FootStance", 'A', 200.0f, 600.0f);
-	Object *enemy2 = w.unit("Swordsman", 'B', 600.0f, 600.0f);
-	REQUIRE(bird);
-	REQUIRE(enemy);
+	Object *enemy = w.unit("Swordsman", 'B', 350.0f, 600.0f);
 	REQUIRE(foot);
-	REQUIRE(enemy2);
-	auto *birdAi = dynamic_cast<GiantBirdAIUpdate *>(bird->getAIUpdateInterface());
-	REQUIRE(birdAi);
-	auto *footAi = dynamic_cast<AIUpdateInterface *>(foot->getAIUpdateInterface());
-	REQUIRE(footAi);
-	StancesBehavior *footSb = StancesBehavior::of(*foot);
-	REQUIRE(footSb);
-	MESSAGE("K: guardEnemyScanRate=" << w.logic->settings().guardEnemyScanRate << " autoAcquire=" << w.logic->combat().autoAcquireEnabled() << " bird attackInfo=" << (const void *)birdAi->attackInfo()
-			   << " foot attackInfo=" << (const void *)footAi->attackInfo());
-	const unsigned noFog = (unsigned)(AI::CAN_ATTACK | AI::ATTACK_BUILDINGS | AI::AUTO_ACQUIRE);
-	const unsigned withFog = (unsigned)(AI::CAN_ATTACK | AI::ATTACK_BUILDINGS | AI::AUTO_ACQUIRE | AI::UNFOGGED);
-	MESSAGE("K: guard qualifiers without UNFOGGED(0x" << std::hex << noFog << std::dec << ")=" << searchOf(*bird, 1000.0f, noFog) << " with UNFOGGED(0x" << std::hex << withFog << std::dec << ")="
-			   << searchOf(*bird, 1000.0f, withFog) << " foot same=" << searchOf(*foot, 1000.0f, withFog));
-	MESSAGE("K: closest-path bird=" << searchOf(*bird, 1000.0f, AI::CAN_ATTACK | AI::AUTO_ACQUIRE) << " scored-path bird="
-			   << (AI::findClosestEnemy(*bird, 1000.0f, AI::CAN_ATTACK | AI::AUTO_ACQUIRE, birdAi->attackInfo(), nullptr, 0) ? "yes" : "none"));
-	MESSAGE("K: foot stance=" << (int)footSb->getStance() << " bird state=" << birdAi->currentStateId() << " foot state=" << footAi->currentStateId());
-	std::string birdTrace, footTrace;
-	for (int i = 0; i < 20; ++i)
-	{
-		w.frames(60);
-		birdTrace += std::to_string(birdAi->currentStateId()) + "/" + std::to_string((int)w.health(enemy)) + " ";
-		footTrace += std::to_string(footAi->currentStateId()) + "/" + std::to_string((int)w.health(enemy2)) + " ";
-	}
-	MESSAGE("K: 1200 frames bird state/enemy hp: " << birdTrace);
-	MESSAGE("K: 1200 frames foot state/enemy2 hp: " << footTrace);
-	MESSAGE("K: foot moved from (200,600) to (" << foot->getPosition()->x << "," << foot->getPosition()->y << ") stance=" << (int)footSb->getStance());
-	CHECK(false);
-}
-
-TEST_CASE("PORT-136 probe K2: the eagle's guard acquisition with the partition region set: position, health, state")
-{
-	combattest::CombatWorld w;
-	StanceTemplateStore store;
-	store.registerBlock(w.w.fx.env.blocks);
-	StanceTemplateStore *const saved = TheStanceTemplateStore;
-	TheStanceTemplateStore = &store;
-	struct Restore
-	{
-		StanceTemplateStore *v;
-		~Restore() { TheStanceTemplateStore = v; }
-	} restore{saved};
-	const std::string error = w.w.load(eagleIni(true), INI_LOAD_OVERWRITE, "port136-guard2.ini");
-	REQUIRE_MESSAGE(error.empty(), error);
-	w.logic->partition().setRegion(0.0f, 0.0f, 1000.0f, 1000.0f);
-	Object *bird = w.unit("Port136Eagle", 'A', 200.0f, 200.0f);
-	Object *enemy = w.unit("Swordsman", 'B', 600.0f, 200.0f);
-	REQUIRE(bird);
 	REQUIRE(enemy);
-	auto *ai = dynamic_cast<GiantBirdAIUpdate *>(bird->getAIUpdateInterface());
+	auto *ai = dynamic_cast<AIUpdateInterface *>(foot->getAIUpdateInterface());
 	REQUIRE(ai);
-	StancesBehavior *sb = StancesBehavior::of(*bird);
-	REQUIRE(sb);
-	for (int i = 0; i < 24; ++i)
-	{
-		w.frames(30);
-		MESSAGE("K2 t=" << (i + 1) * 30 << " state=" << ai->currentStateId() << " stance=" << (int)sb->getStance() << " bird=(" << bird->getPosition()->x << "," << bird->getPosition()->y << ","
-				   << bird->getPosition()->z << ") hp=" << w.health(bird) << " enemy=(" << enemy->getPosition()->x << "," << enemy->getPosition()->y << ") hp=" << w.health(enemy) << " range="
-				   << AI::adjustedVisionRange(*bird, 3u));
-	}
-	CHECK(false);
+	REQUIRE(StancesBehavior::of(*foot));
+	CHECK(ai->makeAttackThenIdleMachine(10) == nullptr); // no bird factory: the ground machine is made as before
+	const float startHealth = w.health(enemy);
+	const int hit = w.runUntil([&] { return w.health(enemy) < startHealth; }, 1500);
+	MESSAGE("PORT-136 foot: hit after " << hit << " frames, foot at (" << foot->getPosition()->x << "," << foot->getPosition()->y << ") state=" << ai->currentStateId() << " enemy hp " << startHealth << " -> "
+				   << w.health(enemy));
+	REQUIRE(hit < 1500);
+	CHECK(foot->getPosition()->x > 200.0f + 20.0f); // it walked
+	CHECK(foot->getPosition()->z <= 1.0f);
 }
 
-TEST_CASE("PORT-136 probe K3: the scored search (attackInfo non-null) for the eagle and for a foot unit at four distances")
-{
-	combattest::CombatWorld w;
-	StanceTemplateStore store;
-	store.registerBlock(w.w.fx.env.blocks);
-	StanceTemplateStore *const saved = TheStanceTemplateStore;
-	TheStanceTemplateStore = &store;
-	struct Restore
-	{
-		StanceTemplateStore *v;
-		~Restore() { TheStanceTemplateStore = v; }
-	} restore{saved};
-	const std::string error = w.w.load(eagleIni(true) + kFootIni, INI_LOAD_OVERWRITE, "port136-scored.ini");
-	REQUIRE_MESSAGE(error.empty(), error);
-	w.logic->partition().setRegion(0.0f, 0.0f, 1000.0f, 1000.0f);
-	const float distances[] = { 20.0f, 60.0f, 100.0f, 200.0f, 400.0f };
-	for (int i = 0; i < 5; ++i)
-	{
-		const float y = 100.0f + 160.0f * i;
-		Object *bird = w.unit("Port136Eagle", 'A', 200.0f, y);
-		Object *enemy = w.unit("Swordsman", 'B', 200.0f + distances[i], y);
-		Object *foot = w.unit("Port136Foot", 'A', 200.0f, y + 20.0f);
-		Object *enemy2 = w.unit("Swordsman", 'B', 200.0f + distances[i], y + 20.0f);
-		REQUIRE(bird);
-		REQUIRE(foot);
-		auto *birdAi = dynamic_cast<GiantBirdAIUpdate *>(bird->getAIUpdateInterface());
-		auto *footAi = dynamic_cast<AIUpdateInterface *>(foot->getAIUpdateInterface());
-		REQUIRE(birdAi);
-		REQUIRE(footAi);
-		const unsigned q = (unsigned)(AI::CAN_ATTACK | AI::AUTO_ACQUIRE);
-		Object *birdSb = AI::findClosestEnemy(*bird, 1000.0f, q, nullptr, nullptr, 0);
-		Object *birdS = AI::findClosestEnemy(*bird, 1000.0f, q, birdAi->attackInfo(), nullptr, 0);
-		Object *footSb = AI::findClosestEnemy(*foot, 1000.0f, q, nullptr, nullptr, 0);
-		Object *footS = AI::findClosestEnemy(*foot, 1000.0f, q, footAi->attackInfo(), nullptr, 0);
-		MESSAGE("K3 d=" << distances[i] << " info=" << (const void *)birdAi->attackInfo() << " bird: closest=" << (birdSb ? birdSb->getTemplate()->getName() : std::string("none")) << " scored="
-				   << (birdS ? birdS->getTemplate()->getName() : std::string("none")) << " | foot: closest=" << (footSb ? footSb->getTemplate()->getName() : std::string("none")) << " scored="
-				   << (footS ? footS->getTemplate()->getName() : std::string("none")));
-		(void)enemy;
-		(void)enemy2;
-	}
-	CHECK(false);
-}
-
-TEST_CASE("PORT-136 probe L: does the eagle accept an attack command while it sits in the guard state?")
-{
-	combattest::CombatWorld w;
-	StanceTemplateStore store;
-	store.registerBlock(w.w.fx.env.blocks);
-	StanceTemplateStore *const saved = TheStanceTemplateStore;
-	TheStanceTemplateStore = &store;
-	struct Restore
-	{
-		StanceTemplateStore *v;
-		~Restore() { TheStanceTemplateStore = v; }
-	} restore{saved};
-	const std::string error = w.w.load(eagleIni(true), INI_LOAD_OVERWRITE, "port136-atk.ini");
-	REQUIRE_MESSAGE(error.empty(), error);
-	w.logic->partition().setRegion(0.0f, 0.0f, 1000.0f, 1000.0f);
-	Object *bird = w.unit("Port136Eagle", 'A', 200.0f, 200.0f);
-	Object *enemy = w.unit("Swordsman", 'B', 600.0f, 200.0f);
-	REQUIRE(bird);
-	REQUIRE(enemy);
-	auto *ai = dynamic_cast<GiantBirdAIUpdate *>(bird->getAIUpdateInterface());
-	REQUIRE(ai);
-	w.frames(120);
-	MESSAGE("L: before the order state=" << ai->currentStateId() << " pos=(" << bird->getPosition()->x << "," << bird->getPosition()->y << ")");
-	const bool accepted = ai->aiAttackObject(enemy, CMD_FROM_AI, 0);
-	MESSAGE("L: aiAttackObject(CMD_FROM_AI)=" << accepted);
-	for (int i = 0; i < 10; ++i)
-	{
-		w.frames(30);
-		MESSAGE("L t=" << 120 + (i + 1) * 30 << " state=" << ai->currentStateId() << " bird=(" << bird->getPosition()->x << "," << bird->getPosition()->y << "," << bird->getPosition()->z << ") hp=" << w.health(bird)
-				   << " enemy hp=" << w.health(enemy));
-	}
-	const GameLogic::Report rep = w.logic->report();
-	MESSAGE("L: stops=" << rep.stops.size() << " errors=" << rep.errors.size());
-	for (size_t i = 0; i < rep.stops.size() && i < 12; ++i)
-	{
-		MESSAGE("L stop[" << i << "]: " << rep.stops[i]);
-	}
-	for (size_t i = 0; i < rep.errors.size() && i < 6; ++i)
-	{
-		MESSAGE("L error[" << i << "]: " << rep.errors[i]);
-	}
-	CHECK(false);
-}
-
-TEST_CASE("PORT-136 probe M: what kills the eagle at ~590 frames? extras on and off")
-{
-	for (bool extras : { true, false })
-	{
-		combattest::CombatWorld w;
-		StanceTemplateStore store;
-		store.registerBlock(w.w.fx.env.blocks);
-		StanceTemplateStore *const saved = TheStanceTemplateStore;
-		TheStanceTemplateStore = &store;
-		struct Restore
-		{
-			StanceTemplateStore *v;
-			~Restore() { TheStanceTemplateStore = v; }
-		} restore{saved};
-		const std::string error = w.w.load(eagleIni(extras), INI_LOAD_OVERWRITE, extras ? "port136-m1.ini" : "port136-m2.ini");
-		REQUIRE_MESSAGE(error.empty(), error);
-		w.logic->partition().setRegion(0.0f, 0.0f, 1000.0f, 1000.0f);
-		Object *bird = w.unit("Port136Eagle", 'A', 200.0f, 200.0f);
-		REQUIRE(bird);
-		auto *ai = dynamic_cast<GiantBirdAIUpdate *>(bird->getAIUpdateInterface());
-		REQUIRE(ai);
-		std::string trace;
-		for (int i = 0; i < 12; ++i)
-		{
-			w.frames(100);
-			trace += std::to_string((int)w.health(bird)) + "/" + std::to_string(ai->currentStateId()) + " ";
-		}
-		MESSAGE("M extras=" << extras << " hp/state every 100 frames: " << trace);
-	}
-	CHECK(false);
-}
