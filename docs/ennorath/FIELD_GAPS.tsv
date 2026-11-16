@@ -15,7 +15,7 @@ parsed-unused	object		VoiceEnterStateMoveToCamp	353	manual		no				the owner is n
 parsed-unused	object		VoiceEnterStateRetreatToCastle	330	manual		no				the owner is not a module class of the map (an INI block, or a class the mod's objects do not use)
 parsed-unused	experiencelevel		ShowLevelUpTint	261	manual	S-7196	no				the owner is not a module class of the map (an INI block, or a class the mod's objects do not use)
 parsed-unused	object	RespawnUpdate	DeathAnimationTime	232	struct	S-7323	yes	167	8	5	0x0061B379@1 0x006DA205@2 0x005488D4@3 0x00619A03@3 0x006198F6@4 0x0075B641@7 0x0092C367@7 0x0092BE94@8
-parsed-unused	object	ToggleMountedSpecialAbilityUpdate	OpacityTarget	213	manual		yes	352	2	16	0x008B42E6@0 0x008B1024@1
+parsed-unused	object	ToggleMountedSpecialAbilityUpdate	OpacityTarget	213	manual		yes	352	0	16	no specific none function: the reader is ported without a citation, shared, or in another class
 parsed-unused	weapon	/AttributeModifierNugget	DamageFXType	180	manual	S-188 S-7225	no				the owner is not a module class of the map (an INI block, or a class the mod's objects do not use)
 parsed-unused	locomotor		MinTurnSpeed	157	struct	S-7221	no				the owner is not a module class of the map (an INI block, or a class the mod's objects do not use)
 parsed-unused	locomotor		StickToGround	113	manual	S-7221	no				the owner is not a module class of the map (an INI block, or a class the mod's objects do not use)
@@ -24,7 +24,7 @@ parsed-unused	object		InstanceScaleFuzziness	89	manual	S-7192	no				the owner is
 parsed-unused	weapon		PreAttackFX	88	struct		no				the owner is not a module class of the map (an INI block, or a class the mod's objects do not use)
 parsed-unused	audioevent		LowPassCutoff	86	block-parser	S-245	no				the owner is not a module class of the map (an INI block, or a class the mod's objects do not use)
 parsed-unused	object		ShowHealthInSelectionDecal	83	manual	S-7286	no				the owner is not a module class of the map (an INI block, or a class the mod's objects do not use)
-parsed-unused	object	HordeContain	RanksToJustFreeWhenAttacking	82	struct	S-082 S-7213	yes	507	103	19	0x0086BD7D@0 0x0086BD98@0 0x0086BDC0@0 0x0086BE2E@0 0x0086BE49@0 0x0086BE64@0 0x0086C0BC@0 0x0086C192@0
+parsed-unused	object	HordeContain	RanksToJustFreeWhenAttacking	82	struct	S-082 S-7213	yes	507	97	19	0x0086BD7D@0 0x0086BD98@0 0x0086BE2E@0 0x0086BE49@0 0x0086BE64@0 0x0086C0BC@0 0x0086C192@0 0x0086C758@0
 parsed-unused	object	/UnitSpecificSounds	VoiceEnterUnitTransportShip	76	by-name-prefix		no				the owner is not a module class of the map (an INI block, or a class the mod's objects do not use)
 parsed-unused	commandbutton		DoubleClick	74	struct	S-7292	no				the owner is not a module class of the map (an INI block, or a class the mod's objects do not use)
 parsed-unused	object		VoiceCombineWithHorde	66	manual	S-703	no				the owner is not a module class of the map (an INI block, or a class the mod's objects do not use)
@@ -32,13 +32,13 @@ parsed-unused	loadsubsystem		Loader	63	block-parser		no				the owner is not a mo
 parsed-unused	upgrade		ButtonImage	62	manual	S-1260 S-1404 S-2521	no				the owner is not a module class of the map (an INI block, or a class the mod's objects do not use)
 parsed-unused	object	W3DTreeDraw	DarkeningFactor	60	struct	S-111 S-7215	yes	10	2	0	0x004CE75C@0 0x004CE48F@1
 parsed-unused	weapon		FXTrigger	51	manual	S-149 S-682	no				the owner is not a module class of the map (an INI block, or a class the mod's objects do not use)
-parsed-unused	object	PorcupineFormationBodyModule	CrushDamageWeaponTemplate	50	struct	S-7191	yes	87	3	5	0x008C61CA@1 0x008C6269@1 0x008C633D@1
-parsed-unused	object	PorcupineFormationBodyModule	CrusherLevelResisted	50	manual	S-7191	yes	87	3	5	0x008C61CA@1 0x008C6269@1 0x008C633D@1
-parsed-unused	object	PorcupineFormationBodyModule	DamageWeaponTemplate	50	struct	S-7191	yes	87	3	5	0x008C61CA@1 0x008C6269@1 0x008C633D@1
+parsed-unused	object	PorcupineFormationBodyModule	CrushDamageWeaponTemplate	50	struct	S-7191	yes	87	2	5	0x008C6269@1 0x008C633D@1
+parsed-unused	object	PorcupineFormationBodyModule	CrusherLevelResisted	50	manual	S-7191	yes	87	2	5	0x008C6269@1 0x008C633D@1
+parsed-unused	object	PorcupineFormationBodyModule	DamageWeaponTemplate	50	struct	S-7191	yes	87	2	5	0x008C6269@1 0x008C633D@1
 parsed-unused	mousecursor		Texture	49	own-reader-unasked		no				the owner is not a module class of the map (an INI block, or a class the mod's objects do not use)
 parsed-unused	object		SoundStealthOff	48	manual		no				the owner is not a module class of the map (an INI block, or a class the mod's objects do not use)
 parsed-unused	object		SoundStealthOn	48	manual	S-1242 S-707	no				the owner is not a module class of the map (an INI block, or a class the mod's objects do not use)
-parsed-unused	object	RadiateFearUpdate	WhichSpecialPower	48	manual	S-7193	yes	20	4	0	0x0089F7AC@0 0x0089F7D3@0 0x0089F741@1 0x0089F978@1
+parsed-unused	object	RadiateFearUpdate	WhichSpecialPower	48	manual	S-7193	yes	20	2	0	0x0089F7AC@0 0x0089F978@1
 parsed-unused	object	CastleMemberBehavior	BeingBuiltSound	42	struct		yes	204	4	9	0x00660E31@0 0x0079B68F@0 0x00797C40@1 0x00714A09@2
 parsed-unused	weapon		CanSwoop	42	struct	S-7217	no				the owner is not a module class of the map (an INI block, or a class the mod's objects do not use)
 parsed-unused	object		VoiceMoveOverWalls	40	manual	S-704	no				the owner is not a module class of the map (an INI block, or a class the mod's objects do not use)
@@ -49,28 +49,28 @@ parsed-unused	object	/UnitSpecificSounds	VoicePrimaryWeaponMode	31	by-name	S-728
 parsed-unused	object	/UnitSpecificSounds	VoiceSecondaryWeaponMode	31	by-name	S-7285	no				the owner is not a module class of the map (an INI block, or a class the mod's objects do not use)
 parsed-unused	object		IsAutoBuilt	28	by-name		no				the owner is not a module class of the map (an INI block, or a class the mod's objects do not use)
 parsed-unused	object		VoiceEnterStateMoveOverWalls	27	manual	S-704	no				the owner is not a module class of the map (an INI block, or a class the mod's objects do not use)
-parsed-unused	object	SalvageCrateCollide	LevelUpRadius	27	struct	S-7234	yes	41	3	1	0x008C12F2@1 0x008C0645@2 0x008C1432@2
+parsed-unused	object	SalvageCrateCollide	LevelUpRadius	27	struct	S-7234	yes	41	1	1	0x008C1432@2
 parsed-unused	object		UpgradeCameo1	26	by-name	S-7294	no				the owner is not a module class of the map (an INI block, or a class the mod's objects do not use)
-parsed-unused	object	SalvageCrateCollide	BannerChance	26	struct	S-7234	yes	41	3	1	0x008C12F2@1 0x008C0645@2 0x008C1432@2
-parsed-unused	object	SalvageCrateCollide	ResourceChance	26	struct	S-7234	yes	41	3	1	0x008C12F2@1 0x008C0645@2 0x008C1432@2
+parsed-unused	object	SalvageCrateCollide	BannerChance	26	struct	S-7234	yes	41	1	1	0x008C1432@2
+parsed-unused	object	SalvageCrateCollide	ResourceChance	26	struct	S-7234	yes	41	1	1	0x008C1432@2
 parsed-unused	locomotor		AllowAirborneMotiveForce	22	struct	S-7221	no				the owner is not a module class of the map (an INI block, or a class the mod's objects do not use)
 parsed-unused	locomotor		Apply2DFrictionWhenAirborne	21	struct	S-7221	no				the owner is not a module class of the map (an INI block, or a class the mod's objects do not use)
-parsed-unused	object	HordeContain	LivingWorldOverloadTemplate	21	struct		yes	507	103	19	0x0086BD7D@0 0x0086BD98@0 0x0086BDC0@0 0x0086BE2E@0 0x0086BE49@0 0x0086BE64@0 0x0086C0BC@0 0x0086C192@0
+parsed-unused	object	HordeContain	LivingWorldOverloadTemplate	21	struct		yes	507	97	19	0x0086BD7D@0 0x0086BD98@0 0x0086BE2E@0 0x0086BE49@0 0x0086BE64@0 0x0086C0BC@0 0x0086C192@0 0x0086C758@0
 parsed-unused	weapon	/FireLogicNugget	DelayTime	20	manual	S-1600	no				the owner is not a module class of the map (an INI block, or a class the mod's objects do not use)
 parsed-unused	locomotor		LateralVelocityRollFactor	19	struct	S-7221	no				the owner is not a module class of the map (an INI block, or a class the mod's objects do not use)
-parsed-unused	object	GiantBirdSlowDeathBehavior	CrashAvoidStrength	19	struct	S-5606	yes	196	5	10	0x0086502B@0 0x00864FE2@1 0x0068BF44@2 0x0079295E@2 0x008614FF@2
-parsed-unused	object	GiantBirdSlowDeathBehavior	NeedToMaintainFlailingHeight	19	struct	S-5606	yes	196	5	10	0x0086502B@0 0x00864FE2@1 0x0068BF44@2 0x0079295E@2 0x008614FF@2
-parsed-unused	object	LargeGroupBonusUpdate	AlliesOnly	18	struct	S-7291	yes	65	3	1	0x008936C9@0 0x00893650@1 0x00893810@1
+parsed-unused	object	GiantBirdSlowDeathBehavior	CrashAvoidStrength	19	struct	S-5606	yes	196	3	10	0x0068BF44@2 0x0079295E@2 0x008614FF@2
+parsed-unused	object	GiantBirdSlowDeathBehavior	NeedToMaintainFlailingHeight	19	struct	S-5606	yes	196	3	10	0x0068BF44@2 0x0079295E@2 0x008614FF@2
+parsed-unused	object	LargeGroupBonusUpdate	AlliesOnly	18	struct	S-7291	yes	65	1	1	0x00893810@1
 parsed-unused	object	W3DTornadoDraw/DecalTemplate	SpiralAcceleration	16	nested-parser		no				the owner is not a module class of the map (an INI block, or a class the mod's objects do not use)
 parsed-unused	object	W3DTornadoDraw/DecalTemplate	Style	16	manual		no				the owner is not a module class of the map (an INI block, or a class the mod's objects do not use)
 parsed-unused	locomotor		MaximumWheelCompression	15	struct	S-7221	no				the owner is not a module class of the map (an INI block, or a class the mod's objects do not use)
 parsed-unused	object		GeometryFrontAngle	15	by-name	S-7319	no				the owner is not a module class of the map (an INI block, or a class the mod's objects do not use)
-parsed-unused	object	RubbleRiseUpdate	MaxRubbleRiseDelay	14	struct	S-346	yes	17	2	0	0x008A8277@1 0x008A78B3@3
-parsed-unused	object	RubbleRiseUpdate	MinRubbleRiseDelay	14	struct	S-346	yes	17	2	0	0x008A8277@1 0x008A78B3@3
+parsed-unused	object	RubbleRiseUpdate	MaxRubbleRiseDelay	14	struct	S-346	yes	17	1	0	0x008A78B3@3
+parsed-unused	object	RubbleRiseUpdate	MinRubbleRiseDelay	14	struct	S-346	yes	17	1	0	0x008A78B3@3
 parsed-unused	bannertype		FlagObj	12	own-reader-unasked		no				the owner is not a module class of the map (an INI block, or a class the mod's objects do not use)
 parsed-unused	bannertype		Icon	12	manual		no				the owner is not a module class of the map (an INI block, or a class the mod's objects do not use)
 parsed-unused	controlbarscheme		ScreenCreationRes	12	block-parser		no				the owner is not a module class of the map (an INI block, or a class the mod's objects do not use)
-parsed-unused	object	FlingPassengerSpecialAbilityUpdate	FlingPassengerVelocity	12	struct		yes	39	1	1	0x008986A9@1
+parsed-unused	object	FlingPassengerSpecialAbilityUpdate	FlingPassengerVelocity	12	struct		yes	39	0	1	no specific none function: the reader is ported without a citation, shared, or in another class
 parsed-unused	object	W3DScriptedModelDraw/DefaultModelConditionState	ShadowMaxHeight	12	manual		no				the owner is not a module class of the map (an INI block, or a class the mod's objects do not use)
 parsed-unused	playertemplate		SpellStoreCurrentPowerLabel	12	struct	S-7326	no				the owner is not a module class of the map (an INI block, or a class the mod's objects do not use)
 parsed-unused	playertemplate		SpellStoreMaximumPowerLabel	12	struct	S-7326	no				the owner is not a module class of the map (an INI block, or a class the mod's objects do not use)
@@ -86,13 +86,13 @@ parsed-unused	armydefinition		MaxBuildingsToBeDefensiveTarget_Med	11	manual		no	
 parsed-unused	armydefinition		MaxBuildingsToBeDefensiveTarget_Small	11	block-parser		no				the owner is not a module class of the map (an INI block, or a class the mod's objects do not use)
 parsed-unused	armydefinition		MaxThreatForOpportunityTargets	11	block-parser	S-7336	no				the owner is not a module class of the map (an INI block, or a class the mod's objects do not use)
 parsed-unused	armydefinition		ValueToSetForMaxOnDefenseTeam	11	block-parser	S-7336	no				the owner is not a module class of the map (an INI block, or a class the mod's objects do not use)
-parsed-unused	object	W3DScriptedModelDraw	MinLODRequired	11	struct		yes	457	219	6	0x00478374@0 0x004783D1@0 0x004B26E4@0 0x004B26F9@0 0x004B2A1B@0 0x004B2A3B@0 0x004B2A68@0 0x004B2A89@0
+parsed-unused	object	W3DScriptedModelDraw	MinLODRequired	11	struct		yes	457	215	6	0x004B26E4@0 0x004B26F9@0 0x004B2A1B@0 0x004B2A3B@0 0x004B2A68@0 0x004B2A89@0 0x004B2B41@0 0x004B2B92@0
 parsed-unused	fxparticlesystem	/System	UseMaximumHeight	10	block-file	S-7290	no				the owner is not a module class of the map (an INI block, or a class the mod's objects do not use)
 parsed-unused	object		LiveCameraOffset	10	by-name		no				the owner is not a module class of the map (an INI block, or a class the mod's objects do not use)
 parsed-unused	object		LiveCameraPitch	10	by-name		no				the owner is not a module class of the map (an INI block, or a class the mod's objects do not use)
 parsed-unused	locomotor		PitchInDirectionOfZVelFactor	8	struct	S-7221	no				the owner is not a module class of the map (an INI block, or a class the mod's objects do not use)
 parsed-unused	object		GeometryOther	8	by-name	S-7319	no				the owner is not a module class of the map (an INI block, or a class the mod's objects do not use)
-parsed-unused	object	CreateObjectDie	DebrisPortionOfSelf	8	struct	S-7236	yes	10	1	0	0x00888BAE@1
+parsed-unused	object	CreateObjectDie	DebrisPortionOfSelf	8	struct	S-7236	yes	10	0	0	no specific none function: the reader is ported without a citation, shared, or in another class
 parsed-unused	object	RunOffMapBehavior	RunOffMapWaypointName	8	struct		yes	4	0	0	no specific none function: the reader is ported without a citation, shared, or in another class
 parsed-unused	locomotor		MaxOverlappedHeight	7	struct	S-7221	no				the owner is not a module class of the map (an INI block, or a class the mod's objects do not use)
 parsed-unused	locomotor		RudderCorrectionDegree	7	struct		no				the owner is not a module class of the map (an INI block, or a class the mod's objects do not use)
@@ -103,17 +103,17 @@ parsed-unused	locomotor		SwoopStandoffHeight	7	struct		no				the owner is not a 
 parsed-unused	locomotor		SwoopStandoffRadius	7	struct		no				the owner is not a module class of the map (an INI block, or a class the mod's objects do not use)
 parsed-unused	locomotor		SwoopTerminalVelocity	7	struct		no				the owner is not a module class of the map (an INI block, or a class the mod's objects do not use)
 parsed-unused	object	/UnitSpecificSounds	VoiceSpecialAbilityCurseEnemy	7	by-name		no				the owner is not a module class of the map (an INI block, or a class the mod's objects do not use)
-parsed-unused	object	ClearanceTestingSlowDeathBehavior	ClearanceGeometryIsSmall	7	struct		yes	44	4	0	0x00886EF2@0 0x00886F1C@0 0x00887070@0 0x00886EB2@1
+parsed-unused	object	ClearanceTestingSlowDeathBehavior	ClearanceGeometryIsSmall	7	struct		yes	44	2	0	0x00886F1C@0 0x00887070@0
 parsed-unused	object	RunOffMapBehavior	DieOnMap	7	struct	S-5308	yes	4	0	0	no specific none function: the reader is ported without a citation, shared, or in another class
 parsed-unused	object		SoundCreated	6	manual	S-1242 S-707	no				the owner is not a module class of the map (an INI block, or a class the mod's objects do not use)
 parsed-unused	object	ModelConditionSoundSelectorClientBehavior/SoundState	VoiceMoveToCamp	6	manual		no				the owner is not a module class of the map (an INI block, or a class the mod's objects do not use)
-parsed-unused	object	TeleportSpecialAbilityUpdate	MaxDistance	6	struct		yes	171	2	11	0x00896608@0 0x00896415@1
+parsed-unused	object	TeleportSpecialAbilityUpdate	MaxDistance	6	struct		yes	171	1	11	0x00896608@0
 parsed-unused	locomotor		WanderAboutPointRadius	5	struct	S-7221	no				the owner is not a module class of the map (an INI block, or a class the mod's objects do not use)
 parsed-unused	locomotor		WanderLengthFactor	5	manual	S-7221	no				the owner is not a module class of the map (an INI block, or a class the mod's objects do not use)
-parsed-unused	object	ProductionUpdate	BonusForType	5	struct		yes	146	21	7	0x008A03C1@0 0x008A0625@0 0x008A1904@0 0x008A1916@0 0x008A196F@0 0x008A3111@0 0x006AF484@1 0x008A198B@1
-parsed-unused	object	ProductionUpdate	SetBonusModelConditionOnSpeedBonus	5	struct		yes	146	21	7	0x008A03C1@0 0x008A0625@0 0x008A1904@0 0x008A1916@0 0x008A196F@0 0x008A3111@0 0x006AF484@1 0x008A198B@1
-parsed-unused	object	ProductionUpdate	SpeedBonusAudioLoop	5	struct		yes	146	21	7	0x008A03C1@0 0x008A0625@0 0x008A1904@0 0x008A1916@0 0x008A196F@0 0x008A3111@0 0x006AF484@1 0x008A198B@1
-parsed-unused	object	StealthUpdate	HintDetectableConditions	5	struct		yes	119	5	5	0x00776C7D@0 0x00776E23@0 0x0077600A@1 0x007766C4@2 0x00776759@2
+parsed-unused	object	ProductionUpdate	BonusForType	5	struct		yes	146	20	7	0x008A03C1@0 0x008A0625@0 0x008A1904@0 0x008A196F@0 0x008A3111@0 0x006AF484@1 0x008A198B@1 0x008A1A9D@1
+parsed-unused	object	ProductionUpdate	SetBonusModelConditionOnSpeedBonus	5	struct		yes	146	20	7	0x008A03C1@0 0x008A0625@0 0x008A1904@0 0x008A196F@0 0x008A3111@0 0x006AF484@1 0x008A198B@1 0x008A1A9D@1
+parsed-unused	object	ProductionUpdate	SpeedBonusAudioLoop	5	struct		yes	146	20	7	0x008A03C1@0 0x008A0625@0 0x008A1904@0 0x008A196F@0 0x008A3111@0 0x006AF484@1 0x008A198B@1 0x008A1A9D@1
+parsed-unused	object	StealthUpdate	HintDetectableConditions	5	struct		yes	119	4	5	0x00776C7D@0 0x00776E23@0 0x007766C4@2 0x00776759@2
 parsed-unused	object	W3DScriptedModelDraw/DefaultModelConditionState	TurretArtAngle	5	nested-parser		no				the owner is not a module class of the map (an INI block, or a class the mod's objects do not use)
 parsed-unused	object	W3DTreeDraw	FadeDistance	5	struct		yes	10	2	0	0x004CE75C@0 0x004CE48F@1
 parsed-unused	object	W3DTreeDraw	FadeTarget	5	struct		yes	10	2	0	0x004CE75C@0 0x004CE48F@1
@@ -121,9 +121,9 @@ parsed-unused	armydefinition		ScavangedResourceBuildings	4	block-parser	S-7336	n
 not-read	fxparticlesystem		Emitter	4	manual		no				the owner is not a module class of the map (an INI block, or a class the mod's objects do not use)
 not-read	fxparticlesystem		VelocityType	4	manual	S-684	no				the owner is not a module class of the map (an INI block, or a class the mod's objects do not use)
 not-read	fxparticlesystem		VolumeType	4	manual	S-684	no				the owner is not a module class of the map (an INI block, or a class the mod's objects do not use)
-parsed-unused	object	SiegeDeploySpecialPower	InitiateSound	4	struct	S-4942	yes	73	3	3	0x008C9FC8@0 0x008C9C50@1 0x009912DB@1
-parsed-unused	object	SymbioticStructuresBody	Symbiote	4	struct		yes	45	26	1	0x008C4C07@0 0x008C4EA4@0 0x008C4F2D@0 0x008C4F62@0 0x008C4F84@0 0x008C4FB5@0 0x008C4FF9@0 0x008C501C@0
-parsed-unused	object	W3DScriptedModelDraw	UseProducerTexture	4	struct		yes	457	219	6	0x00478374@0 0x004783D1@0 0x004B26E4@0 0x004B26F9@0 0x004B2A1B@0 0x004B2A3B@0 0x004B2A68@0 0x004B2A89@0
+parsed-unused	object	SiegeDeploySpecialPower	InitiateSound	4	struct	S-4942	yes	73	1	3	0x008C9C50@1
+parsed-unused	object	SymbioticStructuresBody	Symbiote	4	struct		yes	45	24	1	0x008C4EA4@0 0x008C4F2D@0 0x008C4F62@0 0x008C4F84@0 0x008C4FB5@0 0x008C4FF9@0 0x008C501C@0 0x008C505F@0
+parsed-unused	object	W3DScriptedModelDraw	UseProducerTexture	4	struct		yes	457	215	6	0x004B26E4@0 0x004B26F9@0 0x004B2A1B@0 0x004B2A3B@0 0x004B2A68@0 0x004B2A89@0 0x004B2B41@0 0x004B2B92@0
 parsed-unused	waterset		DiffuseColor	4	own-reader-unasked	S-023 S-7220	no				the owner is not a module class of the map (an INI block, or a class the mod's objects do not use)
 parsed-unused	waterset		SkyTexelsPerUnit	4	own-reader-unasked		no				the owner is not a module class of the map (an INI block, or a class the mod's objects do not use)
 parsed-unused	waterset		SkyTexture	4	own-reader-unasked		no				the owner is not a module class of the map (an INI block, or a class the mod's objects do not use)
@@ -146,12 +146,12 @@ parsed-unused	object		EvaEventDetectedAlly	3	by-name		no				the owner is not a m
 parsed-unused	object		EvaEventDetectedEnemy	3	by-name		no				the owner is not a module class of the map (an INI block, or a class the mod's objects do not use)
 parsed-unused	object		EvaEventDetectedOwner	3	by-name		no				the owner is not a module class of the map (an INI block, or a class the mod's objects do not use)
 parsed-unused	object	CastleMemberBehavior	StoreUpgradePrice	3	struct	S-7360	yes	204	4	9	0x00660E31@0 0x0079B68F@0 0x00797C40@1 0x00714A09@2
-parsed-unused	object	HorseHordeContain	LivingWorldOverloadTemplate	3	manual		yes	178	20	6	0x0087990E@0 0x008799AD@0 0x008799CF@0 0x00879A72@0 0x00879FDB@0 0x0086C8F2@1 0x008798B7@1 0x00872BC5@2
+parsed-unused	object	HorseHordeContain	LivingWorldOverloadTemplate	3	manual		yes	178	19	6	0x0087990E@0 0x008799AD@0 0x008799CF@0 0x00879A72@0 0x00879FDB@0 0x008798B7@1 0x00872BC5@2 0x00472BC2@3
 parsed-unused	object	ModelConditionSoundSelectorClientBehavior/SoundState	VoiceRetreatToCastle	3	manual		no				the owner is not a module class of the map (an INI block, or a class the mod's objects do not use)
-parsed-unused	object	RespawnBody	ReallyDamagedAttributeModifier	3	struct		yes	50	1	2	0x008C54AA@1
+parsed-unused	object	RespawnBody	ReallyDamagedAttributeModifier	3	struct		yes	50	0	2	no specific none function: the reader is ported without a citation, shared, or in another class
 parsed-unused	object	W3DFloorDraw	FloorFadeRateOnObjectDeath	3	struct		yes	46	21	0	0x004CEA6F@0 0x004CEB80@0 0x004CEBCA@0 0x004CECA1@0 0x004CECB5@0 0x00467B4D@1 0x0046AFCA@1 0x004CE9B6@1
-parsed-unused	object	W3DSailModelDraw	BlowingThresholdDegrees	3	struct	S-112	yes	73	1	0	0x004D0009@0
-parsed-unused	object	W3DScriptedModelDraw	UseDefaultAnimation	3	struct		yes	457	219	6	0x00478374@0 0x004783D1@0 0x004B26E4@0 0x004B26F9@0 0x004B2A1B@0 0x004B2A3B@0 0x004B2A68@0 0x004B2A89@0
+parsed-unused	object	W3DSailModelDraw	BlowingThresholdDegrees	3	struct	S-112	yes	73	0	0	no specific none function: the reader is ported without a citation, shared, or in another class
+parsed-unused	object	W3DScriptedModelDraw	UseDefaultAnimation	3	struct		yes	457	215	6	0x004B26E4@0 0x004B26F9@0 0x004B2A1B@0 0x004B2A3B@0 0x004B2A68@0 0x004B2A89@0 0x004B2B41@0 0x004B2B92@0
 parsed-unused	playertemplate		ScoreScreenImage	3	struct	S-7326	no				the owner is not a module class of the map (an INI block, or a class the mod's objects do not use)
 parsed-unused	scoredkillevaannouncer		CountOnlyKillsAgainstLocalPlayer	3	block-parser		no				the owner is not a module class of the map (an INI block, or a class the mod's objects do not use)
 parsed-unused	scoredkillevaannouncer		CountOnlyKillsByLocalPlayer	3	block-parser		no				the owner is not a module class of the map (an INI block, or a class the mod's objects do not use)
@@ -160,23 +160,23 @@ parsed-unused	scoredkillevaannouncer		MaximumTimeForAnnouncementMS	3	block-parse
 parsed-unused	scoredkillevaannouncer		MinimumCountForAnnouncement	3	block-parser		no				the owner is not a module class of the map (an INI block, or a class the mod's objects do not use)
 parsed-unused	scoredkillevaannouncer		ObjectFilter	3	block-parser	S-083 S-1100 S-1225	no				the owner is not a module class of the map (an INI block, or a class the mod's objects do not use)
 parsed-unused	object	/Flammability	FuelFactor	2	raw-block		no				the owner is not a module class of the map (an INI block, or a class the mod's objects do not use)
-parsed-unused	object	CloudBreakSpecialPower	RequirementsFilterStrategic	2	struct		yes	221	2	0	0x008C89C1@1 0x008C8CAC@1
-parsed-unused	object	HordeContain	SplitHordeNumber	2	struct		yes	507	103	19	0x0086BD7D@0 0x0086BD98@0 0x0086BDC0@0 0x0086BE2E@0 0x0086BE49@0 0x0086BE64@0 0x0086C0BC@0 0x0086C192@0
+parsed-unused	object	CloudBreakSpecialPower	RequirementsFilterStrategic	2	struct		yes	221	1	0	0x008C8CAC@1
+parsed-unused	object	HordeContain	SplitHordeNumber	2	struct		yes	507	97	19	0x0086BD7D@0 0x0086BD98@0 0x0086BE2E@0 0x0086BE49@0 0x0086BE64@0 0x0086C0BC@0 0x0086C192@0 0x0086C758@0
 parsed-unused	object	ModelConditionSoundSelectorClientBehavior/SoundState	SoundImpact	2	manual		no				the owner is not a module class of the map (an INI block, or a class the mod's objects do not use)
 parsed-unused	object	ModelConditionSoundSelectorClientBehavior/SoundState	VoiceEnterStateMoveToCamp	2	manual		no				the owner is not a module class of the map (an INI block, or a class the mod's objects do not use)
-parsed-unused	object	ModelConditionSpecialAbilityUpdate	PreTriggerUnstealthTime	2	struct		yes	174	1	12	0x00894402@1
-parsed-unused	object	OCLSpecialPower	RequirementsFilterStrategic	2	struct		yes	266	6	0	0x008C744B@0 0x008C72C3@1 0x008C7319@1 0x008C7A33@1 0x005EFB95@2 0x00896A70@2
-parsed-unused	object	OneRingPenaltyUpdate	TimeFrozenFromPenalty	2	struct	S-5604	yes	19	1	0	0x0089D109@0
-parsed-unused	object	PlayerHealSpecialPower	RequirementsFilterStrategic	2	struct		yes	222	1	2	0x008CC2CD@1
-parsed-unused	object	PlayerUpgradeSpecialPower	RequirementsFilterStrategic	2	struct		yes	24	2	0	0x008CC052@1 0x008CC1F3@1
+parsed-unused	object	ModelConditionSpecialAbilityUpdate	PreTriggerUnstealthTime	2	struct		yes	174	0	12	no specific none function: the reader is ported without a citation, shared, or in another class
+parsed-unused	object	OCLSpecialPower	RequirementsFilterStrategic	2	struct		yes	266	5	0	0x008C744B@0 0x008C72C3@1 0x008C7A33@1 0x005EFB95@2 0x00896A70@2
+parsed-unused	object	OneRingPenaltyUpdate	TimeFrozenFromPenalty	2	struct	S-5604	yes	19	0	0	no specific none function: the reader is ported without a citation, shared, or in another class
+parsed-unused	object	PlayerHealSpecialPower	RequirementsFilterStrategic	2	struct		yes	222	0	2	no specific none function: the reader is ported without a citation, shared, or in another class
+parsed-unused	object	PlayerUpgradeSpecialPower	RequirementsFilterStrategic	2	struct		yes	24	1	0	0x008CC1F3@1
 parsed-unused	object	SpecialPowerModule	RequirementsFilterStrategic	2	struct		yes	298	4	3	0x00654F8E@0 0x00896A32@0 0x008981BE@0 0x00896A70@1
-parsed-unused	object	SubObjectsUpgrade	WaitBeforeFadeInSeconds	2	struct		yes	40	2	5	0x008B90F4@0 0x008B8E60@1
-parsed-unused	object	SummonReplacementSpecialAbilityUpdate	OpacityTarget	2	manual	S-5608	yes	328	3	14	0x008B1EE7@0 0x008B42E6@0 0x008B1E6A@1
-parsed-unused	object	W3DProjectileStreamDraw	MaxSegments	2	struct	S-113	yes	23	12	0	0x004D0933@0 0x004D0D05@0 0x004D0A7C@1 0x004D0C77@1 0x00740A56@1 0x0055DB90@2 0x0055DCC0@2 0x0055E9F0@2
-parsed-unused	object	W3DProjectileStreamDraw	ScrollRate	2	struct	S-113	yes	23	12	0	0x004D0933@0 0x004D0D05@0 0x004D0A7C@1 0x004D0C77@1 0x00740A56@1 0x0055DB90@2 0x0055DCC0@2 0x0055E9F0@2
-parsed-unused	object	W3DProjectileStreamDraw	Texture	2	struct	S-113	yes	23	12	0	0x004D0933@0 0x004D0D05@0 0x004D0A7C@1 0x004D0C77@1 0x00740A56@1 0x0055DB90@2 0x0055DCC0@2 0x0055E9F0@2
-parsed-unused	object	W3DProjectileStreamDraw	TileFactor	2	struct	S-113	yes	23	12	0	0x004D0933@0 0x004D0D05@0 0x004D0A7C@1 0x004D0C77@1 0x00740A56@1 0x0055DB90@2 0x0055DCC0@2 0x0055E9F0@2
-parsed-unused	object	W3DProjectileStreamDraw	Width	2	struct	S-113	yes	23	12	0	0x004D0933@0 0x004D0D05@0 0x004D0A7C@1 0x004D0C77@1 0x00740A56@1 0x0055DB90@2 0x0055DCC0@2 0x0055E9F0@2
+parsed-unused	object	SubObjectsUpgrade	WaitBeforeFadeInSeconds	2	struct		yes	40	0	5	no specific none function: the reader is ported without a citation, shared, or in another class
+parsed-unused	object	SummonReplacementSpecialAbilityUpdate	OpacityTarget	2	manual	S-5608	yes	328	0	14	no specific none function: the reader is ported without a citation, shared, or in another class
+parsed-unused	object	W3DProjectileStreamDraw	MaxSegments	2	struct	S-113	yes	23	11	0	0x004D0933@0 0x004D0D05@0 0x004D0A7C@1 0x004D0C77@1 0x00740A56@1 0x0055DCC0@2 0x0055E9F0@2 0x004FFBF2@3
+parsed-unused	object	W3DProjectileStreamDraw	ScrollRate	2	struct	S-113	yes	23	11	0	0x004D0933@0 0x004D0D05@0 0x004D0A7C@1 0x004D0C77@1 0x00740A56@1 0x0055DCC0@2 0x0055E9F0@2 0x004FFBF2@3
+parsed-unused	object	W3DProjectileStreamDraw	Texture	2	struct	S-113	yes	23	11	0	0x004D0933@0 0x004D0D05@0 0x004D0A7C@1 0x004D0C77@1 0x00740A56@1 0x0055DCC0@2 0x0055E9F0@2 0x004FFBF2@3
+parsed-unused	object	W3DProjectileStreamDraw	TileFactor	2	struct	S-113	yes	23	11	0	0x004D0933@0 0x004D0D05@0 0x004D0A7C@1 0x004D0C77@1 0x00740A56@1 0x0055DCC0@2 0x0055E9F0@2 0x004FFBF2@3
+parsed-unused	object	W3DProjectileStreamDraw	Width	2	struct	S-113	yes	23	11	0	0x004D0933@0 0x004D0D05@0 0x004D0A7C@1 0x004D0C77@1 0x00740A56@1 0x0055DCC0@2 0x0055E9F0@2 0x004FFBF2@3
 parsed-unused	object	WeaponFireSpecialAbilityUpdate	PreTriggerUnstealthTime	2	struct		yes	178	3	12	0x00896156@0 0x00896370@0 0x006CA701@2
 parsed-unused	weatherdata		WeatherSound	2	block-file	S-4892	no				the owner is not a module class of the map (an INI block, or a class the mod's objects do not use)
 not-read	aidata		AIDozerBoredRadiusModifier	1	catch-all	S-7332	no				the owner is not a module class of the map (an INI block, or a class the mod's objects do not use)
@@ -566,27 +566,27 @@ parsed-unused	object		SoundFallingFromPlane	1	manual	S-1242 S-707	no				the owne
 parsed-unused	object		SoundPromotedElite	1	manual		no				the owner is not a module class of the map (an INI block, or a class the mod's objects do not use)
 parsed-unused	object		SoundPromotedHero	1	manual		no				the owner is not a module class of the map (an INI block, or a class the mod's objects do not use)
 parsed-unused	object		SoundPromotedVeteran	1	manual		no				the owner is not a module class of the map (an INI block, or a class the mod's objects do not use)
-parsed-unused	object	ActiveBody	EnteringDamagedTransitionTime	1	struct		yes	271	35	11	0x008C1C87@0 0x008C234E@0 0x008C261D@0 0x008C3A5A@0 0x008C3A67@0 0x008C3A7B@0 0x008C3A91@0 0x008C3AAD@0
-parsed-unused	object	ActiveBody	ReallyDamagedAttributeModifier	1	struct		yes	271	35	11	0x008C1C87@0 0x008C234E@0 0x008C261D@0 0x008C3A5A@0 0x008C3A67@0 0x008C3A7B@0 0x008C3A91@0 0x008C3AAD@0
+parsed-unused	object	ActiveBody	EnteringDamagedTransitionTime	1	struct		yes	271	30	11	0x008C1C87@0 0x008C234E@0 0x008C261D@0 0x008C3A91@0 0x008C3AAD@0 0x008C3ACC@0 0x005D8808@1 0x008595BA@1
+parsed-unused	object	ActiveBody	ReallyDamagedAttributeModifier	1	struct		yes	271	30	11	0x008C1C87@0 0x008C234E@0 0x008C261D@0 0x008C3A91@0 0x008C3AAD@0 0x008C3ACC@0 0x005D8808@1 0x008595BA@1
 parsed-unused	object	AutoAbilityBehavior	WorkingRadius	1	struct		yes	320	5	14	0x0085D3ED@1 0x006289E7@5 0x0062AB74@5 0x00629BCA@6 0x006A95E6@6
-parsed-unused	object	CastleBehavior	CrewPrepareFX	1	struct		yes	451	73	20	0x00797BCF@0 0x00797D86@0 0x00799CA5@0 0x00862772@0 0x00686BF5@1 0x0068D8D7@1 0x00799C6A@1 0x00646148@2
-parsed-unused	object	CastleBehavior	CrewPrepareInterval	1	struct		yes	451	73	20	0x00797BCF@0 0x00797D86@0 0x00799CA5@0 0x00862772@0 0x00686BF5@1 0x0068D8D7@1 0x00799C6A@1 0x00646148@2
-parsed-unused	object	CastleBehavior	CrewReleaseFX	1	struct		yes	451	73	20	0x00797BCF@0 0x00797D86@0 0x00799CA5@0 0x00862772@0 0x00686BF5@1 0x0068D8D7@1 0x00799C6A@1 0x00646148@2
-parsed-unused	object	DevastateSpecialPower	RequirementsFilterStrategic	1	struct		yes	220	1	0	0x008CC63F@1
-parsed-unused	object	ElvenWoodSpecialPower	RequirementsFilterStrategic	1	struct		yes	227	2	0	0x008C7B78@1 0x0073C667@4
+parsed-unused	object	CastleBehavior	CrewPrepareFX	1	struct		yes	451	70	20	0x00797BCF@0 0x00797D86@0 0x00799CA5@0 0x00686BF5@1 0x0068D8D7@1 0x00799C6A@1 0x00646148@2 0x006461CA@2
+parsed-unused	object	CastleBehavior	CrewPrepareInterval	1	struct		yes	451	70	20	0x00797BCF@0 0x00797D86@0 0x00799CA5@0 0x00686BF5@1 0x0068D8D7@1 0x00799C6A@1 0x00646148@2 0x006461CA@2
+parsed-unused	object	CastleBehavior	CrewReleaseFX	1	struct		yes	451	70	20	0x00797BCF@0 0x00797D86@0 0x00799CA5@0 0x00686BF5@1 0x0068D8D7@1 0x00799C6A@1 0x00646148@2 0x006461CA@2
+parsed-unused	object	DevastateSpecialPower	RequirementsFilterStrategic	1	struct		yes	220	0	0	no specific none function: the reader is ported without a citation, shared, or in another class
+parsed-unused	object	ElvenWoodSpecialPower	RequirementsFilterStrategic	1	struct		yes	227	1	0	0x0073C667@4
 parsed-unused	object	ModelConditionSoundSelectorClientBehavior/SoundState	SoundMoveLoop	1	manual		no				the owner is not a module class of the map (an INI block, or a class the mod's objects do not use)
 parsed-unused	object	ProductionSpeedBonus	RequirementsFilterStrategic	1	struct		yes	45	6	1	0x008C726B@1 0x005FD6A5@2 0x006AEFBE@2 0x005FD431@3 0x006AE82A@3 0x0060D23A@4
-parsed-unused	object	RespawnBody	DamagedAttributeModifier	1	struct		yes	50	1	2	0x008C54AA@1
-parsed-unused	object	SalvageCrateCollide	PorterChance	1	struct	S-7234	yes	41	3	1	0x008C12F2@1 0x008C0645@2 0x008C1432@2
-parsed-unused	object	ScavengerSpecialPower	RequirementsFilterStrategic	1	struct		yes	214	1	0	0x008C8842@1
-parsed-unused	object	TaintSpecialPower	RequirementsFilterStrategic	1	struct		yes	226	2	0	0x008C8D7F@1 0x008C8FC0@1
-parsed-unused	object	UntamedAllegianceSpecialPower	RequirementsFilterStrategic	1	struct		yes	162	1	10	0x008CBF55@1
+parsed-unused	object	RespawnBody	DamagedAttributeModifier	1	struct		yes	50	0	2	no specific none function: the reader is ported without a citation, shared, or in another class
+parsed-unused	object	SalvageCrateCollide	PorterChance	1	struct	S-7234	yes	41	1	1	0x008C1432@2
+parsed-unused	object	ScavengerSpecialPower	RequirementsFilterStrategic	1	struct		yes	214	0	0	no specific none function: the reader is ported without a citation, shared, or in another class
+parsed-unused	object	TaintSpecialPower	RequirementsFilterStrategic	1	struct		yes	226	1	0	0x008C8FC0@1
+parsed-unused	object	UntamedAllegianceSpecialPower	RequirementsFilterStrategic	1	struct		yes	162	0	10	no specific none function: the reader is ported without a citation, shared, or in another class
 parsed-unused	object	UpgradeSoundSelectorClientBehavior/SoundUpgrade	SoundImpact	1	manual		no				the owner is not a module class of the map (an INI block, or a class the mod's objects do not use)
 parsed-unused	object	UpgradeSoundSelectorClientBehavior/SoundUpgrade	VoiceMoveToCamp	1	manual		no				the owner is not a module class of the map (an INI block, or a class the mod's objects do not use)
 parsed-unused	object	UpgradeSoundSelectorClientBehavior/SoundUpgrade	VoiceRetreatToCastle	1	manual		no				the owner is not a module class of the map (an INI block, or a class the mod's objects do not use)
 parsed-unused	object	UpgradeSoundSelectorClientBehavior/SoundUpgrade/UnitSpecificSounds	VoiceEnterUnitTransportShip	1	by-name-prefix		no				the owner is not a module class of the map (an INI block, or a class the mod's objects do not use)
-parsed-unused	object	W3DScriptedModelDraw	BirthFadeAdditive	1	struct		yes	457	219	6	0x00478374@0 0x004783D1@0 0x004B26E4@0 0x004B26F9@0 0x004B2A1B@0 0x004B2A3B@0 0x004B2A68@0 0x004B2A89@0
-parsed-unused	object	W3DScriptedModelDraw	HighDetailOnly	1	struct		yes	457	219	6	0x00478374@0 0x004783D1@0 0x004B26E4@0 0x004B26F9@0 0x004B2A1B@0 0x004B2A3B@0 0x004B2A68@0 0x004B2A89@0
+parsed-unused	object	W3DScriptedModelDraw	BirthFadeAdditive	1	struct		yes	457	215	6	0x004B26E4@0 0x004B26F9@0 0x004B2A1B@0 0x004B2A3B@0 0x004B2A68@0 0x004B2A89@0 0x004B2B41@0 0x004B2B92@0
+parsed-unused	object	W3DScriptedModelDraw	HighDetailOnly	1	struct		yes	457	215	6	0x004B26E4@0 0x004B26F9@0 0x004B2A1B@0 0x004B2A3B@0 0x004B2A68@0 0x004B2A89@0 0x004B2B41@0 0x004B2B92@0
 parsed-unused	object	W3DScriptedModelDraw/DefaultModelConditionState	OverrideTooltip	1	nested-parser		no				the owner is not a module class of the map (an INI block, or a class the mod's objects do not use)
 parsed-unused	object	W3DScriptedModelDraw/ModelConditionState	OverrideTooltip	1	nested-parser		no				the owner is not a module class of the map (an INI block, or a class the mod's objects do not use)
 parsed-unused	pathfinder		SlopeLimits	1	own-reader-unasked	S-160	no				the owner is not a module class of the map (an INI block, or a class the mod's objects do not use)
