@@ -1,6 +1,8 @@
-# Port 462: unit voice gates — research checkpoint
+# Port 462: unit voice gates — RW analysis and verification
 
-This is incomplete research, not a completed port. No runtime changes yet.
+Final status: implemented and verified on the full openbfme_tests target.
+The checkpoint sections below preserve the research chronology, including
+corrections to the initial issue hypothesis; the final table is authoritative.
 Binary: RotWK 2.01, MD5 daed3668006cd90f01c34e5a7da1901f.
 Read using tools/mod/rw.py dis in the sandbox.
 
@@ -126,3 +128,40 @@ choice collection (including NoSound early exit). Waypoint gate queries
 existing live UI, not a cached simulation flag. No new simulation state.
 The charge back-reference guard is implicit in the Object-based picker;
 its erroneous comment is corrected, not replaced with a headless-object mute.
+
+
+## Final behavior/test map
+
+| Behavior | RotWK instruction | Synthetic regression |
+|---|---|---|
+| Mode 2 replaces move/attack/enter before unit-specific rules; empty slot stays silent | 0x8DE901, 0x8DDFD7, 0x8DF416; copy/exit 0x8DE94B / 0x8DE974 | PORT-462 planning replaces move attack and enter exactly once |
+| Planning does not replace enter-state move or selection; mode 1 remains ordinary | 0x8DE8F3, 0x8DE908, picker selection case | PORT-462 planning does not replace selection or enter-state movement |
+| Waypoint suppression is movement-sensitive, live, and after planning | 0x8DEA45–0x8DEA5C | PORT-462 waypoint movement gate is live and does not mute attacks or planning |
+| Waiting for path counts even before moving; enter-state bypasses waypoint suppression | 0x8DEA3B / 0x8DEA49 | PORT-462 waypoint gate includes waiting for path but excludes enter-state |
+| Charge helper checks drawable's Object, not Object's client hooks; existing timeout preserved | 0x8DE15C, 0x671EE4, 0x671F0B, 0x671F16 | PORT-462 charge guard is a drawable Object back-reference not clientHooks presence |
+
+Full Release target built with Godot disabled, -j1, after rebase onto
+origin/main 10bdabc1. Final filter: -tc="PORT-462*".
+5 test cases passed, 90 assertions passed, 6717 other cases filtered out.
+
+Negative control used the SAME full engine/build/openbfme_tests, never a
+narrow runner: disabled only the planning replacement and waypoint gate,
+compiled the affected engine object and rebuilt its archive and full link
+using the commands emitted for the CMake openbfme_tests target. Result:
+2 test cases passed, 3 failed; 76 assertions passed, 14 failed. Restored
+source byte-for-byte, rebuilt the same full binary: 5/5, 90/90 passed.
+The tests and expectations were unchanged during this control.
+
+First execution found a fixture error (LogicWorld did not register live AI
+modules); switched to the existing MoveWorld. No expectations were changed.
+No foreign tests, hashes, workflow files or simulation snapshots changed.
+
+Remaining: VoiceCrush stays S-704 as explicitly excluded; stance-button
+planning and planned-action message handling remain the separate S-703
+scope. The latter is why the helper's 0x46A bypass is documented but this
+port does not introduce an additional message dispatch path.
+No player-visible INFERENCE was introduced. Drawable back-reference is
+represented by the existing live Object candidate, not by a new boolean.
+Upstream PR not proposed: this change affects sound only and the required
+before/after captures are not available in this sandbox. Owner performs
+in-game listening checks in the fork PR.
