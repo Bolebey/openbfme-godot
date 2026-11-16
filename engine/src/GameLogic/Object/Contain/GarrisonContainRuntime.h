@@ -89,9 +89,13 @@ public:
 	UpdateSleepTime update() override;
 	// ---- ContainModuleInterface ----
 	bool addToContain(Object *obj) override;
-	void removeFromContain(Object *obj) override;
+	void removeFromContain(Object *obj, bool exposeStealthUnits = false) override;
 	void containReactToTransformChange() override;
 	bool isGarrisonable() const override { return true; }
+	// slot 0x1C RW 0x87B308: `mov eax, [ecx - 0x1C]; mov al, [eax + 0xA1]; ret` -- the module data's ImmuneToClearBuildingAttacks (GarrisonContain,
+	// HordeGarrisonContain, SlaughterHordeContain and CitadelSlaughterHordeContain tables RW 0xC5C698 / 0xC5C9F0 / 0xC5F0D0 / 0xC5F2E8; the garrison reads
+	// it through OpenContain's `garrison` member, whose +0xA1 is the same byte, GarrisonContainRuntime.h's data layout)
+	bool isImmuneToClearBuildingAttacks() const override; // RW 0x87B308, out of line: the module data is incomplete here
 	bool isPassengerAllowedToFire() const override { return true; } // slot 0xB4 RW 0x8BD372 (GarrisonContain, HordeGarrisonContain, TunnelContain; lane DECOMP-3)
 	bool isDisplayedOnControlBar() const override { return true; } // slot 0xC8 RW 0x8BD372 (lane UI-1)
 	bool isValidContainerFor(const Object &obj, bool checkCapacity, bool checkPath) const override;
@@ -129,7 +133,7 @@ public:
 	const Coord3D &exitRallyPoint() const { return m_exitRallyPoint; }
 	bool exitRallyValid() const { return m_rallyValid; }
 	// RW 0x87B4DC: every rider leaves (onDie with EjectPassengersOnDeath, the evacuation of a dying building)
-	void removeAllContained() override;
+	void removeAllContained(bool exposeStealthUnits = false) override;
 
 	// lane GARRISON-1 counters (reported)
 	struct Stats
