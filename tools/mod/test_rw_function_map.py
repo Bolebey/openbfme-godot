@@ -225,5 +225,6 @@ def test_ordered_object_counts_deduplicate_and_require_loaded_parent():
     assert counts['A'] == 3
     with pytest.raises(ValueError, match='not yet loaded'):
         resolve_objects([child, parent], reg)
-    with pytest.raises(ValueError, match='duplicate'):
-        resolve_objects([parent, parent], reg)
+    merged = ObjectDefinition('Parent', 'object', '', (event('three'),))
+    objects, _ = resolve_objects([parent, merged], reg)
+    assert [x.tag for x in objects['Parent']] == ['two', 'three']

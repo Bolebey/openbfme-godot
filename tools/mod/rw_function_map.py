@@ -512,19 +512,22 @@ def resolve_objects(definitions: list[ObjectDefinition], registry: list[dict]):
     Counting is per distinct object, not number of declarations or instances of
     a module within an object. This function does not infer the archive's load
     order or a map's override load type. Duplicate object definitions are not
-    accepted without such evidence; all keys are case-sensitive like the port.
+    replayed into the existing template for normal load (type 1), as in
+    ThingFactory::parseObjectDefinition. All keys are case-sensitive like the port.
     """
     from collections import Counter
     objects: dict[str, tuple[ModuleEntry, ...]] = {}
     for obj in definitions:
-        if not obj.name or obj.name in objects:
-            raise ValueError(f'{obj.source}: duplicate or empty object {obj.name!r}')
+        if not obj.name:
+            raise ValueError(f'{obj.source}: empty object name')
         if obj.kind not in {'object', 'childobject', 'objectreskin'}:
             raise ValueError(f'{obj.source}: unsupported object kind {obj.kind!r}')
         if obj.kind == 'object':
             if obj.parent:
                 raise ValueError(f'{obj.source}: Object has a parent')
-            entries = copy_module_state(objects.get('DefaultThingTemplate', ()))
+            entries = objects.get(obj.name)
+            if entries is None:
+                entries = copy_module_state(objects.get('DefaultThingTemplate', ()))
         else:
             if obj.parent not in objects:
                 raise ValueError(f'{obj.source}: parent {obj.parent!r} not yet loaded')
