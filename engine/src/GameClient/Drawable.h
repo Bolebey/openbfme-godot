@@ -191,6 +191,14 @@ struct DrawEntry
 	int trackId = -1;
 	// lane LOCAL-29 (issue #218): AttachToBoneInAnotherModule (RW 0x4B6A6F..0x4B6B26 / RW 0x672B5B)
 	std::string attachToBone;
+	// Both editions (RW 0x4C4EE0..0x4C5175): per-draw-module shadow state & fade curve tracking (m_shadow on each W3DScriptedModelDraw).
+	mutable bool shadowStateInitialized = false;
+	mutable UnsignedInt shadowStartFrame = 0;
+	mutable UnsignedInt shadowFadeOutStartFrame = ~0u;
+	mutable const ModelConditionInfo *lastShadowState = nullptr;
+	mutable const RenderObjPrototype *lastShadowModel = nullptr;
+	mutable std::string lastShadowModelName;
+	mutable bool lastShadowStateHasShadow = false;
 };
 
 // LOCAL-25 (issue #187): client presentation physics state (retail Drawable + 0x13C, RW 0x67BDC0 / donor 0x00270098)
