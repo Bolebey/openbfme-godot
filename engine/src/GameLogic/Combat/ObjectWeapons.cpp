@@ -523,16 +523,19 @@ std::unique_ptr<Weapon> ObjectWeapons::makeExtraWeapon(const WeaponTemplate *t)
 	return w;
 }
 
+// Both editions: RW 0x691014 (DONOR BFME2 0x0029091E Object::rva0029091E) builds a WeaponSetFlags with `bit` and queries
+// ThingTemplate::findWeaponTemplateSet (RW 0x73F6B9 -> 0x73EE52 -> 0x73D89F). Because FindWeaponTemplateSet returns the
+// default Conditions = None set (bestUnmatched < 0x3E7) whenever any WeaponSet is defined on the template, templates such as
+// ImladrisZwillingeEdain and ImladrisGwaihir still receive WEAPONSET_HERO_MODE (0x1B) in HeroModeSpecialAbilityUpdate.
 bool ObjectWeapons::hasWeaponSetFor(int bit) const
 {
-	for (const WeaponTemplateSet &s : m_owner->getTemplate()->weaponTemplateSets())
+	if (bit < 0 || bit >= 128)
 	{
-		if (s.testWeaponSetFlag(bit))
-		{
-			return true;
-		}
+		return false;
 	}
-	return false;
+	WeaponSetFlags flags{};
+	flags[(size_t)bit >> 5] |= 1u << (bit & 31);
+	return FindWeaponTemplateSet(m_owner->getTemplate()->weaponTemplateSets(), flags) != nullptr;
 }
 
 int ObjectWeapons::extraWeaponStatus(Weapon &w)
