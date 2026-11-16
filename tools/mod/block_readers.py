@@ -117,14 +117,19 @@ def getter_callers(functions, getters):
     return {getter: sorted(result[getter]) for getter in sorted(getters)}
 
 
-def field_table(data, base, address):
+def field_table(data, base, address, end_address=None):
     """Read 16-byte INI field entries from a mapped image, through the terminator.
 
     Values and raw bytes must never be written to the report. A malformed table
-    or name is an error rather than a partial result.
+    or name is an error rather than a partial result. end_address is an
+    explicitly verified exclusive bound for a table without a null sentinel.
     """
     rows = {}
+    if end_address is not None and (end_address < address or (end_address - address) % 16):
+        raise ValueError('invalid field table bound')
     while True:
+        if address == end_address:
+            return rows
         pos = address - base
         if pos < 0 or pos + 16 > len(data):
             raise ValueError(f'field table outside image at {address:#x}')

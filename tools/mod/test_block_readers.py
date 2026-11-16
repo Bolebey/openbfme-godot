@@ -70,3 +70,14 @@ def test_global_pointer_across_branch_and_clobber():
     code = bytes.fromhex('a100200000 89c3 7404 31db eb02 90 90 8b4b3c 31db 8b4b40 c3')
     blocks = {0x1000: ((0x1000, 9), (0x1009, 4), (0x100d, 2), (0x100f, 9))}
     assert br.global_reads(code, 0x1000, blocks, {0x2000}) == [(0x1000, 0x2000, (), 0x3c, 0x100f)]
+
+
+def test_bounded_field_table_without_sentinel():
+    import struct
+    import pytest
+    data = bytearray(64)
+    struct.pack_into('<IIII', data, 0, 0x1020, 0x2000, 0, 0x10)
+    data[0x20:0x25] = b'Name\0'
+    assert br.field_table(data, 0x1000, 0x1000, 0x1010) == {'name': 0x10}
+    with pytest.raises(ValueError):
+        br.field_table(data, 0x1000, 0x1000, 0x100f)

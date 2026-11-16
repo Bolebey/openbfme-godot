@@ -10,7 +10,7 @@ trivial, not getModuleNameKey / xfer / a deleting destructor). They are candidat
 a function ported without a citation, or a function of another class that reads the module's data. A row with `how` = manual or a
 `stop` may already carry a verdict ("RotWK does not read it", TOP20 / docs/STOPS.md): read it first. The task still proves the reader
 (parser -> offset -> every reader, PROCESS 5 step 4). Only block, class and field names, counts and RW addresses are written: no values.
-With --game and --inventory, GameData, AIData and AudioSettings get intra-function global-pointer read candidates. Other blocks remain unimplemented.
+With --game and --inventory, GameData, AIData, AudioSettings and Mouse get intra-function global-pointer read candidates. Other blocks remain unimplemented.
 With --xmap, named template getters add direct-caller candidates (entry-block reads only).
 These are heuristic leads, not no-reader verdicts; register state is propagated over direct CFG edges only, not stack spills or indirect calls.
 """
@@ -73,11 +73,16 @@ def write(rows, path: Path):
 # (0x6441A5..AD). Names and offsets come from the
 # original mapped image because those tables are absent from field-tables.json.
 SINGLETONS = {
-    "gamedata": ("TheGlobalData", 0xDE4364, (), 0xBFF580),
+    "gamedata": ("TheGlobalData", 0xDE4364, (), 0xBFF580, None),
     # RW 0x7017AA: TheAI [0xDE4B40], data [ecx+0x18], table 0xC1CB20.
-    "aidata": ("TheAI->data", 0xDE4B40, (0x18,), 0xC1CB20),
+    "aidata": ("TheAI->data", 0xDE4B40, (0x18,), 0xC1CB20, None),
     # RW 0x44107A: TheAudio [0xDE42FC], settings [eax+0x10], table 0xBD7698.
-    "audiosettings": ("TheAudio->settings", 0xDE42FC, (0x10,), 0xBD7698),
+    "audiosettings": ("TheAudio->settings", 0xDE42FC, (0x10,), 0xBD7698, None),
+    # RW 0x5ED789: TheMouse at 0xDE36E0, table 0xBF6158. Last
+    # valid entry ends at 0xBF62A8, where its name string begins. There is no
+    # sentinel in the static image; bounded rows are leads, not a full verdict.
+    # DONOR BFME2 parse 0x5EE050 (Code/GameEngine/Source/GameClient/Input/Mouse.cpp).
+    "mouse": ("TheMouse", 0xDE36E0, (), 0xBF6158, 0xBF62A8),
 }
 
 
@@ -110,8 +115,8 @@ def top_level_candidates(game, inventory, xmap=None):
     for function, pointer, path, offset, instruction in matches:
         by_field.setdefault((pointer, path, offset), set()).add((function, instruction))
     output = {}
-    for block, (name, pointer, path, table) in SINGLETONS.items():
-        for field, offset in br.field_table(data, base, table).items():
+    for block, (name, pointer, path, table, end) in SINGLETONS.items():
+        for field, offset in br.field_table(data, base, table, end).items():
             route = f"global {name} +0x{offset:X}"
             candidates = sorted(by_field.get((pointer, path, offset), ()))
             note = ", ".join(f"0x{function:08X} ({citations.get(function, 'none')}; read 0x{instruction:08X})"
