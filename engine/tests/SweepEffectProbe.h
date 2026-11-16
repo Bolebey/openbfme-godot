@@ -397,7 +397,46 @@ struct EffectProbe
 	std::map<ObjectID, Seen> seen;
 	std::vector<Expect> expects;
 	std::vector<std::string> unasserted;
+	std::vector<std::string> skippedNotes;
 	std::set<const BehaviorModule *> visited;
+
+	static bool nuggetUpgradesOk(const WeaponNugget &n, const Object *caster)
+	{
+		if (n.m_requiredUpgradeNames.empty() && n.m_forbiddenUpgradeNames.empty())
+		{
+			return true;
+		}
+		if (!caster)
+		{
+			return n.m_requiredUpgradeNames.empty();
+		}
+		const Player *pl = caster->getControllingPlayer();
+		auto has = [&](const std::string &up) { return caster->hasUpgrade(up) || (pl && pl->hasUpgradeComplete(up)); };
+		for (const std::string &up : n.m_forbiddenUpgradeNames)
+		{
+			if (has(up))
+			{
+				return false;
+			}
+		}
+		for (const std::string &up : n.m_requiredUpgradeNames)
+		{
+			if (!has(up))
+			{
+				return false;
+			}
+		}
+		return true;
+	}
+
+	static bool nuggetFilterOk(const WeaponNugget &n, const Object &caster, const Object *target)
+	{
+		if (!target || !ObjectFilterMatch::isValid(&n.m_specialObjectFilter))
+		{
+			return true;
+		}
+		return ObjectFilterMatch::allows(caster.logic(), n.m_specialObjectFilter, *target, caster.getControllingPlayer());
+	}
 	bool sawBaseSpecialAbilityUpdate = false;
 	unsigned weaponModeActive = 0;
 	float bounty = 0.0f; ///< lane FACT-C: the caster's player's bounty percent
@@ -406,7 +445,7 @@ struct EffectProbe
 	std::uint32_t playerMoney = 0;
 	size_t luaEvents = 0;
 
-	static void inspectWeaponSpecial(const std::string &cls, const std::string &weaponName, const WeaponTemplate *w, Object &holder, EffectProbe &p)
+	static void inspectWeaponSpecial(const std::string &cls, const std::string &weaponName, const WeaponTemplate *w, Object &holder, EffectProbe &p, const Object *target = nullptr)
 	{
 		std::vector<const WeaponTemplate *> ws;
 		std::set<const WeaponTemplate *> seenWs;
@@ -442,6 +481,15 @@ struct EffectProbe
 			bool curHasDamage = false;
 			for (const std::shared_ptr<WeaponNugget> &n : cur->m_nuggets)
 			{
+				if (!nuggetUpgradesOk(*n, &holder))
+				{
+					continue;
+				}
+				if (!nuggetFilterOk(*n, holder, target))
+				{
+					p.skippedNotes.push_back(std::string(n->keyword()) + " skipped (target fails SpecialObjectFilter)");
+					continue;
+				}
 				const WeaponNuggetKind nk = n->kind();
 				if (nk == NUGGET_DAMAGE || nk == NUGGET_DOT)
 				{
@@ -665,14 +713,14 @@ struct EffectProbe
 			{
 				p.expects.push_back({ FIRE_LOGIC, cls + " SpecialWeapon " + weaponName });
 			}
-			else
+			else if (p.skippedNotes.empty())
 			{
 				p.unasserted.push_back(cls + " SpecialWeapon " + weaponName + " (no supported weapon nugget)");
 			}
 		}
 	}
 
-	static void expectFrom(BehaviorModule *m, Object &holder, const SpecialPowerTemplate *t, EffectProbe &p, int depth)
+	static void expectFrom(BehaviorModule *m, Object &holder, const SpecialPowerTemplate *t, EffectProbe &p, int depth, const Object *target = nullptr)
 	{
 		const std::string cls = m->getModuleClassName();
 		if (const WeaponModeSpecialPowerUpdate *wm = dynamic_cast<const WeaponModeSpecialPowerUpdate *>(m))
@@ -703,7 +751,7 @@ struct EffectProbe
 			else if (const WeaponFireSpecialAbilityUpdateModuleData *wd = dynamic_cast<const WeaponFireSpecialAbilityUpdateModuleData *>(d))
 			{
 				const WeaponTemplate *w = TheWeaponStore ? TheWeaponStore->findWeaponTemplate(wd->m_specialWeapon) : nullptr;
-				inspectWeaponSpecial(cls, wd->m_specialWeapon, w, holder, p);
+				inspectWeaponSpecial(cls, wd->m_specialWeapon, w, holder, p, target);
 			}
 			else if (const ArrowStormUpdateModuleData *ad = dynamic_cast<const ArrowStormUpdateModuleData *>(d))
 			{
@@ -798,7 +846,7 @@ struct EffectProbe
 					BehaviorModule *activated = key == NAMEKEY_INVALID ? nullptr : holder.findModuleByTag(key);
 					if (activated && activated != m && depth < 3 && p.visited.insert(activated).second)
 					{
-						expectFrom(activated, holder, nullptr, p, depth + 1);
+						expectFrom(activated, holder, nullptr, p, depth + 1, target);
 						if (activated->getModuleClassName() == "SpecialPowerModule")
 						{
 							if (SpecialPowerModuleInterface *actSp = activated->getSpecialPower())
@@ -819,7 +867,7 @@ struct EffectProbe
 																	: osp && osp->getSpecialPowerTemplate() == actTpl;
 										if (match && p.visited.insert(om.get()).second)
 										{
-											expectFrom(om.get(), holder, actTpl, p, depth + 1);
+											expectFrom(om.get(), holder, actTpl, p, depth + 1, target);
 										}
 									}
 								}
@@ -937,7 +985,7 @@ struct EffectProbe
 		}
 	}
 
-	static EffectProbe take(GameLogic &logic, Object *u, const SpecialPowerTemplate *t, size_t engineEvents = 0)
+	static EffectProbe take(GameLogic &logic, Object *u, const SpecialPowerTemplate *t, size_t engineEvents = 0, const Object *target = nullptr)
 	{
 		EffectProbe p;
 		p.frame = logic.getFrame();
@@ -1025,7 +1073,7 @@ struct EffectProbe
 									: wm ? wm->getSpecialPowerTemplate() == t : sp && sp->getSpecialPowerTemplate() == t;
 				if (mine && one.visited.insert(m.get()).second)
 				{
-					expectFrom(m.get(), *h, t, one, 0);
+					expectFrom(m.get(), *h, t, one, 0, target);
 				}
 			}
 			if (one.sawBaseSpecialAbilityUpdate && one.expects.empty() && one.unasserted.empty())
@@ -1045,6 +1093,13 @@ struct EffectProbe
 				if (done.insert("unasserted " + c).second)
 				{
 					p.unasserted.push_back(c);
+				}
+			}
+			for (const std::string &sn : one.skippedNotes)
+			{
+				if (done.insert("skipped " + sn).second)
+				{
+					p.skippedNotes.push_back(sn);
 				}
 			}
 		}
@@ -1587,12 +1642,26 @@ struct EffectProbe
 		}
 		if (expects.empty() && unasserted.empty())
 		{
-			missing += "no effect of it is asserted (module SpecialPowerModule); ";
+			if (!skippedNotes.empty())
+			{
+				for (const std::string &sn : skippedNotes)
+				{
+					missing += sn + "; ";
+				}
+			}
+			else
+			{
+				missing += "no effect of it is asserted (module SpecialPowerModule); ";
+			}
 		}
 		std::string all;
 		for (const std::string &x : out)
 		{
 			all += (all.empty() ? "" : ", ") + x;
+		}
+		for (const std::string &sn : skippedNotes)
+		{
+			all += (all.empty() ? "" : ", ") + sn;
 		}
 		return all;
 	}

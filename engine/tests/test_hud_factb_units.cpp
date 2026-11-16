@@ -864,11 +864,15 @@ void unitsSweep(const std::string &faction, Results &res, bool sweep)
 				// a position power whose result is on own units (a level grant, a heal, invisibility, timer refresh) is cast at an own horde made there;
 				// one whose result is on enemies (a dominate, a hit, a curse, a terror, a grab, replace, emotion, meta-impact, steal, paralyze) at the enemy;
 				// the others at the ground by the unit
+				const bool targetless = !cb->hasOption(COMMAND_OPTION_NEED_TARGET_ENEMY_OBJECT | COMMAND_OPTION_NEED_TARGET_NEUTRAL_OBJECT
+													   | COMMAND_OPTION_NEED_TARGET_ALLY_OBJECT | COMMAND_OPTION_NEED_TARGET_POS);
 				bool atOwn = false, stageOwn = false, atEnemy = false, closerEnemy = false, needsHeal = false, needsStealMoney = false, needsTimerRefresh = false;
 				for (const EffectProbe::Expect &x : EffectProbe::take(g.logic(), u, t).expects)
 				{
-					closerEnemy = closerEnemy || x.kind == EffectProbe::TERROR || x.kind == EffectProbe::EMOTION || x.kind == EffectProbe::LUA_EVENT
-								  || x.kind == EffectProbe::META_IMPACT;
+					closerEnemy = closerEnemy
+								  || (targetless
+									  && (x.kind == EffectProbe::TERROR || x.kind == EffectProbe::EMOTION || x.kind == EffectProbe::LUA_EVENT
+										  || x.kind == EffectProbe::META_IMPACT));
 					atOwn = atOwn || x.kind == EffectProbe::LEVEL || x.kind == EffectProbe::HEAL || x.kind == EffectProbe::TIMER_REFRESH
 							|| (x.kind == EffectProbe::MODEL_CONDITION && x.scope == EffectProbe::Expect::SCOPE_PLAYER);
 					stageOwn = stageOwn || atOwn || x.kind == EffectProbe::MODIFIER;
@@ -887,7 +891,7 @@ void unitsSweep(const std::string &faction, Results &res, bool sweep)
 					{
 						g.logic().destroyObject(old);
 					}
-					enemyUnitId = g.rig.make(enemyName, c.x + 60.0f, c.y + 20.0f, enemy)->getID();
+					enemyUnitId = g.rig.make(enemyName, c.x + 80.0f, c.y + 20.0f, enemy)->getID();
 					g.step(5);
 					toughen(g.logic(), enemyUnitId);
 				}
@@ -897,7 +901,7 @@ void unitsSweep(const std::string &faction, Results &res, bool sweep)
 				}
 				if (stageOwn && ownHordeId == INVALID_ID)
 				{
-					ownHordeId = g.rig.make(ownHordeOf(faction), c.x - 60.0f, c.y + 60.0f)->getID();
+					ownHordeId = g.rig.make(ownHordeOf(faction), c.x - 100.0f, c.y + 100.0f)->getID();
 				}
 				auto pickFilteredTemplate = [&](const ObjectFilter &filter, const Player *ownerPlayer) -> const ThingTemplate * {
 					auto usable = [&](const ThingTemplate *tt) {
@@ -952,6 +956,29 @@ void unitsSweep(const std::string &faction, Results &res, bool sweep)
 							tempEnemyTarget = true;
 							g.step(5);
 							toughen(g.logic(), tempTarget.id);
+						}
+					}
+				}
+				else if (cb->hasOption(COMMAND_OPTION_NEED_TARGET_POS) && !cb->hasOption(COMMAND_OPTION_NEED_TARGET_ENEMY_OBJECT | COMMAND_OPTION_NEED_TARGET_ALLY_OBJECT | COMMAND_OPTION_NEED_TARGET_NEUTRAL_OBJECT)
+						 && atEnemy && !atOwn && t && t->m_objectFilter)
+				{
+					Object *eu = g.logic().findObjectByID(enemyUnitId);
+					Object *eb = g.logic().findObjectByID(enemyBuildingId);
+					const bool okU = eu && ObjectFilterMatch::allows(g.logic(), *t->m_objectFilter, *eu, g.rig.local);
+					const bool okB = eb && ObjectFilterMatch::allows(g.logic(), *t->m_objectFilter, *eb, g.rig.local)
+									 && ActionManager::canDoSpecialPowerAtLocation(*u, *eb->getPosition(), t, cb->m_options);
+					if (!okU && !okB)
+					{
+						const Coord3D spot{ c.x + 120.0f, c.y + 120.0f, g.logic().getGroundHeight(c.x + 120.0f, c.y + 120.0f) };
+						if (ActionManager::canDoSpecialPowerAtLocation(*u, spot, t, cb->m_options))
+						{
+							if (const ThingTemplate *tt = pickFilteredTemplate(*t->m_objectFilter, enemy))
+							{
+								tempTarget.id = g.rig.make(tt->getName(), spot.x, spot.y, enemy)->getID();
+								tempEnemyTarget = true;
+								g.step(5);
+								toughen(g.logic(), tempTarget.id);
+							}
 						}
 					}
 				}
@@ -1044,7 +1071,93 @@ void unitsSweep(const std::string &faction, Results &res, bool sweep)
 					continue;
 				}
 				collect();
-				EffectProbe probeBefore = EffectProbe::take(g.logic(), u, t, g.rig.game->report().scripting.engineEvents);
+				auto resolveTarget = [&]() -> Object * {
+					Object *tgt = nullptr;
+					if (!cb->hasOption(COMMAND_OPTION_NEED_TARGET_ENEMY_OBJECT | COMMAND_OPTION_NEED_TARGET_NEUTRAL_OBJECT | COMMAND_OPTION_NEED_TARGET_ALLY_OBJECT | COMMAND_OPTION_NEED_TARGET_POS))
+					{
+						return nullptr;
+					}
+					if (cb->hasOption(COMMAND_OPTION_NEED_TARGET_ENEMY_OBJECT))
+					{
+						// (looked up by id: the baseline frames may have killed one)
+						if (tempTarget.id != INVALID_ID && tempEnemyTarget)
+						{
+							tgt = g.logic().findObjectByID(tempTarget.id);
+						}
+						else
+						{
+							tgt = cb->m_affectsKindOf != KindOfMaskType{} ? g.logic().findObjectByID(enemyBuildingId) : g.logic().findObjectByID(enemyUnitId);
+							if (tgt && t && t->m_objectFilter && !ObjectFilterMatch::allows(g.logic(), *t->m_objectFilter, *tgt, g.rig.local))
+							{
+								Object *alt = cb->m_affectsKindOf != KindOfMaskType{} ? g.logic().findObjectByID(enemyUnitId) : g.logic().findObjectByID(enemyBuildingId);
+								if (alt && ObjectFilterMatch::allows(g.logic(), *t->m_objectFilter, *alt, g.rig.local))
+								{
+									tgt = alt;
+								}
+							}
+						}
+					}
+					else if (cb->hasOption(COMMAND_OPTION_NEED_TARGET_ALLY_OBJECT))
+					{
+						tgt = g.logic().findObjectByID(tempTarget.id != INVALID_ID && !tempEnemyTarget ? tempTarget.id : allyId);
+					}
+					else if (cb->hasOption(COMMAND_OPTION_NEED_TARGET_NEUTRAL_OBJECT))
+					{
+						tgt = g.logic().findObjectByID(enemyBuildingId);
+					}
+					else if (atOwn && atEnemy && t && t->m_objectFilter
+							 && (!g.logic().findObjectByID(ownHordeId) || !ObjectFilterMatch::allows(g.logic(), *t->m_objectFilter, *g.logic().findObjectByID(ownHordeId), g.rig.local)))
+					{
+						tgt = g.logic().findObjectByID(enemyUnitId);
+					}
+					else if (atOwn)
+					{
+						tgt = g.logic().findObjectByID(ownHordeId);
+					}
+					else if (atEnemy)
+					{
+						if (tempTarget.id != INVALID_ID && tempEnemyTarget)
+						{
+							tgt = g.logic().findObjectByID(tempTarget.id);
+						}
+						else
+						{
+							tgt = g.logic().findObjectByID(enemyUnitId);
+							if (tgt && t && t->m_objectFilter && !ObjectFilterMatch::allows(g.logic(), *t->m_objectFilter, *tgt, g.rig.local))
+							{
+								if (Object *eb = g.logic().findObjectByID(enemyBuildingId); eb && ObjectFilterMatch::allows(g.logic(), *t->m_objectFilter, *eb, g.rig.local))
+								{
+									tgt = eb;
+								}
+							}
+						}
+					}
+					else if (t && (t->m_flags & SPF_NEEDS_OBJECT_FILTER) && t->m_objectFilter)
+					{
+						for (ObjectID candId : { enemyUnitId, enemyBuildingId, ownHordeId, allyId })
+						{
+							if (Object *cand = candId != INVALID_ID ? g.logic().findObjectByID(candId) : nullptr)
+							{
+								if (ObjectFilterMatch::allows(g.logic(), *t->m_objectFilter, *cand, g.rig.local))
+								{
+									tgt = cand;
+									break;
+								}
+							}
+						}
+					}
+					// an object target: a horde is clicked on one of its members (the horde object has no body to pick); a position power is cast at the
+					// horde's own position (its centre: an area dominate skips HORDE_MEMBERs and takes the horde within DominateRadius)
+					const bool objectTarget = cb->hasOption(COMMAND_OPTION_NEED_TARGET_ENEMY_OBJECT | COMMAND_OPTION_NEED_TARGET_NEUTRAL_OBJECT | COMMAND_OPTION_NEED_TARGET_ALLY_OBJECT);
+					if (tgt && objectTarget && tgt->getContain() && tgt->getContain()->getContainCount() > 0 && !tgt->getContain()->getContainedItemsList()->empty())
+					{
+						tgt = tgt->getContain()->getContainedItemsList()->front();
+					}
+					return tgt;
+				};
+				Object *plannedOn = resolveTarget();
+				const ObjectID plannedOnId = plannedOn ? plannedOn->getID() : INVALID_ID;
+				EffectProbe probeBefore = EffectProbe::take(g.logic(), u, t, g.rig.game->report().scripting.engineEvents, plannedOn);
 				probeBefore.nominals(g.logic());
 				if (!g.select(u) || !g.reveal(u, [&](const CommandButton &x) { return &x == cb; }, b))
 				{
@@ -1065,60 +1178,12 @@ void unitsSweep(const std::string &faction, Results &res, bool sweep)
 				std::string target = "none";
 				if (cb->hasOption(COMMAND_OPTION_NEED_TARGET_ENEMY_OBJECT | COMMAND_OPTION_NEED_TARGET_NEUTRAL_OBJECT | COMMAND_OPTION_NEED_TARGET_ALLY_OBJECT | COMMAND_OPTION_NEED_TARGET_POS))
 				{
-					Object *on = nullptr;
-					if (cb->hasOption(COMMAND_OPTION_NEED_TARGET_ENEMY_OBJECT))
-					{
-						// (looked up by id: the baseline frames may have killed one)
-						if (tempTarget.id != INVALID_ID && tempEnemyTarget)
-						{
-							on = g.logic().findObjectByID(tempTarget.id);
-						}
-						else
-						{
-							on = cb->m_affectsKindOf != KindOfMaskType{} ? g.logic().findObjectByID(enemyBuildingId) : g.logic().findObjectByID(enemyUnitId);
-							if (on && t && t->m_objectFilter && !ObjectFilterMatch::allows(g.logic(), *t->m_objectFilter, *on, g.rig.local))
-							{
-								Object *alt = cb->m_affectsKindOf != KindOfMaskType{} ? g.logic().findObjectByID(enemyUnitId) : g.logic().findObjectByID(enemyBuildingId);
-								if (alt && ObjectFilterMatch::allows(g.logic(), *t->m_objectFilter, *alt, g.rig.local))
-								{
-									on = alt;
-								}
-							}
-						}
-					}
-					else if (cb->hasOption(COMMAND_OPTION_NEED_TARGET_ALLY_OBJECT))
-					{
-						on = g.logic().findObjectByID(tempTarget.id != INVALID_ID && !tempEnemyTarget ? tempTarget.id : allyId);
-					}
-					else if (cb->hasOption(COMMAND_OPTION_NEED_TARGET_NEUTRAL_OBJECT))
-					{
-						on = g.logic().findObjectByID(enemyBuildingId);
-					}
-					else if (atOwn && atEnemy && t && t->m_objectFilter
-							 && (!g.logic().findObjectByID(ownHordeId) || !ObjectFilterMatch::allows(g.logic(), *t->m_objectFilter, *g.logic().findObjectByID(ownHordeId), g.rig.local)))
-					{
-						on = g.logic().findObjectByID(enemyUnitId);
-					}
-					else if (atOwn)
-					{
-						on = g.logic().findObjectByID(ownHordeId);
-					}
-					else if (atEnemy)
-					{
-						on = g.logic().findObjectByID(enemyUnitId);
-					}
-					// an object target: a horde is clicked on one of its members (the horde object has no body to pick); a position power is cast at the
-					// horde's own position (its centre: an area dominate skips HORDE_MEMBERs and takes the horde within DominateRadius)
-					const bool objectTarget = cb->hasOption(COMMAND_OPTION_NEED_TARGET_ENEMY_OBJECT | COMMAND_OPTION_NEED_TARGET_NEUTRAL_OBJECT | COMMAND_OPTION_NEED_TARGET_ALLY_OBJECT);
-					if (on && objectTarget && on->getContain() && on->getContain()->getContainCount() > 0 && !on->getContain()->getContainedItemsList()->empty())
-					{
-						on = on->getContain()->getContainedItemsList()->front();
-					}
+					Object *on = plannedOnId != INVALID_ID ? g.logic().findObjectByID(plannedOnId) : nullptr;
 					// an object is clicked a few heights over its foot, from the south and from the north, until the click reaches it (the pick volume
 					// of a tall model may not cover its foot; a big caster in front takes the click), pressing the button again before each further try;
 					// its position is read again each time (it fights and moves)
 					const ObjectID onId = on ? on->getID() : INVALID_ID;
-					Coord3D ground{ c.x + 120.0f, c.y + 120.0f, 0.0f };
+					Coord3D ground{ c.x + 120.0f, c.y + 120.0f, g.logic().getGroundHeight(c.x + 120.0f, c.y + 120.0f) };
 					// lane SUMMONLOC-1: the hero power click issues nothing where the location test refuses (RW 0x81E9C5 -> RW 0x6A4260 -> RW 0x82DFB7):
 					// a LIMIT_DISTANCE 150 power (Hwaldar's Hillmen) is clicked nearer, as a player would
 					if (Object *caster = g.logic().findObjectByID(uid); caster && !on && cb->m_command == GUI_COMMAND_SPECIAL_POWER && TheSpecialPowerStore)
@@ -1301,7 +1366,8 @@ void unitsSweep(const std::string &faction, Results &res, bool sweep)
 							hits.track(g.logic());
 						}
 						Object *uNow = g.logic().findObjectByID(uid);
-						const EffectProbe probeAfter = EffectProbe::take(g.logic(), uNow, t, g.rig.game->report().scripting.engineEvents);
+						const Object *onAfter = plannedOnId != INVALID_ID ? g.logic().findObjectByID(plannedOnId) : nullptr;
+					const EffectProbe probeAfter = EffectProbe::take(g.logic(), uNow, t, g.rig.game->report().scripting.engineEvents, onAfter);
 						missing.clear();
 						effect = probeBefore.compare(probeAfter, missing, &hits);
 						if (missing.empty())

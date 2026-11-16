@@ -146,6 +146,17 @@ void trackFor(ProbeWorld &f, HitTracker &hits, int framesCount)
 const char kLocal78Ini[] =
 	"ModifierList L78_ModOne\n  Category = LEADERSHIP\n  Duration = 30000\n  Modifier = ARMOR 50%\nEnd\n"
 	"ModifierList L78_ModTwo\n  Category = SPELL\n  Duration = 30000\n  Modifier = DAMAGE_MULT 120%\nEnd\n"
+	"Upgrade Upg_Bonus\n  Type = OBJECT\nEnd\n"
+	"SpecialPower SP_UpgFilter\n  Enum = SPECIAL_AT_VISIBLE_OBJECT\n  ReloadTime = 1000\nEnd\n"
+	"SpecialPower SP_OnlyMonster\n  Enum = SPECIAL_AT_VISIBLE_OBJECT\n  ReloadTime = 1000\nEnd\n"
+	"Weapon W_UpgFilterBaseWarhead\n  RadiusDamageAffects = ENEMIES\n  DamageNugget\n    Damage = 50\n    DamageType = HERO\n  End\nEnd\n"
+	"Weapon W_UpgFilterBonusWarhead\n  RadiusDamageAffects = ENEMIES\n  AttributeModifierNugget\n    AttributeModifier = L78_ModOne\n    Radius = 150\n  End\nEnd\n"
+	"Weapon W_UpgFilter\n  AttackRange = 150\n  RadiusDamageAffects = ENEMIES\n"
+	"  ProjectileNugget\n    ProjectileTemplateName = Arrow\n    WarheadTemplateName = W_UpgFilterBaseWarhead\n    ForbiddenUpgradeNames = Upg_Bonus\n  End\n"
+	"  ProjectileNugget\n    ProjectileTemplateName = Arrow\n    WarheadTemplateName = W_UpgFilterBonusWarhead\n    RequiredUpgradeNames = Upg_Bonus\n  End\n"
+	"  EmotionWeaponNugget\n    EmotionType = TERROR\n    Radius = 50\n    Duration = 500\n    SpecialObjectFilter = NONE +MONSTER\n  End\n"
+	"End\n"
+	"Weapon W_OnlyMonster\n  AttackRange = 150\n  RadiusDamageAffects = ENEMIES\n  ParalyzeNugget\n    Radius = 50\n    Duration = 1000\n    SpecialObjectFilter = NONE +MONSTER\n  End\nEnd\n"
 	"ObjectCreationList L78_OCLVision\n"
 	"  CreateObject\n    ObjectNames = L78_VisionDummy\n    Count = 1\n  End\n"
 	"End\n"
@@ -215,7 +226,11 @@ const char kLocal78Ini[] =
 		"  Behavior = SpecialPowerModule PFire\n    SpecialPowerTemplate = SP_FireLogicOnly\n    UpdateModuleStartsAttack = Yes\n  End\n"
 		"  Behavior = WeaponFireSpecialAbilityUpdate UFire\n    SpecialPowerTemplate = SP_FireLogicOnly\n    SpecialWeapon = W_FireLogicOnly\n    UnpackTime = 0\n    PreparationTime = 0\n    PackTime = 0\n    IgnoreFacingCheck = Yes\n  End\n"
 		"  Behavior = SpecialPowerModule PNonHorde\n    SpecialPowerTemplate = SP_HordeShot\n    UpdateModuleStartsAttack = Yes\n  End\n"
-		"  Behavior = WeaponFireSpecialAbilityUpdate UNonHorde\n    SpecialPowerTemplate = SP_HordeShot\n    SpecialWeapon = W_HordeFinder\n    UnpackTime = 0\n    PreparationTime = 0\n    PackTime = 0\n    StartAbilityRange = 200\n    IgnoreFacingCheck = Yes\n  End\n")
+		"  Behavior = WeaponFireSpecialAbilityUpdate UNonHorde\n    SpecialPowerTemplate = SP_HordeShot\n    SpecialWeapon = W_HordeFinder\n    UnpackTime = 0\n    PreparationTime = 0\n    PackTime = 0\n    StartAbilityRange = 200\n    IgnoreFacingCheck = Yes\n  End\n"
+		"  Behavior = SpecialPowerModule PUpgFilter\n    SpecialPowerTemplate = SP_UpgFilter\n    UpdateModuleStartsAttack = Yes\n  End\n"
+		"  Behavior = WeaponFireSpecialAbilityUpdate UUpgFilter\n    SpecialPowerTemplate = SP_UpgFilter\n    SpecialWeapon = W_UpgFilter\n    UnpackTime = 0\n    PreparationTime = 0\n    PackTime = 0\n    StartAbilityRange = 200\n    IgnoreFacingCheck = Yes\n  End\n"
+		"  Behavior = SpecialPowerModule POnlyMon\n    SpecialPowerTemplate = SP_OnlyMonster\n    UpdateModuleStartsAttack = Yes\n  End\n"
+		"  Behavior = WeaponFireSpecialAbilityUpdate UOnlyMon\n    SpecialPowerTemplate = SP_OnlyMonster\n    SpecialWeapon = W_OnlyMonster\n    UnpackTime = 0\n    PreparationTime = 0\n    PackTime = 0\n    StartAbilityRange = 200\n    IgnoreFacingCheck = Yes\n  End\n")
 	"Object L78_HordeMember\n"
 	"  KindOf = INFANTRY SELECTABLE CAN_ATTACK\n"
 	"  Geometry = CYLINDER\n  GeometryMajorRadius = 5\n  GeometryMinorRadius = 5\n  GeometryHeight = 15\n"
@@ -740,6 +755,59 @@ TEST_CASE("LOCAL-78: Invisibility, TimerRefresh, SPECIAL_HARVEST, SPECIAL_ATHELA
 		std::string missing;
 		before.compare(EffectProbe::take(*f.logic, caster, t), missing, &hits);
 		CHECK_MESSAGE(missing.empty(), missing);
+	}
+}
+
+TEST_CASE("LOCAL-78: SweepEffectProbe respects nugget upgrade gates, SpecialObjectFilter, and skippedNotes")
+{
+	ProbeWorld f(kLocal78Ini);
+	Object *caster = f.unit("L78_WeaponCaster", 'A', 300, 300);
+	Object *enemy = f.unit("L78_Victim", 'B', 330, 300);
+	f.frames(2);
+
+	const SpecialPowerTemplate *spUpg = f.powerTpl("SP_UpgFilter");
+	const SpecialPowerTemplate *spMon = f.powerTpl("SP_OnlyMonster");
+	REQUIRE(spUpg != nullptr);
+	REQUIRE(spMon != nullptr);
+
+	// 1. Without Upg_Bonus and with an INFANTRY target: RequiredUpgradeNames skips BonusWarhead,
+	//    SpecialObjectFilter NONE +MONSTER skips EmotionWeaponNugget with a skippedNote, leaving only DAMAGE.
+	{
+		const EffectProbe probeInf = EffectProbe::take(*f.logic, caster, spUpg, 0, enemy);
+		REQUIRE(probeInf.unasserted.empty());
+		REQUIRE(probeInf.expects.size() == 1);
+		CHECK(probeInf.expects[0].kind == EffectProbe::DAMAGE);
+		REQUIRE(probeInf.skippedNotes.size() == 1);
+		CHECK(probeInf.skippedNotes[0].find("SpecialObjectFilter") != std::string::npos);
+	}
+
+	// 2. With target == nullptr: EmotionWeaponNugget +MONSTER is not pre-filtered out
+	{
+		const EffectProbe probeNone = EffectProbe::take(*f.logic, caster, spUpg, 0, nullptr);
+		REQUIRE(probeNone.expects.size() == 2);
+		CHECK(probeNone.skippedNotes.empty());
+	}
+
+	// 3. When all nuggets of a weapon are filtered out by SpecialObjectFilter, compare() reports failure instead of silent PASS
+	{
+		const EffectProbe beforeMon = EffectProbe::take(*f.logic, caster, spMon, 0, enemy);
+		CHECK(beforeMon.expects.empty());
+		REQUIRE(beforeMon.skippedNotes.size() == 1);
+		std::string missing;
+		beforeMon.compare(beforeMon, missing, nullptr);
+		CHECK(missing.find("SpecialObjectFilter") != std::string::npos);
+	}
+
+	// 4. Grant Upg_Bonus to caster -> BonusWarhead MODIFIER becomes active, ForbiddenUpgradeNames skips BaseWarhead
+	{
+		const UpgradeTemplate *up = TheUpgradeCenter ? TheUpgradeCenter->findUpgrade("Upg_Bonus") : nullptr;
+		REQUIRE(up != nullptr);
+		caster->giveUpgrade(up);
+		const EffectProbe probeUp = EffectProbe::take(*f.logic, caster, spUpg, 0, enemy);
+		REQUIRE(probeUp.expects.size() == 1);
+		CHECK(probeUp.expects[0].kind == EffectProbe::MODIFIER);
+		CHECK(probeUp.expects[0].modifiers.count("L78_ModOne") == 1u);
+		REQUIRE(probeUp.skippedNotes.size() == 1);
 	}
 }
 
