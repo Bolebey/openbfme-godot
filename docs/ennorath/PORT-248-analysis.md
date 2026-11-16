@@ -41,3 +41,15 @@ The collision path and geometry recalculation must be fully traced for indirect
 reads of byte +4 before claiming either a behavioral gap or a no-reader verdict.
 DONOR `Code/GameEngine/Include/Common/Geometry.h` identifies the byte and
 `Code/GameEngine/Source/Common/System/GeometryParseDimensions.cpp` the parser.
+
+Additional tracing: the primary vtable 0xC72370 has RW 0x8C5304 in slot 1,
+which independently confirms the donor's loadPostProcess identification. The
+clearance runtime table 0xC6065C has RW 0x887191 at slot 3. The would-collide
+filter's vtable 0xC112C8 has RW 0x66139C in slot 1; it calls RW 0xAD2CE0.
+The terrain sampler RW 0x8E047D calls the GeometryInfo copy constructor RW
+0x4923F0, which copies the small byte at 0x49240B into the sampler. RW 0x8E0354
+then uses the copied geometry; this copy is a reader in the literal sense but
+is not by itself proof that the bit affects the result. Complete tracing of
+RW 0xAD2CE0, RW 0x8E047D / 0x8E0354 and their geometry callees is still needed,
+including indirect access and other users of the module data. Do not classify
+the field as unused merely because the main function does not load +0x194.
