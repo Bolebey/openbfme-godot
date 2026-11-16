@@ -228,3 +228,16 @@ def test_ordered_object_counts_deduplicate_and_require_loaded_parent():
     merged = ObjectDefinition('Parent', 'object', '', (event('three'),))
     objects, _ = resolve_objects([parent, merged], reg)
     assert [x.tag for x in objects['Parent']] == ['two', 'three']
+
+
+def test_inventory_counts_sites_not_calling_functions():
+    import pytest
+    from rw_function_map import decode_inventory
+    # Two calls in a single function to a known target, then a return.
+    blob = bytes.fromhex('e8 0b 00 00 00 e8 06 00 00 00 c3') + b'\xcc' * 5 + b'\xc3'
+    funcs, stops = decode_inventory(blob, 0x1000, {0x1000: 0x100b, 0x1010: 0x1011}, threshold=1)
+    assert funcs[0x1000].calls == {0x1010}
+    assert funcs[0x1000].callsites == ((0x1000, 0x1010), (0x1005, 0x1010))
+    assert stops == {0x1010: 2}
+    with pytest.raises(ValueError, match='overlapping'):
+        decode_inventory(blob, 0x1000, {0x1000: 0x1010, 0x100f: 0x1011})

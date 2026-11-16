@@ -21,6 +21,7 @@ class Function:
     calls: frozenset[int]
     vcalls: frozenset[int]
     instructions: int
+    callsites: tuple[tuple[int, int], ...] = ()
 
 
 def decode_function(data: bytes, base: int, start: int, end: int, entries: set[int]) -> Function:
@@ -38,6 +39,7 @@ def decode_function(data: bytes, base: int, start: int, end: int, entries: set[i
     visited: set[int] = set()
     calls: set[int] = set()
     vcalls: set[int] = set()
+    callsites: set[tuple[int, int]] = set()
     while pending:
         address = pending.pop()
         while start <= address < end and address not in visited:
@@ -53,6 +55,7 @@ def decode_function(data: bytes, base: int, start: int, end: int, entries: set[i
                 op = ins.operands[0]
                 if op.type == X86_OP_IMM:
                     calls.add(op.imm)
+                    callsites.add((ins.address, op.imm))
                 elif op.type == X86_OP_MEM and op.mem.base:
                     vcalls.add(op.mem.disp)
             elif ins.mnemonic == "jmp":
@@ -60,6 +63,7 @@ def decode_function(data: bytes, base: int, start: int, end: int, entries: set[i
                 if op.type == X86_OP_IMM:
                     if op.imm in entries and op.imm != start:
                         calls.add(op.imm)
+                        callsites.add((ins.address, op.imm))
                     elif start <= op.imm < end:
                         pending.append(op.imm)
                 break
@@ -68,7 +72,7 @@ def decode_function(data: bytes, base: int, start: int, end: int, entries: set[i
                 if start <= target < end:
                     pending.append(target)
             address = nxt
-    return Function(frozenset(calls), frozenset(vcalls), len(visited))
+    return Function(frozenset(calls), frozenset(vcalls), len(visited), tuple(sorted(callsites)))
 
 
 def walk_graph(roots: set[int], functions: dict[int, Function], stops: set[int]):
@@ -537,3 +541,25 @@ def resolve_objects(definitions: list[ObjectDefinition], registry: list[dict]):
     for entries in objects.values():
         counts.update({entry.name for entry in entries})
     return objects, counts
+
+
+def decode_inventory(data: bytes, base: int, bounds: dict[int, int], threshold: int = 200):
+    """Decode an externally established inventory and count distinct call sites.
+
+    `bounds` maps entry VA to exclusive end VA. It must contain nonoverlapping,
+    independently determined function extents; do not pass guessed linear-sweep
+    boundaries. Return decoded functions and targets exceeding the threshold.
+    An unknown direct target remains in the graph as an unresolved leaf.
+    """
+    from collections import Counter
+    if threshold < 0:
+        raise ValueError('negative stop threshold')
+    previous_end = base
+    for start, end in sorted(bounds.items()):
+        if start < previous_end or start >= end or end > base + len(data):
+            raise ValueError(f'invalid or overlapping function bounds at 0x{start:X}')
+        previous_end = end
+    entries = set(bounds)
+    functions = {start: decode_function(data, base, start, end, entries) for start, end in sorted(bounds.items())}
+    counts = Counter(target for function in functions.values() for _, target in function.callsites)
+    return functions, {target: count for target, count in counts.items() if count > threshold}
