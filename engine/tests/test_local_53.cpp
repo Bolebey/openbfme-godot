@@ -79,19 +79,21 @@ ClipRect clipRectOf(const AptCanvasOp &op)
 TEST_CASE("LOCAL-53: the View3D back buffer copy covers every pixel of a fractional clip rectangle")
 {
 	float out[4];
-	// the Powers screen's background at 1920 x 1080 as floats give it: a hair inside 240 .. 1680
-	AptView3DCopyRect(239.99997f, 0.0005f, 1439.99994f, 1079.9895f, out);
+	// the Powers screen's background at 1920 x 1080 as the stage mapping gives it (LOCAL-53 retail): x 239.999603 .. 1680.000488,
+	// y 0.008326 .. 1079.994385
+	AptView3DCopyRect(239.999603f, 0.008326f, 1440.000885f, 1079.986059f, out);
 	CHECK(out[0] == 239.0f);
 	CHECK(out[1] == 0.0f);
-	CHECK(out[0] + out[2] == 1680.0f); // the last column (x = 1679) is in the copy
+	CHECK(out[0] + out[2] == 1681.0f); // through the clip's last (partial) column, x = 1680
 	CHECK(out[1] + out[3] == 1080.0f);
 	// whole pixels stay as they are
 	AptView3DCopyRect(240.0f, 0.0f, 1440.0f, 1080.0f, out);
 	CHECK(out[0] == 240.0f);
 	CHECK(out[2] == 1440.0f);
 	CHECK(out[3] == 1080.0f);
-	// a truncating conversion (Godot's Rect2 -> Rect2i) of the same fractional rectangle stops short of x = 1680: the old copy's gap
-	CHECK((int)239.99997f + (int)1439.99994f == 1678); // columns 1678 and 1679 were not copied
+	// a truncating conversion (Godot's Rect2 -> Rect2i) of the same rectangle ends at 239 + 1440 = 1679: column 1679, the clip's right edge, was
+	// not copied (the line the owner saw)
+	CHECK((int)239.999603f + (int)1440.000885f == 1679);
 }
 
 TEST_CASE("LOCAL-53 retail: the Powers screen's 3D background (SpellStoreBackground, SFE_MenuSpells) gets a back buffer copy through its last column")
@@ -147,6 +149,7 @@ TEST_CASE("LOCAL-53 retail: the Powers screen's 3D background (SpellStoreBackgro
 		CHECK(copy[0] + copy[2] == std::ceil(r.x1));
 		CHECK(copy[1] == std::floor(r.y0));
 		CHECK(copy[1] + copy[3] == std::ceil(r.y1));
-		CHECK(std::ceil(r.x1) == right); // the last column of the clip (x = right - 1) is copied
+		// the old copy (truncated position and size) ended one column short of the clip's right edge: column right - 1 was the line
+		CHECK((int)r.x0 + (int)(r.x1 - r.x0) == (int)right - 1);
 	}
 }
