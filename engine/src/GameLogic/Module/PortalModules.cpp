@@ -287,8 +287,10 @@ Coord3D DynamicPortalBehaviour::topAttackPosition()
 	const Coord3D &t = m_data->m_topAttackPos;
 	const double ax = SimMath::absD((double)b[0]), ay = SimMath::absD((double)b[3]);
 	const float m = (float)(ax >= ay ? ax : ay);
-	const float scale = SimMath::length3d(SimMath::divf32(b[0], m), SimMath::divf32(b[3], m), SimMath::divf32(b[6], m));
-	const float lx = mulf32(t.x, scale), ly = mulf32(t.y, scale), lz = mulf32(t.z, scale);
+	const double scale = SimMath::length3d(SimMath::divf32(b[0], m), SimMath::divf32(b[3], m), SimMath::divf32(b[6], m));
+	const float lx = SimMath::fstpDword(SimMath::pc24MulW((double)t.x, scale));
+	const float ly = SimMath::fstpDword(SimMath::pc24MulW((double)t.y, scale));
+	const float lz = SimMath::fstpDword(SimMath::pc24MulW((double)t.z, scale));
 	return Coord3D{ addf32(addf32(addf32(mulf32(b[0], lx), mulf32(b[1], ly)), mulf32(b[2], lz)), p.x),
 		addf32(addf32(addf32(mulf32(b[3], lx), mulf32(b[4], ly)), mulf32(b[5], lz)), p.y),
 		addf32(addf32(addf32(mulf32(b[6], lx), mulf32(b[7], ly)), mulf32(b[8], lz)), p.z) };
