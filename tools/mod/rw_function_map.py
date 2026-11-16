@@ -450,3 +450,44 @@ def parse_module_events(lines: list[tuple[str, str]], start: int, grammar):
         raise ValueError('object or module edit block is not closed')
 
     return walk(start, 'normal')
+
+
+def replay_module_events(entries: tuple[ModuleEntry, ...], events: list[ModuleEvent], registry: list[dict], *, child: bool):
+    """Apply extracted edits to a copied object using registry masks/predicates.
+
+    Caller selects the source object and whether it is a ChildObject; copying
+    and default-template creation are deliberately explicit. Errors are fatal:
+    silently omitting a module would make the object counts misleading.
+    """
+    records = {record['name']: record for record in registry}
+    types = {'behavior': 0, 'draw': 1, 'clientupdate': 2, 'clientbehavior': 3}
+    replacing = None
+    in_replace = False
+    for event in events:
+        try:
+            if event.action == 'remove':
+                entries, _ = remove_module(entries, event.tag)
+            elif event.action == 'replace_begin':
+                if in_replace:
+                    raise ValueError('nested replacement')
+                entries, replacing = remove_module(entries, event.tag)
+                in_replace = True
+            elif event.action == 'replace_end':
+                if not in_replace or replacing is None or replacing.tag != event.tag:
+                    raise ValueError('unmatched replacement')
+                replacing = None
+                in_replace = False
+            elif event.action == 'add':
+                record = records.get(event.name)
+                if record is None or record['type'] != types[event.category]:
+                    raise ValueError(f'unknown module/type {event.name}/{event.category}')
+                entry = ModuleEntry(event.name, event.tag, event.category, record['mask'], record['isAiModuleData'],
+                                    record['slot7'], event.inheritable)
+                entries = add_module(entries, entry, child=child, replacing=replacing)
+            else:
+                raise ValueError(f'unknown module event {event.action!r}')
+        except (ValueError, KeyError) as exc:
+            raise ValueError(f'{event.source}: {exc}') from exc
+    if in_replace:
+        raise ValueError('unclosed replacement')
+    return entries

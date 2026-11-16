@@ -183,3 +183,20 @@ def test_module_field_that_can_be_one_line_does_not_eat_object_end():
     events, end = parse_module_events([(line, str(i)) for i, line in enumerate(text)], 0, grammar)
     assert end == len(text)
     assert [(e.name, e.tag) for e in events] == [('A', 'Arbitrary')]
+
+
+def test_replay_extracted_events_uses_registry_and_replacement():
+    import pytest
+    from rw_function_map import ModuleEntry, ModuleEvent, replay_module_events
+    registry = [dict(name='A', type=0, mask=1, isAiModuleData=False, slot7=False),
+                dict(name='AI', type=0, mask=17, isAiModuleData=True, slot7=False)]
+    initial = (ModuleEntry('A', 'old', 'behavior', 1, False, False),)
+    events = [ModuleEvent('replace_begin', tag='old', source='2'),
+              ModuleEvent('add', tag='new', name='A', category='behavior', source='3'),
+              ModuleEvent('replace_end', tag='old', source='4')]
+    result = replay_module_events(initial, events, registry, child=True)
+    assert [(x.name, x.tag) for x in result] == [('A', 'new')]
+    with pytest.raises(ValueError, match='3: ReplaceModule'):
+        replay_module_events(initial, [events[0], ModuleEvent('add', tag='new', name='AI', category='behavior', source='3')], registry, child=True)
+    with pytest.raises(ValueError, match='unclosed replacement'):
+        replay_module_events(initial, events[:2], registry, child=True)
