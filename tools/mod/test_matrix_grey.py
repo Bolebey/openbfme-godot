@@ -142,9 +142,12 @@ def test_markdown_report_counts_and_branches_without_mod_values(tmp_path):
     assert '| state 2 | 1 |' in text and '| state 1 | 0 |' not in text  # only the DISABLED rows are counted
     assert '`none` is not "unexplained gray"' in text
     # the retail comparison: the gate this issue ported, the stop it left, and retail's order
-    assert '0x942826' in text and 'PORTED BY PORT-220' in text
-    assert '0x9427EB' in text and 'S-7386' in text
+    assert '## RW 0x942733 against ControlBar::evaluate' in text
+    assert '| RW | what it decides | the port | verdict | evidence |' in text
+    assert '0x942826' in text and 'PORTED HERE (PORT-220)' in text and '| same | dis this session |' in text
+    assert '0x9427EB' in text and 'S-7386' in text and 'missing' in text
     assert text.index('0x9427BD') < text.index('0x942826') < text.index('0x942833')
+    assert 'PR #518' in text and 'python tools/mod/matrix_grey.py' in text
     # the committable half carries no fixture name or value
     for leaked in ('NoGate', 'NeedsModel', 'NeedsUpgrade', 'Upgrade_Fictional', 'Workshop', 'FakeFaction'):
         assert leaked not in text
