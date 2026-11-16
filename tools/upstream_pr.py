@@ -135,7 +135,10 @@ def build() -> tuple[bool, str]:
         env = dict(os.environ, CMAKE_BUILD_PARALLEL_LEVEL=JOBS)
         r = sh(["cmd", "/c", str(TREE / "build.bat")], cwd=TREE, env=env, timeout=3 * 3600)
     else:  # upstream's own Linux CI build (.github/workflows/pr.yml): cmake + ccache, no GDExtension; the cache shared with the other trees
-        env = dict(test_env(), CCACHE_BASEDIR="/content")
+        env = dict(test_env(), CCACHE_BASEDIR="/content", CCACHE_MAXSIZE="8G")
+        if env.get("CCACHE_DIR"):  # the sandbox's local cache (build_tests.sh, ccache_keep.sh), the Drive one read-only behind it
+            env["CCACHE_REMOTE_STORAGE"] = f"file:{env['CCACHE_DIR']}|read-only"
+        env["CCACHE_DIR"] = "/content/ccache-local"
         sh(["git", "submodule", "update", "--init", "--depth", "1", "engine/thirdparty/godot-cpp"], cwd=TREE)
         c = sh(["cmake", "-S", "engine", "-B", "engine/build", "-G", "Ninja", "-DCMAKE_BUILD_TYPE=Release", "-DOPENBFME_BUILD_GODOT=OFF",
                 "-DCMAKE_C_COMPILER_LAUNCHER=ccache", "-DCMAKE_CXX_COMPILER_LAUNCHER=ccache"], cwd=TREE, env=env)
