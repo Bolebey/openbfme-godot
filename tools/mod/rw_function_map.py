@@ -252,3 +252,38 @@ def write_reports(rows: list[MapRow], tsv: Path, markdown: Path, command: str,
         print(f'{module} 0x{address:08X}: {old} -> ported')
     print(f'{len(changed)} rows moved from none/partial to ported')
     return changed
+
+
+@dataclass(frozen=True)
+class ModuleTables:
+    name: str
+    create: int
+    constructor: int
+    data_vtable: int
+    tables: tuple[tuple[int, int], ...]
+
+
+def discover_module_tables(image, registry: list[dict], constructor_finder, table_finder) -> list[ModuleTables]:
+    """Resolve constructor-installed tables, never treating ModuleData as Module.
+
+    The finders operate on the PE image. Each result needs a primary table at
+    offset zero; an unresolved factory is an error, not an empty module graph.
+    The offset table can contain secondary interfaces and still requires an
+    independently determined base class and slot extent before use as roots.
+    """
+    result = []
+    seen = set()
+    for record in registry:
+        name = record['name']
+        if name in seen:
+            raise ValueError(f'duplicate module: {name}')
+        seen.add(name)
+        create = int(record['create'], 0)
+        ctor = constructor_finder(image, create)
+        if ctor is None:
+            raise ValueError(f'{name}: constructor not found for 0x{create:X}')
+        stores = table_finder(image, ctor)
+        if 0 not in stores:
+            raise ValueError(f'{name}: primary vtable not found for 0x{ctor:X}')
+        result.append(ModuleTables(name, create, ctor, int(record['vtable'], 0), tuple(sorted(stores.items()))))
+    return result

@@ -94,3 +94,25 @@ def test_reports_reject_ambiguous_rows_and_existing_format(tmp_path):
     tsv.write_text('unexpected\theader\n', encoding='utf-8')
     with pytest.raises(ValueError, match='columns'):
         write_reports([row], tsv, md, 'example', {}, {}, 200)
+
+
+def test_module_tables_use_constructor_not_module_data():
+    import pytest
+    from rw_function_map import discover_module_tables
+    image = object()
+    records = [{'name': 'Thing', 'create': '0x1000', 'vtable': '0x9000'}]
+    def constructor_finder(img, address):
+        assert img is image and address == 0x1000
+        return 0x1100
+    def table_finder(img, address):
+        assert img is image and address == 0x1100
+        return {0x10: 0x3100, 0: 0x3000}
+    result = discover_module_tables(image, records, constructor_finder, table_finder)
+    assert result[0].data_vtable == 0x9000
+    assert result[0].tables == ((0, 0x3000), (0x10, 0x3100))
+    with pytest.raises(ValueError, match='constructor not found'):
+        discover_module_tables(image, records, lambda *_: None, table_finder)
+    with pytest.raises(ValueError, match='primary vtable not found'):
+        discover_module_tables(image, records, constructor_finder, lambda *_: {0x10: 0x3100})
+    with pytest.raises(ValueError, match='duplicate module'):
+        discover_module_tables(image, records * 2, constructor_finder, table_finder)
