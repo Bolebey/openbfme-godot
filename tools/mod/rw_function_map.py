@@ -356,7 +356,7 @@ class ModuleEvent:
     source: str = ''
 
 
-def parse_module_events(lines: list[tuple[str, str]], start: int, grammar):
+def parse_module_events(lines: list[tuple[str, str]], start: int, grammar, *, limit: int | None = None):
     """Extract object-level module edits using the retail field-table grammar.
 
     `start` is the first line inside an Object/ChildObject/ObjectReskin. Other
@@ -384,13 +384,13 @@ def parse_module_events(lines: list[tuple[str, str]], start: int, grammar):
                     i += 1
                 if i == len(lines):
                     raise ValueError(f'{source}: unclosed module script')
-            elif (kind and kind[0] == 'block' and i + 1 < len(lines)
-                  and fa.field_key(lines[i + 1][0])[0].lower() not in {'end', key.lower()}
-                  and fa.opens_block(lines, i + 1, kind[1], node, grammar.classes)):
+            elif (kind and kind[0] == 'block' and
+                  (key.lower() != 'addemotion' or (i + 1 < len(lines) and
+                   fa.field_key(lines[i + 1][0])[0].lower() not in {'end', 'addemotion'} and
+                   fa.opens_block(lines, i + 1, kind[1], node, grammar.classes)))):
                 end = fa.block_end(lines, i + 1, kind[1], grammar.classes)
-                if end < 0:
-                    raise ValueError(f'{source}: unclosed nested module block')
-                i = end
+                if end >= 0:
+                    i = end
             i += 1
         raise ValueError(f'{source}: unclosed module')
 
@@ -449,7 +449,10 @@ def parse_module_events(lines: list[tuple[str, str]], start: int, grammar):
             i += 1
         raise ValueError('object or module edit block is not closed')
 
-    return walk(start, 'normal')
+    events, end = walk(start, 'normal')
+    if limit is not None and end != limit:
+        raise ValueError(f'object boundary mismatch: parsed to line index {end}, expected {limit}')
+    return events, end
 
 
 def replay_module_events(entries: tuple[ModuleEntry, ...], events: list[ModuleEvent], registry: list[dict], *, child: bool):

@@ -177,9 +177,9 @@ def test_module_field_that_can_be_one_line_does_not_eat_object_end():
     from types import SimpleNamespace
     from rw_function_map import parse_module_events
     grammar = SimpleNamespace(
-        classes={'A': {'optional': ('block', {'subfield': ('line', None)})}},
+        classes={'A': {'addemotion': ('block', {'subfield': ('line', None)})}},
         object={'geometry': ('line', None)})
-    text = ['Behavior = A Arbitrary', 'Optional = value', 'Optional = other', 'End', 'Geometry = X', 'End']
+    text = ['Behavior = A Arbitrary', 'AddEmotion = value', 'AddEmotion = other', 'End', 'Geometry = X', 'End']
     events, end = parse_module_events([(line, str(i)) for i, line in enumerate(text)], 0, grammar)
     assert end == len(text)
     assert [(e.name, e.tag) for e in events] == [('A', 'Arbitrary')]
@@ -200,3 +200,13 @@ def test_replay_extracted_events_uses_registry_and_replacement():
         replay_module_events(initial, [events[0], ModuleEvent('add', tag='new', name='AI', category='behavior', source='3')], registry, child=True)
     with pytest.raises(ValueError, match='unclosed replacement'):
         replay_module_events(initial, events[:2], registry, child=True)
+
+
+def test_object_boundary_mismatch_is_not_silently_accepted():
+    import pytest
+    from types import SimpleNamespace
+    from rw_function_map import parse_module_events
+    grammar = SimpleNamespace(classes={}, object={})
+    lines = [('End', '1'), ('Other = ignored', '2')]
+    with pytest.raises(ValueError, match='boundary mismatch'):
+        parse_module_events(lines, 0, grammar, limit=2)
