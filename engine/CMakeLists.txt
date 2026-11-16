@@ -160,6 +160,7 @@ add_custom_command(
 
 # ---- core ---------------------------------------------------------------------------------
 include(cmake/SimFp.cmake) # openbfme_sim_fp (the simulation floating-point contract) and the simulation manifest helpers
+include(cmake/Port165.cmake) # PORT-165: horde position attacks
 # openbfme_float_chars is its own static library, like openbfme_detlibm: the Lua library below the core needs it
 add_library(openbfme_float_chars STATIC src/Common/System/FloatFromChars.cpp)
 target_include_directories(openbfme_float_chars PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src)
@@ -226,7 +227,6 @@ include(cmake/Port124.cmake) # PORT-124: ring transfer through CitadelSlaughterH
 include(cmake/Port94.cmake) # PORT-94: SalvageCrateCollide LevelUpRadius / ResourceChance / BannerChance verdict (issue #242; OPENBFME_PORT94_TESTS)
 include(cmake/Port102.cmake) # OPENBFME_PORT102_TESTS (Object GeometryUsedForHealthBox)
 include(cmake/Port115.cmake) # PORT-115: the archers' Barrage, a horde's FIRE_WEAPON at a position (issue #299; OPENBFME_PORT115_TESTS)
-include(cmake/Port165.cmake) # PORT-165: horde position attacks
 include(cmake/Port75.cmake) # PORT-75: BannerCarrierUpdate MorphCondition / BannerMorphFX (issue #207; OPENBFME_PORT75_TESTS)
 include(cmake/Port79.cmake) # OPENBFME_PORT79_TESTS (lane PORT-79)
 include(cmake/Port89.cmake) # OPENBFME_PORT89_TESTS (lane PORT-89: Object/SoundCrushing)
@@ -857,6 +857,7 @@ endif()
 if(OPENBFME_BUILD_TESTS)
 include(cmake/AudioFixtures.cmake)
 add_executable(openbfme_tests
+    ${OPENBFME_PORT165_TESTS}
     ${OPENBFME_WIN1_TESTS}
     ${OPENBFME_DEP2_TESTS}
     ${OPENBFME_SMOOTH_TESTS}
@@ -873,7 +874,6 @@ add_executable(openbfme_tests
     ${OPENBFME_PORT121_TESTS}
     ${OPENBFME_PORT132_TESTS}
     ${OPENBFME_PORT115_TESTS}
-    ${OPENBFME_PORT165_TESTS}
     ${OPENBFME_PORT99_TESTS}
     ${OPENBFME_PORT94_TESTS}
     ${OPENBFME_PORT119_TESTS}
