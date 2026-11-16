@@ -218,7 +218,7 @@ def check(names: list[str], do_build: bool) -> None:
     up = git("rev-parse", UP)
     for b in branches:
         sha = git("rev-parse", f"origin/{b}")
-        if not names and seen.get(b, {}).get("sha") == sha and seen[b].get("up") == up and seen[b]["verdict"] != "text-ok":
+        if not names and seen.get(b, {}).get("sha") == sha and seen[b].get("up") == up and seen[b].get("built") == do_build:
             continue  # the loop (sandbox 4): neither the branch nor upstream moved since its last full check
         print(f"== {b}", flush=True)
         try:
@@ -230,12 +230,12 @@ def check(names: list[str], do_build: bool) -> None:
             elif do_build:
                 problems = build_checks(b, facts)
                 verdict = "fail" if problems else "ready"
-            else:
-                verdict = "text-ok"
+            else:  # owner 2026-11-16: no build here, upstream's CI builds and runs the PR
+                verdict = "ready"
         except Exception as e:  # one branch's failure does not stop the others
             git("checkout", "-q", "-f", "--detach", UP, check=False)
             problems, facts, verdict = [f"error: {e}"[:300]], {"files": [], "logic": [], "tests": [], "subjects": [], "visual": False, "behind": 0}, "fail"
-        results[b] = {"verdict": verdict, "problems": problems, **facts, "sha": sha, "up": up}
+        results[b] = {"verdict": verdict, "problems": problems, **facts, "sha": sha, "up": up, "built": do_build}
         print(f"   {verdict}: " + ("; ".join(problems) or "ok"), flush=True)
     old = json.loads((OUT / "report.json").read_text(encoding="utf-8")) if (OUT / "report.json").exists() else {}
     old.update(results)
@@ -388,7 +388,7 @@ if __name__ == "__main__":
         sys.exit(2)
     args = [a for a in sys.argv[2:] if not a.startswith("--")]
     if sys.argv[1] == "check":
-        check(args, "--no-build" not in sys.argv)
+        check(args, "--build" in sys.argv)  # owner 2026-11-16: no build by default, upstream's CI builds the PR
     elif sys.argv[1] == "rebase":
         rebase(args)
     else:
