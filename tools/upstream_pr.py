@@ -177,7 +177,12 @@ def build_checks(branch: str, facts: dict) -> list[str]:
         ok, err = build()
         if ok:
             without = run_tests(facts["tests"])
-            problems += [f'"{t}" passes without the change (upstream drops such tests)' for t, st in without.items() if st == "pass"]
+            guards = [t for t, st in without.items() if st == "pass"]
+            if guards and len(guards) == len(without):
+                problems.append("every new test passes without the change (upstream wants one that fails)")
+            elif guards:  # guard tests next to a failing one: upstream may drop them, the PR still stands
+                facts["guards"] = guards
+                print(f"   guard tests (pass without the change, upstream may drop them): {', '.join(guards)}", flush=True)
         else:  # the test calls the change's new API: it cannot pass without it, which is what upstream asks
             print("   (the tests do not build without the change: they need its API)", flush=True)
     git("checkout", "-q", "-f", "--detach", "upstream/main")
