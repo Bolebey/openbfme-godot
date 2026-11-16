@@ -502,6 +502,7 @@ include(cmake/Port194.cmake)    # PORT-194: the crowd response of the unit voice
 include(cmake/Port209.cmake)    # PORT-209: the horde's banner carrier at build complete and the combine's banner tie-break (issue #491; OPENBFME_PORT209_TESTS)
 include(cmake/Port202.cmake)    # PORT-202: the locomotor's wading updater and the disguised climber's reveal (issue #469; OPENBFME_PORT202_TESTS)
 include(cmake/Port204.cmake)    # PORT-204: crush warning path gate and horde +0x170 member list (issue #471; OPENBFME_PORT204_TESTS)
+include(cmake/Port250.cmake) # PORT-250: the SPECIAL_POWER availability arm and its UnitCost gate (fork issue 578; OPENBFME_PORT250_TESTS)
 include(cmake/Port464.cmake)    # PORT-464: the per-frame steering of a summoned helper (issue #464; OPENBFME_PORT464_TESTS)
 include(cmake/Port203.cmake)    # PORT-203: tunnel nemesis, removeFromContain(exposeStealthUnits), TunnelContain ExitInterface, AITNGuard (issue #470; OPENBFME_PORT203_TESTS)
 add_library(openbfme_core STATIC
@@ -1235,6 +1236,7 @@ add_executable(openbfme_tests
     ${OPENBFME_PORT433_TESTS}
     ${OPENBFME_PORT202_TESTS}
     ${OPENBFME_PORT204_TESTS}
+    ${OPENBFME_PORT250_TESTS}
     ${OPENBFME_PORT464_TESTS}
     ${OPENBFME_PORT203_TESTS}
     tests/test_main.cpp
