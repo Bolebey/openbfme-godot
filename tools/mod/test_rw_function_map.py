@@ -179,7 +179,7 @@ def test_module_field_that_can_be_one_line_does_not_eat_object_end():
     grammar = SimpleNamespace(
         classes={'A': {'optional': ('block', {'subfield': ('line', None)})}},
         object={'geometry': ('line', None)})
-    text = ['Behavior = A Arbitrary', 'Optional = value', 'End', 'Geometry = X', 'End']
+    text = ['Behavior = A Arbitrary', 'Optional = value', 'Optional = other', 'End', 'Geometry = X', 'End']
     events, end = parse_module_events([(line, str(i)) for i, line in enumerate(text)], 0, grammar)
     assert end == len(text)
     assert [(e.name, e.tag) for e in events] == [('A', 'Arbitrary')]

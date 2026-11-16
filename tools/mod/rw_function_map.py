@@ -384,7 +384,9 @@ def parse_module_events(lines: list[tuple[str, str]], start: int, grammar):
                     i += 1
                 if i == len(lines):
                     raise ValueError(f'{source}: unclosed module script')
-            elif kind and kind[0] == 'block' and fa.opens_block(lines, i + 1, kind[1], node, grammar.classes):
+            elif (kind and kind[0] == 'block' and i + 1 < len(lines)
+                  and fa.field_key(lines[i + 1][0])[0].lower() not in {'end', key.lower()}
+                  and fa.opens_block(lines, i + 1, kind[1], node, grammar.classes)):
                 end = fa.block_end(lines, i + 1, kind[1], grammar.classes)
                 if end < 0:
                     raise ValueError(f'{source}: unclosed nested module block')
