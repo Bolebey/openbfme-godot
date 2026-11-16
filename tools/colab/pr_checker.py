@@ -44,6 +44,9 @@ DOC_UNION = {"docs/STOPS.md", "docs/ennorath/NIGHT_WATCH.md", "docs/ennorath/PRO
              "docs/ennorath/PR_CANDIDATES.md", "docs/ennorath/MODULE_GAPS.md", "docs/ennorath/TEST_BASELINE.md", "engine/CMakeLists.txt"}
 
 
+SANDBOX = (Path("/content/sandbox_id").read_text().strip() if Path("/content/sandbox_id").exists() else "?")
+
+
 def sh(cmd: list[str] | str, cwd: Path = WT, timeout: int | None = None, env: dict | None = None) -> subprocess.CompletedProcess:
     return subprocess.run(cmd, cwd=cwd, shell=isinstance(cmd, str), capture_output=True, text=True,
                           encoding="utf-8", errors="replace", timeout=timeout, env=env)
@@ -82,7 +85,8 @@ def ensure_tree() -> None:
 
 
 def build() -> tuple[bool, str]:
-    done = sh(["bash", "tools/colab/build_tests.sh"], timeout=3 * 3600)
+    # the compiler cache on the sandbox's disk, Drive's read-only behind it (build_tests.sh, OPENBFME_CCACHE_DIR)
+    done = sh(["bash", "tools/colab/build_tests.sh"], timeout=3 * 3600, env=dict(os.environ, OPENBFME_CCACHE_DIR="/content/ccache-prcheck"))
     log = done.stdout + done.stderr
     (HOME / "build.log").write_text(log)
     if done.returncode:
@@ -118,7 +122,7 @@ def agent_env() -> dict:
 
 
 def run_set(patterns: list[str]) -> dict[str, tuple[str, str]]:
-    workers = max(1, (os.cpu_count() or 2) // 2)
+    workers = max(1, os.cpu_count() or 2)  # one process per core: each test is single-threaded, memory allows it (3-5 GB each, 50 GB)
     with cf.ThreadPoolExecutor(workers) as pool:
         return {tc: (st, err) for tc, st, err in pool.map(run_test, patterns)}
 
@@ -159,7 +163,7 @@ def check_pr(pr: dict, state: dict, main_sha: str, open_prs: list[dict], comment
     base = main_baseline(state, main_sha)
     sh(["git", "fetch", "-q", "origin", f"+pull/{n}/head:refs/prcheck/{n}"]).check_returncode()
     sh(["git", "checkout", "-q", "-f", "--detach", main_sha]).check_returncode()
-    lines = [f"<!-- prcheck {sha} -->", f"**Проверка PR #{n}** на `main` {main_sha[:8]}, голова {sha[:8]} (песочница 3, `tools/colab/pr_checker.py`)", ""]
+    lines = [f"<!-- prcheck {sha} -->", f"**Проверка PR #{n}** на `main` {main_sha[:8]}, голова {sha[:8]} (песочница {SANDBOX}, `tools/colab/pr_checker.py`)", ""]
     merge = sh(["git", "-c", "user.name=prcheck", "-c", "user.email=prcheck@localhost", "merge", "--no-edit", "--no-verify", "-q", f"refs/prcheck/{n}"])
     if merge.returncode:
         files = sh(["git", "diff", "--name-only", "--diff-filter=U"]).stdout.split()
@@ -190,6 +194,14 @@ def check_pr(pr: dict, state: dict, main_sha: str, open_prs: list[dict], comment
     shared = [f for f in changed if f in SHARED]
     if shared:
         lines.append(f"⚠️ Правит общие таблицы {', '.join(f'`{f}`' for f in shared)}: новые строки — файлами `docs/stops.d/S-<id>.md` и `docs/ennorath/night_watch.d/…`, README не трогать (PROCESS 5.7). Допустимо только закрыть или сузить существующий стоп.")
+    # a new matrix may not hide buttons that passed on main (tools/matrix_run.py diff, owner 2026-11-16 after PR 587)
+    if "docs/ennorath/MATRIX.tsv" in changed and (WT / "tools/matrix_run.py").exists():
+        md = sh([sys.executable, "tools/matrix_run.py", "diff", "--against", main_sha])
+        out = (md.stdout + md.stderr).strip()
+        head = "✅ Матрица: ни одна кнопка, проходившая на main, не ухудшилась без объяснения" if md.returncode == 0 else \
+            "❌ **Матрица ухудшает кнопки, проходившие на main**, без объяснения в `docs/ennorath/matrix_explain.d/<задача>.md` " \
+            "(строка `` `<объект> <кнопка>`: почему ``; ошибка теста — чинить тест, а не объяснять)"
+        lines += [head, "```", out[:3500], "```"]
     ok, err = build()
     if not ok:
         lines += ["❌ **Не собирается**:", "```", err[:3000], "```"]
