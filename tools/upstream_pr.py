@@ -194,8 +194,24 @@ def build_checks(branch: str, facts: dict) -> list[str]:
     return problems
 
 
+DRIVE_UP = Path("/content/drive/MyDrive/openbfme-runs/upstream")
+
+
+def publish_prs() -> None:
+    """On a Colab sandbox: the owner's upstream PRs to Drive (openbfme-upstream-prs.json), the dashboard's fallback when its own GitHub token
+    may not read Open-BFME (403, 2026-11-16)."""
+    if not DRIVE_UP.parent.is_dir():
+        return
+    r = gh(["pr", "list", "-R", UPSTREAM, "--author", FORK_OWNER, "--state", "all", "--limit", "300", "--json",
+            "number,title,url,headRefName,state,isDraft,createdAt,updatedAt,closedAt,mergedAt"], check=False)
+    if r.returncode == 0:
+        DRIVE_UP.mkdir(exist_ok=True)
+        (DRIVE_UP / "openbfme-upstream-prs.json").write_text(r.stdout, encoding="utf-8")
+
+
 def check(names: list[str], do_build: bool) -> None:
     OUT.mkdir(parents=True, exist_ok=True)
+    publish_prs()
     branches = names or ready_branches()
     results = {}
     seen = json.loads((OUT / "report.json").read_text(encoding="utf-8")) if (OUT / "report.json").exists() else {}
