@@ -3,8 +3,9 @@
 Runs on the owner's PC, in the persistent tree workspace/wt/upstream-pr (detached upstream/main, built once with its own build.bat, then
 incremental): the Colab token cannot open PRs in Open-BFME (403), the PC's gh can.
 
-    python -I tools/upstream_pr.py check [branch ...]   # every up/* branch without an upstream PR, or the named ones; writes the report
-    python -I tools/upstream_pr.py check --no-build     # the text and merge checks only (seconds)
+    python -I tools/upstream_pr.py check [branch ...]   # every up/* branch without an upstream PR, or the named ones: text and merge checks
+                                                        # (owner 2026-11-16: no build, upstream's CI builds the PR); writes the report
+    python -I tools/upstream_pr.py check --build        # also builds each branch on upstream/main and runs its tests with and without it
     python -I tools/upstream_pr.py rebase [branch ...]  # squashes branches onto upstream/main, resolving list-file conflicts and "#N"
     python -I tools/upstream_pr.py open up/port-217 ... # opens the PRs of branches that passed the last check (never all at once)
 
@@ -360,9 +361,12 @@ def rebase(names: list[str]) -> None:
 def pr_body(b: str, r: dict) -> str:
     log = git("log", "--reverse", "--format=%s%n%n%b", f"{UP}..origin/{b}")
     log = re.sub(r"\n*Co-Authored-By:.*", "", log).strip()
-    tests = "\n".join(f"- `{t}`: fails without the change, passes with it" for t in r["tests"])
-    return (f"## What this changes\n\n{log}\n\n## How it was checked\n\n{tests}\n\n"
-            "Built and run on upstream/main (Windows MSVC). Pins: not re-measured here (the merge queue re-measures them).\n\n"
+    tests = "\n".join(f"- `{t}`" for t in r["tests"])
+    how = ("Built and run on upstream/main: each test fails without the change and passes with it." if r.get("built") else
+           "The author ran each test without the change (fails) and with it (passes); the branch is rebased on the current upstream/main "
+           "and left to CI to build.")
+    return (f"## What this changes\n\n{log}\n\n## How it was checked\n\n{tests}\n\n{how} Pins: not re-measured here (the merge queue "
+            "re-measures them).\n\n"
             "## Checklist\n\n- [x] one change\n- [x] a test that fails without it\n- [x] no fork-only files\n")
 
 
