@@ -53,3 +53,15 @@ is not by itself proof that the bit affects the result. Complete tracing of
 RW 0xAD2CE0, RW 0x8E047D / 0x8E0354 and their geometry callees is still needed,
 including indirect access and other users of the module data. Do not classify
 the field as unused merely because the main function does not load +0x194.
+
+Further: RW 0xC60650 slot 0 is RW 0x887013, an accessor returning the
+GeometryInfo at data +0x190, so callers of this interface outside the class
+must be considered. RW 0x8E047D copies it via RW 0x4923F0 and the sampler's
+RW 0x8E0354 uses its shape and bounds; RW 0xAD22C0 checks the shape list and
+shape type. RW 0x66139C calls collision RW 0xAD2CE0. DONOR BFME2 0x483F19
+(`Code/GameEngine/Source/Common/Rva00483C35Rva00483F19.cpp`) passes the
+geometry by reference to the collision filter and by copy to the sampler;
+`Code/GameEngine/Source/GameLogic/Map/TerrainLogic.cpp` shows that other
+GeometryInfo consumers can inspect isSmall. It remains necessary to trace
+actual callers of slot 0, not assume the field is unused globally from the
+local collision and sampler paths.
