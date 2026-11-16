@@ -16,6 +16,7 @@
 #include "GameEngineDevice/W3DDevice/GameClient/Drawable/Draw/W3DModelDrawVariants.h"
 #include "GameEngineDevice/W3DDevice/GameClient/Drawable/Draw/W3DSailModelDraw.h"
 #include "GameEngineDevice/W3DDevice/GameClient/Drawable/Draw/W3DLightDraw.h"
+#include "GameEngineDevice/W3DDevice/GameClient/Drawable/Draw/W3DTornadoDraw.h"
 #include "GameEngineDevice/W3DDevice/GameClient/Drawable/Draw/W3DModelDrawBones.h"
 #include "GameEngineDevice/W3DDevice/GameClient/Drawable/Draw/W3DQuadrupedDraw.h"
 #include "Common/ModelState.h"
@@ -110,6 +111,10 @@ void Drawable::reactToTransformChange(const Coord3D *oldPos, float oldAngle)
 		{
 			e.lightDraw->reactToTransformChange(oldPos, oldAngle);
 		}
+		if (e.tornadoDraw)
+		{
+			e.tornadoDraw->reactToTransformChange(oldPos, oldAngle);
+		}
 	}
 }
 
@@ -118,6 +123,13 @@ void Drawable::friend_boundToObject()
 	for (std::unique_ptr<DrawableModule> &m : m_clientModules)
 	{
 		m->onDrawableBoundToObject();
+	}
+	for (DrawEntry &e : m_entries)
+	{
+		if (e.tornadoDraw)
+		{
+			e.tornadoDraw->onDrawableBoundToObject();
+		}
 	}
 }
 
@@ -287,6 +299,16 @@ void Drawable::addEntry(DrawServices &services, const ThingTemplate::Nugget &nug
 				e.animated = true;
 			}
 		}
+		// Local 73 (P-146): W3DTornadoDraw (RW 0x004D102E / DONOR BFME2 0x004D181D)
+		if (ci->kind == W3D_DRAWKIND_NOT_DRAWN && (nugget.name == "W3DTornadoDraw" || dynamic_cast<const W3DTornadoDrawModuleData *>(nugget.data.get()) != nullptr))
+		{
+			const auto *td = dynamic_cast<const W3DTornadoDrawModuleData *>(nugget.data.get());
+			if (td)
+			{
+				e.tornadoDraw = std::make_unique<W3DTornadoDraw>(this, td);
+				e.animated = true;
+			}
+		}
 	}
 	m_entries.push_back(std::move(e));
 }
@@ -295,7 +317,7 @@ bool Drawable::hasAnimatedEntry() const
 {
 	for (const DrawEntry &e : m_entries)
 	{
-		if (e.animated && (e.draw || e.lightDraw))
+		if (e.animated && (e.draw || e.lightDraw || e.tornadoDraw))
 		{
 			return true;
 		}

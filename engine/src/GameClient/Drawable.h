@@ -58,6 +58,7 @@ class AnimationSoundModuleManager;
 class ModelConditionAudioLoopClientBehavior;
 class LightPulsePool;
 class W3DLightDraw;
+class W3DTornadoDraw;
 
 // LOCAL-3: TintEnvelope (ZH Include/GameClient/TintEnvelope.h, RW 0x671B20 .. 0x674AD7 / BFME2 0x671800 .. 0x6747B1, both editions identical).
 // Steps a drawable's additive tint or selection flash through attack, sustain and decay at the client frame rate, with optional sine modulation by the
@@ -168,6 +169,7 @@ struct DrawEntry
 	std::string notDrawnReason;       ///< why a non-model entry draws nothing
 	std::unique_ptr<W3DScriptedModelDraw> draw; ///< MODEL kind
 	std::unique_ptr<W3DLightDraw> lightDraw;    ///< lane LOCAL-28: W3DLightDraw dynamic light module
+	std::unique_ptr<W3DTornadoDraw> tornadoDraw; ///< Local 73 (P-146): W3DTornadoDraw spiral ground decals (RW 0x4D102E)
 	std::unique_ptr<W3DSupplyDraw> supply;     ///< PORT-77: supply-pile variant status alongside the shared model runtime
 	bool animated = false;            ///< advance() would change the draw (W3DScriptedModelDraw::needsAdvance, set at creation and on every flag change, never lowered by an advance: the pose after a blend's promotion is still pushed): advance() each render frame
 	bool missingModel = false;        ///< the model is not in the mounted archives (a retail data defect): not drawn
