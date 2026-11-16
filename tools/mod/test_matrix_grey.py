@@ -145,7 +145,7 @@ def test_markdown_report_counts_and_branches_without_mod_values(tmp_path):
     assert '## RW 0x942733 against ControlBar::evaluate' in text
     assert '| RW | what it decides | the port | verdict | evidence |' in text
     assert '0x942826' in text and 'PORTED HERE (PORT-220)' in text and '| same | dis this session |' in text
-    assert '0x9427EB' in text and 'S-7386' in text and 'missing' in text
+    assert '0x9427EB' in text and 'S-7426' in text and 'missing' in text
     assert text.index('0x9427BD') < text.index('0x942826') < text.index('0x942833')
     assert 'PR #518' in text and 'python tools/mod/matrix_grey.py' in text
     # the committable half carries no fixture name or value

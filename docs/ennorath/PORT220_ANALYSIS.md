@@ -110,3 +110,30 @@ special-power fields, `ToggleMountedSpecialAbilityUpdate`, the `TOGGLE_WEAPONSET
 the selected object only; animation `ModelConditionState` blocks are readers and are not
 reported. On Ennorath INI 1.9.8.3 that identifies a candidate setter for 4 of the 49 model
 rows; the rest stay `-`, and a `-` never means the button is ungated.
+
+## What this session changed in the engine
+
+`ControlBar::evaluate` now carries the Object +0x45B gate at retail's position
+(commit `c58bff1`): after the script availability call (RW 0x942490) and before
+the experience tracker's gate (RW 0x942833), a set flag returns
+`ButtonState::Restricted` (RW 0x9438C8's availability 0) for every command. The
+flag itself is new simulation state — `Object::markSingleUseCommandUsed`
+(RW 0x940397) / `Object::hasSingleUseCommandBeenUsed` (RW 0x9422C2) — saved by
+`Object::xfer` version 6 and hashed by `crcOmittingModules` when set, so an
+object that never pressed such a button keeps both its snapshot layout and its
+hash. `ControlBar::pressButton` writes it where processCommandUI does
+(RW 0x94066B): the button holds Options bit 17 (`COMMAND_OPTION_SINGLE_USE_COMMAND`,
+the name RW 0xDA4C88's table gives index 17) and the bar's last evaluation was
+Enabled or Active, retail's availability results 1 and 2. Retail's results 6 and
+7 leave through their own paths and write nothing; the button's +0xF8 that
+RW 0x940656 clears is client state this port does not carry (S-290).
+
+The ON_GROUND_ONLY half stays unimplemented and is stop **S-7426**
+(`docs/stops.d/S-7426.md`): AI +0x1F0 / +0x1FC / +0x140 and the path queries
+RW 0x5E2DF4 / RW 0x661E50 have no counterpart in `AIUpdate.h`, and reading
+RW 0x66288A alone does not prove what its fields mean.
+
+Ennorath INI 1.9.8.3 contains no `SINGLE_USE_COMMAND` button, so none of the
+mod's 587 `DISABLED` rows is explained by this gate; it is one of the common
+branches the issue asks `evaluate` to be compared against, and the census rows
+it does explain are retail's.
