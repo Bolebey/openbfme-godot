@@ -210,11 +210,63 @@ def publish_prs() -> None:
         (DRIVE_UP / "openbfme-upstream-prs.json").write_text(r.stdout, encoding="utf-8")
 
 
+def watch_upstream(results: dict) -> None:
+    """The owner's open upstream PRs (owner 2026-11-16): when a maintainer wrote (a comment or a review by someone else) or upstream's CI
+    turned red since the last look, the branch gets the full check with a build here (build_checks: the tests with and without the change on
+    upstream/main), and the report keeps what they wrote and what the build showed (verdict "answered"; the dashboard shows it at the PR)."""
+    r = gh(["pr", "list", "-R", UPSTREAM, "--author", FORK_OWNER, "--state", "open", "--limit", "100", "--json",
+            "number,url,headRefName,comments,reviews,statusCheckRollup"], check=False)
+    if r.returncode:
+        print(f"upstream PRs: {r.stderr.strip()[:200]}", flush=True)
+        return
+    seen_path = OUT / "upstream_seen.json"
+    first = not seen_path.exists()  # the first look only records the answers already there (no build for them)
+    seen = json.loads(seen_path.read_text(encoding="utf-8")) if seen_path.exists() else {}
+    for pr in json.loads(r.stdout):
+        key = str(pr["number"])
+        notes = [(c.get("createdAt", ""), (c.get("author") or {}).get("login", "?"), "comment", c.get("body", ""))
+                 for c in pr.get("comments") or []]
+        notes += [(v.get("submittedAt", ""), (v.get("author") or {}).get("login", "?"), (v.get("state") or "review").lower(), v.get("body", ""))
+                  for v in pr.get("reviews") or []]
+        notes = sorted(n for n in notes if n[1] != FORK_OWNER and not n[1].endswith("[bot]"))
+        red = sorted({c.get("name") or c.get("context") or "?" for c in pr.get("statusCheckRollup") or []
+                      if (c.get("conclusion") or c.get("state") or "").upper() in ("FAILURE", "ERROR", "TIMED_OUT", "CANCELLED")})
+        last = notes[-1][0] if notes else ""
+        was = seen.get(key, {})
+        if last <= was.get("last", "") and red == was.get("red", []):
+            continue
+        seen[key] = {"last": last, "red": red}
+        b = pr["headRefName"]
+        reply = [f"{who} ({kind}, {when[:16]}): {' '.join(body.split())[:300]}" for when, who, kind, body in notes if when > was.get("last", "")]
+        if red and red != was.get("red", []):
+            reply.append("upstream CI red: " + ", ".join(red))
+        print(f"== {b}: upstream answered on PR {pr['number']}", flush=True)
+        if first:
+            results[b] = {"verdict": "answered", "problems": [], "files": [], "logic": [], "tests": [], "subjects": [], "visual": False,
+                          "behind": 0, "sha": "", "up": "", "built": False, "pr": pr["number"], "pr_url": pr["url"], "reply": reply,
+                          "build_ok": None}
+            continue
+        try:
+            git("fetch", "-q", "origin", cwd=REPO)
+            problems, facts = text_checks(b)
+            problems = problems + build_checks(b, facts) if not facts["visual"] else problems
+        except Exception as e:
+            git("checkout", "-q", "-f", "--detach", UP, check=False)
+            problems, facts = [f"error: {e}"[:300]], {"files": [], "logic": [], "tests": [], "subjects": [], "visual": False, "behind": 0}
+        results[b] = {"verdict": "answered", "problems": problems, **facts, "sha": git("rev-parse", f"origin/{b}", check=False),
+                      "up": git("rev-parse", UP), "built": True, "pr": pr["number"], "pr_url": pr["url"], "reply": reply,
+                      "build_ok": not problems}
+        print(f"   build check: " + ("; ".join(problems) or "ok"), flush=True)
+    seen_path.write_text(json.dumps(seen, indent=1), encoding="utf-8")
+
+
 def check(names: list[str], do_build: bool) -> None:
     OUT.mkdir(parents=True, exist_ok=True)
     publish_prs()
     branches = names or ready_branches()
     results = {}
+    if not names:
+        watch_upstream(results)
     seen = json.loads((OUT / "report.json").read_text(encoding="utf-8")) if (OUT / "report.json").exists() else {}
     up = git("rev-parse", UP)
     for b in branches:
