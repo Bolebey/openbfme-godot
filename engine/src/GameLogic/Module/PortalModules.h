@@ -130,7 +130,7 @@ public:
 	bool isEndPortalAboveWall(Coord3D *out) override { return static_cast<const DynamicPortalBehaviour *>(this)->isEndPortalAboveWall(out); }
 	void createPortalWaypoints() override { createWaypoints(); }
 	void clearPortalWaypoints() override { clearPortals(); }
-	// RW 0x863D77: normalize the transformed local X axis by max(abs(x), abs(y)), take its 3D length, scale all TopAttackPos components, then transform (RW 0x70BFD1).
+	// RW 0x863D77: normalize the transformed local X axis by max(abs(x), abs(y)), take its 3D length, scale TopAttackPos X/Y only (Z is unchanged), then transform (RW 0x70BFD1).
 	Coord3D topAttackPosition() override;
 	const DynamicPortalBehaviourModuleData *portalData() const { return m_data; }
 	bool created() const { return m_created; }

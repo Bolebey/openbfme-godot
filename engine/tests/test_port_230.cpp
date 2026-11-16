@@ -60,7 +60,7 @@ struct Portal230World : combattest::CombatWorld
 } // namespace
 
 // RW 0x863D77 divides the transformed local X axis by max(abs(x), abs(y)), takes its 3D length (RW 0x403111),
-// scales X, Y and Z of TopAttackPos by that length, then applies RW 0x70BFD1's object transform.
+// scales only X and Y of TopAttackPos by that length, leaves Z unchanged, then applies RW 0x70BFD1's object transform.
 TEST_CASE("PORT-230 TopAttackPos: a tilted portal scales Z with the full 3D axis length (RW 0x863D77)")
 {
 	Portal230World world;
@@ -73,9 +73,9 @@ TEST_CASE("PORT-230 TopAttackPos: a tilted portal scales Z with the full 3D axis
 	object->teleportTransform(&origin, basis);
 
 	const Coord3D result = DynamicPortalBehaviour::of(*object)->topAttackPosition();
-	CHECK(result.x == doctest::Approx(2.3431458f)); // tolerance: float32 rounding through RW’s sequential transform multiply/adds.
-	CHECK(result.y == doctest::Approx(23.656854f)); // tolerance: float32 rounding through RW’s sequential transform multiply/adds.
-	CHECK(result.z == doctest::Approx(41.31371f)); // tolerance: float32 rounding through RW’s sequential transform multiply/adds.
+	CHECK(result.x == doctest::Approx(4.8431458f)); // tolerance: float32 rounding through RW’s sequential transform multiply/adds.
+	CHECK(result.y == doctest::Approx(26.156854f)); // tolerance: float32 rounding through RW’s sequential transform multiply/adds.
+	CHECK(result.z == doctest::Approx(37.778175f)); // tolerance: float32 rounding through RW’s sequential transform multiply/adds.
 }
 
 // Neighboring upright/yaw-only behavior: with TopAttackPos.Z zero, the planar result is unchanged.
