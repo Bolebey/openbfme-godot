@@ -72,11 +72,8 @@ Object Port136Eagle
   PassengerBonePrefix = PassengerBone:B_Passenger KindOf:GRAB_AND_DROP
   DamagePercentToUnits = 0%
  End
- Behavior = LifetimeUpdate ModuleTag_Life
-  MinLifetime = 120000
-  MaxLifetime = 120000
- End
 )ini";
+		// probe N: a LifetimeUpdate with MinLifetime/MaxLifetime 120000 kills the eagle at ~500 frames, so the fixture leaves it out (a guard test must run long)
 	}
 	s += R"ini( LocomotorSet
   Locomotor = Port136BirdLoco
@@ -703,65 +700,6 @@ TEST_CASE("PORT-136 probe M: what kills the eagle at ~590 frames? extras on and 
 			trace += std::to_string((int)w.health(bird)) + "/" + std::to_string(ai->currentStateId()) + " ";
 		}
 		MESSAGE("M extras=" << extras << " hp/state every 100 frames: " << trace);
-	}
-	CHECK(false);
-}
-
-TEST_CASE("PORT-136 probe N: which extra module kills the guarding eagle?")
-{
-	struct Variant
-	{
-		const char *name;
-		bool stances;
-		bool contain;
-		bool life;
-	};
-	const Variant variants[] = { { "stances+contain+life", true, true, true }, { "stances only", true, false, false }, { "contain+life only", false, true, true }, { "stances+life", true, false, true } };
-	for (const Variant &v : variants)
-	{
-		std::string ini = eagleIni(true);
-		if (!v.stances)
-		{
-			const std::string block = " Behavior = StancesBehavior ModuleTag_Stances\n  StanceTemplate = Port136Hero\n End\n";
-			REQUIRE(ini.find(block) != std::string::npos);
-			ini.erase(ini.find(block), block.size());
-		}
-		if (!v.contain)
-		{
-			const std::string block = " Behavior = TransportContain ModuleTag_Contain\n  Slots = 1\n  PassengerBonePrefix = PassengerBone:B_Passenger KindOf:GRAB_AND_DROP\n  DamagePercentToUnits = 0%\n End\n";
-			REQUIRE(ini.find(block) != std::string::npos);
-			ini.erase(ini.find(block), block.size());
-		}
-		if (!v.life)
-		{
-			const std::string block = " Behavior = LifetimeUpdate ModuleTag_Life\n  MinLifetime = 120000\n  MaxLifetime = 120000\n End\n";
-			REQUIRE(ini.find(block) != std::string::npos);
-			ini.erase(ini.find(block), block.size());
-		}
-		combattest::CombatWorld w;
-		StanceTemplateStore store;
-		store.registerBlock(w.w.fx.env.blocks);
-		StanceTemplateStore *const saved = TheStanceTemplateStore;
-		TheStanceTemplateStore = &store;
-		struct Restore
-		{
-			StanceTemplateStore *pv;
-			~Restore() { TheStanceTemplateStore = pv; }
-		} restore{saved};
-		const std::string error = w.w.load(ini, INI_LOAD_OVERWRITE, "port136-n.ini");
-		REQUIRE_MESSAGE(error.empty(), error);
-		w.logic->partition().setRegion(0.0f, 0.0f, 1000.0f, 1000.0f);
-		Object *bird = w.unit("Port136Eagle", 'A', 200.0f, 200.0f);
-		REQUIRE(bird);
-		auto *ai = dynamic_cast<GiantBirdAIUpdate *>(bird->getAIUpdateInterface());
-		REQUIRE(ai);
-		std::string trace;
-		for (int i = 0; i < 8; ++i)
-		{
-			w.frames(100);
-			trace += std::to_string((int)w.health(bird)) + "/" + std::to_string(ai->currentStateId()) + " ";
-		}
-		MESSAGE("N " << v.name << ": " << trace);
 	}
 	CHECK(false);
 }
