@@ -11,8 +11,14 @@
 //     + 0x38 / + 0x3C / + 0x40) above MaxDistance^2 (0x896679, jbe) answers no (0x89667E); within it the base answers (0x896682).
 //   * the place reaches the slot from the location requirements RW 0x897E01: 0x897E14 takes the requirements' first argument, 0x897E18 allows it
 //     to be null, 0x897E7F pushes it into `call [eax + 0x20]` at 0x897E82. The object form RW 0x82DAAB passes none, so the null branch is real.
-//   * the number in the test INI is the mod's own shape: Shelob's tunnel and Karsh's blink carry MaxDistance 1000 / 500 (field audit v13). The
-//     test writes its own smaller value so the map's edge (ActionManager RW 0x82D56A) is not what answers.
+//   * the numbers are the mod's own shape: every Ennorath power of a TeleportSpecialAbilityUpdate (`SpecialAbilityWildShelobTunnel`,
+//     `SpecialAbilityKarshBlink`, the blink and reposition powers) takes `Enum = SPECIAL_BALROG_WINGS`; the mod's `MaxDistance` values are
+//     WILD_SHELOB_TUNNEL_DISTANCE and 1000 / 500. The test writes its own smaller value so the map's edge (ActionManager RW 0x82D56A) or the
+//     cursor radius is not what answers.
+//   * `SPECIAL_BALROG_WINGS` is type 0x41 (name list RW 0xDA5C90), whose per-type location test RW 0x82E252 is not ported (stop S-1874): the
+//     ActionManager refuses that type before any module is asked, in retail and in the port alike today. The end-to-end cases therefore use a
+//     type the port answers true for (0x34, `SPECIAL_ROUSING_SPEECH`, the FINAL_YES row of RW 0x82ED8E) so that the module is what decides, and
+//     the mod's own type is exercised through the interface method the requirements call.
 
 #include "doctest.h"
 #include "CombatTestUtil.h"
@@ -29,12 +35,12 @@
 
 namespace
 {
-// CombatTestUtil's CombatWorld plus the special power stores and the two module sets these abilities need.
+// CombatTestUtil's CombatWorld plus the special power store and the two module sets these abilities need.
 struct Port247World : combattest::CombatWorld
 {
 	SpecialPowerStore powers;
 	SpecialPowerStore *savedPowers = TheSpecialPowerStore;
-	explicit Port247World(const char *objects) : combattest::CombatWorld(std::string(objects).c_str())
+	explicit Port247World(const char *objects) : combattest::CombatWorld()
 	{
 		TheSpecialPowerStore = &powers;
 		w.fx.env.blocks.registerBlock("SpecialPower", [](INI *ini) { SpecialPowerStore::parseSpecialPowerDefinitionGlobal(ini); });
@@ -47,80 +53,82 @@ struct Port247World : combattest::CombatWorld
 	~Port247World() { TheSpecialPowerStore = savedPowers; }
 };
 
-// A hero shaped like the mod's teleporting heroes (Shelob, Karsh): a body, an AI, the power and the ability that drives it.
-#define PORT247_HERO(name, abilityLines, powerLines)                                                                                             \
+// A hero shaped like the mod's teleporting heroes (Shelob, Karsh, the drakes): a body, an AI, the power and the ability that drives it.
+#define PORT247_HERO(name, power, abilityLines)                                                                                                  \
 	"Object " name "\n"                                                                                                                         \
 	" KindOf = INFANTRY SELECTABLE HERO\n"                                                                                                      \
 	" Geometry = CYLINDER\n GeometryMajorRadius = 8\n GeometryMinorRadius = 8\n GeometryHeight = 20\n"                                          \
 	" Body = ActiveBody BodyTag\n  MaxHealth = 100\n End\n"                                                                                     \
 	" Behavior = AIUpdateInterface AiTag\n End\n"                                                                                               \
-	" Behavior = SpecialPowerModule PowerTag\n  SpecialPowerTemplate = SpecialAbilityTestTunnel\n End\n"                                        \
+	" Behavior = SpecialPowerModule PowerTag\n  SpecialPowerTemplate = " power "\n End\n"                                                       \
 	" Behavior = TeleportSpecialAbilityUpdate TunnelTag\n"                                                                                      \
-	"  SpecialPowerTemplate = SpecialAbilityTestTunnel\n"                                                                                       \
-	"  UnpackTime = 400\n  PackTime = 400\n  ApproachRequiresLOS = No\n  BusyForDuration = 1800\n" abilityLines " End\n" powerLines "End\n"
+	"  SpecialPowerTemplate = " power "\n"                                                                                                     \
+	"  UnpackTime = 400\n  PackTime = 400\n  ApproachRequiresLOS = No\n  BusyForDuration = 1800\n" abilityLines " End\nEnd\n"
 
 const char kPort247[] =
 	"SpecialPower SpecialAbilityTestTunnel\n  Enum = SPECIAL_BALROG_WINGS\n  ReloadTime = 1000\nEnd\n"
-	PORT247_HERO("TunnelHero", "  MaxDistance = 200\n", "")
-	PORT247_HERO("NoLimitHero", "", "") // no MaxDistance: the data keeps 0 (the constructor RW 0x89870E zeroes + 0xD0 .. + 0xD8, the parse leaves + 0xDC)
-	PORT247_HERO("MountedHero", "  MaxDistance = 200\n", "  RequiredConditions = MOUNTED\n");
+	"SpecialPower SpecialAbilityTestTunnelLocation\n  Enum = SPECIAL_ROUSING_SPEECH\n  ReloadTime = 1000\nEnd\n"
+	PORT247_HERO("TunnelHero", "SpecialAbilityTestTunnel", "  MaxDistance = 200\n")
+	PORT247_HERO("LocHero", "SpecialAbilityTestTunnelLocation", "  MaxDistance = 200\n")
+	PORT247_HERO("NoLimitHero", "SpecialAbilityTestTunnelLocation", "") // no MaxDistance: the parse leaves + 0xDC zero (the data constructor RW 0x89870E zeroes + 0xD0 .. + 0xD8)
+	PORT247_HERO("MountedHero", "SpecialAbilityTestTunnelLocation", "  MaxDistance = 200\n  RequiredConditions = MOUNTED\n");
 
 struct Rig
 {
 	Port247World f;
 	Object *hero = nullptr;
 	TeleportSpecialAbilityUpdate *tp = nullptr;
-	explicit Rig(const char *name) : f(kPort247)
+	const TeleportSpecialAbilityUpdateModuleData *data = nullptr;
+	explicit Rig(const char *name, float x = 300.0f, float y = 300.0f) : f(kPort247)
 	{
-		hero = f.unit(name, 'A', 300.0f, 300.0f);
+		hero = f.unit(name, 'A', x, y);
 		REQUIRE(hero);
-		REQUIRE(hero->getPosition()->x == 300.0f);
 		tp = dynamic_cast<TeleportSpecialAbilityUpdate *>(hero->findModule("TeleportSpecialAbilityUpdate"));
 		REQUIRE(tp);
-	}
-	const SpecialPowerTemplate *power() const
-	{
-		const SpecialPowerTemplate *t = tp->abilityData()->m_specialPowerTemplate;
-		REQUIRE(t);
-		return t;
+		data = dynamic_cast<const TeleportSpecialAbilityUpdateModuleData *>(tp->abilityData());
+		REQUIRE(data);
+		REQUIRE(data->m_specialPowerTemplate);
 	}
 };
 } // namespace
 
-// RW 0x896608: the ability is refused where the place lies further than MaxDistance from the object; a place inside it passes, and so does the
-// base's answer for a null place (0x89660C). Without the override the far place would pass as it does for every other SpecialAbilityUpdate.
-TEST_CASE("PORT-247 teleport: a place beyond MaxDistance is refused, one inside it passes (RW 0x896608)")
+// RW 0x896608: the module refuses a place further than MaxDistance from the object, and answers the base's yes inside it. The far case fails on
+// the module alone, so this holds the reader itself; a null place takes the 0x89660C branch to the base.
+TEST_CASE("PORT-247 teleport: the module refuses a place beyond MaxDistance, one inside it passes (RW 0x896608)")
 {
 	Rig r("TunnelHero");
-	const Coord3D near = { 400.0f, 300.0f, 0.0f }; // 100 from the object, MaxDistance 200
+	CHECK(r.data->m_maxDistance == 200.0f);
+	const Coord3D near = { 400.0f, 300.0f, 0.0f }; // 100 from the object
 	const Coord3D far = { 700.0f, 300.0f, 0.0f };  // 400 from the object
-	CHECK(ActionManager::canDoSpecialPowerAtLocation(*r.hero, near, r.power(), 0u));
-	CHECK_FALSE(ActionManager::canDoSpecialPowerAtLocation(*r.hero, far, r.power(), 0u));
-	// the interface method the location requirements call (RW 0x897E82): the far place answers no (0x89667E), the null place the base's yes
-	CHECK_FALSE(r.tp->allowsSpecialPowerUse(&far));
 	CHECK(r.tp->allowsSpecialPowerUse(&near));
-	CHECK(r.tp->allowsSpecialPowerUse(nullptr));
+	CHECK_FALSE(r.tp->allowsSpecialPowerUse(&far)); // RW 0x89667E
+	CHECK(r.tp->allowsSpecialPowerUse(nullptr));    // RW 0x89660C: no place given, the base's answer
+}
+
+// The place reaches the module through the location requirements RW 0x897E01 (0x897E82 pushes it): a place beyond MaxDistance stops the whole
+// command, one inside it passes. Before the change the far place passed, because the base never reads the place.
+TEST_CASE("PORT-247 teleport: the location requirement cuts the place by MaxDistance (RW 0x897E82 / 0x896608)")
+{
+	Rig r("LocHero");
+	const Coord3D near = { 400.0f, 300.0f, 0.0f };
+	const Coord3D far = { 700.0f, 300.0f, 0.0f };
+	CHECK(ActionManager::canDoSpecialPowerAtLocation(*r.hero, near, r.data->m_specialPowerTemplate, 0u));
+	CHECK_FALSE(ActionManager::canDoSpecialPowerAtLocation(*r.hero, far, r.data->m_specialPowerTemplate, 0u));
 }
 
 // The neighbours the override must not change: with no MaxDistance the data's zero takes the 0x896620 branch back to the base, so the same far
 // place passes; and the base's RequiredConditions (RW 0x851551) still refuse a place inside MaxDistance when the object does not meet them.
 TEST_CASE("PORT-247 teleport: without MaxDistance the far place passes and the base's conditions still rule (RW 0x896620 / 0x851B6E)")
 {
-	Port247World f(kPort247);
-	Object *free = f.unit("NoLimitHero", 'A', 300.0f, 300.0f);
-	Object *mounted = f.unit("MountedHero", 'A', 300.0f, 400.0f);
-	REQUIRE(free);
-	REQUIRE(mounted);
-	auto *freeTp = dynamic_cast<TeleportSpecialAbilityUpdate *>(free->findModule("TeleportSpecialAbilityUpdate"));
-	auto *mountedTp = dynamic_cast<TeleportSpecialAbilityUpdate *>(mounted->findModule("TeleportSpecialAbilityUpdate"));
-	REQUIRE(freeTp);
-	REQUIRE(mountedTp);
+	Rig free("NoLimitHero");
+	CHECK(free.data->m_maxDistance == 0.0f);
 	const Coord3D far = { 700.0f, 300.0f, 0.0f };
-	CHECK(freeTp->abilityData()->m_maxDistance == 0.0f);
-	CHECK(ActionManager::canDoSpecialPowerAtLocation(*free, far, freeTp->abilityData()->m_specialPowerTemplate, 0u));
+	CHECK(free.tp->allowsSpecialPowerUse(&far));
+	CHECK(ActionManager::canDoSpecialPowerAtLocation(*free.hero, far, free.data->m_specialPowerTemplate, 0u));
 	// MOUNTED is a model condition the hero does not have: the base's RW 0x851551 refuses even the place inside MaxDistance
+	Rig mounted("MountedHero", 300.0f, 400.0f);
+	CHECK(mounted.data->m_maxDistance == 200.0f);
 	const Coord3D nearMounted = { 400.0f, 400.0f, 0.0f };
-	CHECK(mountedTp->abilityData()->m_maxDistance == 200.0f);
-	CHECK_FALSE(mountedTp->allowsSpecialPowerUse(&nearMounted));
-	CHECK_FALSE(ActionManager::canDoSpecialPowerAtLocation(*mounted, nearMounted, mountedTp->abilityData()->m_specialPowerTemplate, 0u));
+	CHECK_FALSE(mounted.tp->allowsSpecialPowerUse(&nearMounted));
+	CHECK_FALSE(ActionManager::canDoSpecialPowerAtLocation(*mounted.hero, nearMounted, mounted.data->m_specialPowerTemplate, 0u));
 }

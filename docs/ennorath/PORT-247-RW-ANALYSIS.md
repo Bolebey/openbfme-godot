@@ -135,3 +135,20 @@ RW 0x85DA99/DACA). Регион класса RW 0x85D2FF .. 0x85E100 прочи�
 4. Тесты `PORT-247 …`: телепорт за MaxDistance отвергается, в пределах — разрешается, без поля
    (MaxDistance 0) — разрешается всегда; соседнее поведение (базовый `allowsSpecialPowerUse`,
    условия силы) держится отдельным тестом.
+
+## Почему правку пока не видно в игре (S-1874)
+
+Все телепорты Эннората (`SpecialAbilityWildShelobTunnel`, `SpecialAbilityKarshBlink`, `SpecialAbilitySauronBlink`,
+`SpecialAbilityHeroBlink`, `SpecialAbilityColdDrakeReposition`, `SpecialAbilitySummonedDragonReposition`,
+`SpecialAbilityWyrmReposition`, `SpecialAbilityHaradSpyShadowstep`, `SpecialAbilityMagiebndlung`) объявлены как
+`Enum = SPECIAL_BALROG_WINGS`. Это тип **0x41**: список имён RW 0xDA5C90, строка RW 0xC0… (имя на 65-м месте).
+`ActionManager::canDoSpecialPowerAtLocation` доходит до таблицы концовок `finalTestOf` только после собственного
+теста типа: `case 0x41` (RW 0x82E252) в порте отвечает через `unportedAnswer`, то есть **нет**, — это открытый стоп
+S-1874. Поэтому порт сегодня отказывает любому телепорту в точку и до, и после этой правки, по чужой причине;
+строки `finalTestOf` относят 0x41 к FINAL_CLEAR (RW 0x82E91A), но до неё дело не доходит.
+
+Тесты PORT-247 держат именно мою правку: путь `ActionManager::canDoSpecialPowerAtLocation` → `moduleAllows`
+(RW 0x897E01) → слот 0x20 идёт с типом 0x34 (`SPECIAL_ROUSING_SPEECH`, строка FINAL_YES RW 0x82ED8E), который порт
+отвечает «да», поэтому решает модуль; и отдельно — прямой вызов метода интерфейса с тем же
+`TeleportSpecialAbilityUpdate`, что у мода. После переноса S-1874 проверка владельца (Шелоб / Карш) заработает без
+правок в этой ветке.
