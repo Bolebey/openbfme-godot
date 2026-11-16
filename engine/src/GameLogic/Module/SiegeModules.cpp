@@ -42,7 +42,7 @@ namespace
 const char *const kStopPortal =
 	"[S-4940] siege deploy portal (lanes SIEGE-1 / WALL-2): SiegeDeploySpecialPower asks the ladder's / tower's DynamicPortalBehaviour through "
 	"SiegePortalInterface (RW 0x863EB3 IsEndPortalAboveWall, waypoints RW 0x86404D / 0x8639EF, TopAttackPos RW 0x863D77 / TopAttackRadius RW 0x863D30; PORT-230 "
-	"re-read RW 0x863D77 and ported its max-planar-axis normalization, 3D length and X/Y/Z scaling). INFERENCE: an object with a differently named module that "
+	"re-read RW 0x863D77 and ported its max-planar-axis normalization, 3D length and X/Y-only TopAttackPos scaling; Z remains unchanged). INFERENCE: an object with a differently named module that "
 	"does not implement SiegePortalInterface would keep the deploy in phase 1";
 const char *const kStopSiege =
 	"[S-4942] siege deploy (lane SIEGE-1): ported from RotWK: SiegeDockingBehavior (RW 0x85D216 / 0x85CE65 / 0x85CBC8 / 0x85CA8A / 0x85CD20 / 0x85CCB8), "
