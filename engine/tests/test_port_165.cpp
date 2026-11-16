@@ -497,6 +497,9 @@ TEST_CASE("PORT-165: command-set toggle sends the horde bomb volley through deto
     w.frames(1);
     REQUIRE(horde->getWeapons()->weaponInSlot(2));
     for (Object *member : members) REQUIRE(member->getWeapons()->weaponInSlot(2));
+    const Coord3D hordeStart = *horde->getPosition();
+    std::vector<Coord3D> memberStarts;
+    for (Object *member : members) memberStarts.push_back(*member->getPosition());
 
     Win32BIGFileSystem fs;
     FXPlayback playback(fs, RandomAlgorithm::RotWK_GameDat_LCG);
@@ -529,5 +532,14 @@ TEST_CASE("PORT-165: command-set toggle sends the horde bomb volley through deto
         CHECK(event.detail == "P165ExplosionSound");
     }
     CHECK(w.health(target) < 100.0f); // tolerance: hits depend on projectile scatter and impact order
+    CHECK(horde->getPosition()->x == hordeStart.x);
+    CHECK(horde->getPosition()->y == hordeStart.y);
+    for (size_t i = 0; i < members.size(); ++i)
+    {
+        CHECK(members[i]->getWeapons()->curSlot() == 2);
+        CHECK(members[i]->getWeapons()->stats().shotsFired >= 1); // tolerance: repeated volleys can fire before every bomb lands
+        CHECK(members[i]->getPosition()->x == memberStarts[i].x);
+        CHECK(members[i]->getPosition()->y == memberStarts[i].y);
+    }
     w.logic->fxEvents().setSink(nullptr);
 }
