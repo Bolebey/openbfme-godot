@@ -25,7 +25,7 @@ FAMILIES = {
 VOLATILE = {'eax', 'ecx', 'edx'}
 
 
-def global_reads(data, base, blocks, globals_by_address, pointer_paths=()):
+def global_reads(data, base, blocks, globals_by_address, pointer_paths=(), virtual_getters=()):
     """Return (function, global address, pointer path, offset, instruction).
 
     Propagate possible pointer values along direct CFG edges. Union at joins is
@@ -38,6 +38,7 @@ def global_reads(data, base, blocks, globals_by_address, pointer_paths=()):
     decoder.detail = True
     result = set()
     pointer_paths = set(pointer_paths)
+    virtual_getters = set(virtual_getters)
     for function, spans in sorted(blocks.items()):
         decoded = {}
         for start, size in sorted(spans):
@@ -60,8 +61,18 @@ def global_reads(data, base, blocks, globals_by_address, pointer_paths=()):
                         continue
                     reg = FAMILIES.get(ins.reg_name(op.mem.base))
                     for pointer, path in tracked.get(reg, ()):
-                        result.add((function, pointer, path, op.mem.disp, ins.address))
+                        if not path or path[-1] != 'vtable':
+                            result.add((function, pointer, path, op.mem.disp, ins.address))
                 copied = set()
+                virtual_returns = set()
+                if ins.mnemonic == 'call' and ins.operands and ins.operands[0].type == X86_OP_MEM:
+                    mem = ins.operands[0].mem
+                    if mem.index == X86_REG_INVALID:
+                        tables = tracked.get(FAMILIES.get(ins.reg_name(mem.base)), ())
+                        receivers = tracked.get('ecx', ())
+                        for pointer, path in receivers:
+                            if (pointer, path, mem.disp) in virtual_getters and (pointer, path + ('vtable',)) in tables:
+                                virtual_returns.add((pointer, path + (f'v{mem.disp:X}',)))
                 if ins.mnemonic == 'mov' and len(ins.operands) == 2:
                     dst, src = ins.operands
                     if dst.type == X86_OP_REG and dst.size == 4:
@@ -74,6 +85,8 @@ def global_reads(data, base, blocks, globals_by_address, pointer_paths=()):
                                 nested = path + (src.mem.disp,)
                                 if (pointer, nested) in pointer_paths:
                                     copied.add((pointer, nested))
+                                if src.mem.disp == 0 and any(p == pointer and pp == path for p, pp, _ in virtual_getters):
+                                    copied.add((pointer, path + ('vtable',)))
                         elif src.type == X86_OP_REG and src.size == 4:
                             copied.update(tracked.get(FAMILIES.get(ins.reg_name(src.reg)), ()))
                 _, writes = ins.regs_access()
@@ -82,6 +95,8 @@ def global_reads(data, base, blocks, globals_by_address, pointer_paths=()):
                 if ins.mnemonic == 'call':
                     for reg in VOLATILE:
                         tracked.pop(reg, None)
+                if virtual_returns:
+                    tracked['eax'] = virtual_returns
                 if copied:
                     tracked[FAMILIES[ins.reg_name(ins.operands[0].reg)]] = copied
             last = decoded[start][-1]

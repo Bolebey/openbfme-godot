@@ -81,3 +81,13 @@ def test_bounded_field_table_without_sentinel():
     assert br.field_table(data, 0x1000, 0x1000, 0x1010) == {'name': 0x10}
     with pytest.raises(ValueError):
         br.field_table(data, 0x1000, 0x1000, 0x100f)
+
+
+def test_virtual_singleton_getter_requires_same_receiver_and_slot():
+    # mov ecx,[0x2000]; mov eax,[ecx]; call [eax+0x13c]; mov edx,[eax+0x3c]
+    code = bytes.fromhex('8b0d00200000 8b01 ff903c010000 8b503c c3')
+    blocks = {0x1000: ((0x1000, len(code)),)}
+    reads = br.global_reads(code, 0x1000, blocks, {0x2000}, virtual_getters={(0x2000, (), 0x13c)})
+    assert (0x1000, 0x2000, ('v13C',), 0x3c, 0x100e) in reads
+    assert not any(path == ('v13C',) for _, _, path, _, _ in br.global_reads(
+        code, 0x1000, blocks, {0x2000}, virtual_getters={(0x2000, (), 0x140)}))

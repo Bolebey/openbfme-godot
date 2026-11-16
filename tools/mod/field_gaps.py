@@ -10,9 +10,9 @@ trivial, not getModuleNameKey / xfer / a deleting destructor). They are candidat
 a function ported without a citation, or a function of another class that reads the module's data. A row with `how` = manual or a
 `stop` may already carry a verdict ("RotWK does not read it", TOP20 / docs/STOPS.md): read it first. The task still proves the reader
 (parser -> offset -> every reader, PROCESS 5 step 4). Only block, class and field names, counts and RW addresses are written: no values.
-With --game and --inventory, GameData, AIData, AudioSettings and Mouse get intra-function global-pointer read candidates. Other blocks remain unimplemented.
+With --game and --inventory, GameData, AIData, AudioSettings, MiscAudio and Mouse get intra-function global-pointer read candidates. Other blocks remain unimplemented.
 With --xmap, named template getters add direct-caller candidates (entry-block reads only).
-These are heuristic leads, not no-reader verdicts; register state is propagated over direct CFG edges only, not stack spills or indirect calls.
+These are heuristic leads, not no-reader verdicts; register state is propagated over direct CFG edges only, not stack spills or unknown indirect calls.
 """
 from __future__ import annotations
 
@@ -83,6 +83,9 @@ SINGLETONS = {
     # sentinel in the static image; bounded rows are leads, not a full verdict.
     # DONOR BFME2 parse 0x5EE050 (Code/GameEngine/Source/GameClient/Input/Mouse.cpp).
     "mouse": ("TheMouse", 0xDE36E0, (), 0xBF6158, 0xBF62A8),
+    # RW 0x5ECE27 calls TheAudio vtable slot +0x13C and parses into
+    # the returned MiscAudio using table 0xBF5450.
+    "miscaudio": ("TheAudio->friend_getMiscAudio", 0xDE42FC, ('v13C',), 0xBF5450, None),
 }
 
 
@@ -110,7 +113,8 @@ def top_level_candidates(game, inventory, xmap=None):
     data, base = pe.get_memory_mapped_image(), pe.OPTIONAL_HEADER.ImageBase
     citations = rm.scan_citations(Path("engine/src"))
     matches = br.global_reads(data, base, blocks, {v[1] for v in SINGLETONS.values()},
-                              {(v[1], v[2]) for v in SINGLETONS.values() if v[2]})
+                              {(v[1], v[2]) for v in SINGLETONS.values() if v[2] and isinstance(v[2][-1], int)},
+                              {(0xDE42FC, (), 0x13C)})
     by_field = {}
     for function, pointer, path, offset, instruction in matches:
         by_field.setdefault((pointer, path, offset), set()).add((function, instruction))
