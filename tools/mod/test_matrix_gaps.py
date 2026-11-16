@@ -92,7 +92,7 @@ def test_reports_rank_classes_by_failing_buttons(tmp_path):
     gaps, classes, reach = mg.read_map(m)
     matrix = [{"faction": "F", "object": "TestHorde", "button": "Command_Charge", "result": "NO-FIRE", "detail": ""},
               {"faction": "F", "object": "TestSoldier", "button": "Command_Charge", "result": "NO-EFFECT", "detail": ""}]
-    rows = mg.join(db, matrix, gaps, classes, reach)
+    rows = mg.mark_main(mg.join(db, matrix, gaps, classes, reach))
     out = tmp_path / "GAPS"
     mg.write(rows, out, "cmd", matrix)
     md = out.with_suffix(".md").read_text(encoding="utf-8")
@@ -130,6 +130,20 @@ def test_boilerplate_functions_are_not_listed(tmp_path):
     matrix = [{"faction": "F", "object": "TestSoldier", "button": "Command_Charge", "result": "NO-FIRE", "detail": ""}]
     row = [r for r in mg.join(db, matrix, gaps, classes, reach, {}, {0x852B14: "xfer"}) if r[8] == "SpecialAbilityUpdate"][0]
     assert row[9] == "1" and row[10] == "0"
+
+
+def test_main_class_is_the_most_specific_link():
+    def row(obj, btn, cls, specific):
+        return ["F", obj, btn, "NO-FIRE", "SPECIAL_POWER", "p", obj, "T", cls, "1", str(specific), "0", ""]
+    rows = [row("A", "B1", "SpecialPowerModule", 4), row("A", "B1", "RepairSpecialPower", 1),
+            row("C", "B2", "SpecialPowerModule", 4), row("C", "B2", "OCLSpecialPower", 6),
+            row("D", "B3", "SpecialPowerModule", 4),
+            ["F", "E", "B4", "FORMATION", "HORDE_TOGGLE_FORMATION", "", "", "", "-", "", "", "", "no power or upgrade on the button"]]
+    marked = {(r[1], r[8]): r[13] for r in mg.mark_main(rows)}
+    assert marked[("A", "RepairSpecialPower")] == "yes" and marked[("A", "SpecialPowerModule")] == ""
+    assert marked[("C", "OCLSpecialPower")] == "yes"
+    assert marked[("D", "SpecialPowerModule")] == "yes"  # its only link
+    assert marked[("E", "-")] == ""
 
 
 def test_read_matrix_drops_green_rows(tmp_path):

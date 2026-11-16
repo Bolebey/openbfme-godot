@@ -200,7 +200,28 @@ def join(db: eg.Db, matrix_rows, gaps, map_classes, reach=None, sizes=None, skip
 
 
 HEADER = ["faction", "object", "button", "result", "command", "power / upgrade", "module object", "module tag", "module class",
-          "map none", "specific none", "map partial", "specific none functions (address@depth, smallest depth first) / note"]
+          "map none", "specific none", "map partial", "specific none functions (address@depth, smallest depth first) / note", "main class"]
+
+
+def mark_main(rows):
+    """Append the `main class` column: of the classes a failing button links to, the most specific one says "yes".
+
+    One ability runs through a chain of classes (SpecialPowerModule -> UnpauseSpecialPowerUpgrade -> the update that acts), so the shared
+    links of the chain would head every ranking. The main class of a button is the class linked to the fewest failing buttons overall,
+    then the one with more specific none functions, then by name: no hand list of generic classes."""
+    buttons: dict[str, set] = defaultdict(set)
+    for x in rows:
+        if x[8] not in ("-", ""):
+            buttons[x[8]].add((x[1], x[2]))
+    choice = {}
+    for x in rows:
+        if x[8] in ("-", ""):
+            continue
+        key = (x[1], x[2])
+        rank = (len(buttons[x[8]]), -int(x[10] or 0), x[8])
+        if key not in choice or rank < choice[key]:
+            choice[key] = rank
+    return [x + ["yes" if x[8] not in ("-", "") and choice[(x[1], x[2])][2] == x[8] else ""] for x in rows]
 
 
 def write(rows, out: Path, command_line: str, matrix_rows, trivial_dropped: bool = False, boilerplate_dropped: int = 0):
@@ -235,8 +256,24 @@ def write(rows, out: Path, command_line: str, matrix_rows, trivial_dropped: bool
             s.write(f"Recognised by their code with --game and left out of it too ({boilerplate_dropped} functions of the inventory): getModuleNameKey (a short call of "
                     f"NameKeyGenerator RW 0x{NAMEKEY_GENERATOR:X}) and xfer functions (first indirect call Xfer vslot 0x{XFER_VERSION_SLOT:X}, "
                     f"xferVersion) and scalar deleting destructors (a short call of operator delete RW 0x{OPERATOR_DELETE:X}).\n\n")
-        s.write("## Module classes by the failing buttons they touch\n\n| class | buttons | map none | specific none | map partial | first specific none functions |\n"
-                "|---|---:|---:|---:|---:|---|\n")
+        main: dict[str, set] = defaultdict(set)
+        results: dict[str, dict[str, int]] = defaultdict(lambda: defaultdict(int))
+        for x in rows:
+            if x[13] == "yes" and (x[1], x[2]) not in main[x[8]]:
+                main[x[8]].add((x[1], x[2]))
+                results[x[8]][x[3]] += 1
+        s.write("## Main classes: each failing button once, under its most specific class\n\n"
+                "The main class of a button is the class it links to that the fewest failing buttons link to (then: more specific none functions). "
+                "The shared links of an ability's chain (SpecialPowerModule, UnpauseSpecialPowerUpgrade, ...) stay in the next table; here a button "
+                "counts where its own mechanism lives.\n\n"
+                "| class | buttons | results | specific none | first specific none functions | example buttons |\n|---|---:|---|---:|---|---|\n")
+        for cls, btns in sorted(main.items(), key=lambda kv: (-len(kv[1]), kv[0])):
+            _n, sp, _p, top = first[cls]
+            res = ", ".join(f"{k} {v}" for k, v in sorted(results[cls].items(), key=lambda kv: (-kv[1], kv[0])))
+            ex = ", ".join(f"{o} {b}" for o, b in sorted(btns)[:3])
+            s.write(f"| {cls} | {len(btns)} | {res} | {sp or '-'} | {top or '-'} | {ex} |\n")
+        s.write("\n## Module classes by all the failing buttons they touch (shared links included)\n\n"
+                "| class | buttons | map none | specific none | map partial | first specific none functions |\n|---|---:|---:|---:|---:|---|\n")
         for cls, btns in sorted(by_class.items(), key=lambda kv: (-len(kv[1]), kv[0])):
             n, sp, p, top = first[cls]
             s.write(f"| {cls} | {len(btns)} | {n or '-'} | {sp or '-'} | {p or '-'} | {top or '-'} |\n")
@@ -262,8 +299,8 @@ def main(argv=None):
     matrix_rows = read_matrix(a.matrix)
     gaps, classes, reach = read_map(a.map)
     sizes, skip = load_filters(a.inventory, a.game)
-    rows = join(db, matrix_rows, gaps, classes, reach, sizes, skip)
-    shown = ["tools/mod/matrix_gaps.py", "--base", "<ROTWK_INSTALL>", "--overlay", "<mod install>",
+    rows = mark_main(join(db, matrix_rows, gaps, classes, reach, sizes, skip))
+    shown =["tools/mod/matrix_gaps.py", "--base", "<ROTWK_INSTALL>", "--overlay", "<mod install>",
              "--matrix", str(a.matrix).replace("\\", "/"), "--map", str(a.map).replace("\\", "/"), "--out", str(a.out).replace("\\", "/")]
     shown += ["--inventory", "<rw_function_blocks.json>"] if sizes else []
     shown += ["--game", "<game.dat>"] if skip else []
