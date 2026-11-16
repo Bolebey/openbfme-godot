@@ -170,6 +170,23 @@ struct OclFx : combattest::CombatWorld
 		return nullptr;
 	}
 
+	// the module that answers for `powerName` (two modules may share one OCL list)
+	OCLSpecialPower *moduleFor(const char *powerName)
+	{
+		const SpecialPowerTemplate *t = power(powerName);
+		for (const std::unique_ptr<BehaviorModule> &m : caster->modules())
+		{
+			if (OCLSpecialPower *o = dynamic_cast<OCLSpecialPower *>(m.get()))
+			{
+				if (o->data() && o->getSpecialPowerTemplate() == t)
+				{
+					return o;
+				}
+			}
+		}
+		return nullptr;
+	}
+
 	bool allowed(const char *powerName, const Coord3D &loc)
 	{
 		return ActionManager::canDoSpecialPowerAtLocation(*caster, loc, power(powerName), 0);
@@ -213,8 +230,9 @@ TEST_CASE("PORT-249: the list's nuggets are folded with an AND and RW 0x5F08C2's
 	CHECK(f.allowed("Port249PowerCount2", spot));
 
 	// RW 0x5F091B is reached for the one-name list and its placement branch is not ported: counted, the nugget answers yes
-	OCLSpecialPower *one = f.moduleOf("Port249OCL");
+	OCLSpecialPower *one = f.moduleFor("Port249Power");
 	REQUIRE(one);
+	CHECK(f.allowed("Port249Power", spot));
 	CHECK(one->unportedPlacementTests() == 1);
 }
 
