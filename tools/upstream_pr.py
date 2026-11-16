@@ -5,6 +5,7 @@ incremental): the Colab token cannot open PRs in Open-BFME (403), the PC's gh ca
 
     python -I tools/upstream_pr.py check [branch ...]   # every up/* branch without an upstream PR, or the named ones; writes the report
     python -I tools/upstream_pr.py check --no-build     # the text and merge checks only (seconds)
+    python -I tools/upstream_pr.py rebase [branch ...]  # squashes branches onto upstream/main, resolving list-file conflicts and "#N"
     python -I tools/upstream_pr.py open up/port-217 ... # opens the PRs of branches that passed the last check (never all at once)
 
 The checks are upstream's rules (docs/ennorath/PROCESS.md, "Как собирается PR в upstream"; their CONTRIBUTING / REVIEW):
@@ -94,6 +95,13 @@ def text_checks(branch: str) -> tuple[list[str], dict]:
                 break
             paths.append(l.strip())
         problems.append("conflicts with upstream/main: " + ", ".join(paths[:6]))
+    if "docs/STOPS.md" in files:  # upstream's CI wants unique stop ids: a new row's id must be free there
+        up_ids = set(re.findall(r"^\| (S-\d+) \|", git("show", "upstream/main:docs/STOPS.md"), re.M))
+        new_ids = re.findall(r"^\+\| (S-\d+) \|", git("diff", "-U0", f"{base}..{ref}", "--", "docs/STOPS.md"), re.M)
+        base_ids = set(re.findall(r"^\| (S-\d+) \|", git("show", f"{base}:docs/STOPS.md", check=False), re.M))
+        taken = [i for i in new_ids if i in up_ids and i not in base_ids]  # an edit of an existing row keeps its id
+        if taken:
+            problems.append("stop ids already used upstream: " + ", ".join(taken))
     logic = [f for f in files if not TEST_FILE.search(f) and not f.startswith("docs/")]
     visual = bool(logic) and all(VISUAL.search(f) for f in logic)
     tests = sorted(set(re.findall(r'^\+\s*TEST_CASE\("([^"]+)"', git("diff", f"{base}..{ref}", "--", "engine/tests"), re.M)))
@@ -181,6 +189,102 @@ def check(names: list[str], do_build: bool) -> None:
     print(f"report: {OUT / 'report.md'}")
 
 
+# Conflicts the script resolves itself (owner, 2026-11-16): the list files where both sides only add rows. Upstream's file is kept and the
+# branch's added lines go in after their nearest preceding line that upstream's file has (PROCESS.md: "STOPS.md не объединять со своим —
+# брать файл upstream и добавлять только строку этой правки"). README is upstream's. Any other conflicted file stays the branch author's.
+LIST_FILES = re.compile(r"^(engine/CMakeLists\.txt|engine/cmake/.*\.cmake|docs/STOPS\.md|docs/.*\.csv|engine/tests/test_module_coverage\.cpp)$")
+
+
+ROW_KEY = re.compile(r"^\| (S-\d+) \|")
+
+
+def add_branch_lines(path: str, base: str, ref: str) -> str:
+    up = git("show", f"upstream/main:{path}", check=False).split("\n")
+    mine = git("show", f"{ref}:{path}").split("\n")
+    added = set()
+    for l in git("diff", "-U0", f"{base}..{ref}", "--", path).split("\n"):
+        if l.startswith("+") and not l.startswith("+++"):
+            added.add(l[1:])
+    have = set(up)
+    out = list(up)
+    base_rows = {m.group(1): l for l in git("show", f"{base}:{path}", check=False).split("\n") if (m := ROW_KEY.match(l))}
+    for i, line in enumerate(mine):
+        if line not in added or line in have:
+            continue
+        m = ROW_KEY.match(line)
+        if m and m.group(1) in base_rows:  # the branch edits an existing row (a stop closed or narrowed)
+            at = next((k for k, l in enumerate(out) if l.startswith(f"| {m.group(1)} |")), None)
+            if at is None or out[at] != base_rows[m.group(1)]:
+                raise ValueError(f"{path}: {m.group(1)} was changed upstream too")
+            out[at] = line
+            have.add(line)
+            continue
+        j = i - 1
+        while j >= 0 and mine[j] not in have:
+            j -= 1
+        at = out.index(mine[j]) + 1 if j >= 0 else len(out)
+        while at < len(out) and out[at] in added:  # keep the branch's run of new lines in its order
+            at += 1
+        out.insert(at, line)
+        have.add(line)
+    return "\n".join(out)
+
+
+def clean_message(text: str) -> str:
+    text = re.sub(r"\n*Co-Authored-By:.*", "", text)
+    return re.sub(r"(?<![\w/])#(\d+)", r"fork issue \1", text).strip()
+
+
+def rebase(names: list[str]) -> None:
+    """Squash each branch onto the current upstream/main with the list-file conflicts resolved, the "#N" in its text rewritten, and push it
+    back over the same up/ branch (the old head is kept at refs/up-orig/<branch>). A branch with another conflict, a non-English text or
+    fork-only files is left alone and named."""
+    git("fetch", "-q", "origin", cwd=REPO)
+    git("fetch", "-q", "upstream", cwd=REPO)
+    for b in names or ready_branches():
+        ref = f"origin/{b}"
+        problems, facts = text_checks(b)
+        hard = [p for p in problems if not p.startswith(("conflicts with", '"#N"'))]
+        if hard:
+            print(f"{b}: left alone: {'; '.join(hard)}")
+            continue
+        if not problems:
+            print(f"{b}: nothing to fix")
+            continue
+        base = git("merge-base", "upstream/main", ref)
+        git("checkout", "-q", "-f", "--detach", "upstream/main")
+        sh(["git", "merge", "--squash", "-q", ref], cwd=TREE)
+        conflicted = git("diff", "--name-only", "--diff-filter=U").split()
+        other = [f for f in conflicted if not LIST_FILES.search(f) and f != "README.md"]
+        if other:
+            git("reset", "-q", "--hard", "upstream/main")
+            print(f"{b}: left alone: source conflict in {', '.join(other)}")
+            continue
+        try:
+            texts = {f: git("show", f"upstream/main:{f}") if f == "README.md" else add_branch_lines(f, base, ref) for f in conflicted}
+        except ValueError as e:
+            git("reset", "-q", "--hard", "upstream/main")
+            print(f"{b}: left alone: {e}")
+            continue
+        for f, text in texts.items():
+            (TREE / f).write_text(text + "\n", encoding="utf-8", newline="")
+            git("add", f)
+        if any(f == "docs/STOPS.md" for f in conflicted) and (TREE / "tools" / "stops_count.py").exists():
+            sh([sys.executable, "-I", "tools/stops_count.py", "--write"], cwd=TREE)
+            git("add", "-A", "docs", "README.md")
+        msg = clean_message(git("log", "--reverse", "--format=%s%n%n%b", f"{base}..{ref}"))
+        subjects = [clean_message(s) for s in git("log", "--reverse", "--format=%s", f"{base}..{ref}").splitlines()]
+        title = subjects[0] if subjects else b
+        body = "\n".join(f"- {s}" for s in subjects[1:]) if len(subjects) > 1 else re.sub(r"^.*\n*", "", msg, count=1)
+        sh(["git", "commit", "-q", "--no-verify", "-m", title + ("\n\n" + body if body.strip() else "")], cwd=TREE, check=True)
+        old = git("rev-parse", ref)
+        git("push", "-q", "origin", f"{old}:refs/up-orig/{b}")
+        r = sh(["git", "push", "-q", f"--force-with-lease={b}:{old}", "origin", f"HEAD:refs/heads/{b}"], cwd=TREE)
+        git("checkout", "-q", "-f", "--detach", "upstream/main")
+        print(f"{b}: {'squashed onto upstream/main' + (' (resolved ' + ', '.join(conflicted) + ')' if conflicted else '') if r.returncode == 0 else 'push failed: ' + r.stderr.strip()[:200]}")
+    git("fetch", "-q", "origin", cwd=REPO)
+
+
 def pr_body(b: str, r: dict) -> str:
     log = git("log", "--reverse", "--format=%s%n%n%b", f"upstream/main..origin/{b}")
     log = re.sub(r"\n*Co-Authored-By:.*", "", log).strip()
@@ -207,12 +311,14 @@ def open_prs(names: list[str]) -> None:
 
 
 if __name__ == "__main__":
-    if len(sys.argv) < 2 or sys.argv[1] not in ("check", "open"):
+    if len(sys.argv) < 2 or sys.argv[1] not in ("check", "rebase", "open"):
         print(__doc__)
         sys.exit(2)
     args = [a for a in sys.argv[2:] if not a.startswith("--")]
     if sys.argv[1] == "check":
         check(args, "--no-build" not in sys.argv)
+    elif sys.argv[1] == "rebase":
+        rebase(args)
     else:
         if not args:
             sys.exit("name the branches to open (never all at once)")
