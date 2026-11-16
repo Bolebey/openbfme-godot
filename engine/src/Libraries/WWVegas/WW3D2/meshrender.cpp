@@ -67,6 +67,81 @@ float Godot_Tangent_Sign(const float n[3], const float t[3], const float b[3])
 	return cx * b[0] + cy * b[1] + cz * b[2] < 0.0f ? -1.0f : 1.0f;
 }
 
+void Godot_Tangent_Basis(const float n[3], const float t[3], const float b[3], float outT[3], float outB[3])
+{
+	// Retail copies W3D_CHUNK_TANGENTS / W3D_CHUNK_BITANGENTS raw into the D3D9 vertex buffer (RW 0x0058C6B0..0x0058C707,
+	// DONOR BFME2 0x0058C84E..0x0058D16B FXShaderGeometry::Init), where D3D9 vs_2_0 `nrm` maps a zero vector to (0, 0, 0).
+	// Godot octahedral-encodes ARRAY_TANGENT as a unit direction and computes BINORMAL = normalize(cross(NORMAL, TANGENT.xyz)) * w,
+	// which divides 0/0 -> NaN on CPU and Vulkan/SPIR-V when a W3D vertex has a zero or normal-collinear tangent (e.g. IBArmory_A).
+	const float t2 = t[0] * t[0] + t[1] * t[1] + t[2] * t[2];
+	const float cx = n[1] * t[2] - n[2] * t[1];
+	const float cy = n[2] * t[0] - n[0] * t[2];
+	const float cz = n[0] * t[1] - n[1] * t[0];
+	const float c2 = cx * cx + cy * cy + cz * cz;
+	if (t2 > 1e-12f && c2 > 1e-2f * t2)
+	{
+		outT[0] = t[0];
+		outT[1] = t[1];
+		outT[2] = t[2];
+		const float b2 = b[0] * b[0] + b[1] * b[1] + b[2] * b[2];
+		if (b2 > 1e-12f)
+		{
+			outB[0] = b[0];
+			outB[1] = b[1];
+			outB[2] = b[2];
+		}
+		else
+		{
+			const float inv = 1.0f / std::sqrt(c2);
+			outB[0] = cx * inv;
+			outB[1] = cy * inv;
+			outB[2] = cz * inv;
+		}
+		return;
+	}
+	const float b2 = b[0] * b[0] + b[1] * b[1] + b[2] * b[2];
+	const float bx = b[1] * n[2] - b[2] * n[1];
+	const float by = b[2] * n[0] - b[0] * n[2];
+	const float bz = b[0] * n[1] - b[1] * n[0];
+	const float bc2 = bx * bx + by * by + bz * bz;
+	if (b2 > 1e-12f && bc2 > 1e-2f * b2)
+	{
+		const float inv = 1.0f / std::sqrt(bc2);
+		outT[0] = bx * inv;
+		outT[1] = by * inv;
+		outT[2] = bz * inv;
+		outB[0] = b[0];
+		outB[1] = b[1];
+		outB[2] = b[2];
+		return;
+	}
+	const float n2 = n[0] * n[0] + n[1] * n[1] + n[2] * n[2];
+	if (n2 > 1e-12f)
+	{
+		const float invN = 1.0f / std::sqrt(n2);
+		const float nx = n[0] * invN, ny = n[1] * invN, nz = n[2] * invN;
+		const float ax = std::fabs(ny) < 0.9f ? 0.0f : 1.0f;
+		const float ay = std::fabs(ny) < 0.9f ? 1.0f : 0.0f;
+		const float tx = ay * nz;
+		const float ty = -ax * nz;
+		const float tz = ax * ny - ay * nx;
+		const float invT = 1.0f / std::sqrt(tx * tx + ty * ty + tz * tz);
+		outT[0] = tx * invT;
+		outT[1] = ty * invT;
+		outT[2] = tz * invT;
+		outB[0] = ny * outT[2] - nz * outT[1];
+		outB[1] = nz * outT[0] - nx * outT[2];
+		outB[2] = nx * outT[1] - ny * outT[0];
+		return;
+	}
+	outT[0] = 1.0f;
+	outT[1] = 0.0f;
+	outT[2] = 0.0f;
+	outB[0] = 0.0f;
+	outB[1] = 1.0f;
+	outB[2] = 0.0f;
+}
+
 std::uint32_t MeshRenderData::TotalSurfaceTriangles() const
 {
 	std::uint32_t n = 0;
@@ -207,12 +282,9 @@ bool Build_Mesh_Render_Data(const MeshModelClass &mesh, MeshRenderData &out, std
 		out.Bitangent.resize(nv * 3);
 		for (size_t v = 0; v < nv; ++v)
 		{
-			out.Tangent[v * 3 + 0] = mesh.Tangents[v].X;
-			out.Tangent[v * 3 + 1] = mesh.Tangents[v].Y;
-			out.Tangent[v * 3 + 2] = mesh.Tangents[v].Z;
-			out.Bitangent[v * 3 + 0] = mesh.Bitangents[v].X;
-			out.Bitangent[v * 3 + 1] = mesh.Bitangents[v].Y;
-			out.Bitangent[v * 3 + 2] = mesh.Bitangents[v].Z;
+			const float tIn[3] = { mesh.Tangents[v].X, mesh.Tangents[v].Y, mesh.Tangents[v].Z };
+			const float bIn[3] = { mesh.Bitangents[v].X, mesh.Bitangents[v].Y, mesh.Bitangents[v].Z };
+			Godot_Tangent_Basis(&out.Normal[v * 3], tIn, bIn, &out.Tangent[v * 3], &out.Bitangent[v * 3]);
 		}
 	}
 
@@ -508,4 +580,165 @@ Vector3 Deform_Normal(const MeshRenderData &mesh, size_t v, const HTreePose &pos
 	const Vector3 n1 = mesh.DualBone ? Vector3(mesh.Normal1[v * 3], mesh.Normal1[v * 3 + 1], mesh.Normal1[v * 3 + 2]) : n0;
 	const Vector3 b = rotate(pose.Transform[checkedBone(mesh.Bone1[v], pose)], n1);
 	return Vector3(a.X * w0 + b.X * w1, a.Y * w0 + b.Y * w1, a.Z * w0 + b.Z * w1);
+}
+
+namespace
+{
+void normalizeVec3(float v[3])
+{
+	const float len = std::sqrt(v[0] * v[0] + v[1] * v[1] + v[2] * v[2]);
+	if (len > 1e-6f)
+	{
+		const float inv = 1.0f / len;
+		v[0] *= inv; v[1] *= inv; v[2] *= inv;
+	}
+}
+
+void appendBaryVertex(MeshRenderData &m, size_t i0, size_t i1, size_t i2, float w0, float w1, float w2)
+{
+	auto lerp3 = [&](const std::vector<float> &src, std::vector<float> &dst, bool norm) {
+		if (src.empty()) return;
+		float v[3] = {
+			src[i0 * 3] * w0 + src[i1 * 3] * w1 + src[i2 * 3] * w2,
+			src[i0 * 3 + 1] * w0 + src[i1 * 3 + 1] * w1 + src[i2 * 3 + 1] * w2,
+			src[i0 * 3 + 2] * w0 + src[i1 * 3 + 2] * w1 + src[i2 * 3 + 2] * w2
+		};
+		if (norm) normalizeVec3(v);
+		dst.push_back(v[0]); dst.push_back(v[1]); dst.push_back(v[2]);
+	};
+	lerp3(m.Position, m.Position, false);
+	lerp3(m.Normal, m.Normal, true);
+	lerp3(m.Position1, m.Position1, false);
+	lerp3(m.Normal1, m.Normal1, true);
+	lerp3(m.Tangent, m.Tangent, true);
+	lerp3(m.Bitangent, m.Bitangent, true);
+	for (MeshUVStream &u : m.PassUV)
+	{
+		if (u.UV.size() >= m.NumVertices * 2)
+		{
+			u.UV.push_back(u.UV[i0 * 2] * w0 + u.UV[i1 * 2] * w1 + u.UV[i2 * 2] * w2);
+			u.UV.push_back(u.UV[i0 * 2 + 1] * w0 + u.UV[i1 * 2 + 1] * w1 + u.UV[i2 * 2 + 1] * w2);
+		}
+	}
+	for (std::vector<std::uint8_t> &dcg : m.PassDCG)
+	{
+		if (dcg.size() >= m.NumVertices * 4)
+		{
+			for (int c = 0; c < 4; ++c)
+			{
+				const float val = dcg[i0 * 4 + c] * w0 + dcg[i1 * 4 + c] * w1 + dcg[i2 * 4 + c] * w2;
+				dcg.push_back((std::uint8_t)std::clamp((int)std::lround(val), 0, 255));
+			}
+		}
+	}
+	++m.NumVertices;
+}
+} // namespace
+
+bool Subdivide_Floor_Mesh_Data(MeshRenderData &mesh, float maxEdgeXY)
+{
+	if (mesh.Skin || maxEdgeXY <= 0.0f || mesh.NumVertices == 0 || mesh.Surfaces.empty())
+	{
+		return false;
+	}
+	auto edgeLenXY = [&](std::uint32_t a, std::uint32_t b) {
+		const float dx = mesh.Position[a * 3] - mesh.Position[b * 3];
+		const float dy = mesh.Position[a * 3 + 1] - mesh.Position[b * 3 + 1];
+		return std::sqrt(dx * dx + dy * dy);
+	};
+	constexpr int kMaxSubdiv = 24;
+	constexpr size_t kMaxVertices = 65535;
+	bool changed = false;
+	size_t totalTriangles = 0;
+	// Cache shared boundary edge points (minVert, maxVert, stepFromMin, N) -> vertex index to prevent T-junctions when adjacent triangles match N
+	struct EdgeKey {
+		std::uint32_t lo, hi;
+		int step, n;
+		bool operator<(const EdgeKey &o) const { return std::tie(lo, hi, step, n) < std::tie(o.lo, o.hi, o.step, o.n); }
+	};
+	std::map<EdgeKey, std::uint32_t> edgeCache;
+	for (MeshDrawSurface &surf : mesh.Surfaces)
+	{
+		if (surf.Indices.size() % 3 != 0)
+		{
+			totalTriangles += surf.Indices.size() / 3;
+			continue;
+		}
+		const size_t triCount = surf.Indices.size() / 3;
+		std::vector<std::uint32_t> newIndices;
+		std::vector<std::uint32_t> newTriangles;
+		newIndices.reserve(surf.Indices.size());
+		for (size_t t = 0; t < triCount; ++t)
+		{
+			const std::uint32_t i0 = surf.Indices[t * 3];
+			const std::uint32_t i1 = surf.Indices[t * 3 + 1];
+			const std::uint32_t i2 = surf.Indices[t * 3 + 2];
+			const std::uint32_t triId = (t < surf.Triangles.size()) ? surf.Triangles[t] : (std::uint32_t)t;
+			const float maxE = std::max({ edgeLenXY(i0, i1), edgeLenXY(i1, i2), edgeLenXY(i2, i0) });
+			int n = (maxE > maxEdgeXY) ? std::clamp((int)std::ceil(maxE / maxEdgeXY), 1, kMaxSubdiv) : 1;
+			const size_t neededVerts = (size_t)(n + 1) * (n + 2) / 2;
+			if (n <= 1 || mesh.NumVertices + neededVerts > kMaxVertices)
+			{
+				newIndices.push_back(i0); newIndices.push_back(i1); newIndices.push_back(i2);
+				newTriangles.push_back(triId);
+				continue;
+			}
+			changed = true;
+			std::vector<std::uint32_t> grid((size_t)(n + 1) * (n + 1), 0);
+			auto at = [&](int a, int b) -> std::uint32_t & { return grid[(size_t)b * (n + 1) + a]; };
+			auto edgeVertex = [&](std::uint32_t u, std::uint32_t v, int k) -> std::uint32_t {
+				const std::uint32_t lo = std::min(u, v), hi = std::max(u, v);
+				const int step = (u == lo) ? k : (n - k);
+				const EdgeKey key{ lo, hi, step, n };
+				auto it = edgeCache.find(key);
+				if (it != edgeCache.end()) return it->second;
+				const std::uint32_t idx = (std::uint32_t)mesh.NumVertices;
+				const float f = (float)step / (float)n;
+				appendBaryVertex(mesh, lo, hi, hi, 1.0f - f, f, 0.0f);
+				edgeCache[key] = idx;
+				return idx;
+			};
+			for (int b = 0; b <= n; ++b)
+			{
+				for (int a = 0; a <= n - b; ++a)
+				{
+					const int c = n - a - b;
+					if (a == 0 && b == 0) { at(a, b) = i0; continue; }
+					if (a == n && b == 0) { at(a, b) = i1; continue; }
+					if (a == 0 && b == n) { at(a, b) = i2; continue; }
+					if (b == 0) { at(a, b) = edgeVertex(i0, i1, a); continue; }
+					if (a == 0) { at(a, b) = edgeVertex(i0, i2, b); continue; }
+					if (c == 0) { at(a, b) = edgeVertex(i1, i2, b); continue; }
+					const std::uint32_t idx = (std::uint32_t)mesh.NumVertices;
+					appendBaryVertex(mesh, i0, i1, i2, (float)c / (float)n, (float)a / (float)n, (float)b / (float)n);
+					at(a, b) = idx;
+				}
+			}
+			for (int b = 0; b < n; ++b)
+			{
+				for (int a = 0; a < n - b; ++a)
+				{
+					newIndices.push_back(at(a, b));
+					newIndices.push_back(at(a + 1, b));
+					newIndices.push_back(at(a, b + 1));
+					newTriangles.push_back(triId);
+					if (a + b + 1 < n)
+					{
+						newIndices.push_back(at(a + 1, b));
+						newIndices.push_back(at(a + 1, b + 1));
+						newIndices.push_back(at(a, b + 1));
+						newTriangles.push_back(triId);
+					}
+				}
+			}
+		}
+		surf.Indices = std::move(newIndices);
+		surf.Triangles = std::move(newTriangles);
+		totalTriangles += surf.Indices.size() / 3;
+	}
+	if (changed)
+	{
+		mesh.NumTriangles = totalTriangles;
+	}
+	return changed;
 }

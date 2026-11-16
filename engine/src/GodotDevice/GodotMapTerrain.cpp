@@ -190,10 +190,9 @@ String optStr(const Dictionary &o, const char *key, const char *def)
 	return o.has(key) ? (String)o[key] : String(def);
 }
 
-// Draw order, as retail (RW 0x4E2E00 render): Terrain → Roads (0x4E2ECD) → Scorches (0x4E2FD0) → Tracks (0x4E3003)
-// → Particles (0x4E302F) → Water/Bridges (0x4E3070). In Godot the transparent pass draws lower render_priority
-// first (behind) and higher priority last (in front). Particle priorities are -122 .. -9 (ParticleDraw.cpp
-// OrderForBatch), so the terrain decals must sit below that range to draw before the particles: the smoke
+// Draw order, as retail (RW 0x4E2E00 render): Terrain → Roads (0x4E2ECD) → Floors (0x4E2F3A) → Scorches (0x4E2FD0) → Tracks (0x4E3108)
+// → W3D blended/sorted meshes (-121..-23) → Particles (1..114, ParticleDraw.cpp OrderForBatch). In Godot the transparent pass draws lower
+// render_priority first (behind) and higher priority last (in front), so terrain decals (-128..-122) draw before both W3D and particles: smoke
 // covers the roads and scorches as in RotWK (P-52, Port 125, issue #309).
 // P-101: the values live in ParticleDraw.h, inside Godot's -128 .. 127 (Port 125's -150 .. -145 were refused and left at 0)
 const int TERRAIN_RENDER_PRIORITY = FXParticleSystem::kTerrainRenderPriority;

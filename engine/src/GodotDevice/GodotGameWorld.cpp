@@ -599,6 +599,7 @@ GameWorld::~GameWorld()
 	releaseLocalDrivers(); // lane MP-2: the recording / replay driver too
 	m_audio.reset(); // AUDIO-2: the audio side reads the game
 	// the game before the world and the assets it points into; the effect player before the game
+	W3D_Set_Floor_Height_Map(nullptr);
 	m_weather.reset(); // lane WEATHER-1: before the effect player and the game
 	m_liveFX.reset();
 	m_spellStore.reset(); // lane SPELL-2 (review r1): the spell book screens hold the game's player and templates: they go before it
@@ -624,6 +625,7 @@ void GameWorld::_notification(int what)
 		// the effect player (m_fxPlayer) is a child node: Node's own PREDELETE (after this class's, the notification runs reversed) deletes the children
 		// before ~GameWorld, so LiveFX and the weather, which reach into its playback (LiveFX::~LiveFX destroys its terrain fire / smoke systems), go now.
 		// Without this, closing the program with a game loaded crashed in ParticleSystemManager::findParticleSystemByID (2026-11-08).
+		W3D_Set_Floor_Height_Map(nullptr);
 		m_weather.reset();
 		m_liveFX.reset();
 	}
@@ -973,13 +975,16 @@ void GameWorld::build_static_layer(const Ref<RetailFileSystem> &fs, Dictionary &
 			// RW 0x4E8C1B / RW 0x4EC9B5: W3DShrubBuffer / W3DTreeBuffer keys tree types by (ModelName, TextureName) and applies TextureName
 			swaps.emplace_back("*", p.textureName);
 		}
-		const std::string key = AsciiStringUtil::lowered(p.modelName) + W3DInstancer::Texture_Swap_Suffix(swaps) + (p.kind == W3D_DRAWKIND_FLOOR ? "#floor" : "");
+		const bool isTree = p.kind == W3D_DRAWKIND_TREE;
+		const bool isFloor = p.kind == W3D_DRAWKIND_FLOOR;
+		const std::string key = AsciiStringUtil::lowered(p.modelName) + W3DInstancer::Texture_Swap_Suffix(swaps) + (isFloor ? "#floor" : "") + (isTree ? "#veg" : "");
 		auto it = m_staticModels.find(key);
 		int64_t model;
 		if (it == m_staticModels.end())
 		{
 			staticInst->Set_Build_Texture_Swaps(swaps);
-			staticInst->Set_Build_Floor(p.kind == W3D_DRAWKIND_FLOOR); // stop S-4974: a floor blends by its texel alpha
+			staticInst->Set_Build_Floor(isFloor); // stop S-4974: a floor blends by its texel alpha
+			staticInst->Set_Build_Vegetation(isTree); // P-92 / Local 49: Vegetation.fx abs(N.L) lighting
 			model = staticInst->add_model(toGodot(p.modelName));
 			m_staticModels[key] = model;
 		}
@@ -1438,6 +1443,7 @@ Dictionary GameWorld::load_internal(const LiveGame::Options &loIn, const String 
 		}
 		terrain->set_name("Terrain");
 		add_child(terrain);
+		W3D_Set_Floor_Height_Map(m_game->map().hasHeightMap ? &m_game->map().heightMap : nullptr);
 		// TOP20 "Fire, scorches": the live game's scorch marks (LiveFX::scorches: the map's Scorch objects, the FXList nugget, the burning terrain)
 		// are drawn by the terrain's layer from here on (presentScorches)
 		if (TerrainScorchLayer *scorches = Object::cast_to<TerrainScorchLayer>(terrain->get_node_or_null(NodePath("Scorches"))))
@@ -3173,13 +3179,14 @@ int64_t GameWorld::addTreeModelInstance(const std::string &model, const std::str
 		// RW 0x4E8C1B / RW 0x4EC9B5: W3DShrubBuffer / W3DTreeBuffer keys tree types by (ModelName, TextureName) and applies TextureName
 		swaps.emplace_back("*", texture);
 	}
-	const std::string key = AsciiStringUtil::lowered(model) + W3DInstancer::Texture_Swap_Suffix(swaps);
+	const std::string key = AsciiStringUtil::lowered(model) + W3DInstancer::Texture_Swap_Suffix(swaps) + "#veg";
 	auto it = m_staticModels.find(key);
 	int64_t m;
 	if (it == m_staticModels.end())
 	{
 		st->Set_Build_Texture_Swaps(swaps);
 		st->Set_Build_Floor(false);
+		st->Set_Build_Vegetation(true); // P-92 / Local 49: Vegetation.fx abs(N.L) lighting
 		m = st->add_model(toGodot(model));
 		m_staticModels[key] = m;
 	}

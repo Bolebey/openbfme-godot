@@ -24,6 +24,7 @@
 #include <vector>
 
 class Object;
+struct ObjectFilter; // a struct (GameLogic/ObjectFilter.h): MSVC mangles class and struct apart, LNK2019 in the Windows build
 struct Coord3D;
 struct DamageInfo;
 struct DamageInfoInput;
@@ -138,9 +139,24 @@ public:
 	typedef std::list<Object *> ContainedItemsList;
 	virtual const ContainedItemsList *getContainedItemsList() const = 0;
 	virtual unsigned getContainCount() const = 0;
+	// slot 0x114 getContainCount(filter) (OpenContain RW 0x865CE3, in every contain table read: with an argument, the contained objects the filter allows
+	// -- ObjectFilterMatch RW 0x7640C1 with the rider and the container's controlling player, RW 0x68B678 -- are counted; without one, + 0x38). The
+	// ProjectileFilterInContainer ammo of a weapon (RW 0x6CD298) and its getStatus gate (RW 0x6CD11F) ask it
+	virtual unsigned countContainedMatching(const ObjectFilter &filter) const
+	{
+		(void)filter;
+		return getContainCount();
+	}
+	// slot 0x13C (OpenContain RW 0x866367): the first contained object the filter allows is TAKEN OUT of the container (slot 0xA4) and returned -- the
+	// projectile of a ProjectileFilterInContainer nugget (RW 0x90FAC3). No match: null. A contain that does not answer leaves the container untouched
+	virtual Object *takeContainedMatching(const ObjectFilter &filter)
+	{
+		(void)filter;
+		return nullptr;
+	}
 	// true when the object was added
 	virtual bool addToContain(Object *obj) = 0;
-	virtual void removeFromContain(Object *obj) = 0;
+	virtual void removeFromContain(Object *obj, bool exposeStealthUnits = false) = 0;
 	// ZH ContainModuleInterface::containReactToTransformChange: the container moved or turned (Object::reactToTransformChange)
 	virtual void containReactToTransformChange() {}
 	// RW 0x867AA1, contain slot 0x14C: suppress entry sounds during initial payload creation.
@@ -210,6 +226,8 @@ public:
 	virtual bool isExitBusy() const { return false; }
 	virtual int reserveDoorForExit(const Object &obj) { (void)obj; return -1; }
 	virtual void exitObjectViaDoor(Object *obj, int door) { (void)obj; (void)door; }
+	// RW 0x868759 OpenContain::exitObjectInAHurry (exit interface slot 5 / +0x14, called by AITNGuardIdleState RW 0x94CFF5)
+	virtual void exitObjectInAHurry(Object *obj) { (void)obj; }
 	// lane GARRISON-2: slot 0xD4, read by RW 0x68BF11 for the locomotor's speed (OpenContain RW 0x867A75: 1.0; SiegeEngineContain RW 0x87ED45: the crew count x
 	// SpeedPercentPerCrew, x87)
 	virtual float getCrewPowerMultiplier() const { return 1.0f; }

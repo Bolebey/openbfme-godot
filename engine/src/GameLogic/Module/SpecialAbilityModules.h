@@ -225,9 +225,9 @@ public:
 	// RW 0x852E8F
 	void initiateIntentToDoSpecialPower(const SpecialPowerTemplate *t, Object *target, const Coord3D *loc, unsigned options, int extra) override;
 	bool isActive() const override { return m_active; }
-	// lane BACKLOG4 (S-1222): the special power update interface's slot 0x18 (RW 0x851C92) asked without a command button, as Object RW 0x693919 asks it:
-	// false with the packing state (+ 0x30) 0; else true for the template types 0x1A and 0x1D, else the within-range flag (+ 0x80). The command button
-	// branches (RW 0x851C9E .. 0x851CE1) are not this caller's
+	// lane BACKLOG4 (S-1222) / PORT-188: the special power update interface's slot 0x18 (RW 0x851C92) asked without a command button, as Object RW 0x693919
+	// and SpecialAbilityUpdate::initiateIntentToDoSpecialPower RW 0x85307F ask it: false with the packing state (+ 0x30) 0; else true for the template types
+	// 0x1A and 0x1D, else the within-range flag (+ 0x80). The command button branches (RW 0x851C9E .. 0x851CE1) are not these callers'
 	bool isPowerCurrentlyInUse() const;
 	// RW 0x851B6E: the RequiredConditions / RejectedConditions (RW 0x851551); a power of the garrison types 0x27 / 0x28 also needs room in the object's
 	// contain (contain slots 0x114 / 0x70)
@@ -333,7 +333,8 @@ public:
 	~WeaponFireSpecialAbilityUpdate() override;
 	void finishAbility(bool ownerDying, bool aborted) override; // RW 0x896033
 	unsigned shotsFired() const { return m_shots; }
-	Weapon *ownedWeapon() { return specialWeapon(); } // the special weapon (made on first use), for tests
+	Weapon *ownedWeapon() { return m_weapon.get(); } // RW +0x88: made and loaded in the constructor (RW 0x895DE1 .. 0x895E22)
+	const Weapon *ownedWeapon() const { return m_weapon.get(); }
 	void crc(StateHasher &h) const override;
 
 protected:
@@ -343,11 +344,9 @@ protected:
 
 private:
 	int specialWeaponCondition() const;
-	Weapon *specialWeapon();
 	ObjectWeapons *weaponHost(); // the object's ObjectWeapons, else m_ownHost
 	const WeaponFireSpecialAbilityUpdateModuleData *m_wf;
 	std::unique_ptr<Weapon> m_weapon; // + 0x88
-	bool m_weaponMade = false;
 	unsigned m_shots = 0;
 	// lane WALL-1: the weapon host of an object without a weapon set (the deployed mine's Detonate): retail's Object embeds its WeaponSet and the special
 	// weapon's status and fire (RW 0x6CDCE7, RW 0x6CF3D2) are the Weapon's own, so the shot needs no set; the port's shot needs an ObjectWeapons host, made

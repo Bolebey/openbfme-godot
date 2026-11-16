@@ -1,0 +1,113 @@
+#!/usr/bin/env python3
+"""How much Ennorath work is left, one row a day: docs/ennorath/PROGRESS.tsv (the owner's dashboard charts it on /stats).
+
+Columns:
+  date             the day of the snapshot (YYYY-MM-DD)
+  rev              the commit the docs were read at
+  fields_total     Ennorath INI fields in the last field audit (tools/mod/field_audit.py)
+  fields_open      fields with work left: parsed-unused, not-read, stub-block, missing-module, parsed-only-module, no-table-row
+  modules_missing  docs/ennorath/MODULE_GAPS.md rows with state `missing`
+  problems_total   docs/ennorath/PROBLEMS.md entries (### P-N)
+  problems_done    entries whose status line is checked ([x])
+  stops_open       docs/STOPS.md rows not `closed` (tools/stops_count.py)
+  audit            which field audit the two field columns come from ("-" = carried from the row before)
+
+Usage:
+  python tools/mod/progress_snapshot.py [--audit <field-audit.tsv>] [--audit-name v12] [--date YYYY-MM-DD] [--rev <commit>] [--write]
+Without --audit the field columns are carried from the last row. --rev reads the docs at that commit (the backfill); default the
+working tree. --write replaces the row of that date in PROGRESS.tsv (rows stay sorted by date); without it the row is printed.
+The audit tsv holds counts only here: no game data enters the repository.
+"""
+from __future__ import annotations
+
+import argparse
+import csv
+import datetime as dt
+import re
+import subprocess
+import sys
+from pathlib import Path
+
+REPO = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(REPO / "tools"))
+import stops_count  # noqa: E402
+
+OUT = REPO / "docs" / "ennorath" / "PROGRESS.tsv"
+COLUMNS = ["date", "rev", "fields_total", "fields_open", "modules_missing", "problems_total", "problems_done", "stops_open", "audit"]
+OPEN_STATUSES = {"parsed-unused", "not-read", "stub-block", "missing-module", "parsed-only-module", "no-table-row"}
+
+
+def read(path: str, rev: str | None) -> str:
+    if rev:
+        return subprocess.run(["git", "-C", str(REPO), "show", f"{rev}:{path}"], check=True, capture_output=True,
+                              text=True, encoding="utf-8").stdout
+    return (REPO / path).read_text(encoding="utf-8")
+
+
+def problems(text: str) -> tuple[int, int]:
+    total = done = 0
+    status_next = False
+    for line in text.splitlines():
+        if line.startswith("### P-"):
+            total += 1
+            status_next = True
+            continue
+        if status_next and line.startswith("- Статус:"):
+            done += "[x]" in line[:16]
+            status_next = False
+    return total, done
+
+
+def audit_counts(tsv: Path) -> tuple[int, int]:
+    with tsv.open(encoding="utf-8", newline="") as f:
+        rows = list(csv.DictReader(f, delimiter="\t"))
+    if not rows or "status" not in rows[0]:
+        raise SystemExit(f"{tsv}: not a field-audit.tsv (no status column)")
+    return len(rows), sum(1 for r in rows if r["status"] in OPEN_STATUSES)
+
+
+def load() -> list[dict[str, str]]:
+    if not OUT.exists():
+        return []
+    with OUT.open(encoding="utf-8", newline="") as f:
+        return list(csv.DictReader(f, delimiter="\t"))
+
+
+def main() -> int:
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--audit", type=Path)
+    ap.add_argument("--audit-name", default="")
+    ap.add_argument("--date", default=dt.date.today().isoformat())
+    ap.add_argument("--rev")
+    ap.add_argument("--write", action="store_true")
+    a = ap.parse_args()
+
+    rows = load()
+    rev = a.rev or subprocess.run(["git", "-C", str(REPO), "rev-parse", "--short=8", "HEAD"], capture_output=True, text=True).stdout.strip()
+    total, done = problems(read("docs/ennorath/PROBLEMS.md", a.rev))
+    missing = sum(1 for l in read("docs/ennorath/MODULE_GAPS.md", a.rev).splitlines() if "| missing |" in l)
+    stops = stops_count.open_count(read("docs/STOPS.md", a.rev))
+    if a.audit:
+        ftotal, fopen = audit_counts(a.audit)
+        audit = a.audit_name or a.audit.parent.name
+    else:
+        before = [r for r in rows if r["date"] < a.date]
+        if not before:
+            raise SystemExit("no earlier row to carry the field columns from: give --audit")
+        ftotal, fopen, audit = int(before[-1]["fields_total"]), int(before[-1]["fields_open"]), "-"
+    row = {"date": a.date, "rev": rev[:8], "fields_total": str(ftotal), "fields_open": str(fopen), "modules_missing": str(missing),
+           "problems_total": str(total), "problems_done": str(done), "stops_open": str(stops), "audit": audit}
+    if not a.write:
+        print("\t".join(row[c] for c in COLUMNS))
+        return 0
+    rows = sorted([r for r in rows if r["date"] != a.date] + [row], key=lambda r: r["date"])
+    with OUT.open("w", encoding="utf-8", newline="\n") as f:
+        f.write("\t".join(COLUMNS) + "\n")
+        for r in rows:
+            f.write("\t".join(r[c] for c in COLUMNS) + "\n")
+    print(f"{OUT.relative_to(REPO)}: {a.date} written ({len(rows)} rows)")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

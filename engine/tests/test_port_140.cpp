@@ -301,3 +301,36 @@ TEST_CASE("PORT-140: a weapon without ProjectileFilterInContainer is untouched b
 	REQUIRE(togglePunch != nullptr);
 	CHECK(troll->getWeapons()->weaponStatus(*togglePunch) == WEAPON_READY_TO_FIRE);
 }
+
+TEST_CASE("PORT-140 gate 3: an empty rock with IdleAfterFiringDelay is ready only while the owner's weapon is locked (RW 0x6CD11F -> 0x68B634, P-104)")
+{
+	// Ennorath's creep troll (CaveTroll_Slaved, PRIMARY MordorCaveTrollRockThrow) has IdleAfterFiringDelay = 2167: Weapon::getStatus RW 0x6CD142 then
+	// asks, with no carried rock and the reload over, whether the owner's current weapon is locked (RW 0x6CD11F -> Object::isCurWeaponLocked RW 0x68B634).
+	// Not locked: OUT_OF_AMMO, and the punch is chosen. Locked (a throw in progress): READY_TO_FIRE.
+	std::string ini = kPort140Troll;
+	const std::string anchor = "Weapon Port140Rock\n";
+	const size_t at = ini.find(anchor);
+	REQUIRE(at != std::string::npos);
+	ini.insert(at + anchor.size(), "  IdleAfterFiringDelay = 2167\n");
+	CombatWorld g(ini.c_str());
+	Object *troll = g.unit("Port140Troll", 'A', 40.0f, 40.0f);
+	REQUIRE(troll != nullptr);
+	Object *victim = g.unit("Port140Troll", 'B', 46.0f, 40.0f);
+	REQUIRE(victim != nullptr);
+	ObjectWeapons *weapons = troll->getWeapons();
+	REQUIRE(weapons != nullptr);
+	Weapon *rock = weapons->weaponInSlot(PRIMARY_WEAPON);
+	REQUIRE(rock != nullptr);
+	REQUIRE(troll->getContain()->getContainCount() == 0u);
+	REQUIRE_FALSE(weapons->isCurWeaponLocked());
+	CHECK(weapons->weaponStatus(*rock) == WEAPON_OUT_OF_AMMO);
+	CHECK(weapons->chooseBestWeaponForTarget(victim, PREFER_TEMPLATE_DEFAULT, CMD_FROM_AI)); // RW 0x6C8A4E
+	CHECK(currentWeaponName(*troll) == "Port140Punch");
+
+	// the other half: a locked current weapon makes the empty rock ready (RW 0x6CD1BF -> READY_TO_FIRE)
+	REQUIRE(weapons->setWeaponLock(PRIMARY_WEAPON, LOCKED_TEMPORARILY));
+	REQUIRE(weapons->isCurWeaponLocked());
+	CHECK(weapons->weaponStatus(*rock) == WEAPON_READY_TO_FIRE);
+	weapons->releaseWeaponLock(LOCKED_TEMPORARILY);
+	CHECK(weapons->weaponStatus(*rock) == WEAPON_OUT_OF_AMMO);
+}

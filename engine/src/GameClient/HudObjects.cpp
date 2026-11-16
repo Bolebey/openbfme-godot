@@ -193,6 +193,12 @@ bool canSelect(const HudContext &ctx, const Object &obj, bool dragSelecting)
 	}
 	// RW 0x7108F2 (SelectionTranslator partition callback) / RW 0x671A3F (CanSelectDrawable) -> RW 0x68DE58 (Object::isSelectable).
 	// Retail objects are selectable unless destroyed, effectively dead (without KeepSelectableWhenDead), status UNSELECTABLE, or DRONE.
+	// Both editions (RW 0x83BDA2..0x83BDAF): UNSELECTABLE status and m_masked (+ 0x459) reject selection before Object::isSelectable / CREEP checks.
+	static const int unselectable = ObjectTemplateInfoBuilder::objectStatusIndex("UNSELECTABLE");
+	if ((unselectable >= 0 && obj.testStatus((unsigned)unselectable)) || obj.isMasked())
+	{
+		return false;
+	}
 	if (!isSelectable(obj, ctx.ui.getGUICommand()))
 	{
 		// INFERENCE (owner-verified in game, P-28): ensure neutral / creep units can be selected by single click.
@@ -239,7 +245,12 @@ unsigned collisionTypeOf(const HudContext &ctx, const Object &obj)
 	static const KindIndices kinds;
 	const auto isKind = [&obj](int bit) { return bit >= 0 && obj.isKindOf((unsigned)bit); };
 	unsigned t = 0;
-	if (isKind(kinds.selectable) || isKind(kinds.walkOnWall))
+	// Both editions (RW 0x4B583C / DONOR BFME2 0x4B5FE6; RW 0x4B2D5E): explicit setScriptSelectable (0/1) overrides template SELECTABLE || WALK_ON_TOP_OF_WALL.
+	const int selectableOverride = obj.scriptSelectableOverride();
+	const bool selectablePick = selectableOverride == -1
+		? (isKind(kinds.selectable) || isKind(kinds.walkOnWall))
+		: (selectableOverride == 1);
+	if (selectablePick)
 	{
 		t = PICK_TYPE_SELECTABLE;
 	}

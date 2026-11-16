@@ -127,6 +127,12 @@ struct AISpecialPowerDecision
 	                                      ///< + 0x2C of SPELLBOOK_ASSIST_BATTLE_BUFF (0) / _DEBUFF (1)
 	ObjectID assistUnit = INVALID_ID;     ///< SPELLBOOK_ASSIST_BATTLE_*: + 0x38 the army unit the decision chose
 	ObjectID assistTarget = INVALID_ID;   ///< .. + 0x3C the unit (BUFF) or its victim (DEBUFF)
+	// The summoned helper the slot 1 overrides steer (RW 0x9EB961 / 0x9E8A42 / 0x9E7F0F): the template name of what the power creates, taken from the
+	// special power module once while it is empty (RW 0x9EB9A5 / 0x9E8A83 / 0x9E7F50: RW 0x401E64 true for a null or empty string; the module RW 0x68C26D
+	// of the button's template, its slot 0x5C), and the object the lookup found, cached by id and cleared when it is gone (RW 0x9EBA37 -> RW 0x449681,
+	// RW 0x9EBA54). TARGETAOE_SUMMON keeps it at + 0x2C / + 0x30, ASSIST_BATTLE at + 0x30 / + 0x34, SHROUD_REVEAL at + 0x50 / + 0x54.
+	std::string helperName;
+	ObjectID helperId = INVALID_ID;
 	std::set<ObjectID> buffedIds;         ///< SPELLBOOK_BUFFECONOMYBUILDING + 0x28: the economy structures already chosen (RW 0x9E7671, never cleared)
 	// the kind of each type (its base class), -1 for an invalid type
 	static int kindOf(int type);
@@ -168,6 +174,7 @@ public:
 	struct Stats
 	{
 		unsigned long long asked = 0, yes = 0, executed = 0, unportedDecisions = 0, unportedCommands = 0;
+		unsigned long long unsteeredHelpers = 0; ///< the slot 1 overrides whose steering body is not ported, met (ASSIST_BATTLE_* / SHROUD_REVEAL)
 		std::array<unsigned long long, AI_SPECIAL_POWER_TYPE_COUNT> executedByType{};
 		std::array<unsigned long long, AI_SPECIAL_POWER_TYPE_COUNT> unportedByType{}; ///< lane AIPOW-1: the unported decisions met, per type
 	};
@@ -178,6 +185,10 @@ public:
 private:
 	void init();                                                // RW 0x8B714F
 	bool powerReady(const SpecialPowerTemplate *t);             // RW 0x8B708B
+	// the decision object's slot 1 (RW 0x993019's ++counter) with the three per-type overrides in front of it
+	void slotOne(Object &obj);                                  // RW 0x993019, 0x9EB961, 0x9E8A42, 0x9E7F0F
+	void steerSummonedHelper(Object &obj);                      // RW 0x9EB961 (TARGETAOE_SUMMON)
+	std::string summonedHelperName(Object &obj);                // RW 0x9EB9A5 .. 0x9EBA32: the power module's slot 0x5C
 	bool decide(Object &obj);                                   // slot 0x1C
 	void execute(Object &obj);                                  // slot 0x18
 	void runButton(Object &obj, Object *target, const Coord3D *loc); // RW 0x696FD2 / 0x697890 / 0x6979D9 with source 1

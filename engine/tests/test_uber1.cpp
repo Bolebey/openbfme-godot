@@ -207,6 +207,10 @@ void storeUberHashes(const char *name, const std::vector<std::uint32_t> &hashes)
 // pin: the arena PR batch of 2026-11-14 (2) (fork PRs 440 .. 476) re-measured it once on the merged tree (OPENBFME_UBER1_REGEN=1, Linux GCC on Colab, whose
 // hashes match the MSVC pins): PORT-437 (#476, the generic attack machine's object conditions RW 0x7457DF / RW 0x745901) moves it from frame 0; the
 // merged tree with #476 reverted passes the previous vector
+// pin: batch 3 of 2026-11-15 (fork PRs 484 .. 501, 10 merged) re-measured it once on the merged tree (REGEN=1, Linux GCC on Colab, whose hashes
+// match the MSVC pins). The per-PR checks (each PR alone on main 157b917f) name the movers: Local 59 (#500, WeaponFireSpecialAbilityUpdate makes and
+// loads its weapon in the constructor and crc() hashes it, RW 0x895DE1: from frame 0), Local 61 (#501, stunned units skip the AI update, RW 0x669652),
+// Port 464 (#487, a summoned helper's AI steering) and Port 201 (#496, the captured building's production cancel and upgrade reset)
 TEST_CASE("uber1: the Uber battle hashes as its pin vector in every frame with 1, 4 and 16 logic threads and in a repeated run; the hash's own jobs run on "
 		  "workers; Faithful hashes differently and serially")
 {

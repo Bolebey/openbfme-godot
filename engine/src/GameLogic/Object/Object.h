@@ -318,14 +318,14 @@ public:
 	// 10 (DISABLED_SCRIPT_UNDERPOWERED) forever
 	void setScriptStatus(std::uint8_t bits, bool set);
 	std::uint8_t scriptStatus() const { return m_scriptStatus; }
-	// lane SCRIPT-2: RW Object + 0x454 (set by RW 0x68BE3C, the script's "Selectable" panel flag); the client's isSelectable also needs it
-	void setScriptSelectable(bool on) { m_scriptSelectable = on; }
+	// lane SCRIPT-2 / LOCAL-58: RW Object + 0x454 (set by RW 0x68BE3C / DONOR BFME2 0x0028B76D); setting false calls Drawable::setSelectable(false)
+	// (RW 0x6719FA / DONOR BFME2 0x00271700) to deselect the drawable and toggle the draw/pick selectable override (-1/0/1, RW 0x4B2D5E / 0x4B583C).
+	void setScriptSelectable(bool on);
 	bool isScriptSelectable() const { return m_scriptSelectable; }
-	// lane MODCOMPAT-MOD1: RW Object::maskObject (RW 0x68BEB1): Object + 0x459 bit 1 (masking also deselects the object for every player but its own,
-	// RW 0x625759: the selection is the client's). Writers: RebuildHoleBehavior (RW 0x886630 / 0x886B51), SpawnBehavior's AggregateHealth (RW 0x86321B, not
-	// ported: S-1425) and RW 0x8A7754. Its readers (RW 0x6C91EB, 0x81E691, 0x83BDAF) are not ported: the masked hole is also UNSELECTABLE and UNATTACKABLE
-	// (stop S-1427)
-	void maskObject(bool on) { m_masked = on; }
+	int scriptSelectableOverride() const;
+	// lane MODCOMPAT-MOD1 / LOCAL-58: RW Object::maskObject (RW 0x68BEB1 / DONOR BFME2 0x0028B7E2): Object + 0x459 bit 1; masking also deselects the
+	// object for every player except its controlling owner (RW 0x625759). Both editions match.
+	void maskObject(bool on);
 	bool isMasked() const { return m_masked; }
 
 	// lane SCRIPT-2: the trigger areas the object is in (RW 0x69264D, from reactToTransformChange when the position changed). Entries at + 0x3DC
@@ -645,6 +645,7 @@ private:
 	std::string m_name;
 	std::uint8_t m_scriptStatus = 0; ///< lane SCRIPT-2: RW + 0x457 (hashed when not zero)
 	bool m_scriptSelectable = false; ///< RW +0x454: ctor initializes from SELECTABLE; hash only deviations from the template-derived default
+	bool m_scriptSelectableExplicit = false; ///< RW 0x4B2D5E / 0x4B583C: draw-module override (-1 unset vs explicit 0/1) for WALK_ON_TOP_OF_WALL
 	bool m_masked = false;           ///< RW + 0x459 bit 1 (maskObject; hashed when set)
 	TriggerEntry m_triggers[MAX_TRIGGERS_IN];  ///< lane SCRIPT-2: RW + 0x3DC
 	int m_triggerCount = 0;                      ///< RW + 0x45A
