@@ -29,6 +29,8 @@
 #include "GameLogic/Module/SpecialAbilityModules.h"
 #include "GameLogic/Module/HeroAbilityModules.h"
 #include "GameLogic/Module/HordeDispatchSpecialPower.h"
+#include "Common/Thing/ThingTemplate.h"
+#include "GameLogic/Module/HeroModules.h"
 #include "GameLogic/Module/SpellBookPowers.h"
 #include "GameLogic/Module/StealthAbilityModules.h"
 #include "GameLogic/Module/WeaponChangeSpecialPower.h"
@@ -617,13 +619,41 @@ void unitsSweep(const std::string &faction, Results &res, bool sweep)
 					const bool playerUpgrade = up->getUpgradeType() == UPGRADE_TYPE_PLAYER;
 					const int cost = up->calcCostToBuild(g.rig.local, u);
 					const int expect = (int)std::ceil(up->getBuildTimeSeconds() * 5.0f);
-					bool got = false;
-					for (int f = 0; f < expect + 60 && !got; ++f)
+					bool got = false, gone = false;
+					for (int f = 0; f < expect + 60 && !got && !gone; ++f)
 					{
 						g.step(1);
 						u = g.logic().findObjectByID(uid);
+						gone = !playerUpgrade && !u;
 						// UPGRADE_TYPE_PLAYER (e.g. ImladrisLoremaster Tome upgrades) lands on Player (RW 0x6AEE22), not the Object
 						got = playerUpgrade ? g.rig.local->hasUpgradeComplete(up) : (u && u->hasUpgrade(up));
+					}
+					if (gone)
+					{
+						// the unit left the world once the upgrade landed: ReplaceObjectUpgrade (a wall segment's gate / tower / hub, MordorBattleTower ->
+						// Ungol) makes a new object of the player at the spot, as the special powers' replacement above (2026-11-16: the by-id lookup of
+						// Local 75 no longer sees the destroyed unit's upgrade)
+						Object *after = nullptr;
+						for (Object *o = g.logic().getFirstObject(); o; o = o->getNextObject())
+						{
+							if (o->getID() > uid && o->getControllingPlayer() == g.rig.local && o->getTemplate() && o->getTemplate()->getName() != e->name
+								&& dist2d(*o->getPosition(), c) < 600.0f
+								&& (factb::hasKindOf(*o->getTemplate(), "SELECTABLE") || factb::hasKindOf(*o->getTemplate(), "STRUCTURE")))
+							{
+								after = o;
+							}
+						}
+						if (after)
+						{
+							res.pass(item, str("%s replaced the unit with %s after %u frames, cost %d", cb->m_upgradeName.c_str(),
+											   after->getTemplate()->getName().c_str(), g.frame() - pressFrame, cost));
+						}
+						else
+						{
+							res.fail(item, str("%s: the unit left the world %u frames after the press, nothing replaced it", cb->m_upgradeName.c_str(),
+											   g.frame() - pressFrame));
+						}
+						continue;
 					}
 					if (!got)
 					{
@@ -2639,8 +2669,10 @@ TEST_CASE("factb spell book: every Isengard spell book power cast through the HU
 	// again (664 more lost with the cast), so its line passes; S-921 keeps the explanation (no effect of its own is asserted). Dragon Strike stays KNOWN (S-1997)
 	// pin: P-45 (2026-11-06, PROCESS 7 rule 2): on the fork the upstream merge 5361552b's fight misses the 500 heuristic again (1868 lost with the cast, 1936
 	// without; 55aa2e22, its first parent, passes): a KNOWN line once more (S-921), as after q38
+	// the fork's merge of upstream 942fd79e (2026-11-16): Isengard's Taint passes by its own effect (the TaintLand aura's GenericBuff on the caster's
+	// units), as Mordor's does since TAINTAREA-1, so its S-1997 entry goes
 	r.check({ { "spell SpellBookDevastation", "S-921" }, { "spell SpellBookIndustry", "S-1997" },
-		{ "spell SpellBookFueltheFires", "S-1997" }, { "spell SpellBookDragonStrike", "S-1997" }, { "spell SpellBookIsengardTaint", "S-1997" } });
+		{ "spell SpellBookFueltheFires", "S-1997" }, { "spell SpellBookDragonStrike", "S-1997" } });
 }
 
 TEST_CASE("factb spell book: every Mordor spell book power cast through the HUD's spell bar shows its effect")
@@ -2652,7 +2684,8 @@ TEST_CASE("factb spell book: every Mordor spell book power cast through the HUD'
 	Results r;
 	spellBookOf("FactionMordor", r);
 	r.print("spell book FactionMordor");
-	r.check({ { "spell SpellBookIndustry", "S-1997" }, { "spell SpellBookTaint", "S-1997" }, { "spell SpellBookUntamedAllegiance", "S-1997" } });
+	// lane TAINTAREA-1: Taint's line passes by its own effect (the TaintLand aura's GenericBuff on the caster's units), its pin goes
+	r.check({ { "spell SpellBookIndustry", "S-1997" }, { "spell SpellBookUntamedAllegiance", "S-1997" } });
 }
 
 namespace
@@ -3608,7 +3641,7 @@ TEST_CASE("factc spell book: every Goblin and Angmar spell bought in the store a
 		return;
 	}
 	factcCase("spell book", "FactionWild", spellsViaStore,
-			  { { "spell SpellBookTaint", "S-1997|no effect of TaintSpecialPower" }, { "spell SpellBookUntamedAllegiance", "S-1997|the HUD refused the scene's spot" } });
+			  { { "spell SpellBookUntamedAllegiance", "S-1997|the HUD refused the scene's spot" } }); // lane TAINTAREA-1: Taint passes by its own effect
 	factcCase("spell book", "FactionAngmar", spellsViaStore, { { "spell SpellBookUntamedAllegiance", "S-1997|the HUD refused the scene's spot" } });
 }
 
