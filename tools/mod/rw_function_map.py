@@ -354,6 +354,7 @@ class ModuleEvent:
     category: str = ''
     inheritable: bool = False
     source: str = ''
+    body: bool = False
 
 
 def parse_module_events(lines: list[tuple[str, str]], start: int, grammar, *, limit: int | None = None):
@@ -428,7 +429,7 @@ def parse_module_events(lines: list[tuple[str, str]], start: int, grammar, *, li
                 end = module_end(i + 1, found[1], source)
                 category = 'behavior' if low == 'body' else low
                 events.append(ModuleEvent('add', tag=args[1], name=found[0], category=category,
-                                          inheritable=mode == 'inheritablemodule', source=source))
+                                          inheritable=mode == 'inheritablemodule', source=source, body=low == 'body'))
                 i = end + 1
                 continue
             else:
@@ -482,6 +483,8 @@ def replay_module_events(entries: tuple[ModuleEntry, ...], events: list[ModuleEv
                 record = records.get(event.name)
                 if record is None or record['type'] != types[event.category]:
                     raise ValueError(f'unknown module/type {event.name}/{event.category}')
+                if event.category == 'behavior' and bool(record['mask'] & 32) != event.body:
+                    raise ValueError(f'body category mismatch for {event.name}')
                 entry = ModuleEntry(event.name, event.tag, event.category, record['mask'], record['isAiModuleData'],
                                     record['slot7'], event.inheritable)
                 entries = add_module(entries, entry, child=child, replacing=replacing)
@@ -492,3 +495,42 @@ def replay_module_events(entries: tuple[ModuleEntry, ...], events: list[ModuleEv
     if in_replace:
         raise ValueError('unclosed replacement')
     return entries
+
+
+@dataclass(frozen=True)
+class ObjectDefinition:
+    name: str
+    kind: str
+    parent: str
+    events: tuple[ModuleEvent, ...]
+    source: str = ''
+
+
+def resolve_objects(definitions: list[ObjectDefinition], registry: list[dict]):
+    """Resolve definitions in supplied *load order*, rejecting missing parents.
+
+    Counting is per distinct object, not number of declarations or instances of
+    a module within an object. This function does not infer the archive's load
+    order or a map's override load type. Duplicate object definitions are not
+    accepted without such evidence; all keys are case-sensitive like the port.
+    """
+    from collections import Counter
+    objects: dict[str, tuple[ModuleEntry, ...]] = {}
+    for obj in definitions:
+        if not obj.name or obj.name in objects:
+            raise ValueError(f'{obj.source}: duplicate or empty object {obj.name!r}')
+        if obj.kind not in {'object', 'childobject', 'objectreskin'}:
+            raise ValueError(f'{obj.source}: unsupported object kind {obj.kind!r}')
+        if obj.kind == 'object':
+            if obj.parent:
+                raise ValueError(f'{obj.source}: Object has a parent')
+            entries = copy_module_state(objects.get('DefaultThingTemplate', ()))
+        else:
+            if obj.parent not in objects:
+                raise ValueError(f'{obj.source}: parent {obj.parent!r} not yet loaded')
+            entries = copy_module_state(objects[obj.parent])
+        objects[obj.name] = replay_module_events(entries, list(obj.events), registry, child=obj.kind == 'childobject')
+    counts = Counter()
+    for entries in objects.values():
+        counts.update({entry.name for entry in entries})
+    return objects, counts

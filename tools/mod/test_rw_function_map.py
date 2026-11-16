@@ -210,3 +210,20 @@ def test_object_boundary_mismatch_is_not_silently_accepted():
     lines = [('End', '1'), ('Other = ignored', '2')]
     with pytest.raises(ValueError, match='boundary mismatch'):
         parse_module_events(lines, 0, grammar, limit=2)
+
+
+def test_ordered_object_counts_deduplicate_and_require_loaded_parent():
+    import pytest
+    from rw_function_map import ModuleEvent, ObjectDefinition, resolve_objects
+    reg = [dict(name='A', type=0, mask=0, isAiModuleData=False, slot7=False)]
+    event = lambda tag: ModuleEvent('add', name='A', tag=tag, category='behavior')
+    default = ObjectDefinition('DefaultThingTemplate', 'object', '', (event('one'),))
+    parent = ObjectDefinition('Parent', 'object', '', (event('two'),))
+    child = ObjectDefinition('Child', 'childobject', 'Parent', (ModuleEvent('remove', tag='one'),))
+    objects, counts = resolve_objects([default, parent, child], reg)
+    assert [x.tag for x in objects['Child']] == ['two']
+    assert counts['A'] == 3
+    with pytest.raises(ValueError, match='not yet loaded'):
+        resolve_objects([child, parent], reg)
+    with pytest.raises(ValueError, match='duplicate'):
+        resolve_objects([parent, parent], reg)
