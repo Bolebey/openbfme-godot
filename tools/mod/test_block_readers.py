@@ -29,3 +29,21 @@ def test_volatile_registers_killed_at_calls():
     code = bytes.fromhex('a100200000 89c3 e800000000 8b483c 8b4b40 c3')
     assert br.global_reads(code, 0x1000, {0x1000: ((0x1000, len(code)),)}, {0x2000}) == [
         (0x1000, 0x2000, 0x40, 0x100f)]
+
+
+def test_field_table_and_route_join():
+    import struct
+    import field_gaps as fg
+    data = bytearray(0x80)
+    struct.pack_into('<IIII', data, 0, 0x1040, 0x2000, 0, 0x3c)
+    data[0x40:0x46] = b'Field\0'
+    assert br.field_table(data, 0x1000, 0x1000) == {'field': 0x3c}
+    audit = [{'status': 'not-read', 'block': 'gamedata', 'field': 'Field', 'defs': '1'}]
+    candidates = {('gamedata', 'field'): ('global Example +0x3C', '0x00001000 (none)')}
+    assert fg.join(audit, {}, set(), block_candidates=candidates)[0][11:] == [
+        '0x00001000 (none)', 'global Example +0x3C']
+
+
+def test_lea_is_not_a_read():
+    code = bytes.fromhex('a100200000 8d483c c3')
+    assert br.global_reads(code, 0x1000, {0x1000: ((0x1000, len(code)),)}, {0x2000}) == []

@@ -8,6 +8,7 @@ The input is an address/size inventory and the loaded image; no game bytes are
 written by this module.
 """
 from collections import defaultdict
+import struct
 
 from capstone import Cs, CS_ARCH_X86, CS_MODE_32, CS_AC_READ
 from capstone.x86 import X86_OP_MEM, X86_OP_REG, X86_REG_INVALID
@@ -45,11 +46,13 @@ def global_reads(data, base, blocks, globals_by_address):
             tracked = {}
             for ins in instructions:
                 for op in ins.operands:
+                    if ins.mnemonic == 'lea':
+                        continue  # computes an address; does not read the field
                     if op.type != X86_OP_MEM or not (op.access & CS_AC_READ) or op.mem.index != X86_REG_INVALID:
                         continue
                     reg = FAMILIES.get(ins.reg_name(op.mem.base))
                     if reg in tracked:
-                        result.add ( (function, tracked[reg], op.mem.disp, ins.address) )
+                        result.add((function, tracked[reg], op.mem.disp, ins.address))
                 copied = None
                 if ins.mnemonic == 'mov' and len(ins.operands) == 2:
                     dst, src = ins.operands
@@ -82,3 +85,30 @@ def getter_callers(functions, getters):
         for target in function.calls & getters:
             result[target].add(caller)
     return {getter: sorted(result[getter]) for getter in sorted(getters)}
+
+
+def field_table(data, base, address):
+    """Read 16-byte INI field entries from a mapped image, through the terminator.
+
+    Values and raw bytes must never be written to the report. A malformed table
+    or name is an error rather than a partial result.
+    """
+    rows = {}
+    while True:
+        pos = address - base
+        if pos < 0 or pos + 16 > len(data):
+            raise ValueError(f'field table outside image at {address:#x}')
+        name_ptr, parser, _, offset = struct.unpack_from('<IIII', data, pos)
+        if name_ptr == 0:
+            return rows
+        name_pos = name_ptr - base
+        if not 0 <= name_pos < len(data):
+            raise ValueError(f'field name outside image at {address:#x}')
+        end = data.find(b'\0', name_pos, min(name_pos + 256, len(data)))
+        if end < 0 or not parser:
+            raise ValueError(f'invalid field entry at {address:#x}')
+        name = data[name_pos:end].decode('ascii')
+        if name.lower() in rows:
+            raise ValueError(f'duplicate field name {name}')
+        rows[name.lower()] = offset
+        address += 16

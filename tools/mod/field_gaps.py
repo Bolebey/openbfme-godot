@@ -10,7 +10,8 @@ trivial, not getModuleNameKey / xfer / a deleting destructor). They are candidat
 a function ported without a citation, or a function of another class that reads the module's data. A row with `how` = manual or a
 `stop` may already carry a verdict ("RotWK does not read it", TOP20 / docs/STOPS.md): read it first. The task still proves the reader
 (parser -> offset -> every reader, PROCESS 5 step 4). Only block, class and field names, counts and RW addresses are written: no values.
-The map starts from module tables only: fields of top-level blocks (Object, Weapon, Locomotor, Upgrade, ...) get no candidates.
+With --game and --inventory, GameData gets same-basic-block global-pointer read candidates. Other top-level blocks remain unimplemented.
+These are heuristic leads, not no-reader verdicts; register state is not propagated across blocks or indirect calls.
 """
 from __future__ import annotations
 
@@ -21,10 +22,12 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import matrix_gaps as mg  # noqa: E402
+import block_readers as br  # noqa: E402
+import rw_function_map as rm  # noqa: E402
 
 STATUSES = ("parsed-unused", "not-read")
 HEADER = ["status", "block", "owner", "field", "defs", "how", "stop", "owner in map", "map none", "specific none", "map partial",
-          "candidate functions (address@depth, smallest depth first) / note"]
+          "candidate functions (address@depth, smallest depth first) / note", "route"]
 
 
 def defs_of(row) -> int:
@@ -34,7 +37,9 @@ def defs_of(row) -> int:
         return 0
 
 
-def join(audit_rows, gaps, classes, reach=None, sizes=None, skip=None):
+def join(audit_rows, gaps, classes, reach=None, sizes=None, skip=None, block_candidates=None):
+    include_route = block_candidates is not None
+    block_candidates = block_candidates or {}
     rows = []
     for r in audit_rows:
         if r.get("status") not in STATUSES:
@@ -42,11 +47,16 @@ def join(audit_rows, gaps, classes, reach=None, sizes=None, skip=None):
         owner = r.get("owner") or ""
         base = [r["status"], r.get("block", ""), owner, r.get("field", ""), str(defs_of(r)), r.get("how", ""), r.get("stop", "")]
         if owner not in classes:
-            rows.append(base + ["no", "", "", "", "the owner is not a module class of the map (an INI block, or a class the mod's objects do not use)"])
+            candidates = block_candidates.get((r.get("block", "").lower(), r.get("field", "").lower())) if not owner else None
+            if candidates is not None:
+                route, note = candidates
+                rows.append(base + ["no", "", "", "", note, route])
+            else:
+                rows.append(base + ["no", "", "", "", "the owner is not a module class of the map (an INI block, or a class the mod's objects do not use)"] + ([""] if include_route else []))
             continue
         none, specific, partial = mg.class_gaps(gaps.get(owner, {}), reach, sizes, skip)
         note = mg.format_functions(specific) or "no specific none function: the reader is ported without a citation, shared, or in another class"
-        rows.append(base + ["yes", str(none), str(len(specific)), str(partial), note])
+        rows.append(base + ["yes", str(none), str(len(specific)), str(partial), note] + (["module"] if include_route else []))
     rows.sort(key=lambda x: (-int(x[4]), x[1], x[2], x[3]))
     return rows
 
@@ -56,6 +66,40 @@ def write(rows, path: Path):
         w = csv.writer(stream, delimiter="\t", lineterminator="\n")
         w.writerow(HEADER)
         w.writerows(rows)
+
+
+# RW 0x644148 parses into TheGlobalData [0xDE4364] using 0xBFF580
+# (0x6441A5..AD). Names and offsets come from the
+# original mapped image because those tables are absent from field-tables.json.
+SINGLETONS = {
+    "gamedata": ("TheGlobalData", 0xDE4364, 0xBFF580),
+}
+
+
+def top_level_candidates(game, inventory):
+    import json
+    import pefile
+    import hashlib
+    record = json.loads(inventory.read_text(encoding="utf-8"))
+    if record.get("sha256") != hashlib.sha256(game.read_bytes()).hexdigest() or record.get("missing_seeds"):
+        raise ValueError("inventory does not match game or has missing seeds")
+    blocks = {f["address"]: tuple(tuple(span) for span in f["blocks"]) for f in record["functions"]}
+    pe = pefile.PE(str(game), fast_load=True)
+    data, base = pe.get_memory_mapped_image(), pe.OPTIONAL_HEADER.ImageBase
+    citations = rm.scan_citations(Path("engine/src"))
+    matches = br.global_reads(data, base, blocks, {v[1] for v in SINGLETONS.values()})
+    by_field = {}
+    for function, pointer, offset, instruction in matches:
+        by_field.setdefault((pointer, offset), set()).add((function, instruction))
+    output = {}
+    for block, (name, pointer, table) in SINGLETONS.items():
+        for field, offset in br.field_table(data, base, table).items():
+            route = f"global {name} +0x{offset:X}"
+            candidates = sorted(by_field.get((pointer, offset), ()))
+            note = ", ".join(f"0x{function:08X} ({citations.get(function, 'none')}; read 0x{instruction:08X})"
+                             for function, instruction in candidates)
+            output[(block, field)] = (route, note or "no candidate in recovered basic blocks; not a no-reader verdict")
+    return output
 
 
 def main(argv=None):
@@ -70,7 +114,8 @@ def main(argv=None):
         audit_rows = list(csv.DictReader(stream, delimiter="\t"))
     gaps, classes, reach = mg.read_map(a.map)
     sizes, skip = mg.load_filters(a.inventory, a.game)
-    rows = join(audit_rows, gaps, classes, reach, sizes, skip)
+    candidates = top_level_candidates(a.game, a.inventory) if a.game else {}
+    rows = join(audit_rows, gaps, classes, reach, sizes, skip, candidates)
     write(rows, a.out)
     in_map = sum(1 for r in rows if r[7] == "yes")
     with_candidates = sum(1 for r in rows if r[7] == "yes" and r[9] not in ("", "0"))
