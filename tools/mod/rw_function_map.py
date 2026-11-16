@@ -374,7 +374,7 @@ def parse_module_events(lines: list[tuple[str, str]], start: int, grammar, *, li
 
     def module_end(i, node, source):
         while i < len(lines):
-            key, _ = fa.field_key(lines[i][0])
+            key, value = fa.field_key(lines[i][0])
             if key.lower() == 'end':
                 return i
             kind = fa.row_kind(node, key) if node is not None else None
@@ -385,9 +385,7 @@ def parse_module_events(lines: list[tuple[str, str]], start: int, grammar, *, li
                 if i == len(lines):
                     raise ValueError(f'{source}: unclosed module script')
             elif (kind and kind[0] == 'block' and
-                  (key.lower() != 'addemotion' or (i + 1 < len(lines) and
-                   fa.field_key(lines[i + 1][0])[0].lower() not in {'end', 'addemotion'} and
-                   fa.opens_block(lines, i + 1, kind[1], node, grammar.classes)))):
+                  (key.lower() != 'addemotion' or value.split()[:1] and value.split()[0].lower() == 'override')):
                 end = fa.block_end(lines, i + 1, kind[1], grammar.classes)
                 if end >= 0:
                     i = end
