@@ -226,6 +226,10 @@ def check(names: list[str], do_build: bool) -> None:
     for b, r in sorted(old.items()):
         lines.append(f"| `{b}` | {r['verdict']} | {r['behind']} | {len(r['tests'])} | {'; '.join(r['problems']).replace('|', '/')[:300]} |")
     (OUT / "report.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
+    drive = Path("/content/drive/MyDrive/openbfme-runs/upstream")
+    if drive.parent.is_dir():  # a Colab sandbox: the dashboard (/local, "PR в апстрим") reads the report from Drive by this name
+        drive.mkdir(exist_ok=True)
+        (drive / "openbfme-upstream-report.json").write_text(json.dumps(old, indent=1), encoding="utf-8")
     print(f"report: {OUT / 'report.md'}")
 
 
