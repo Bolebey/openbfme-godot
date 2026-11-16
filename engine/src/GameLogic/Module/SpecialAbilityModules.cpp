@@ -2255,9 +2255,12 @@ void WeaponFireSpecialAbilityUpdate::startUnpacking()
 			++m_unported; // RW 0x6944A5: the horde passes the condition to its members (S-859)
 		}
 	}
-	if (m_wf->m_playWeaponPreFireFX)
+	// RW 0x895FC4–0x896026: the enabled flag, weapon, template and REGULAR PreAttackFX must all exist; play on the owner's drawable.
+	if (m_wf->m_playWeaponPreFireFX && m_weapon && m_weapon->getTemplate())
 	{
-		++m_unported; // RW 0x895FC4: the weapon's PreAttackFX at the target (client)
+		const WeaponTemplate &wt = *m_weapon->getTemplate();
+		Object &owner = *getObject();
+		owner.logic().fxEvents().emit(FXEventLog::drawablePositionEvent("PreAttackFX", owner.logic().getFrame(), wt.m_preAttackFXs[0], owner, wt.m_weaponSpeed));
 	}
 }
 
