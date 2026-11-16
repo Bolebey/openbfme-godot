@@ -495,6 +495,7 @@ include(cmake/Port428.cmake)    # PORT-428: the aerial path's 3D would-collide f
 include(cmake/Port439.cmake)    # PORT-439: the script action FOCAL_LENGTH_CAMERA (the view's focal length, issue #439; OPENBFME_PORT439_TESTS)
 include(cmake/Port194.cmake)    # PORT-194: the crowd response of the unit voice, RotWK's CrowdResponse parser and threshold rule (issue #461; OPENBFME_PORT194_TESTS)
 include(cmake/Port202.cmake)    # PORT-202: the locomotor's wading updater and the disguised climber's reveal (issue #469; OPENBFME_PORT202_TESTS)
+include(cmake/Port208.cmake)    # PORT-208: force attack from garrisons and spawners, the clicked map tree as a target (issue #490; OPENBFME_PORT208_TESTS)
 include(cmake/Port464.cmake)    # PORT-464: the per-frame steering of a summoned helper (issue #464; OPENBFME_PORT464_TESTS)
 add_library(openbfme_core STATIC
     ${OPENBFME_PLAY2_SOURCES}
@@ -1220,6 +1221,7 @@ add_executable(openbfme_tests
     ${OPENBFME_PORT430_TESTS}
     ${OPENBFME_PORT433_TESTS}
     ${OPENBFME_PORT202_TESTS}
+    ${OPENBFME_PORT208_TESTS}
     ${OPENBFME_PORT464_TESTS}
     tests/test_main.cpp
     tests/test_big_archive.cpp
