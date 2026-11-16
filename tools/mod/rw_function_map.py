@@ -653,3 +653,51 @@ def inventory_from_ini(path: Path, grammar, registry: list[dict]):
     finally:
         vfs.close()
         del eg.MISSING[previous_missing:]
+
+
+def decode_block_inventory(data: bytes, base: int,
+                           blocks: dict[int, tuple[tuple[int, int], ...]], threshold: int = 200):
+    """Decode externally recovered basic blocks, without filling address gaps.
+
+    Each pair is (block VA, size). Shared tail blocks are allowed between
+    functions, but frequency counts deduplicate physical call sites. An indirect
+    jump is not followed. Direct jumps to another entry are tail calls; jump
+    tables and other gaps are not decoded as instructions. A block that ends in
+    the middle of an instruction is rejected, rather than silently shortened.
+    """
+    from collections import Counter
+    if threshold < 0:
+        raise ValueError('negative frequency threshold')
+    decoder = Cs(CS_ARCH_X86, CS_MODE_32)
+    decoder.detail = True
+    functions = {}
+    all_sites = set()
+    for start, spans in sorted(blocks.items()):
+        if not spans or start not in {a for a, _ in spans}:
+            raise ValueError(f'entry has no basic block: 0x{start:X}')
+        calls, vcalls, sites, visited = set(), set(), set(), set()
+        end_previous = base
+        for address, size in sorted(spans):
+            end = address + size
+            if size <= 0 or address < end_previous or not base <= address < end <= base + len(data):
+                raise ValueError(f'invalid basic block: 0x{address:X}')
+            end_previous = end
+            offset = address - base
+            instructions = list(decoder.disasm(data[offset:offset + size], address))
+            if not instructions or instructions[-1].address + instructions[-1].size != end:
+                raise ValueError(f'truncated basic block: 0x{address:X}')
+            for ins in instructions:
+                visited.add(ins.address)
+                if ins.mnemonic not in {'call', 'jmp'}:
+                    continue
+                op = ins.operands[0]
+                if op.type == X86_OP_IMM:
+                    if ins.mnemonic == 'call' or (op.imm in blocks and op.imm != start):
+                        calls.add(op.imm)
+                        sites.add((ins.address, op.imm))
+                elif ins.mnemonic == 'call' and op.type == X86_OP_MEM and op.mem.base:
+                    vcalls.add(op.mem.disp)
+        functions[start] = Function(frozenset(calls), frozenset(vcalls), len(visited), tuple(sorted(sites)))
+        all_sites.update(sites)
+    counts = Counter(target for _, target in all_sites)
+    return functions, {target: count for target, count in counts.items() if count > threshold}

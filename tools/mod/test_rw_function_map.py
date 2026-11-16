@@ -271,3 +271,27 @@ def test_ini_archive_inventory_with_includes_default_child_and_duplicates(tmp_pa
     assert {x.tag for x in objects['Base']} == {'tag_a', 'tag_b', 'tag_c'}
     assert {x.tag for x in objects['Child']} == {'tag_a', 'tag_c'}
     assert counts == {'A': 3, 'B': 2}
+
+
+def test_block_inventory_skips_gaps_and_counts_shared_sites_once():
+    from rw_function_map import decode_block_inventory
+    # call 0x1020; ret; gap (not code); shared tail call 0x1020; ret
+    blob = bytearray(b'\xcc' * 0x30)
+    blob[0:6] = b'\xe8\x1b\x00\x00\x00\xc3'
+    blob[0x10:0x16] = b'\xe8\x0b\x00\x00\x00\xc3'
+    blob[0x20] = 0xc3
+    blocks = {0x1000: ((0x1000, 6), (0x1010, 6)),
+              0x1010: ((0x1010, 6),), 0x1020: ((0x1020, 1),)}
+    functions, stops = decode_block_inventory(bytes(blob), 0x1000, blocks, 1)
+    assert functions[0x1000].instructions == 4
+    assert functions[0x1000].calls == {0x1020}
+    assert stops == {0x1020: 2}  # not 3: the shared site is physical code once
+
+
+def test_block_inventory_rejects_truncated_instruction_and_absent_entry():
+    import pytest
+    from rw_function_map import decode_block_inventory
+    with pytest.raises(ValueError, match='truncated'):
+        decode_block_inventory(b'\xe8\0\0\0\0', 0x1000, {0x1000: ((0x1000, 4),)})
+    with pytest.raises(ValueError, match='entry has no'):
+        decode_block_inventory(b'\xc3\xc3', 0x1000, {0x1000: ((0x1001, 1),)})
