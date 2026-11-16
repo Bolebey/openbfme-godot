@@ -33,6 +33,7 @@
 #include "GameLogic/Combat/CombatNames.h"
 #include "GameLogic/Combat/CombatQueries.h"
 #include "GameLogic/GameLogic.h"
+#include "GameLogic/Economy.h"
 #include "GameLogic/AI/AIGroup.h"
 #include "GameLogic/Module/AIUpdate.h"
 #include "GameLogic/ScriptEngine/ScriptEngine.h"
@@ -593,20 +594,25 @@ void SpecialPowerModule::onScienceAcquired()
 	// RW 0x896BD9 ..: a PublicTimer power of a STRUCTURE adds the in-game UI timer (client)
 }
 
-// RW 0x8969E5 (GameLogic + 0x114 == 3, S-525: the MP / skirmish filter in a skirmish or multiplayer game, no filter otherwise)
+// RW 0x8969E5 (DONOR BFME2 0x00493251, SpecialPowerModuleRva0049466D.cpp): GameLogic + 0x114 != 3 (RW 0x8969EE .. 0x8969FE) selects
+// RequirementsFilterStrategic (+0x3C); GameLogic + 0x114 == 3 tests RW 0x625456 (RW 0x896A00 .. 0x896A07 -> true when not skirmish / multiplayer)
+// and selects RequirementsFilterMPSkirmish (+0x38, RW 0x896A09). RW 0x896A0E -> RW 0x762977 passes an unset filter (constructor RW 0x896834:
+// RW 0x89695E / 0x896982 -> RW 0x763D11) or one whose +0x88 flag is 0 (NONE); otherwise RW 0x896A17 .. 0x896A2D asks RW 0x68B678
+// (Object::getControllingPlayer) -> RW 0x6ABD0B (Player::hasObjectMatching(filter, true)).
 bool SpecialPowerModule::requirementsMet() const
 {
+	const bool kind3 = getObject()->logic().economy().context().gameKind == 3;
 	Player *p = getObject()->getControllingPlayer();
-	if (!p || !p->science().mode().skirmishOrMultiplayer)
+	if (kind3 && (!p || !p->science().mode().skirmishOrMultiplayer))
 	{
 		return true;
 	}
-	const std::shared_ptr<const ObjectFilter> &f = m_spData->m_requirementsFilterMPSkirmish;
-	if (!f)
+	const std::shared_ptr<const ObjectFilter> &f = kind3 ? m_spData->m_requirementsFilterMPSkirmish : m_spData->m_requirementsFilterStrategic;
+	if (!f || !f->flag)
 	{
-		return true; // RW 0x896A0E: an unset filter (S-523 for its default)
+		return true;
 	}
-	return p->hasObjectMatching(*f, true); // RW 0x6ABD0B
+	return !p || p->hasObjectMatching(*f, true);
 }
 
 // RW 0x897E87 / 0x897987 (the ported part)
