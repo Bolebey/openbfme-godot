@@ -193,6 +193,14 @@ ButtonState ControlBar::evaluate(const CommandButton &b, Object &obj, bool &comm
 	{
 		return ButtonState::Restricted;
 	}
+	// PORT-220 (issue #529): RW 0x942826 .. 0x94282D, after the script availability call (RW 0x942490) and before the experience tracker's gate
+	// (RW 0x942833): an object whose single-use command flag (Object + 0x45B) is set disables every button of its command set (RW 0x9438C8: availability 0).
+	// The flag's writer is processCommandUI's RW 0x94066B (ControlBarCommandProcessing.cpp); the flag is never cleared (no RW instruction writes 0 to it
+	// after the constructor's RW 0x699C88), so the object keeps its gray buttons. Command 0x18 skips only RW 0x942490 (RW 0x94280D .. 0x942811), not this gate.
+	if (obj.hasSingleUseCommandBeenUsed())
+	{
+		return ButtonState::Restricted;
+	}
 	// RW 0x942833..0x94284E: no tracker, or a positive RequireLevel above the current rank, hides the button.
 	const ExperienceTracker *xp = obj.getExperienceTracker();
 	if (!xp || (b.m_requireLevel > 0 && xp->getRank() < b.m_requireLevel))

@@ -511,6 +511,7 @@ include(cmake/Port203.cmake)    # PORT-203: tunnel nemesis, removeFromContain(ex
 include(cmake/Port227.cmake)    # PORT-227: Ennorath backlog (WaitForOthers, ForceSkirmishAI, SUMMON_ANTI*/WALL_UPGRADE, TechBuilding, ThreatBreakdown, S-4257; issue #550; OPENBFME_PORT227_TESTS)
 include(cmake/Port249.cmake)    # PORT-249: OCLSpecialPower's location requirements, slot 0x48 (fork issue 577; OPENBFME_PORT249_TESTS)
 include(cmake/Port237.cmake)    # PORT-237: OCL nuggets/fields, CreateObjectDie, AODCrushCollide, OCLUpdate CreateAtEdge, BattlePlan bonuses (issue #560; OPENBFME_PORT237_TESTS)
+include(cmake/Port220.cmake)    # PORT-220: the single-use command flag, Object + 0x45B (issue #529; OPENBFME_PORT220_TESTS)
 add_library(openbfme_core STATIC
     ${OPENBFME_PLAY2_SOURCES}
     ${OPENBFME_APT_SOURCES}
@@ -1251,6 +1252,7 @@ add_executable(openbfme_tests
     ${OPENBFME_PORT227_TESTS}
     ${OPENBFME_PORT249_TESTS}
     ${OPENBFME_PORT237_TESTS}
+    ${OPENBFME_PORT220_TESTS}
     tests/test_main.cpp
     tests/test_big_archive.cpp
     tests/test_parser_fuzz_regressions.cpp
