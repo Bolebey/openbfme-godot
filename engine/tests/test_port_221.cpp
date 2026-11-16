@@ -82,8 +82,9 @@ const char kPort221Ini[] =
 	"  Enum = SPECIAL_ARROW_STORM\n"
 	"  ReloadTime = 10000\n"
 	"End\n"
+	// an object-targeted power: RotWK casts at an object only for the types RW 0x82DAE9 lets through (0x81 AT_VISIBLE_OBJECT; GENERAL_TARGETLESS is refused)
 	"SpecialPower SpecialAbilityP221TargetedStrike\n"
-	"  Enum = SPECIAL_GENERAL_TARGETLESS\n"
+	"  Enum = SPECIAL_AT_VISIBLE_OBJECT\n"
 	"  ReloadTime = 10000\n"
 	"End\n"
 	"SpecialPower SpecialAbilityP221HeroCry\n"
