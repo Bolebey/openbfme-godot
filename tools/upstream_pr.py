@@ -48,7 +48,23 @@ def git(*a, cwd=TREE, check=True) -> str:
     return sh(["git", *a], cwd=cwd, check=check).stdout.strip()
 
 
+WINDOWS = os.name == "nt"
+# On a Colab sandbox (sb4, owner 2026-11-16) gh opens the upstream PRs with the classic public_repo token of /root/.upstream_token (the
+# fork-only token gets 403 there); the PC's gh has its own login.
+UPSTREAM_TOKEN = Path("/root/.upstream_token")
+
+
+def gh(args: list[str], check=True) -> subprocess.CompletedProcess:
+    env = dict(os.environ)
+    if UPSTREAM_TOKEN.exists():
+        env["GH_TOKEN"] = UPSTREAM_TOKEN.read_text().strip()
+    return sh(["gh", *args], check=check, env=env)
+
+
 def test_env() -> dict:
+    if not WINDOWS:  # the sandbox's game paths (the Colab cell writes them)
+        out = sh(["bash", "-c", "source /root/.agent_env 2>/dev/null; env -0"]).stdout
+        return dict(kv.split("=", 1) for kv in out.split("\0") if "=" in kv)
     env = dict(os.environ)
     env.setdefault("ROTWK_INSTALL", str(REPO / "workspace" / "games-en" / "Vanilla_(2.01)" / "install"))
     env.setdefault("BFME2_INSTALL", r"C:\Program Files (x86)\BFME2")
@@ -60,8 +76,8 @@ def ready_branches() -> list[str]:
     git("fetch", "-q", "origin", cwd=REPO)
     git("fetch", "-q", "upstream", cwd=REPO)
     branches = [b.strip().removeprefix("origin/") for b in git("branch", "-r", "--list", "origin/up/*", cwd=REPO).splitlines()]
-    out = sh(["gh", "pr", "list", "-R", UPSTREAM, "--author", FORK_OWNER, "--state", "all", "--limit", "500",
-              "--json", "headRefName"], check=True).stdout
+    out = gh(["pr", "list", "-R", UPSTREAM, "--author", FORK_OWNER, "--state", "all", "--limit", "500",
+              "--json", "headRefName"]).stdout
     have = {p["headRefName"] for p in json.loads(out)}
     return [b for b in branches if b not in have]
 
@@ -113,16 +129,24 @@ def text_checks(branch: str) -> tuple[list[str], dict]:
 
 
 def build() -> tuple[bool, str]:
-    env = dict(os.environ, CMAKE_BUILD_PARALLEL_LEVEL=JOBS)
-    r = sh(["cmd", "/c", str(TREE / "build.bat")], cwd=TREE, env=env, timeout=3 * 3600)
+    if WINDOWS:
+        env = dict(os.environ, CMAKE_BUILD_PARALLEL_LEVEL=JOBS)
+        r = sh(["cmd", "/c", str(TREE / "build.bat")], cwd=TREE, env=env, timeout=3 * 3600)
+    else:  # upstream's own Linux CI build (.github/workflows/pr.yml): cmake + ccache, no GDExtension; the cache shared with the other trees
+        env = dict(test_env(), CCACHE_BASEDIR="/content")
+        sh(["git", "submodule", "update", "--init", "--depth", "1", "engine/thirdparty/godot-cpp"], cwd=TREE)
+        c = sh(["cmake", "-S", "engine", "-B", "engine/build", "-G", "Ninja", "-DCMAKE_BUILD_TYPE=Release", "-DOPENBFME_BUILD_GODOT=OFF",
+                "-DCMAKE_C_COMPILER_LAUNCHER=ccache", "-DCMAKE_CXX_COMPILER_LAUNCHER=ccache"], cwd=TREE, env=env)
+        r = c if c.returncode else sh(["cmake", "--build", "engine/build", "--target", "openbfme_tests", "-j", str(os.cpu_count() or 2)],
+                                      cwd=TREE, env=env, timeout=3 * 3600)
     log = r.stdout + r.stderr
     (OUT / "build.log").write_text(log, encoding="utf-8")
-    errs = [l for l in log.splitlines() if re.search(r"error (C|LNK)\d+|FAILED:", l)][:6]
+    errs = [l for l in log.splitlines() if re.search(r"error (C|LNK)\d+|error:|FAILED:", l)][:6]
     return r.returncode == 0, "\n".join(errs) or log[-600:]
 
 
 def run_tests(names: list[str]) -> dict[str, str]:
-    exe = TREE / "engine" / "build" / "openbfme_tests.exe"
+    exe = TREE / "engine" / "build" / ("openbfme_tests.exe" if WINDOWS else "openbfme_tests")
     res = {}
     for name in names:
         pat = name.replace(",", "?")  # doctest splits -tc on commas
@@ -305,8 +329,8 @@ def open_prs(names: list[str]) -> None:
             print(f"{b}: the branch moved since the check, run check again")
             continue
         title = r["subjects"][0] if r["subjects"] else b
-        out = sh(["gh", "pr", "create", "-R", UPSTREAM, "--head", f"{FORK_OWNER}:{b}", "--base", "main", "--title", title,
-                  "--body", pr_body(b, r)])
+        out = gh(["pr", "create", "-R", UPSTREAM, "--head", f"{FORK_OWNER}:{b}", "--base", "main", "--title", title,
+                  "--body", pr_body(b, r)], check=False)
         print(f"{b}: {out.stdout.strip() or out.stderr.strip()}")
 
 
