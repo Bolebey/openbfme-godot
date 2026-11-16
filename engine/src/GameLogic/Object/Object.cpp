@@ -2780,6 +2780,10 @@ void Object::crcOmittingModules(StateHasher &h, const std::function<bool(const B
 	{
 		h.addU32(0x5C100000u); // lane BFME2CAMP1: only when set (a game without a campaign's carry-over keeps its hash)
 	}
+	if (m_singleUseCommandUsed)
+	{
+		h.addU32(0x5C450001u); // PORT-220: RW + 0x45B, the single-use command flag; hashed only when set (an object that never pressed one keeps its hash)
+	}
 	if (m_fireWeaponDeadline != 0)
 	{
 		h.addU32(0x5C200000u | m_fireWeaponDeadline); // BFME2 ObjectDoXfer.cpp:668, RW +0x478; hashed only when set
@@ -3058,7 +3062,7 @@ void Object::setScriptStatus(std::uint8_t bits, bool set)
 // (the Objects block's order) and the team links (the TeamFactory's post-process).
 void Object::xfer(Xfer &x)
 {
-	XferVersion version{ 1, 5 }; // v2 campaignCarryover, v3 fireWeaponDeadline, v4 PORT-5 Object + 0x251, v5 PORT-34 geometryHeights
+	XferVersion version{ 1, 6 }; // v2 campaignCarryover, v3 fireWeaponDeadline, v4 PORT-5 Object + 0x251, v5 PORT-34 geometryHeights, v6 PORT-220 Object + 0x45B
 	x.xferVersion(version);
 	// a load never reads its destination: the save-side values are built from the members only when saving (SAVES.md, rules for xfer authors)
 	const bool saving = !x.isLoading();
@@ -3150,6 +3154,15 @@ void Object::xfer(Xfer &x)
 	x.xferUnsignedByte(&scriptStatus);
 	SnapshotXfer::checkMask(scriptStatus, 0x1F, "an object's script status", "the five script status bits"); // ZH ObjectScriptStatusBit 1 .. 0x10
 	m_scriptStatus = scriptStatus;
+	if (version.current >= 6)
+	{
+		// PORT-220: RW + 0x45B (BFME2 ObjectDoXfer.cpp:556 transfers the same byte); an older snapshot keeps the constructor's clear (RW 0x699C88)
+		x.xferBool(&m_singleUseCommandUsed);
+	}
+	else if (x.isLoading())
+	{
+		m_singleUseCommandUsed = false;
+	}
 	if (version.current >= 2)
 	{
 		x.xferBool(&m_campaignCarryover);

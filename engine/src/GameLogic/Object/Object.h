@@ -318,6 +318,13 @@ public:
 	// 10 (DISABLED_SCRIPT_UNDERPOWERED) forever
 	void setScriptStatus(std::uint8_t bits, bool set);
 	std::uint8_t scriptStatus() const { return m_scriptStatus; }
+	// PORT-220 (issue #529): RW Object + 0x45B, the single-use command flag. The setter is RW 0x940397 (`mov byte ptr [ecx + 0x45B], 1` / `ret`), the
+	// accessor RW 0x9422C2 (`mov al, byte ptr [ecx + 0x45B]` / `ret`), and Object::Object clears it together with + 0x45A / + 0x45C (RW 0x699C88). Its
+	// writers are processCommandUI's inline RW 0x94066B (bit 17 of the pressed button's Options, + 0x1C) and the setter; its reader is getCommandAvailability's
+	// gate RW 0x942826 (a set flag returns 0, disabled, for every command). Donor BFME2 names the pair markSingleUseCommandUsed / hasSingleUseCommandBeenUsed
+	// (gamelogic/object.h:402 .. 403, ObjectDoXfer.cpp:392 at + 0x43B, ControlBarRappellerCount.cpp:445) — corroboration, not retail proof.
+	void markSingleUseCommandUsed() { m_singleUseCommandUsed = true; } ///< RW 0x940397
+	bool hasSingleUseCommandBeenUsed() const { return m_singleUseCommandUsed; } ///< RW 0x9422C2
 	// lane SCRIPT-2 / LOCAL-58: RW Object + 0x454 (set by RW 0x68BE3C / DONOR BFME2 0x0028B76D); setting false calls Drawable::setSelectable(false)
 	// (RW 0x6719FA / DONOR BFME2 0x00271700) to deselect the drawable and toggle the draw/pick selectable override (-1/0/1, RW 0x4B2D5E / 0x4B583C).
 	void setScriptSelectable(bool on);
@@ -649,6 +656,7 @@ private:
 	bool m_masked = false;           ///< RW + 0x459 bit 1 (maskObject; hashed when set)
 	TriggerEntry m_triggers[MAX_TRIGGERS_IN];  ///< lane SCRIPT-2: RW + 0x3DC
 	int m_triggerCount = 0;                      ///< RW + 0x45A
+	bool m_singleUseCommandUsed = false;         ///< PORT-220: RW + 0x45B (hashed when set, xfer v6)
 	std::vector<std::uint8_t> m_geometryActive; ///< lane HUD-5: the shapes' active flags of the object's own GeometryInfo (+ 0xA8), empty: the template's
 	std::uint32_t m_geometryVersion = 0;
 	const ThingTemplate *m_geometrySource = nullptr; ///< lane MODCOMPAT-MOD1: the template whose GeometryInfo the object carries (null: its own; setGeometryInfoFrom)
