@@ -185,6 +185,7 @@ include(cmake/Port43.cmake)     # PORT-43: GameData/PowerLimit -> GameLogic + 0x
 include(cmake/Port51.cmake)     # PORT-51: Object/InstanceScaleFuzziness, parsed and never read by RotWK (issue #155; OPENBFME_PORT51_TESTS)
 include(cmake/Port99.cmake)     # PORT-99: PlayerTemplate/LightPointsUpSound, its only reader is the light-point (WOTR) action (issue #259; OPENBFME_PORT99_TESTS)
 include(cmake/Port214.cmake) # PORT-214: a hero's voice volume is his own Volume / MinVolume pair (fork issue 504; OPENBFME_PORT214_TESTS)
+include(cmake/Port247.cmake) # PORT-247: TeleportSpecialAbilityUpdate MaxDistance (RW 0x896608) and two fields RotWK never reads (issue #571; OPENBFME_PORT247_TESTS)
 include(cmake/Port119.cmake)   # PORT-119: AttachToBoneInAnotherModule, the two figures of a two-in-one hero (issue #303; OPENBFME_PORT119_TESTS)
 include(cmake/Port156.cmake)  # PORT-156: PlayerTemplate spell-book labels and screen images, parsed and read by nobody (issue #374; OPENBFME_PORT156_TESTS)
 include(cmake/Port164.cmake)   # PORT-164: the GiantBird contact point through getBestContactPoint mode 1 (fork issue 387; OPENBFME_PORT164_TESTS)
@@ -953,6 +954,7 @@ add_executable(openbfme_tests
     ${OPENBFME_PORT102_TESTS}
     ${OPENBFME_PORT113_TESTS}
     ${OPENBFME_PORT214_TESTS}
+    ${OPENBFME_PORT247_TESTS}
     ${OPENBFME_PORT75_TESTS}
     ${OPENBFME_PORT79_TESTS}
     ${OPENBFME_PORT89_TESTS}

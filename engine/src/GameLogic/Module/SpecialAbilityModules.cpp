@@ -621,9 +621,11 @@ void SpecialAbilityUpdate::initiateIntentToDoSpecialPower(const SpecialPowerTemp
 	setWakeFrame(obj, (UpdateSleepTime)1); // RW 0x850C32(object, 1)
 }
 
-// RW 0x851B6E (the special power update interface's slot 0x20)
-bool SpecialAbilityUpdate::allowsSpecialPowerUse() const
+// RW 0x851B6E (the special power update interface's slot 0x20). The place is pushed to RW 0x851551 and ignored there (0x851551 reads no argument);
+// the port's conditionsAllow() takes no argument for the same reason.
+bool SpecialAbilityUpdate::allowsSpecialPowerUse(const Coord3D *loc) const
 {
+	(void)loc;
 	if (!m_data->m_specialPowerTemplate || !conditionsAllow())
 	{
 		return false; // RW 0x851B75: no power (+ 0x4 of the data) answers no
