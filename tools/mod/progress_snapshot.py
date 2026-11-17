@@ -42,7 +42,7 @@ import stops_count  # noqa: E402
 OUT = REPO / "docs" / "ennorath" / "PROGRESS.tsv"
 COLUMNS = ["date", "rev", "fields_total", "fields_open", "modules_missing", "problems_total", "problems_done", "stops_open", "audit",
            "buttons_red", "gaps_specific", "stops_new", "stops_closed", "buttons_total"]
-GREEN = {"PASS", "STANCE", "DISABLED", "INVENTORY", "TEMPORARY", "MEMBER", "MOD-DATA", "NO-TARGET", "BY-DESIGN"}  # the last two: by design (matrix review 2026-11-17)
+GREEN = {"PASS", "STANCE", "DISABLED", "INVENTORY", "TEMPORARY", "MEMBER", "MOD-DATA", "NO-TARGET", "BY-DESIGN", "ORDER"}  # by design, or fine when swept alone (matrix review 2026-11-17)
 OPEN_STATUSES = {"parsed-unused", "not-read", "stub-block", "missing-module", "parsed-only-module", "no-table-row"}
 
 
