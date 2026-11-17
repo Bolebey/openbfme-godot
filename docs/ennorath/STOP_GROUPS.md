@@ -5364,6 +5364,9 @@ S-001, S-005, S-006, S-008, S-009, S-013, S-014, S-024, S-025, S-026, S-032, S-0
 
 #### Problem
 3 open stops may share a mechanism. Verify each link; do not assume the grouping proves ownership.
+- S-185 (code): Armour stacking — The two ARMOR attribute-modifier reads in `AdjustDamage` (RW 0x5D8A64, 0x5D8AF1) call into `.danetta` in the installed image (stacking `1-(1-a)(1-b)`); the port implements the additive sum of the unpatched getter and BFME2 1.06. Identical for one modifier..
+- S-322 (code): ActiveBody — armour is the ArmorSet of the object's armor flags looked up per hit (RW 0x5D893C); the flank test (RW 0x68FB63), the ARMOR / INVULNERABLE attribute modifiers, doDamageFX, the damage modules' onDamage are not ported; lane LOCAL-1 (issue #88): GameData AttributeModifierArmorMaxBonus (row RW 0xC00490, GlobalData + 0xAE8) is loaded by GameLogicSettingsLoader and passed to AdjustDamage via ActiveBody::DamageHost::armorMaxBonus(), replacing the hardco.
+- S-636 (code): Armour attribute queries (XP-1) — AdjustDamage's INVULNERABLE and ARMOR queries (RW 0x5D8A64, 0x5D8AF1) call into the community-added `.danetta` section of the available binary; they are ported as the victim's pool sums with the damage type's name (Damage.h's contract), unverified against a clean 2.01.
 
 #### Known
 Kinds: code. Classes: AIBurningDeathState, ActiveBody, DamageHost, DelayedDeathBody, HighlanderBody, ImmortalBody, InactiveBody, RespawnBody, StructureBody, SymbioticStructuresBody.
@@ -5392,6 +5395,9 @@ RW instructions and tests justify each change; report any remaining stops and in
 
 #### Problem
 3 open stops may share a mechanism. Verify each link; do not assume the grouping proves ownership.
+- S-091 (code): Draw scripts (Lua) — `BeginScript ... EndScript` bodies (2,771 states) are stored verbatim (parsed the way RW 0x42D400 reads them: the INI layer's lines concatenated, each keeping its own leading white space, ended by the INI's second end token ENDSCRIPT) and run through an injected `W3DDrawScriptHost`. The production host is `W3DLuaDrawScriptHost` (lane LUA-1): EA's Lua 4.0.1 fork in the drawable state of the script engine with the 21 registered bindings read off th.
+- S-1580 (code): UseWeaponTiming with a zero cycle (ANIM-1) — RW 0x4BEE94 .. 0x4BEEA2 divides the animation's natural frames by the weapon cycle (cvtsi2ss / divss): a cycle of 0 frames (no pre-attack and no FiringDuration) gives an infinite speed in retail; the port does not reproduce the division by zero and plays the animation at its own speed.
+- S-5920 (code): Missing movement animation repair — Owner-requested presentation adaptation (2026-11-13), shared by BFME2 / RotWK and BFME1 data mode. RW 0x4BEC9B..0x4BECA6 (S-001 caveat) and BFME2 `W3DScriptedModelDrawAnimationFrameCount.cpp::adjustAnimation` retain the previous track when all clips of a state are missing; a completed idle or attack then freezes under MOVING. After retaining the missing-asset error, the draw now uses the first matching normal movement state with a resolvable loop.
 
 #### Known
 Kinds: code. Classes: MapObjectBuilder, MapObjectRuntime, W3DDrawScriptApi, W3DDrawScriptHost, W3DLuaDrawScriptHost.
@@ -5420,6 +5426,8 @@ RW instructions and tests justify each change; report any remaining stops and in
 
 #### Problem
 2 open stops may share a mechanism. Verify each link; do not assume the grouping proves ownership.
+- S-017 (code): Apt atof — Retail MSVCR71 atof differs from correct rounding for decimal texts whose exact value lies in [2e-324, DBL_MIN): it returns TWICE the value for exact powers of two there (and 0 for 2^-1023), the exact decimal of 2^-1075 is 0x1 in retail but 0 in the engine (Boolean true vs false), and 2.225073858507201259573821257020768020077017763406988739288377e-308 is 0x000FFFFFFFFFFFFF in retail but 0x0010000000000000 in the engine. The cause inside the CRT i.
+- S-123 (code): Lua numerics — Script arithmetic (`+ - * /` and the `for` step) is rounded to a 24 bit significand like retail's x87 at precision control 24 (setFPMode RW 0x440809; one rounding of the exact result, checked against the hardware-verified NumericState). That the game runs at PC24 while scripts execute is assumed, not traced; `LUA_EA_NUM_DOUBLE` selects plain doubles. Number text is MSVCR71's %.16g (3 digit exponents, 1.#INF, 1.#QNAN, -1.#IND: CRT facts, the binar.
 
 #### Known
 Kinds: code. Classes: none.
@@ -5448,6 +5456,8 @@ RW instructions and tests justify each change; report any remaining stops and in
 
 #### Problem
 2 open stops may share a mechanism. Verify each link; do not assume the grouping proves ownership.
+- S-041 (code): Lua type() — `type(<boolean>)` in retail Lua faults: `lua_typename` (RW 0xB5B320) indexes the 6-entry table at 0xD0B298 with EA's boolean tag 6 and dereferences the bytes of the string "table" as a `char*` (read at 0x6C626174). There is no retail result to port.
+- S-120 (code): Lua fork — EA's Lua 4.0.1 is rebuilt, not copied: stock lua.org 4.0.1 (md5 a31d963d..., vendored pristine) plus a patch layer (engine/src/Libraries/Lua/README.md) reconstructed from the RotWK disassembly and Open-BFME-1's reconstruction; no EA source exists. The ORACLE-1 recordings (16 boolean results, the function counts 37/19/11/23/5, the type(boolean) fault) are the only executed retail values; the rest is read from the disassembly (jump ops, OP_NOT, OP_.
 
 #### Known
 Kinds: code. Classes: none.
@@ -5476,6 +5486,8 @@ RW instructions and tests justify each change; report any remaining stops and in
 
 #### Problem
 2 open stops may share a mechanism. Verify each link; do not assume the grouping proves ownership.
+- S-081 (code): Locomotor numerics — The locomotor movers mix x87 and SSE (`moveForward` RW 0x5E586F, the getters, Wheels' 4/pi products) and call the CRT / x87 trigonometry (`fcos` / `fsin` RW 0x42F4E0 / 0x42F4D0, CRT sin / cos / atan2). The port reproduces operation order and PC24 precision through `NumericState` and plain float32 SSE arithmetic (built with `-ffp-contract=off`), but sin / cos / atan2 are not retail's: they were the platform libm (`GameLogic/SimMath.h`) and since l.
+- S-233 (code): Numeric facade bounds — `pc24*W`, `sqrtPC24` and `fildU32` are binary64-bounded carriers, not x87 registers (`(2^600 * 2^600) / 2^600` is infinity here); exact only for the audited float-derived chains. (Resolved by lane WIN-1: `atan2d` / `cosd` / `sind` / `cosf32` / `sinf32` no longer call the platform libm, which glibc and the UCRT round differently, but `NumericState::sinDD` / `cosDD` / `atan2DD`, deterministic double-double, pinned bit for bit against 5,333 correctl.
 
 #### Known
 Kinds: code. Classes: GameLogicRandom.
@@ -5504,6 +5516,8 @@ RW instructions and tests justify each change; report any remaining stops and in
 
 #### Problem
 2 open stops may share a mechanism. Verify each link; do not assume the grouping proves ownership.
+- S-1122 (code): Self destruct (MP-2) — MSG_SELF_DESTRUCT (logicMessageDispatcher case RW 0x77CA3D: the first mutual living ally gets the assets, else the player is killed) and Player::transferAssetsFromThat (RW 0x6AF598: objects without KindOf INERT / MOVE_ONLY / IGNORED_IN_GUI change to the ally's default team with INHERITED_FROM_ALLY_TEAM and the ally's addObjectBuilt with its counting off, a horde member's container joins, the completed upgrades but RW 0xC14034 .. 0xC14170's fourte.
+- S-723 (code): Network disconnects — lane MP-2 ports RotWK's DisconnectManager (GameNetwork/DisconnectManager.h: a peer silent for NetworkDisconnectTime brings up the disconnect screen, the timeout bars run on NetworkPlayerTimeoutTime, the remaining players vote, the next packet router drops the player at the frame every peer is on, DESTROYPLAYER becomes MSG_SELF_DESTRUCT { TRUE }); a stall is still reported (`LockstepDriver::longStalls`); the open points are S-1121 and S-1122.
 
 #### Known
 Kinds: code. Classes: DisconnectManager, LockstepDriver.
@@ -5532,6 +5546,8 @@ RW instructions and tests justify each change; report any remaining stops and in
 
 #### Problem
 2 open stops may share a mechanism. Verify each link; do not assume the grouping proves ownership.
+- S-1403 (code): Create-a-Hero awards and statistics — CAH statistics implements mounted AwardSystem definitions, validated template/subclass references, separate Save/<uniqueID> counters (RW 0x80B339), local kill events before the score gates (RW 0x69560B / 0x80B1D4), Manager statistics and award images/names/descriptions (RW 0x9C513E / 0x9C523F), AwardState (RW 0x9BF127), threshold sums and all-trigger evaluation (BFME2 donor RVA 0x40A99A / 0x40AA27). Still unverified: result timing uses completed .
+- S-323 (code): Kill credit — [S-323] kill credit: Object::scoreTheKill (RW 0x6955BC) skips a victim with KindOf IGNORED_IN_GUI (0x695661), requires an enemy of another owner (0x6956E8..0x6956F7) and then pays the bounty through Economy::awardBounty (call 0x695743 -> 0x6AC06F); the victim's playable-side test (0x69574F) comes after the bounty in RW and only gates skill points, so it is not applied to the bounty; the score keeper, the skill points, the experience tracker, the .
 
 #### Known
 Kinds: code. Classes: EndGameView.
@@ -5560,6 +5576,8 @@ RW instructions and tests justify each change; report any remaining stops and in
 
 #### Problem
 2 open stops may share a mechanism. Verify each link; do not assume the grouping proves ownership.
+- S-4071 (code): Online sign-in (ONLINE-4) — OnlineLogin.apt (RW 0x97C819, BFME2 0x572885 tier A) signs in with GameSpy (e-mail, nickname, password, locale). OpenBFME's lobby has only guest sign-in (docs/ONLINE.md section 3): the Nickname combo is the guest name (the last one offered again, kept in Options.ini OpenBFMEOnlineName by the game); E-mail, Password and RememberInfo are disabled; Create, Delete nickname, Register and ServiceTerms are disabled through the movie's own DisableButton*.
+- S-4750 (code): Online login: nickname only (MENUWORK-1) — The owner does not want accounts yet (2026-10-14): OnlineLogin.apt (RW 0x97C819, GameSpy's account sign-in) is shown with the nickname row only. Once the page's clips are placed the engine hides the movie's account parts every update (`AptOnlineShell::loginAccountParts()`: the password and remember-me labels, the e-mail and nickname frames (one shape, InputFields depth 2), the lower box of Service terms / Official web site (innerBorder depths 3, .
 
 #### Known
 Kinds: code. Classes: AptOnlineShell.
@@ -5588,6 +5606,8 @@ RW instructions and tests justify each change; report any remaining stops and in
 
 #### Problem
 2 open stops may share a mechanism. Verify each link; do not assume the grouping proves ownership.
+- S-4854 (code): DynamicPortalBehaviour WallBoundsMesh (lane WALL-2) — upgradeImplementation's WallBoundsMesh branch (RW 0x86436B .. 0x8643BE: the drawable takes the named mesh, RW 0x672F68, and the object leaves and enters the pathfinder's map, RW 0x6E85FB / 0x6E85E9) is not ported: no retail DynamicPortalBehaviour sets WallBoundsMesh; a module that does is reported.
+- S-4855 (code): DynamicPortalBehaviour and the castle upgrade plot (lane WALL-2) — With an AI, upgradeImplementation and the removal hand the object's id (or 0) to its FoundationAIUpdate interface's slot 2 (RW 0x8643CA / 0x863D56 -> RW 0x8582DE: the plot's occupant, its statuses and drawable calls); not called (GondorCastleUpgrade / RohanCastleUpgrade with Upgrade_PosternGate reach it): reported.
 
 #### Known
 Kinds: code. Classes: DynamicPortalBehaviour, FoundationAIUpdate.
@@ -5616,6 +5636,8 @@ RW instructions and tests justify each change; report any remaining stops and in
 
 #### Problem
 2 open stops may share a mechanism. Verify each link; do not assume the grouping proves ownership.
+- S-4870 (code): Quick Match (ONLINEHUB-1) — RotWK's TOURNAMENT page (OnlineQuickMatch.swf, RW 0x9C9F30) searched GameSpy's ranked matchmaker. OpenBFME's search is the platform's (docs/PLATFORM_API.md: a ticket polled at poll_after_s; same mode and size, oldest first): the Ladder combo chooses the size (1 vs 1 / 2 vs 2; RotWK's ladders were 1v1 and 2v2, inference), Army the faction or random, Color the colour, the mode is the player's simulation profile; ConnectionSpeed is shown disabled an.
+- S-4873 (code): Tournaments (ONLINEHUB-1) — NOT RETAIL: RotWK has no bracket tournaments (its "Tournament" was the ranked automatch, S-4870). A panel of the game's own list box skin (window\\apt\\listbox.wnd) in the TOURNAMENT page's empty right half, framed and lettered as the OpenBFME options page: the platform's tournaments, the chosen one's rules and bracket; a double click asks in GuiFX's Yes / No box to register, withdraw or join "your next match" (the first player listed hosts its r.
 
 #### Known
 Kinds: code. Classes: none.
@@ -5644,6 +5666,9 @@ RW instructions and tests justify each change; report any remaining stops and in
 
 #### Problem
 3 open stops may share a mechanism. Verify each link; do not assume the grouping proves ownership.
+- S-1985 (code): Object creation upgrade (FACT-A; the module is FACT-C's port since merge q2, whose stop is S-2007) — ObjectCreationUpgrade (RW 0x8B8281 / 0x8B8464 / 0x8B87C5) runs: the delay, ThingToSpawn built at the offset (or queued in the building's production), its fade in, its SlavedUpdate enslaved, GrantUpgrade / RemoveUpgrade. CLOSED by lane MODCOMPAT-MOD1: the master's SlaveWatcherBehavior gets the new object's id (RW 0x887AF5) and DestroyWhenSold kills the watched slave (RW 0x698EC3, with DeathAnimAndDuration, RW 0x68B581).
+- S-1995 (code): Other unported modules of Isengard and Mordor (FACT-B) — ObjectCreationUpgrade (the Lava Moat) is ported by FACT-A on merge q1 and left both pins; PickupStuffUpdate (every horde) is ported by lane MODCOMPAT-MOD1 (S-1422) and left both pins; AutoPickUpUpdate (the mountain troll, the Watcher) and BoredUpdate (the mountain troll) are ported by lane MODCOMPAT-MOD1 (S-7160, S-7161) and left the Mordor pin; TransitionDamageFX is ported by lane FX-4 (S-686) and left both pins; lane MODCOMPAT-MOD1 ported Audio.
+- S-2007 (code): ObjectCreationUpgrade (FACT-C) — Ported from RW 0x8B8281 (upgradeImplementation), 0x8B8464 (update), 0x8B87C5 (processUpgradeRemoval), data RW 0xC6E2F8: after Delay, ThingToSpawn made at the owner's transform applied to Offset, turned by Angle, its create modules run; or, UseBuildingProduction, queued at the owner's ProductionUpdate; then GrantUpgrade given and RemoveUpgrade taken. The Angmar spike moat, the Sanctum's readiness (its Frostball), the expansions' free wall catapult.
 
 #### Known
 Kinds: code. Classes: AimWeaponBehavior, AnnounceBirthAndDeathBehavior, AudioLoopUpgrade, AutoPickUpUpdate, BaseUpgrade, BoredUpdate, ClickReactionBehavior, EvacuateDamage, FlingPassengerSpecialAbilityUpdate, GeometryUpgrade, HordeTransportContainDamage, ObjectCreationUpgrade, PickupStuffUpdate, ProductionUpdate, RunOffMapBehavior, SiegeDeployHordeSpecialPower, SlaughterHordeContain, SlaveWatcherBehavior, SlavedUpdate, TransitionDamageFX.
@@ -5672,6 +5697,9 @@ RW instructions and tests justify each change; report any remaining stops and in
 
 #### Problem
 3 open stops may share a mechanism. Verify each link; do not assume the grouping proves ownership.
+- S-080 (code): Game-logic RNG — The RotWK `game.dat` on this machine (community modified, S-001) holds a different generator from BFME2 1.06 and ZH: `randomValue` RW 0x6D315D is `seed[0]*0x08088405+1` returned xor the product's high word (21 bytes, then 98 NOPs filling the 119-byte slot of BFME2 0x633EC3's six-word carry chain), and `seedRandom` RW 0x6D31D4 multiplies by 0x7FFFFFED and fills all six words. Whether a clean 2.01 has the carry chain (patched here) or the LCG (chan.
+- S-093 (code): Draw client random — The render-side random (`W3DClientRandom`) is an instance of the shared generators of `Common/RandomValue.h` with its OWN state (never the logic generator's), and the algorithm has NO default: the constructor names `RandomAlgorithm::ZH_CarryChain` or `RotWK_GameDat_LCG`. TARGET (patched binary, S-001): RotWK's client wrappers 0x6D32E4 / 0x6D33AB call the same 0x6D315D LCG replacement (21 bytes + 98 NOPs) as the logic RNG, one community patch site.
+- S-189 (code): Weapon RNG — The logic RNG algorithm of the retail 2.01 is unproven (S-080), so every weapon draw (pre-attack jitter, delay, reload, scatter pick) inherits it. `RandomValue.h` calls RW 0xDE4364 TheGameLogic; it is TheGlobalData (the logic frame is [0xDE412C]+0x40)..
 
 #### Known
 Kinds: code. Classes: RandomAlgorithm, W3DClientRandom.
@@ -5700,6 +5728,7 @@ RW instructions and tests justify each change; report any remaining stops and in
 
 #### Problem
 1 open stops may share a mechanism. Verify each link; do not assume the grouping proves ownership.
+- S-2006 (code): Ability weapons without their hit (FACT-C) — Cast through their buttons (they fire: the recharge starts), these special weapons land no hit of their size on the target in 200 frames (EffectProbe DAMAGE: the first hit after the cast is the weapon's Weapon.ini x Armor.ini): the mountain giant's Stomp (WildMountainGiantStomp, MinimumAttackRange 0.8: no hit), Karsh's Whisper of Death (AngmarWhisperofDeath: its first hit is not the weapon's); the necromancers' Black Ice (a SpecialPowerModule wit.
 
 #### Known
 Kinds: code. Classes: SpecialPowerModule.
@@ -5728,6 +5757,8 @@ RW instructions and tests justify each change; report any remaining stops and in
 
 #### Problem
 2 open stops may share a mechanism. Verify each link; do not assume the grouping proves ownership.
+- S-703 (code): Unit voice: message types — Message types of RW 0x8DEDBB not answered: weapon modes (0x43A), the planned action queue (0x46A), the Ring voices (0x7E4, 0x7E5). Ported: special powers (0x410 .. 0x412, 0x456, RW 0x8DF7FE) and enter state (0x7EC, RW 0x8DFCE1) via SpecialPower UnitSpecificSoundToUse* (TOP20 #11); combine hordes (0x423, RW 0x8DF2EB: no target -> nothing, the candidate's horde's ComboHorde entry for the TARGET-side horde's template supplies InitiateVoice, else row.
+- S-7224 (code): The other sounds of SpecialAbilityUpdate: PrepSoundLoop, PackSound, UnpackSound, TriggerModelCondition sounds (PORT-93, issue #241) — `ActiveLoopSound` (data + 0x34) is ported (RW 0x854008 .. 0x85405B start, RW 0x85311B .. 0x853131 stop). NOT ported, same module: `PrepSoundLoop` (+ 0x10) — the retail code sits in `startPreparation` RW 0x853EAC .. 0x853EC8 (added for the object, handle kept at module + 0x34) and its removal is inside `endPreparation` (RW 0x85261D .. 0x852628); `PackSound` (+ 0x08, RW 0x853596 area) and `UnpackSound` (+ 0x0C) with their handles (+ 0x38 removed th.
 
 #### Known
 Kinds: code. Classes: SpecialAbilityUpdate.
@@ -5756,6 +5787,7 @@ RW instructions and tests justify each change; report any remaining stops and in
 
 #### Problem
 1 open stops may share a mechanism. Verify each link; do not assume the grouping proves ownership.
+- S-7226 (code): Unit voice: the post of message 0x7EA (VoiceStartCharging) (PORT-87, issue #235) — Ported (PORT-87): the dispatcher's case itself — RW 0x8DEDBB is entered with 0x7EA and reaches RW 0x8DFD0D, which pushes the literal at RW 0xC77A74 (`VoiceStartCharging`) and asks the name lookup RW 0x8DDB2A (the template's `UnitSpecificSounds`, tt + 0x388, table RW 0xDA4378, parser RW 0x73F684); the port's `UnitVoiceResponse::pickAndPlay` answers the id (`VOICE_EVENT_START_CHARGING`, `fillName`). NOT PORTED: **who posts 0x7EA in RotWK 2.01** — t.
 
 #### Known
 Kinds: code. Classes: AIAttackState, AIChargeTargetState, SpecialAbilityUpdate, UnitVoiceResponse.
@@ -5784,6 +5816,7 @@ RW instructions and tests justify each change; report any remaining stops and in
 
 #### Problem
 1 open stops may share a mechanism. Verify each link; do not assume the grouping proves ownership.
+- S-1043 (code): Stealth abilities (STEALTH-2) — ToggleHiddenSpecialAbilityUpdate (the elven cloak, the hobbits' and Wormtongue's escapes: RW 0x8B1909 trigger, RW 0x8B1A70 hide, RW 0x8B19AC unhide, RW 0x8B1962 EffectDuration, untoggled by RW 0x81B3D3 / 0x7760B7) and InvisibilitySpecialPower (Move Unseen: RW 0x8C66EB at a location, RW 0x8C65D2 at an object) run. Not ported: ShowPalantirTimer and the EffectDuration report to the player (the palantir timer, client); the hide's room test for the ga.
 
 #### Known
 Kinds: code. Classes: InvisibilitySpecialPower, ToggleHiddenSpecialAbilityUpdate.
@@ -5812,6 +5845,10 @@ RW instructions and tests justify each change; report any remaining stops and in
 
 #### Problem
 4 open stops may share a mechanism. Verify each link; do not assume the grouping proves ownership.
+- S-082 (code): HordeContain data — HordeContain fields parsed exactly but with no reader found in the RotWK binary (spec horde-and-movement.md section 4): RankInfo `Leader <rank> <index>` (slot record +0x18), BackUpMinDelayTime / BackUpMaxDelayTime / BackUpMinDistance / BackUpMaxDistance / BackupPercentage, CowerRadius, RanksToJustFreeWhenAttacking, and RanksToReleaseWhenAttacking (lane FLANK-1: FrontAngle +0x264 and FlankedDuration +0x26C are read by the flank test RW 0x876FC4, F.
+- S-1102 (code): Horde garrison link (GARRISON-1) — HordeContain's garrison slots are ported (HordeGarrisonLink.cpp): the members on their way (RW 0x86EE1B / 0x86EBF4 / 0x8757FC / 0x86D755), the garrisoned byte (RW 0x872ADF / 0x872B76), enterContainer RW 0x875DC3 (the horde first, then every member ordered in), the members' walk RW 0x875C93, the per-frame push RW 0x876B25 (CloseEnoughDist, MaxNumMembersToForceToImmediatelyEnter, WaitToForceMemberToEnterDelay) and exitContainer RW 0x875EFD; the AI .
+- S-6004 (code): HordeContain::splitHorde (MODGAP-2) — Ported from RW 0x8791C5 with BFME2 HordeContainRva00475F61.cpp for the shape; SplitHordeSpecialPower RW 0x8CCA45. NOT ported: the attribute modifiers' removal RW 0x86C962 (slot 0x1E8), a defected horde's hand-over RW 0x6930C9, the weapon set flag 0x18 of the first member. INFERENCE: the held member destroyed is the banner carrier.
+- S-7293 (code): HordeContain/NotComboFormation: the AICombineState it is read from (PORT-112, issue #272) — The byte (module data + 0x25C, getter RW 0x872B91, interface slot 136) has one reader, RW 0x751716: the onEnter (slot 4 of vtable RW 0xC29548, the state's name key 0xD2CCD3C pushed by its constructor RW 0x7448DE) of AICombineState — RW 0x751738 asks the getter through the ordered object's contain (RW 0x68C866) and RW 0x751746 calls slot 0x60 (RW 0x86C7F6, the formation swap). The state itself is NOT ported: LOCAL-18 executes the combine order ins.
 
 #### Known
 Kinds: code. Classes: CombineHordeSpecialPower, HordeContain, RankInfo, SplitHordeSpecialPower.
@@ -5840,6 +5877,7 @@ RW instructions and tests justify each change; report any remaining stops and in
 
 #### Problem
 1 open stops may share a mechanism. Verify each link; do not assume the grouping proves ownership.
+- S-300 (code): Castle layouts — A CastleBehavior reads its base layout from the `.bse` map file `Bases\\<name>\\<name>.bse` (Bases.big / bases.big) when it unpacks; the CastleTemplates chunk grammar is read from RW 0x731010 (all 207 retail files parse to the last byte and equal the independent survey `tools/castle/castle_survey.py`). Retail fills the store from a name list at start (RW 0x7311FB), the port on first use (same files, same parser); a missing file or a chunk without.
 
 #### Known
 Kinds: code. Classes: CastleBehavior.
@@ -5868,6 +5906,8 @@ RW instructions and tests justify each change; report any remaining stops and in
 
 #### Problem
 2 open stops may share a mechanism. Verify each link; do not assume the grouping proves ownership.
+- S-564 (code): Object look inputs — RW 0x694A45 / 0x68E4E2 are ported for the owner / allies / REVEAL_TO_ALL mask, ShroudClearingRange, UNDER_CONSTRUCTION (the bounding radius), VisionSide / VisionRear, the VisionBonus height bonus (RW 0x69264D's ground reference) and the HORDE_MEMBER rule; the SHROUD_CLEARING modifier (RW 0x804F39 type 0x14, RW 0x68E500) and the object's own range (Object + 0x1B4, RW 0x68C234) since lane DECOMP-1; not read: the spied mask (player + 0x3C8), object .
+- S-7100 (code): DynamicShroudClearingRangeUpdate grid decal (LOCAL-35, issue #285) — The module drives the shroud clearing range (RW 0x88E9B0 -> `Object::setShroudClearingRange` RW 0x68C234), but the 30 `RadiusDecal` grid decals retail also creates / animates / clears (RW 0x88E87F / 0x88E8C7 / 0x88E6AF) are not drawn; `m_decalsCreated` is kept so the logic and the save match retail.
 
 #### Known
 Kinds: code. Classes: DynamicShroudClearingRangeUpdate, HordeContain.
@@ -5896,6 +5936,7 @@ RW instructions and tests justify each change; report any remaining stops and in
 
 #### Problem
 1 open stops may share a mechanism. Verify each link; do not assume the grouping proves ownership.
+- S-854 (code): RespawnUpdate details (HERO-1) — The revive-time producer exit query is ported: `onRevived` copies the producer position and calls its exit interface's slot 9 `getNaturalRallyPoint(out, true)` (RW 0x8B38B0 .. 0x8B38E7); the result is discarded by RotWK. The separate slot-2 `exitObjectViaDoor` placement at animation end is already ported (RW 0x8B3AD5 .. 0x8B3AEA). Still not ported: respawn health above 100% raises max health (RW 0x8C47F6)..
 
 #### Known
 Kinds: code. Classes: ActiveBody, RespawnUpdate.
@@ -5924,6 +5965,7 @@ RW instructions and tests justify each change; report any remaining stops and in
 
 #### Problem
 1 open stops may share a mechanism. Verify each link; do not assume the grouping proves ownership.
+- S-707 (code): Object sounds — Not ported: SoundCreated, SoundEnter / Exit, SoundPromoted*, SoundStealthOn / Off, SoundFallingFromPlane, SoundAmbientBattle (death, impact and FireFX sounds are FX list nuggets: FX-2). Done in part 2: the weapon FireSound (RW 0x8E3411), SoundMoveStart / Loop (S-712), VoiceFullyCreated at construction completion (RW 0x857D6C .. 0x857DBA: `GettingBuiltBehavior::checkCompletion` posts it immediately before `m_completedOnce = true`, guarded by `!m_c.
 
 #### Known
 Kinds: code. Classes: ActiveBody, GettingBuiltBehavior.
@@ -5952,6 +5994,7 @@ RW instructions and tests justify each change; report any remaining stops and in
 
 #### Problem
 1 open stops may share a mechanism. Verify each link; do not assume the grouping proves ownership.
+- S-2456 (code): Radar colour (RADAR-1) — A blip's colour is Object::getIndicatorColor (RW 0x68B6F5: the custom colour + 0x324, else the team owner's colour, else 0xFF000000) with its HSV saturation times 1.6 (RW 0x6D8C53), times the draw tint (-1). Not ported: the custom indicator colour (none set here), the disguise colour of RW 0x6D90DC and the object + 0x250 colour interface; a capture's colour refresh (RW 0x6D9004) happens with every snapshot..
 
 #### Known
 Kinds: code. Classes: StealthUpdate.
@@ -5980,6 +6023,7 @@ RW instructions and tests justify each change; report any remaining stops and in
 
 #### Problem
 1 open stops may share a mechanism. Verify each link; do not assume the grouping proves ownership.
+- S-484 (code): SubObjectsUpgrade drawing — the fade (RW 0x8B8F40) and the house recolour (RW 0x67273A) are not drawn: counted in `UpgradeModuleClasses::stats()`; sub objects show / hide at once (Drawable::showModule / showSubObject, permanent form). The UpgradeTexture swap is drawn (RW 0x8B911E: every draw module of the drawable takes the module's list through vslot 0x84, replacing the one it had; the removal hands an empty list): the RotWK heavy armour look of most infantry, Ennorath's A.
 
 #### Known
 Kinds: code. Classes: SubObjectsUpgrade.
@@ -6008,6 +6052,7 @@ RW instructions and tests justify each change; report any remaining stops and in
 
 #### Problem
 1 open stops may share a mechanism. Verify each link; do not assume the grouping proves ownership.
+- S-002 (code): INI startup — Startup position of `TheBannerUI`, `TheFontLibrary`, `ArmySummaryDescription`, `StrategicHUD`, `InGameNotificationBox`, `AptButtonTooltipMap` not recovered: callers end at virtual dispatch. The last three are in known relative order (RW 0x647101/06/0B). None defines or uses macros..
 
 #### Known
 Kinds: code. Classes: AptButtonTooltipMap, ArmySummaryDescription.
@@ -6036,6 +6081,8 @@ RW instructions and tests justify each change; report any remaining stops and in
 
 #### Problem
 2 open stops may share a mechanism. Verify each link; do not assume the grouping proves ownership.
+- S-023 (code): W3D materials — BFME2 FX materials draw with the lighting of normalmapped.fxo, decoded from Shaders.big (lane RENDER-1, `tools/render/d3d9_disasm.py`: per pixel `tex * saturate(AmbientLight * AmbientColor * 0.5) * 2 + sum(Light.Color * (tex * DiffuseColor * N.L + SpecularColor * N.H^SpecularExponent))`, normal map in the frame -binormal, -tangent, normal with xy * BumpScale (the file's tangent and bitangent go into the vertex buffer raw, FXShaderGeometry.cpp:557.
+- S-390 (code): Object lighting — the light environment of the retail effects is filled like ZH's (scene ambient = the map's objects light 0 ambient clamped to [0, 1], directional lights = the objects lights 0..2 whose diffuse reaches 0.05, direction -lightPos; infantry drawables use the map's infantry set): the RotWK fill code and the per-drawable choice were not read. Target facts: the SAS callbacks (RW 0x54F406 -> 0x54CF11 / 0x54CFD0 / 0x54D083) send both colours doubled when .
 
 #### Known
 Kinds: code. Classes: none.
@@ -6064,6 +6111,8 @@ RW instructions and tests justify each change; report any remaining stops and in
 
 #### Problem
 2 open stops may share a mechanism. Verify each link; do not assume the grouping proves ownership.
+- S-031 (code): Terrain shader inputs — Taint mask (ported: S-5261, terrain.fxo's Taint struct and pixel blend; the mask texel's colour is the shader path's), shadow-receiving variants and the cloud/macro uniform semantics (cloud sign, MapSize, MapBorderWidth) are not retail-verified; the Base / Normal atlases are filtered by the hardware's anisotropic sampler (terrain.fxo: MinFilter ANISOTROPIC, Mag / Mip LINEAR, MaxAnisotropy 8) at the viewport's level (the OpenBFMEAnisotropic option.
+- S-1650 (code): Map colour grade (RENDER-4) — The map's PostEffectsChunk LookupTablePostEffect (13 of the 23 RotWK multiplayer maps name one; Weathertop blends 0.76) grades the 3D view as postfx_lookuptable.fxo does: ps_2_0 `texld` frame, `texld` volume at frame.rgb, `lrp BlendFactor` (decoded with tools/render/d3d9_disasm.py), LookupTableSampler LINEAR / LINEAR / POINT mip, CLAMP u / v / w; RW 0x511763 builds it from BlendFactor and LookupTexture (Default_vol.tga when unnamed, RW 0x4AF7A9)..
 
 #### Known
 Kinds: code. Classes: LookupTablePostEffect, MapPostEffectsHost, MapWeather.
@@ -6092,6 +6141,7 @@ RW instructions and tests justify each change; report any remaining stops and in
 
 #### Problem
 1 open stops may share a mechanism. Verify each link; do not assume the grouping proves ownership.
+- S-071 (code): Object model: nested blocks — Object-level nested blocks (`ArmorSet`, `WeaponSet`, `LocomotorSet`, `Prerequisites`, `UnitSpecificSounds`, `UnitSpecificFX`, `AutoResolve*`, `Flammability`, `ThreatBreakdown`, `FormationPreviewDecal`, ...) are consumed to their exact End through the binary's sub-tables and kept as `RawBlock` lines (file, source line, text). The template-level clearing (armor / weapon sets once after a copy RW 0x73FAC4 / 0x73ED19, unit-specific maps, Prerequisite.
 
 #### Known
 Kinds: code. Classes: ArmorTemplateSet, ProductionPrerequisite, RawBlock, WeaponTemplateSet.
@@ -6120,6 +6170,8 @@ RW instructions and tests justify each change; report any remaining stops and in
 
 #### Problem
 2 open stops may share a mechanism. Verify each link; do not assume the grouping proves ownership.
+- S-073 (code): Module registry — The name and purpose of the ModuleData vtable slot 7 predicate (RW 0x73F4A9 calls it only for a ChildObject and clears the list entries that answer true: behaviour verified, true for the 11 BODY-mask classes except InactiveBody) and the meaning of interface mask 0x2000 (PillageModule alone) and of 0x1000 (all six ClientBehavior classes) are not identified..
+- S-075 (code): Module factory — A module declaration naming a class the binary does not register: RotWK's `newModuleDataFromINI` returns NULL (RW 0x656EF1) and `parseModuleName` calls through it (RW 0x73F496), a crash. This port raises an INIException (code 3) naming the class..
 
 #### Known
 Kinds: code. Classes: INIException, InactiveBody, ModuleData, PillageModule.
@@ -6148,6 +6200,7 @@ RW instructions and tests justify each change; report any remaining stops and in
 
 #### Problem
 1 open stops may share a mechanism. Verify each link; do not assume the grouping proves ownership.
+- S-076 (code): INI block bodies — `BeginScript` bodies end at the first line whose first token is ENDSCRIPT (RW 0x42D400); RW has no end-of-file test in that loop and never returns when the terminator is missing. This port reports `Missing 'ENDSCRIPT' token`..
 
 #### Known
 Kinds: code. Classes: none.
@@ -6176,6 +6229,7 @@ RW instructions and tests justify each change; report any remaining stops and in
 
 #### Problem
 1 open stops may share a mechanism. Verify each link; do not assume the grouping proves ownership.
+- S-092 (code): Draw blending — RESOLVED for the weight: RW 0x4B33FB passes track 0 and track 1 to the pose evaluator with percentage = 1 - countdown / initial (the countdown starts at `max(1, min(blend > 0 ? blend : 5, frames - 1))` of the incoming track, RW 0x4B55D5, and falls at the incoming track's rate, RW 0x4BF560); `W3DDrawFrame::blendPercentage` is that number. Still unverified: the Godot side feeding it to `Blend_Pose` (the instancer was written without a Godot run on .
 
 #### Known
 Kinds: code. Classes: W3DDrawFrame.
