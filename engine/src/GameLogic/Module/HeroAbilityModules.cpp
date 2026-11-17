@@ -1238,16 +1238,23 @@ void WeaponModeSpecialPowerUpdate::doSpecialPowerAtLocation(const Coord3D &, uns
 void WeaponModeSpecialPowerUpdate::initiate()
 {
 	Object *obj = getObject();
-	ObjectWeapons *weapons = obj->getWeapons();
 	if (m_data->m_lockWeaponSlot == 5)
 	{
-		if (weapons) // RW 0x68FDF7
+		// RW 0x89843E: RW 0x68FDF7 is a popcount over the data's four WeaponSetFlags words (cmp edi, 4); an empty mask skips the loop
+		bool anyFlag = false;
+		for (std::uint32_t word : m_data->m_weaponSetFlags)
+		{
+			anyFlag = anyFlag || word != 0;
+		}
+		if (anyFlag)
 		{
 			for (int bit = 0; bit < 0x68; ++bit)
 			{
 				if ((m_data->m_weaponSetFlags[(size_t)bit >> 5] >> (bit & 31)) & 1u)
 				{
-					weapons->setWeaponSetFlag(bit, true); // RW 0x691059
+					// RW 0x691059 is an OBJECT method (this + 0x38C, then the weapon set update RW 0x6C99E2 and the model condition mirror
+					// RW 0xC16958): an object without a weapon set keeps the bits in its own words and mirrors the condition just the same.
+					obj->setWeaponSetFlag(bit, true);
 				}
 			}
 		}
@@ -1272,14 +1279,11 @@ UpdateSleepTime WeaponModeSpecialPowerUpdate::update()
 	Object *obj = getObject();
 	// P-141 (RW 0x8983C1 -> 0x68DF11, Both editions): release lock through Contain/HordeContain even when a horde container itself has no weapons
 	ObjectWeapons::releaseObjectWeaponLock(*obj, LOCKED_PERMANENTLY);
-	if (ObjectWeapons *weapons = obj->getWeapons())
+	for (int bit = 0; bit < 0x68; ++bit)
 	{
-		for (int bit = 0; bit < 0x68; ++bit)
+		if ((m_data->m_weaponSetFlags[(size_t)bit >> 5] >> (bit & 31)) & 1u)
 		{
-			if ((m_data->m_weaponSetFlags[(size_t)bit >> 5] >> (bit & 31)) & 1u)
-			{
-				weapons->setWeaponSetFlag(bit, false); // RW 0x691106
-			}
+			obj->setWeaponSetFlag(bit, false); // RW 0x691106, the same OBJECT method as RW 0x691059 (Object + 0x38C), weaponless included
 		}
 	}
 	if (!m_data->m_attributeModifier.empty())
@@ -2529,9 +2533,10 @@ void AutoAbilityBehavior::xfer(Xfer &x)
 	x.xferUnsignedInt(&m_castRecord.frame);
 }
 
+// RW 0x898357: RW 0x404F15 (version (1, 1)), the base's xfer (RW 0x9912DB -> RW 0x850C60), then Xfer slot 0x90 on + 0x38 (the "active" bool)
 void WeaponModeSpecialPowerUpdate::xfer(Xfer &x)
 {
-	SnapshotXfer::version(x, 1, 1);
+	SnapshotXfer::version(x, 1, 1); // RW 0x404F15
 	xferUpdateModule(x);
 	x.xferUnsignedInt(&m_readyFrame);
 	x.xferInt(&m_pauseCount);

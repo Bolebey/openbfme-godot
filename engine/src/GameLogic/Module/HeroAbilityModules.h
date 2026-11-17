@@ -313,11 +313,23 @@ private:
 //     0x6AD1B0); else reload = ftol((unsigned)ReloadTime * fstp(the player's recharge discount + 1) * the RECHARGE attribute modifier product (RW 0x68C82D,
 //     1.0 here as SpecialPowerModule's, S-529)); below 1.0: nothing when the percent is 0, else ready = now + ftol((1 - max(0, percent - p)) * reload); else
 //     now + reload); do* (RW 0x9911FB / 0x991231 / 0x991269): not paused and not disabled (RW 0x9325B4): the special power update's initiate (slot 0);
-//   * initiate (RW 0x89841E): LockWeaponSlot none: every WeaponSetFlags bit on (RW 0x691059, when the object has a weapon set RW 0x68FDF7); else the slot is
+//   * initiate (RW 0x89841E): LockWeaponSlot none: when the data's WeaponSetFlags words are not empty (RW 0x68FDF7, a popcount over the four words,
+//     RW 0x89843E) every set bit goes on through RW 0x691059, which is an OBJECT method (Object + 0x38C, the weapon set update RW 0x6C99E2, then the model
+//     condition the table RW 0xC16958 names): an object without a weapon set, a horde container included, keeps the bits in its own words and mirrors the
+//     condition too (Port 256, fork issue 604: the weapons object was null there, so the mode did nothing -- the matrix's WildMarauderSwordHorde
+//     Command_HalftrollChargeAttack); else the slot is
 //     locked (RW 0x69121A(slot, 2): LOCKED_PERMANENTLY); the AttributeModifier for Duration (RW 0x68F1A8); the update wakes in Duration; active; the recharge
 //     starts (slot 0x3C, 1.0); the firing tracker resets (RW 0x8E302A(1): COMBAT-1's, not called, S-1228);
 //   * update (RW 0x8983B5): the PERMANENT weapon lock is released (RW 0x68DF11(2)), every WeaponSetFlags bit off (RW 0x691106), the modifier removed (RW
 //     0x68F259), not active, the countdown unpaused (slot 0x24(0)); sleeps forever.
+// Port 256 (fork issue 604): the class's own map rows that carried no citation, classified by reading them (RW_FUNCTION_MAP depth 0):
+//   0x898276 / 0x898290  the static type descriptor accessor (returns RW 0xC0B4D0) and its one-shot initializer (the pool object RW 0x5487EC); slots + 0x08 and
+//                       + 0x10 of the primary vtable RW 0xC65188, no game code calls them -- the port has no RTTI descriptor, nothing to port;
+//   0x89833B            the scalar deleting destructor (the destructor RW 0x89822B, then operator delete RW 0x42F6A0 for argument bit 0) -- the port's
+//                       implicit destructor;
+//   0x8E38D8            a thunk chain RW 0x8B88B0 -> RW 0x4D0EAF -> the empty stub RW 0x63F3BF (slot + 0x04 of RW 0xC65188: nothing);
+//   0x9E7051            the getter of + 0x38 ("active"): mov al, [ecx+0x18] on the + 0x20 subobject -- the port's isActive() / active();
+//   0x898357            the xfer override: version (1, 1) RW 0x404F15, the base RW 0x9912DB, then Xfer slot 0x90 on + 0x38 -- the port's xfer().
 class WeaponModeSpecialPowerUpdateModuleData : public ModuleData
 {
 public:
