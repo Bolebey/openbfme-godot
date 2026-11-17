@@ -47,3 +47,44 @@ def test_known_map_start_beats_false_interior_seed():
     resolver.cache = {}
     resolver.reaches = lambda start, address: start in (0x401000, 0x401100)
     assert resolver.owner(0x401108) == 0x401000
+
+
+def test_historical_shared_function_does_not_merge(tmp_path):
+    p = tmp_path/'stops.md'
+    p.write_text(row(10, 'Gap X remains. Earlier fixed since RW 0x401002 landed its hit.') +
+                 row(11, 'Gap Y remains. Already ported since RW 0x401008.'))
+    stops = read_stops([p])
+    inv = Inventory([{'address': 0x401000, 'blocks': [[0x401000, 32]]}])
+    enrich(stops, {}, set(), inv)
+    assert stops['S-10'].functions == stops['S-11'].functions == {0x401000}
+    groups, _ = cluster(stops, {})
+    assert not any({'S-10', 'S-11'} <= set(g) for g in groups)
+
+
+def test_incidental_class_is_not_primary(tmp_path):
+    p = tmp_path/'stops.md'
+    p.write_text(row(1, 'The caller uses ModuleX for a different path.') + row(2, 'ModuleX is missing a path.'))
+    stops = read_stops([p])
+    enrich(stops, {}, {'ModuleX'}, Inventory([]))
+    assert stops['S-1'].classes == {'ModuleX'}
+    assert not stops['S-1'].primary_classes
+    assert stops['S-2'].primary_classes == {'ModuleX'}
+
+
+def test_output_has_every_stop_and_all_references(tmp_path):
+    import csv
+    from stop_groups import output
+    p = tmp_path/'stops.md'
+    p.write_text(row(10, 'RW 0x401002, compare S-001 and S-999') + row(11) + row(12, kind='closed'))
+    stops = read_stops([p])
+    inv = Inventory([{'address': 0x401000, 'blocks': [[0x401000, 32]]}])
+    enrich(stops, {}, set(), inv)
+    groups, unplaced = cluster(stops, {})
+    out = tmp_path/'report'
+    output(stops, groups, unplaced, {}, [], [], None, out, 'regenerate')
+    with out.with_suffix('.tsv').open() as f:
+        rows = list(csv.DictReader(f, delimiter='\t'))
+    assert {r['id'] for r in rows} == {'S-10', 'S-11'}
+    assert rows[0]['references'] == 'S-001, S-999'
+    assert rows[1]['group'] == 'unplaced'
+    assert 'lookup unavailable' in out.with_suffix('.md').read_text()

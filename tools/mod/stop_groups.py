@@ -35,8 +35,11 @@ class Stop:
     cells: list[str]
     addresses: set[int] = field(default_factory=set)
     functions: set[int] = field(default_factory=set)
+    link_functions: set[int] = field(default_factory=set)
     classes: set[str] = field(default_factory=set)
+    primary_classes: set[str] = field(default_factory=set)
     refs: set[str] = field(default_factory=set)
+    all_refs: set[str] = field(default_factory=set)
     tasks: set[str] = field(default_factory=set)
 
 
@@ -123,6 +126,7 @@ class BinaryResolver:
                     seeds.add(a)
         self.seeds = sorted(seeds)
         self.map_starts = sorted(a for a in map_starts if self.lo <= a < self.hi)
+        self.map_start_set = set(self.map_starts)
         self.md = capstone.Cs(capstone.CS_ARCH_X86, capstone.CS_MODE_32)
         self.cache = {}
 
@@ -133,6 +137,10 @@ class BinaryResolver:
         while todo and steps < 3500:
             pc = todo.pop()
             while self.lo <= pc < self.hi and pc not in visited and steps < 3500:
+                # A tail-jump or fall-through into another known entry is not
+                # evidence that the target instruction belongs to this function.
+                if pc != start and pc in self.map_start_set:
+                    break
                 visited.add(pc)
                 off = pc - self.base
                 ins = next(self.md.disasm(self.data[off:off + 16], pc, count=1), None)
@@ -182,19 +190,37 @@ class BinaryResolver:
         return None
 
 
-def enrich(stops, funcs, classes, resolver):
-    pattern = re.compile(r'(?<![\w])(?:' + '|'.join(map(re.escape, sorted(classes, key=len, reverse=True))) + r')(?![\w])') if classes else None
+def enrich(stops, funcs, classes, resolver, port_classes=frozenset()):
+    known_classes = classes | port_classes
+    pattern = re.compile(r'(?<![\w])(?:' + '|'.join(map(re.escape, sorted(known_classes, key=lambda x: (-len(x), x)))) + r')(?![\w])') if known_classes else None
     for s in stops.values():
         # Pinned-by contains test-title ranges, not dependencies.
         evidence = ' '.join(s.cells[2:5] + s.cells[6:])
         s.addresses = rw_addresses(evidence)
         s.functions = {f for a in s.addresses if (f := resolver.owner(a)) is not None}
+        # Preserve all citations for audit, but do not use explicitly historical
+        # fixes as mechanism edges. Such citations often connect unrelated gaps.
+        live = []
+        for sentence in re.split(r'(?<=[.;])\s+', evidence):
+            historical = re.search(r'\b(?:since|earlier|already ported|is ported|are ported|now ported|no longer|passes now|land(?:s|ed) its hit)\b', sentence, re.I)
+            unresolved = re.search(r'\b(?:not ported|unported|not traced|remains? unported)\b', sentence, re.I)
+            if not historical or unresolved:
+                live.append(sentence)
+        s.link_functions = {f for a in rw_addresses(' '.join(live)) if (f := resolver.owner(a)) is not None}
         s.classes = set(pattern.findall(' '.join(s.cells[2:4] + s.cells[6:]))) if pattern else set()
-        s.refs = (set(ID.findall(evidence)) - {s.id} - IGNORE_REFS) & stops.keys()
+        # Named subjects are stronger than classes mentioned only as callers,
+        # reports or historical context in a long gap description.
+        s.primary_classes = set(pattern.findall(s.cells[2])) & classes if pattern else set()
+        if not s.primary_classes and pattern:
+            prefix = s.cells[3][:100]
+            s.primary_classes = {c for c in pattern.findall(prefix)
+                                 if c in classes and re.match(r'^\s*`?' + re.escape(c) + r'\b', prefix)}
+        s.all_refs = set(ID.findall(evidence)) - {s.id}
+        s.refs = (s.all_refs - IGNORE_REFS) & stops.keys()
         s.tasks = set(TASK.findall(' '.join(s.cells)))
 
 
-def cluster(stops, funcs, limit=MAX_GROUP):
+def cluster(stops, funcs, limit=MAX_GROUP, stoplist=frozenset()):
     parent = {x: x for x in stops}
     def find(x):
         while parent[x] != x:
@@ -209,9 +235,9 @@ def cluster(stops, funcs, limit=MAX_GROUP):
     for sid, s in stops.items():
         for ref in s.refs:
             union(sid, ref)
-        keys = [('class', c) for c in s.classes]
+        keys = [('class', c) for c in s.primary_classes]
         # Common library helpers create giant, meaningless components.
-        keys += [('function', a) for a in s.functions if len(funcs.get(a, {}).get('classes', ())) <= 3]
+        keys += [('function', a) for a in s.link_functions if a not in stoplist and len(funcs.get(a, {}).get('classes', ())) <= 3]
         for key in keys:
             if key in seen:
                 union(sid, seen[key])
@@ -233,21 +259,28 @@ def cluster(stops, funcs, limit=MAX_GROUP):
         # Never stuff unrelated leftovers into one arbitrary 40-stop task.
         remaining = set(component)
         while remaining:
-            counts = collections.Counter(a for sid in remaining for a in stops[sid].functions
-                                         if len(funcs.get(a, {}).get('classes', ())) <= 3)
+            counts = collections.Counter(a for sid in remaining for a in stops[sid].link_functions
+                                         if a not in stoplist and len(funcs.get(a, {}).get('classes', ())) <= 3)
             common = [(count, a) for a, count in counts.items() if count >= 2]
             if common:
                 _, pivot = min(common, key=lambda x: (-x[0], x[1]))
-                batch = sorted(sid for sid in remaining if pivot in stops[sid].functions)[:limit]
+                batch = sorted(sid for sid in remaining if pivot in stops[sid].link_functions)[:limit]
             else:
-                counts = collections.Counter(c for sid in remaining for c in stops[sid].classes)
+                counts = collections.Counter(c for sid in remaining for c in stops[sid].primary_classes)
                 common = [(count, c) for c, count in counts.items() if count >= 2]
                 if common:
                     _, pivot = min(common, key=lambda x: (-x[0], x[1]))
-                    batch = sorted(sid for sid in remaining if pivot in stops[sid].classes)[:limit]
+                    batch = sorted(sid for sid in remaining if pivot in stops[sid].primary_classes)[:limit]
                 else:
                     first = min(remaining)
-                    linked = {sid for sid in remaining if sid in stops[first].refs or first in stops[sid].refs}
+                    # A generic cross reference can describe a related but separate
+                    # mechanism (e.g. numerical facade used by wall replacement).
+                    # Keep dependency-only records with a referenced task, but do
+                    # not collapse two independently placed mechanisms here.
+                    linked = {sid for sid in remaining if
+                              (sid in stops[first].refs or first in stops[sid].refs)
+                              and (not stops[first].functions and not stops[first].primary_classes
+                                   or not stops[sid].functions and not stops[sid].primary_classes)}
                     batch = [first] + sorted(linked - {first})[:limit - 1]
             remaining.difference_update(batch)
             groups.append(batch)
@@ -265,30 +298,52 @@ def open_issues(path):
 
 
 def output(stops, groups, unplaced, funcs, matrix, fields, issues, out, command):
+    map_classes = set().union(*(v['classes'] for v in funcs.values())) if funcs else set()
     details = []
     for ids in groups:
         fs = set().union(*(stops[x].functions for x in ids))
         cs = set().union(*(stops[x].classes for x in ids))
-        cc = collections.Counter(c for x in ids for c in stops[x].classes)
-        fc = collections.Counter(f for x in ids for f in stops[x].functions)
-        name = (cc.most_common(1)[0][0] if cc else f'RW 0x{fc.most_common(1)[0][0]:08X}' if fc else ids[0])
-        missing = sum(funcs.get(f, {}).get('status', 'none') in ('none', 'partial') for f in fs)
+        cc = collections.Counter(c for x in ids for c in sorted(stops[x].primary_classes))
+        fc = collections.Counter(f for x in ids for f in sorted(stops[x].link_functions))
+        name = (cc.most_common(1)[0][0] if cc and (len(ids) == 1 or cc.most_common(1)[0][1] > 1)
+                else f'RW 0x{fc.most_common(1)[0][0]:08X}' if fc and (len(ids) == 1 or fc.most_common(1)[0][1] > 1)
+                else 'linked stops ' + ', '.join(ids[:2]))
+        missing = sum(funcs.get(f, {}).get('status') in ('none', 'partial') for f in fs)
         buttons = sorted({r['button'] for r in matrix if r['module class'] in cs and r['button']})
         fl = sorted({f"{r['owner']}.{r['field']}" for r in fields if r['owner'] in cs and r['status'] in ('parsed-unused', 'not-read')})
-        covers = None if issues is None else [f"#{i['number']} {i['title']}" for i in issues if re.search(r'\b(?:Port|Local)[ -]+\d+', i['title'], re.I) and (any(re.search(r'(?<![\w-])'+re.escape(x)+r'(?![\w-])', i['title'], re.I) for x in ids) or any(re.search(r'(?<!\w)'+re.escape(x)+r'(?!\w)', i['title'], re.I) for x in cs))]
+        covers = None if issues is None else [f"#{i['number']} {i['title']}" for i in issues if re.search(r'\b(?:Port|Local)[ -]+\d+', i['title'], re.I) and (any(re.search(r'(?<![\w-])'+re.escape(x)+r'(?![\w-])', i['title'], re.I) for x in ids) or any(re.search(r'(?<!\w)'+re.escape(x)+r'(?!\w)', i['title'], re.I) for x in cs & map_classes))]
         details.append((ids, fs, cs, name, missing, buttons, fl, covers))
-    details.sort(key=lambda x: (-(len(x[0])/x[4] if x[4] else 0), -len(x[5]), -len(x[6]), x[0]))
+    # Unknown functions are not map 'none', but they are unverified work:
+    # count them in the denominator to avoid promoting huge ambiguous groups.
+    details.sort(key=lambda x: (-(len(x[0]) / (x[4] + sum(a not in funcs for a in x[1]))
+                                  if x[4] + sum(a not in funcs for a in x[1]) else 0),
+                                -len(x[5]), -len(x[6]), x[0]))
     out.parent.mkdir(parents=True, exist_ok=True)
     assigned = {sid: f'G{n:03d}' for n, g in enumerate(details, 1) for sid in g[0]}
     with out.with_suffix('.tsv').open('w', encoding='utf-8', newline='') as f:
         w = csv.writer(f, delimiter='\t', lineterminator='\n')
         w.writerow(['id', 'kind', 'group', 'why', 'functions', 'classes', 'references', 'reported tasks'])
         for sid, s in sorted(stops.items()):
-            w.writerow([sid, s.kind, assigned.get(sid, 'unplaced'), 'function/class/reference' if sid in assigned else 'no resolvable mechanism', ', '.join(f'0x{x:08X}' for x in sorted(s.functions)), ', '.join(sorted(s.classes)), ', '.join(sorted(s.refs)), ', '.join(sorted(s.tasks))])
-    lines = ['# Open stop mechanism candidates', '', f'Regenerate: `{command}`', '', 'Candidates are heuristic, not proof. Check ownership, dependencies and issue overlap before implementation. Large transitive components are split by function; links can cross groups. Unknown function status is conservatively counted as none. Unavailable issue lookup is not evidence of no coverage.', '', f'{len(stops)} open stops; {len(details)} groups; {len(unplaced)} unplaced.', '', '## Ranked groups', '', '| Rank | Mechanism | Stops | none/partial functions | Red buttons | Unused fields | Open task |', '|---:|---|---:|---:|---:|---:|---|']
+            peers = [stops[x] for x in next((g[0] for g in details if sid in g[0]), []) if x != sid]
+            shared_f = sorted(set().union(*(s.link_functions & p.link_functions for p in peers)))
+            shared_c = sorted(set().union(*(s.primary_classes & p.primary_classes for p in peers)))
+            shared_r = sorted(p.id for p in peers if p.id in s.refs or sid in p.refs)
+            why = '; '.join(([f'shared RW 0x{x:08X}' for x in shared_f] + [f'shared class {x}' for x in shared_c] + [f'reference {x}' for x in shared_r])) or ('singleton' if sid in assigned else 'no resolvable mechanism')
+            w.writerow([sid, s.kind, assigned.get(sid, 'unplaced'), why, ', '.join(f'0x{x:08X}' for x in sorted(s.functions)), ', '.join(sorted(s.classes)), ', '.join(sorted(s.all_refs)), ', '.join(sorted(s.tasks))])
+    lines = ['# Open stop mechanism candidates', '', f'Regenerate: `{command}`', '', 'Candidates are heuristic, not proof. Class merges use the area or the first named class of the gap; all mentions remain listed. Common utility functions and citations in explicitly historical-fix sentences are not merge pivots; every citation is retained. Check ownership, dependencies and issue overlap before implementation. Large transitive components are split by function; links can cross groups. Unknown function status is reported separately and is not counted as none, but is included as unverified work in the ranking denominator. Unavailable issue lookup is not evidence of no coverage.', '', f'{len(stops)} open stops; {len(details)} groups; {len(unplaced)} unplaced.', '', '## Ranked groups', '', '| Rank | Mechanism | Stops | none/partial functions | Red buttons | Unused fields | Open task |', '|---:|---|---:|---:|---:|---:|---|']
     for n, (ids, fs, cs, name, missing, buttons, fl, covers) in enumerate(details, 1):
         coverage = 'lookup unavailable' if covers is None else ', '.join(covers) if covers else 'none matched'
         lines.append(f'| {n} | {name} | {len(ids)} | {missing} | {len(buttons)} | {len(fl)} | {coverage.replace("|", "/")} |')
+    lines += ['', '## Group details', '']
+    for n, (ids, fs, cs, name, missing, buttons, fl, covers) in enumerate(details, 1):
+        functions = ', '.join(f"RW 0x{a:08X} ({funcs.get(a, {}).get('status', 'unknown')})" for a in sorted(fs)) or 'none resolved'
+        lines += [f'### G{n:03d}: {name}', '',
+                  f'Stops: {", ".join(ids)}. Kinds: {", ".join(sorted({stops[x].kind for x in ids}))}.',
+                  f'Functions: {functions}. Classes: {", ".join(sorted(cs)) or "none"}.',
+                  f'Candidates: {missing} none/partial functions; {sum(a not in funcs for a in fs)} unknown status.',
+                  f'Red buttons: {", ".join(buttons) or "none linked"}.',
+                  f'Unused fields: {", ".join(fl) or "none linked"}.',
+                  f'Existing task matches: {"lookup unavailable" if covers is None else "; ".join(covers) or "none"}.', '']
     lines += ['', '## Unplaced', '', ', '.join(unplaced) or 'None', '', '## Top 30 task drafts', '']
     for n, (ids, fs, cs, name, missing, buttons, fl, covers) in enumerate(details[:30], 1):
         functions = ', '.join(f"RW 0x{a:08X} ({funcs.get(a, {}).get('status', 'unknown')})" for a in sorted(fs)) or 'none resolved'
@@ -319,8 +374,19 @@ def main():
                 return a if a in funcs else None
         resolver = Exact()
         mode = 'exact map starts only'
-    enrich(stops, funcs, classes, resolver)
-    groups, unplaced = cluster(stops, funcs)
+    # Port-only class names are descriptive metadata, never map-class merge keys.
+    port_classes = set()
+    for path in (ROOT/'engine/src').rglob('*'):
+        if path.suffix in ('.h', '.hpp', '.cpp'):
+            text = path.read_text(encoding='utf-8', errors='replace')
+            port_classes.update(re.findall(r'\b(?:class|struct)\s+([A-Z][A-Za-z0-9_]{3,})\b', text))
+    port_classes = {c for c in port_classes if len(c) >= 7 and any(ch.isupper() for ch in c[1:])}
+    port_classes -= {'GameLogic'}
+    enrich(stops, funcs, classes, resolver, port_classes)
+    map_report = (ROOT/'docs/ennorath/RW_FUNCTION_MAP.md').read_text(encoding='utf-8')
+    stop_section = map_report.split('## Stop list', 1)[1].split('## ', 1)[0]
+    stoplist = {int(a, 16) for a in re.findall(r'(?m)^- (0x[0-9A-Fa-f]+):', stop_section)}
+    groups, unplaced = cluster(stops, funcs, stoplist=stoplist)
     issues = open_issues(args.issues)
     command = 'python tools/mod/stop_groups.py --game workspace/RotWK/game.dat --out docs/ennorath/STOP_GROUPS'
     output(stops, groups, unplaced, funcs, table(ROOT/'docs/ennorath/MATRIX_GAPS.tsv'), table(ROOT/'docs/ennorath/FIELD_GAPS.tsv'), issues, args.out, command)

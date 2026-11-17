@@ -28,3 +28,33 @@ Also corrected two false interior starts: `0x8A3F72` lies inside the map start
 `rw.py dis`). The resolver now prefers a reachable map start over an
 unverified interior candidate. Candidate entry detection still needs review;
 only the cached whole-function inventory can supply its actual blocks.
+
+## Current ranking, second pass
+
+Commands: `python tools/mod/rw.py workspace/RotWK/game.dat dis <VA> 14`.
+
+1. `RW 0x5D893C`, S-185/S-322/S-636: the SEH entry and ARMOR modifier
+   reads `0x5D8A64`/`0x5D8AF1` really concern AdjustDamage. They are a
+   defensible shared-function candidate, but S-185 and S-636 specifically
+   concern the community-patched section, so an unpatched binary is needed
+   for a vanilla conclusion. This candidate is not a proof of a closure.
+2. `RW 0x4BE587`, S-091/S-1580/S-5920: the SEH entry and its shared code
+   are real. The Lua protocol, animation timing and owner presentation repair
+   are distinct branches, so a single implementation issue is not yet justified.
+3. S-017/S-123: `RW 0xB5F9F0` begins with an x87 load and is quoted only in
+   S-123; S-017 is connected by reference, not a demonstrated common
+   function. Labelled linked stops rather than the misleading shared function.
+4. S-041/S-120: `RW 0xB5B320` indexes a type-name table and returns; it is
+   cited by S-041. S-120 concerns the Lua fork generally and refers to S-041.
+   Labelled linked stops rather than a shared-function claim.
+5. S-081/S-233: `RW 0x42F4E0` is `fld; fcos; ret`; S-081 cites the helper,
+   while S-233 refers to the numerical bounds. This is a dependency candidate,
+   not proof that all its numerical behavior is fixed by porting `fcos`.
+
+Corrections after the first pass: class edges now require the primary area or
+first class in the gap, not a class mentioned in a distant caller; a split no
+longer joins two independently placed mechanisms merely due to a reference;
+common utility functions and explicitly historical fixes do not form function
+edges. All references and citations remain visible. Unknown function status is
+included as unverified work in the ranking denominator, never claimed as
+`none`. These safeguards reduce but do not eliminate false positives.
