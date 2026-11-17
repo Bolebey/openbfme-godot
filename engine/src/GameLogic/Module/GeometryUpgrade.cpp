@@ -60,6 +60,15 @@ void GeometryUpgrade::registerModule(ModuleFactory &modules)
 	});
 }
 
+// RW 0x8BAE07 is checked in implementation, not in wouldUpgrade: a conflicting upgrade still marks executed but does not change geometry
+bool GeometryUpgrade::wouldUpgrade(const UpgradeMaskType &mask) const
+{
+	const UpgradeModuleData *d = muxData();
+	if (!d->m_activationMask.any() || isAlreadyUpgraded())
+		return false;
+	return d->m_requiresAllTriggers ? mask.testForAll(d->m_activationMask) : mask.testForAny(d->m_activationMask);
+}
+
 // RW 0x8BADC0
 void GeometryUpgrade::upgradeImplementation()
 {

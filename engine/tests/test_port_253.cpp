@@ -385,6 +385,7 @@ TEST_CASE("PORT-253 CostModifierUpgrade: cost modifiers ordered, StartsActive an
     // CostHut with StartsActive should have added cost modifier onBuildComplete (RW 0x8B9D0F)
     Object *hut = fx.makeAt("CostHut", "Alice", 10.0f, 10.0f);
     REQUIRE(hut);
+    hut->friend_onBuildComplete(); // non-horde: test harness does not call onBuildComplete automatically
     CostModifierUpgrade *cm = findCost(*hut, "ModuleTag_CM");
     REQUIRE(cm);
     // The module is already executed because StartsActive (RW 0x8B9D0F)
@@ -539,6 +540,7 @@ TEST_CASE("PORT-253 SpellRechargeModifierUpgrade: spell recharge modifiers (RW 0
     REQUIRE(bob);
     Object *lib = fx.makeAt("Library", "Alice", 10.0f, 10.0f);
     REQUIRE(lib);
+    lib->friend_onBuildComplete(); // non-horde: ensure StartsActive triggers
     SpellRechargeModifierUpgrade *spell = findSpell(*lib, "ModuleTag_Spell");
     REQUIRE(spell);
     // StartsActive: onBuildComplete should have executed (RW 0x8B9FB6) and set executed true, count +1, discount at index count (RW 0x8BA139)

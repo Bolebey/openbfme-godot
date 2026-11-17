@@ -651,6 +651,15 @@ void DoCommandUpgrade::processUpgradeRemoval()
 	run(m_data->m_removeUpgradeCommandButtonName); // + 0x13C
 }
 
+// RW 0x8B8FD7 is checked in implementation, not in wouldUpgrade: a conflicting upgrade still marks executed but hides nothing
+bool SubObjectsUpgrade::wouldUpgrade(const UpgradeMaskType &mask) const
+{
+	const UpgradeModuleData *d = muxData();
+	if (!d->m_activationMask.any() || isAlreadyUpgraded())
+		return false;
+	return d->m_requiresAllTriggers ? mask.testForAll(d->m_activationMask) : mask.testForAny(d->m_activationMask);
+}
+
 // ---- SubObjectsUpgrade --------------------------------------------------------------------------------------------------------------------
 void SubObjectsUpgrade::upgradeImplementation()
 {
