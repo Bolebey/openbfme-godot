@@ -613,7 +613,10 @@ void unitsSweep(const std::string &faction, Results &res, bool sweep)
 					const ControlBar::Placement place = ControlBar::placementOf(*cb, i, 0);
 					if (cb->m_showButton && (place.arc || place.side))
 					{
-						res.fail(item, "not on the bar");
+						// 2026-11-17 (matrix review): HIDE_WHILE_DISABLED (option bit 22, RW 0x943B39) hides a disabled button in retail too:
+						// off the bar is the grey verdict, not a fault (15 of 20 NOT-ON-BAR were fortress expansions and upgrade-gated powers)
+						res.fail(item, (cb->m_options & (1u << 22)) ? "DISABLED: needs its condition (HIDE_WHILE_DISABLED: hidden while disabled, as in retail)"
+						                                            : "not on the bar");
 					}
 					continue;
 				}
@@ -1039,7 +1042,26 @@ void unitsSweep(const std::string &faction, Results &res, bool sweep)
 				collect();
 				if (mods.empty())
 				{
-					res.fail(item, "no module of the unit or its members carries " + cb->m_specialPowerName);
+					// 2026-11-17 (matrix review): when no template of the unit or its members (the mod's INI) lists a module for the power
+					// either, the mod gives the button no module: RotWK enables such a button too and its press does nothing (RW 0x9434F7 ..
+					// 0x943564, ControlBar.cpp) — the mod's data, not a port fault (60 of 62 NO-MODULE rows)
+					bool listed = false;
+					std::vector<const Object *> who{ u };
+					if (u->getContain() && u->getContain()->getContainedItemsList())
+					{
+						who.insert(who.end(), u->getContain()->getContainedItemsList()->begin(), u->getContain()->getContainedItemsList()->end());
+					}
+					for (const Object *o : who)
+					{
+						for (const ThingTemplate::Nugget &nug : o->getTemplate()->behaviorModules().nuggets())
+						{
+							const SpecialPowerModuleData *d = dynamic_cast<const SpecialPowerModuleData *>(nug.data.get());
+							listed = listed || (d && d->m_specialPowerTemplateName == cb->m_specialPowerName);
+						}
+					}
+					res.fail(item, listed ? "no module of the unit or its members carries " + cb->m_specialPowerName
+					                      : "MOD-DATA: the mod gives the unit no module for " + cb->m_specialPowerName +
+					                            "; RotWK shows the button enabled and the press does nothing too (RW 0x9434F7)");
 					continue;
 				}
 				// an ability whose update requires the toggled weapon set (RequiredConditions WEAPON_TOGGLE: Lurtz's Carnage) is used the way a player
@@ -1534,6 +1556,16 @@ void unitsSweep(const std::string &faction, Results &res, bool sweep)
 					{
 						retryHero = true;
 						firstTry = "target " + target;
+						continue;
+					}
+					// 2026-11-17 (matrix review): the scene had no fitting target when the only ally the sweep has is the unit's own copy
+					// (repairs need a damaged own structure: 14 porters "repaired" themselves) or the click hit nothing (a slave's build boost
+					// with no structure under construction there): not tested, not a port fault
+					const bool selfCopy = target.rfind(e->name + " ", 0) == 0 && cb->hasOption(COMMAND_OPTION_NEED_TARGET_ALLY_OBJECT);
+					const bool hitNothing = target.find("the pick there hits)") != std::string::npos;
+					if (selfCopy || hitNothing)
+					{
+						res.fail(item, "NO-TARGET: the scene has no fitting target for " + cb->m_specialPowerName + " (the sweep clicked " + target + ")");
 						continue;
 					}
 					res.fail(item, cb->m_specialPowerName + ": the click on its target sent nothing (target " + target + ")" + (firstTry.empty() ? "" : " (first try, " + firstTry + ")"));

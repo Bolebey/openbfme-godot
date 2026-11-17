@@ -58,6 +58,8 @@ CATEGORIES = [
     # 2026-11-17 (matrix review): by design, not faults: a temporary object leaves at once; a horde member made alone has no horde to form
     ("TEMPORARY", re.compile(r"^TEMPORARY")),
     ("MEMBER", re.compile(r"^MEMBER")),
+    ("NO-TARGET", re.compile(r"^NO-TARGET")),                         # the scene has no fitting target: not tested
+    ("MOD-DATA", re.compile(r"^MOD-DATA")),                           # the mod gives the button no module: RotWK presses it to no effect too
     ("NO-SELECT", re.compile(r"could not be selected")),
     ("LEFT-WORLD", re.compile(r"left the world")),
     ("INVENTORY", re.compile(r"does not exist")),
@@ -173,6 +175,16 @@ def cmd_run(a) -> None:
             print(f"{faction}: exit {rc}, {sec / 60:.1f} min, report {'yes' if got else 'MISSING (see ' + faction + '.log)'}", flush=True)
 
 
+# Buttons whose failing verdict is the mod's own design, confirmed by the owner (2026-11-17): object, button, why. They count with the grey ones.
+BY_DESIGN_FILE = REPO / "docs" / "ennorath" / "matrix_bydesign.tsv"
+BY_DESIGN = {}
+if BY_DESIGN_FILE.exists():
+    for _line in BY_DESIGN_FILE.read_text(encoding="utf-8").splitlines():
+        _f = _line.split("	")
+        if len(_f) >= 3 and not _line.startswith(("#", "object	")):
+            BY_DESIGN[(_f[0], _f[1])] = _f[2]
+
+
 def cmd_collect(a) -> None:
     rows = []
     for f in FACTIONS:
@@ -183,7 +195,11 @@ def cmd_collect(a) -> None:
             parts = line.split("\t")
             if len(parts) == 5:
                 fac, obj, button, verdict, detail = parts
-                rows.append((fac, obj, button, category(verdict, detail), detail))
+                cat = category(verdict, detail)
+                why = BY_DESIGN.get((obj, button))
+                if cat != "PASS" and why:  # the owner's word on the mod's own design (docs/ennorath/matrix_bydesign.tsv)
+                    cat, detail = "BY-DESIGN", f"BY-DESIGN: {why} (was: {detail})"
+                rows.append((fac, obj, button, cat, detail))
     if not rows:
         raise SystemExit(f"no <faction>.tsv in {a.out}: run `run` first")
     rows = list(dict.fromkeys(rows))  # a rerun after a crash repeats the inventory lines
@@ -213,7 +229,7 @@ def cmd_collect(a) -> None:
         total, ok = sum(cats.values()) - cats.get("STANCE", 0), cats.get("PASS", 0)
         # a greyed button is mostly a requirement the test does not meet (a forge the faction's objects do not have here): counted apart.
         # GREY-BUG (PORT-530) is a port bug, not an unmet requirement: it counts as red, and the per-faction line names it.
-        grey = cats.get("DISABLED", 0) + cats.get("TEMPORARY", 0) + cats.get("MEMBER", 0)  # by design: not red either
+        grey = cats.get("DISABLED", 0) + cats.get("TEMPORARY", 0) + cats.get("MEMBER", 0) + cats.get("MOD-DATA", 0) + cats.get("NO-TARGET", 0) + cats.get("BY-DESIGN", 0)  # by design: not red either
         red = total - ok - grey
         cells[fac] = (f"[{total} кнопок: ✓{ok} ✗{red} серых {grey}](MATRIX.tsv) ({stamp})", str(ok))
         print(f"{fac}: {total} buttons, {ok} pass, {red} red, {grey} grey: " + ", ".join(f"{k} {v}" for k, v in cats.most_common() if k != "PASS"))
