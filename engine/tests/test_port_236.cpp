@@ -172,8 +172,8 @@ TEST_CASE("PORT-236 ScoredKillEvaAnnouncer parses all six fields (RW 0xC51540) a
     CHECK(ann[0].countOnlyKillsByLocalPlayer == true);
     CHECK(ann[0].countOnlyKillsAgainstLocalPlayer == false);
     CHECK(ann[0].minimumCountForAnnouncement == 5);
-    // Duration is stored as frames (MS * LOGICFRAMES_PER_SECOND /1000) – 120000ms = 3600 frames at 30fps
-    CHECK(ann[0].maximumTimeForAnnouncementFrames == 3600); // 120000ms *30/1000
+    // Duration is stored as frames (MS * LOGICFRAMES_PER_SECOND /1000) – 120000ms = 600 frames at 5fps (RW 0x73A429, kDurationMsecScale 0.005)
+    CHECK(ann[0].maximumTimeForAnnouncementFrames == 600); // 120000ms *5/1000, ceilScaled
 }
 
 // --- ScoreKeeper keep-score switch -------------------------------------
