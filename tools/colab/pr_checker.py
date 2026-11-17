@@ -262,15 +262,23 @@ def check_pr(pr: dict, state: dict, main_sha: str, open_prs: list[dict], comment
                      "Новые строки — файлами `docs/stops.d/`, `docs/ennorath/night_watch.d/` (PROCESS 5.7).")
     changed = sh(["git", "diff", "--name-only", f"{main_sha}..HEAD"]).stdout.split()
     diff = sh(["git", "diff", f"{main_sha}..HEAD"]).stdout
-    frag = sh([sys.executable, "tools/fragments.py", "check"]) if (WT / "tools/fragments.py").exists() else None
+    # the PR's issue: its stop ids must not be another issue's reservation (Port 212 took #578's S-7423, 2026-11-17)
+    issue_m = re.search(r"(?:closes|fixes|resolves|issue)\s+#(\d+)", pr.get("body") or "", re.I)
+    frag = sh([sys.executable, "tools/fragments.py", "check"] + (["--issue", issue_m.group(1)] if issue_m else [])) \
+        if (WT / "tools/fragments.py").exists() else None
     if frag and frag.returncode:
         # a stop id another branch took first (PR 523's S-7387, taken by Port 228) is renumbered by the owner when landing, as every batch
-        # does: a warning; any other broken fragment stays red
+        # does: a warning; an id reserved for another issue and any other broken fragment stay red
         problems = [l for l in frag.stdout.splitlines() if l.strip().startswith("- ") or ": " in l]
         taken = [l for l in problems if "is already a row of docs/STOPS.md" in l]
+        foreign = [l for l in problems if "is reserved for issue" in l]
         if problems and len(taken) == len(problems):
             lines.append("⚠️ Номер стопа уже занят (владелец перенумерует при вливании; в следующий раз бери номер из своего диапазона "
                          f"`docs/stops.d/RESERVED.tsv`): {'; '.join(t.strip(' -') for t in taken)[:400]}")
+        elif foreign and len(foreign) + len(taken) == len(problems):
+            lines.append("❌ **Номер стопа зарезервирован за другой задачей**: переименуй фрагмент на номер из диапазона своей issue "
+                         "(`python tools/fragments.py check --issue <номер>` покажет его; нет диапазона — `python tools/fragments.py next`): "
+                         + "; ".join(t.strip(' -') for t in foreign + taken)[:600])
         else:
             lines.append(f"❌ Фрагменты: {frag.stdout.strip()[:600]}")
     shared = [f for f in changed if f in SHARED]
@@ -528,14 +536,40 @@ def cycle(args) -> int:
     return len(todo)
 
 
+def self_update() -> None:
+    """Between cycles (owner 2026-11-17): the installed copy compares itself with origin/main's tools/colab/pr_checker.py and, when that
+    one compiles, replaces itself and restarts on it, so a landed change to the checker needs no hand swap. A copy inside a git tree (a run
+    from a checkout) is that tree's version and stays."""
+    me = Path(__file__).resolve()
+    if sh(["git", "-C", str(me.parent), "rev-parse", "--git-dir"]).returncode == 0:
+        return
+    sh(["git", "fetch", "-q", "origin"], cwd=REPO)
+    new = subprocess.run(["git", "show", "origin/main:tools/colab/pr_checker.py"], cwd=REPO, capture_output=True).stdout
+    if not new or new == me.read_bytes():
+        return
+    try:
+        compile(new, str(me), "exec")
+    except SyntaxError as e:
+        print(f"self-update: origin/main's pr_checker.py does not compile ({e}); keeping the running copy", flush=True)
+        return
+    tmp = me.with_name(me.name + ".new")
+    tmp.write_bytes(new)
+    os.replace(tmp, me)
+    print(f"== {time.strftime('%F %T', time.gmtime())} UTC self-update: restarting on origin/main's pr_checker.py", flush=True)
+    os.execv(sys.executable, [sys.executable, str(me)] + sys.argv[1:])
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--once", action="store_true")
     ap.add_argument("--pr", type=int)
     ap.add_argument("--no-comment", action="store_true")
+    ap.add_argument("--no-self-update", action="store_true", help="keep the running copy (a branch version under test)")
     args = ap.parse_args()
     ensure_tree()
     while True:
+        if not (args.once or args.pr or args.no_self_update):
+            self_update()
         n = cycle(args)
         if args.once or args.pr:
             return 0

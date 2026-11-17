@@ -26,6 +26,19 @@ INV_FULL=$DRIVE/openbfme-audit/rw_function_blocks_full.json   # the whole-image 
 AUDIT=$DRIVE/openbfme-audit/field-audit-auto                  # this run's field audit (the numbered vN stay hand releases)
 RUNS=$DRIVE/openbfme-runs/maps
 mkdir -p "$RUNS"
+# Self-update (owner 2026-11-17): between iterations the loop compares its installed copy with origin/main's and restarts on the new one
+# (after `bash -n`), so a landed change to the loop needs no hand swap. Only an installed copy outside a git tree updates itself (a run from
+# a tree is that tree's version); SELF_UPDATE=0 keeps the running copy (a branch version under test).
+self_update() {
+  [ "${SELF_UPDATE:-1}" = 1 ] || return 0
+  git -C "$(dirname "$0")" rev-parse --git-dir >/dev/null 2>&1 && return 0
+  local new="$0.new"
+  { git -C "$REPO" show "origin/main:tools/colab/$1" > "$new" 2>/dev/null && [ -s "$new" ]; } || { rm -f "$new"; return 0; }
+  if cmp -s "$new" "$0"; then rm -f "$new"; return 0; fi
+  bash -n "$new" || { echo "self-update: origin/main's $1 does not parse, keeping the running copy"; rm -f "$new"; return 0; }
+  echo "== $(date -u '+%F %T') UTC self-update: restarting on origin/main's $1"
+  mv -f "$new" "$0" && exec bash "$0"
+}
 LOG=$RUNS/nightly_maps.log   # every log on the Drive: /content dies with the runtime (owner 2026-11-16)
 
 # The RotWK -> BFME2 pairing (tools/re/README.md, Port 240: no Ghidra): RotWK entries from the angr inventory, BFME2's from the decomp's own
@@ -173,6 +186,7 @@ fi
 # 15 minutes; otherwise once a day at 01:00 UTC when main moved at all (tool and doc commits alone do not take the sandbox for an hour)
 while true; do
   git -C "$REPO" fetch -q origin 2>/dev/null
+  self_update nightly_maps.sh
   head=$(git -C "$REPO" rev-parse --short=8 origin/main 2>/dev/null)
   last=$(cat "$RUNS/last_rev" 2>/dev/null)
   age=$(( $(date +%s) - $(git -C "$REPO" log -1 --format=%ct origin/main 2>/dev/null || echo 0) ))
