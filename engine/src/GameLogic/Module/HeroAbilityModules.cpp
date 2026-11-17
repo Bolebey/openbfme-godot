@@ -1910,7 +1910,13 @@ bool ArrowStormUpdate::allowsSpecialPowerUse(const Coord3D *loc) const
 	}
 	const WeaponBonus sixOnes; // RW 0x893DEB .. 0x893DF6: six floats 0x3F800000, not the weapon's computed bonus
 	const float range = weapons->attackRangeNoTarget(*wt, sixOnes); // RW 0x893E01 -> 0x6CA701
-	return !(SimMath::mulf32(range, range) > dist2); // RW 0x893E17 `fmul` / 0x893E1C `fcompi` / 0x893E20 `ja`
+	// RW 0x893E14 `fld` / 0x893E17 `fmul` (range^2) / 0x893E1A `fxch` / 0x893E1C `fcompi st(1)` (distance^2 against range^2) / 0x893E20 `ja` to the
+	// refusal: a location FARTHER than the range is refused; within it the base's answer (RW 0x893E2A) follows
+	if (SimMath::mulf32(range, range) < dist2)
+	{
+		return false; // RW 0x893DDB
+	}
+	return SpecialAbilityUpdate::allowsSpecialPowerUse(loc);
 }
 
 // RW 0x894100

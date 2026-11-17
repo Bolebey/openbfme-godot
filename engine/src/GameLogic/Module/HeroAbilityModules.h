@@ -534,8 +534,8 @@ protected:
 	// RW 0x893D61 (slot 8 of the special power update interface RW 0xC63E4C; the base's RW 0x851B6E is the call at RW 0x893E2A). Read linearly: no
 	// data / template / owner: false (RW 0x893D6A .. 0x893D99); no location: the base alone (RW 0x893D7B .. 0x893D8A); no weapon template
 	// (RW 0x6CC5DF of data + 0xD0): false; a location inside the template's minimum range (RW 0x6CA03E squared against RW 0x6CA525's edge distance):
-	// false; a non-IMMOBILE caster (+ 0x108 bit 2): the base's; an IMMOBILE one: the attack range with no target (RW 0x6CA701 with six 1.0
-	// WeaponBonuses) squared against the same distance — see HeroAbilityModules.cpp
+	// false; a non-IMMOBILE caster (+ 0x108 bit 2): the base's; an IMMOBILE one: its attack range with no target (RW 0x6CA701 with six 1.0
+	// WeaponBonuses) against the same distance: farther is false, within it the base's answer — see HeroAbilityModules.cpp
 	bool allowsSpecialPowerUse(const Coord3D *loc = nullptr) const override; // RW 0x893D61
 
 private:

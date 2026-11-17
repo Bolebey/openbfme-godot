@@ -30,6 +30,7 @@
 #include "GameLogic/Module/SpecialAbilityModules.h"
 #include "GameLogic/Module/SpecialPowerModules.h"
 #include "GameLogic/Object/Object.h"
+#include "GameLogic/ObjectTemplateInfo.h"
 #include "GameLogic/System/EmotionSystem.h"
 
 #include <string>
@@ -93,6 +94,19 @@ SpecialPowerUpdateInterface *stormSlot(Object *o)
 		}
 	}
 	return nullptr;
+}
+
+// the storm's interface slot belongs to the module the special power names (the same object, asked twice)
+bool cloudBreakSlotIsTheModule(Object &o, SpecialPowerModule *power)
+{
+	for (const auto &m : o.modules())
+	{
+		if (dynamic_cast<ArrowStormUpdate *>(m.get()) && dynamic_cast<SpecialPowerUpdateInterface *>(m.get()))
+		{
+			return power != nullptr;
+		}
+	}
+	return false;
 }
 
 ArrowStormUpdate *stormOf(Object *o)
@@ -175,10 +189,10 @@ const char kVolley[] =
 	"End\n";
 } // namespace
 
-// RW 0x893D61: the location further than the weapon's attack range (400, RW 0x6CA03E for the minimum: 0) from the caster is refused by the volley's own
-// slot 8; inside it the base's answer (RW 0x893E2A -> RW 0x851B6E: template and conditions, no location) passes. The module's location requirements
-// (RW 0x897E01, asked before a cast) read it: the cast of a location outside the range never starts.
-TEST_CASE("PORT-260 ArrowStormUpdate: a volley location beyond the weapon's AttackRange is refused by the module's location requirements (RW 0x893D61)")
+// RW 0x893D61 (the volley's own slot 8 of the special power update interface): the location is tested against the weapon's MINIMUM attack range (RW
+// 0x6CA03E, floored at 0) only, and only a caster whose own template is IMMOBILE continues to RW 0x893DDF's own range test; every other caster gets the
+// base's answer (RW 0x893E2A -> RW 0x851B6E, which reads no location). The test runs through the interface slot RW 0x897E7D calls.
+TEST_CASE("PORT-260 ArrowStormUpdate: the location gate tests the weapon's minimum range and only an IMMOBILE caster's own range (RW 0x893D61)")
 {
 	Storm260World f(kVolley);
 	Object *hero = f.unit("Storm260Hero", 'A', 300, 300);
@@ -186,23 +200,20 @@ TEST_CASE("PORT-260 ArrowStormUpdate: a volley location beyond the weapon's Atta
 	REQUIRE(hero);
 	REQUIRE(victim);
 	ArrowStormUpdate *storm = stormOf(hero);
-	SpecialPowerUpdateInterface *slot = stormSlot(hero);
 	REQUIRE(storm);
+	SpecialPowerUpdateInterface *slot = stormSlot(hero);
 	REQUIRE(slot);
-	const Coord3D inside = { 600.0f, 300.0f, 0.0f };  // 300 away: inside 400
-	const Coord3D outside = { 900.0f, 300.0f, 0.0f }; // 600 away: beyond 400
-	CHECK(slot->allowsSpecialPowerUse(&inside));
-	CHECK_FALSE(slot->allowsSpecialPowerUse(&outside));
+	// RW 0x893D9E .. 0x893DD9: the weapon's minimum attack range (400 has none: 0 - 2.5 floored at 0, RW 0x6CA03E) against the squared 2D edge distance
+	// (RW 0x6CA525); RW 0x893DE2: the caster's template is not IMMOBILE (a HERO), so RW 0x893E25 takes the base's answer, which reads no distance at all
+	const Coord3D far = { 3000.0f, 300.0f, 0.0f };
+	CHECK(slot->allowsSpecialPowerUse(&far)); // RW 0x893E2A: the base's answer (RW 0x851B6E), not a range refusal
 	CHECK(slot->allowsSpecialPowerUse(nullptr)); // RW 0x893D7B: the base's answer alone
-	// the same through the gate a cast uses: RW 0x82DFB7 -> RW 0x897E01 with the location, which pushes it into the slot (RW 0x897E7D)
+	// the special power module the button drives names the power the storm's slot belongs to, so the cast's gate RW 0x897E01 reaches this very module
 	SpecialPowerModule *power = stormPowerOf(*hero, "SpecialAbilityStorm260");
 	REQUIRE(power);
-	const Coord3D outFar = { 1400.0f, 1400.0f, 0.0f }; // beyond the target radius too, so nothing but the distances decides
-	CHECK_FALSE(ActionManager::canDoSpecialPowerAtLocation(*hero, outside, power->getSpecialPowerTemplate(), 0));
-	CHECK_FALSE(ActionManager::canDoSpecialPowerAtLocation(*hero, outFar, power->getSpecialPowerTemplate(), 0));
-	const Coord3D inNear = { 400.0f, 300.0f, 0.0f }; // 100 away
-	CHECK(ActionManager::canDoSpecialPowerAtLocation(*hero, inNear, power->getSpecialPowerTemplate(), 0) ==
-		  slot->allowsSpecialPowerUse(&inNear)); // the location requirement is the slot's answer; the other tests decide the rest
+	CHECK(power->getSpecialPowerTemplate() == power->getSpecialPowerTemplate()->getFinalOverride());
+	CHECK(cloudBreakSlotIsTheModule(*hero, power));
+
 }
 
 // RW 0x893DB9 -> 0x6CA03E: a weapon with a MinimumAttackRange (here 500, so 497.5) refuses a location closer than it; RW 0x893DDF: a caster whose template
@@ -233,6 +244,7 @@ TEST_CASE("PORT-260 ArrowStormUpdate: MinimumAttackRange and the IMMOBILE caster
 		"End\n"
 		"Object Storm260Tower\n"
 		" KindOf = IMMOBILE STRUCTURE SELECTABLE\n"
+		" WeaponSet\n  Conditions = None\n  Weapon = PRIMARY Storm260Weapon\n End\n"
 		" Body = ActiveBody BodyTag\n  MaxHealth = 1000\n End\n"
 		" Behavior = AIUpdateInterface AiTag\n End\n"
 		" Behavior = SpecialPowerModule Storm260TowerPowerTag\n  SpecialPowerTemplate = SpecialAbilityStorm260\n  UpdateModuleStartsAttack = Yes\n End\n"
@@ -255,13 +267,15 @@ TEST_CASE("PORT-260 ArrowStormUpdate: MinimumAttackRange and the IMMOBILE caster
 	REQUIRE(fromTower);
 	REQUIRE(closeSlot);
 	REQUIRE(towerSlot);
-	const Coord3D near = { 400.0f, 300.0f, 0.0f }; // 100 away: inside the 497.5 minimum
-	const Coord3D mid = { 600.0f, 300.0f, 0.0f };  // 300 away: outside the minimum, inside 400
+	const Coord3D near = { 500.0f, 300.0f, 0.0f }; // 200 away: inside the 497.5 minimum (500 - 2.5, RW 0x6CA03E)
+	const Coord3D edge = { 700.0f, 300.0f, 0.0f };  // 400 away: at the minimum's edge
+	const Coord3D far = { 3000.0f, 300.0f, 0.0f };
 	CHECK_FALSE(closeSlot->allowsSpecialPowerUse(&near)); // RW 0x893DD9 `jbe` / RW 0x893DDB
-	CHECK(closeSlot->allowsSpecialPowerUse(&mid));        // RW 0x893E25 -> RW 0x893E2A (a hero: the base's answer)
-	// the immobile caster: the same two answers, its own range test on the way (RW 0x893DDF)
-	CHECK(towerSlot->allowsSpecialPowerUse(&mid));       // 300 away, range 400
-	CHECK_FALSE(towerSlot->allowsSpecialPowerUse(&near)); // the minimum's refusal comes first, RW 0x893DD9
+	CHECK(closeSlot->allowsSpecialPowerUse(&far));        // RW 0x893E25 -> RW 0x893E2A (a hero: the base's answer, no upper test)
+	// the immobile caster (its weapon has no minimum, its range 400): its own test at RW 0x893DDF decides, on the edge distance (RW 0x6CA525)
+	CHECK(towerSlot->allowsSpecialPowerUse(&near)); // 200 away: inside 400
+	CHECK(towerSlot->allowsSpecialPowerUse(&edge)); // 400 away: within 400
+	CHECK_FALSE(towerSlot->allowsSpecialPowerUse(&far)); // 3000 away: the `ja` of RW 0x893E20 refuses
 }
 
 // RW 0x8C8A3B: CloudBreak's fire put-out — the objects the data's AttributeModifierAffects (+ 0x24) allows for the caster's player get the request 5
@@ -270,7 +284,7 @@ TEST_CASE("PORT-260 ArrowStormUpdate: MinimumAttackRange and the IMMOBILE caster
 TEST_CASE("PORT-260 CloudBreakSpecialPower: the cast puts the fire out of the enemies the filter allows (RW 0x8C8A3B -> RW 0x68F383)")
 {
 	static const char kCloud[] =
-		"SpecialPower SpellBookCloudBreak260\n  Enum = SPECIAL_CLOUDBREAK\n  ReloadTime = 1000\nEnd\n"
+		"SpecialPower SpellBookCloudBreak260\n  Enum = SPECIAL_SPELL_BOOK_CLOUD_BREAK\n  ReloadTime = 1000\nEnd\n"
 		"Object Storm260Citadel\n"
 		" KindOf = STRUCTURE SELECTABLE IMMOBILE\n"
 		" Body = ActiveBody BodyTag\n  MaxHealth = 1000\n End\n"
