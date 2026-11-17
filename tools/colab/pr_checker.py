@@ -241,12 +241,25 @@ def check_pr(pr: dict, state: dict, main_sha: str, open_prs: list[dict], comment
             worse.append((tc, e))
         elif st == "pass" and was == "fail":
             better.append(tc)
-    if worse:
+    # a pin the PR names a cause for (its text or diff mentions the test and a pin / cause word: Port 225's "## Pins" section) is no failure:
+    # the owner re-measures it when landing; a PR that moves a pin and says nothing, or breaks any other test, stays red (2026-11-17: PRs 582
+    # and 517 sat "for rework" on the dashboard although 582 had named its uber1 / perf1 cause)
+    text = ((pr.get("body") or "") + "\n" + diff).lower()
+    cause_word = re.search(r"\bpins?\b|пин|причин|cause|re-?measure|перемер", text) is not None
+
+    def named(tc):
+        return tc in PINS and cause_word and re.split(r"[*?]", tc)[0].lower() in text
+
+    real = [(tc, e) for tc, e in worse if not named(tc)]
+    if real:
         lines.append("❌ **Ломает то, что на main зелёное:**")
-        for tc, e in worse:
+        for tc, e in real:
             pin = " — **сдвигает пин**: назови причину в PR (владелец перемеряет)" if tc in PINS else ""
             lines.append(f"- `{tc}`{pin}" + (f"\n```\n{e}\n```" if e else ""))
-    else:
+    for tc, e in worse:
+        if named(tc):
+            lines.append(f"⚠️ `{tc}` сдвигает пин, причина в PR названа: владелец перемерит при вливании." + (f"\n```\n{e}\n```" if e else ""))
+    if not worse:
         reds = [tc for tc in BASE if base.get(tc) == "fail"]
         lines.append("✅ Базовый набор как на main" + (f" (на main и так красные: {', '.join(f'`{t}`' for t in reds)})" if reds else "") + ".")
     if better:
@@ -370,7 +383,7 @@ def cycle(args) -> int:
     sh(["git", "fetch", "-q", "origin"], cwd=REPO).check_returncode()
     main_sha = sh(["git", "rev-parse", "origin/main"], cwd=REPO).stdout.strip()
     prs = json.loads(gh("pr", "list", "--state", "open", "--limit", "100", "--json",
-                        "number,title,headRefOid,headRefName,files,isDraft,updatedAt"))
+                        "number,title,body,headRefOid,headRefName,files,isDraft,updatedAt"))
     sh(["git", "fetch", "-q", "origin", "+refs/pull/*/head:refs/prcheck/*"], cwd=REPO)  # the heads, for the batch test below
     todo = [p for p in prs if (args.pr is None or p["number"] == args.pr) and not p["isDraft"]
             and state["checked"].get(str(p["number"])) != p["headRefOid"]
