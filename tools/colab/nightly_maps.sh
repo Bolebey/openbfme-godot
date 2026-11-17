@@ -45,6 +45,57 @@ decomp_map() {
     { rm -f "$XMAP/rw_map.csv"; echo "decomp map failed (column left empty): $log" >> "$LOG"; }
 }
 
+# The arena's audit archive (owner 2026-11-17: "сам заменял на гугл диске ennorath-audit.zip новым"): this run's audit + the newest hand
+# verdicts + rotwk-triage/ (unchanged, taken from the current archive) -> Drive for-arena/ennorath-audit.zip, the previous one kept as
+# ennorath-audit-prev.zip; only when the audit table changed. The arena gets it through the encrypted refs/arena/files, which Claude
+# re-encrypts on the PC (DashBoard scripts/arena_refresh.sh, run by tools/land.py): the key never comes to a sandbox.
+audit_zip() {
+  local rev=$1 manual=$2
+  python3 - "$DRIVE/for-arena" "$AUDIT" "$manual" "$rev" <<'PY' >> "$LOG" 2>&1
+import io, re, shutil, sys, zipfile
+from datetime import date
+from pathlib import Path
+folder, audit, manual, rev = Path(sys.argv[1]), Path(sys.argv[2]), Path(sys.argv[3]), sys.argv[4]
+cur = folder / "ennorath-audit.zip"
+old = zipfile.ZipFile(cur) if cur.exists() else None
+new_tsv = (audit / "field-audit.tsv").read_bytes()
+if old and any(n.endswith("/field-audit.tsv") and old.read(n) == new_tsv for n in old.namelist()):
+    print("audit zip: unchanged"); sys.exit(0)
+totals = next((l.strip() for l in (audit / "field-audit.md").read_text(encoding="utf-8").splitlines() if "fields of the mod" in l), "")
+readme = f"""ennorath-audit.zip, {date.today()} (main {rev}; rebuilt by tools/colab/nightly_maps.sh after each landing)
+
+field-audit/  the mod field audit (tools/mod/field_audit.py on main {rev}; the mod = Ennorath 1.9.8.3 over RotWK 2.01 vanilla).
+  field-audit.tsv      one row per field the mod writes: status in the PORT (used, parsed-unused, not-read, raw, missing-module, ...),
+                       where, values; the tool column is the tool's own status
+  field-audit.md       the same as a report, plus the hand checks to look at again
+  field-audit-diff.md  the fields whose status changed against the previous run
+  module-coverage.tsv  the engine's module table (ported / parsed-only / missing)
+  module-queue.tsv     classes ordered by the number of mod objects
+  manual-check.tsv     the hand-checked verdicts every run applies with --manual
+  {totals}
+
+rotwk-triage/  what RotWK 2.01 itself does with 741 of those fields (cloud-agent triage, all 25 batches), reviewed; unchanged since 2026-11-10.
+"""
+buf = io.BytesIO()
+with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as z:
+    z.writestr("README.txt", readme)
+    for f in ("field-audit.tsv", "field-audit.md", "field-audit-diff.md", "module-coverage.tsv", "module-queue.tsv"):
+        if (audit / f).exists():
+            z.write(audit / f, f"field-audit/{f}")
+    z.write(manual, "field-audit/manual-check.tsv")
+    for n in (old.namelist() if old else []):
+        if n.startswith("rotwk-triage/"):
+            z.writestr(n, old.read(n))
+if old:
+    old.close()
+    shutil.copyfile(cur, folder / "ennorath-audit-prev.zip")
+tmp = folder / "ennorath-audit.zip.tmp"
+tmp.write_bytes(buf.getvalue())
+tmp.replace(cur)
+print(f"audit zip: replaced ({len(buf.getvalue())} bytes, main {rev})")
+PY
+}
+
 run() {
   local day; day=$(date -u +%F)
   echo "== $day $(date -u +%T) start" >> "$LOG"
@@ -61,6 +112,7 @@ run() {
   local manual; manual=$(ls -d "$DRIVE"/openbfme-audit/field-audit-v* 2>/dev/null | sort -V | tail -1)/manual-check.tsv
   python3 tools/mod/field_audit.py --base "$ROTWK_INSTALL" --overlay "$OPENBFME_ENNORATH_INSTALL" --coverage "$AUDIT/module-coverage.tsv" \
       --manual "$manual" --out "$AUDIT" >> "$RUNS/nightly_audit.log" 2>&1 || { echo "field audit failed at $rev" >> "$LOG"; return 1; }
+  audit_zip "$rev" "$manual" || echo "audit zip failed at $rev" >> "$LOG"   # never stops the run
   [ -d /content/py219/angr ] || python3 -m pip install -q --target /content/py219 angr==9.2.213 bitstring==4.4.0 pycparser==3.0 > /dev/null 2>&1
   export PYTHONPATH=/content/py219
   cp -f "$INV" workspace/rebuild_inventory.json 2>/dev/null
@@ -89,6 +141,11 @@ run() {
     # the sandbox shell may have no GitHub credentials: the commit then waits on the Drive as a patch (Claude applies it on the PC, 2026-11-16)
     git format-patch -1 --stdout HEAD > "$RUNS/$day.patch"
     git push -q -f origin auto/maps 2>/dev/null && rm -f "$RUNS/$day.patch" || echo "push failed at $rev: the commit is $RUNS/$day.patch" >> "$LOG"
+    # owner 2026-11-17: the agents read the maps from main, so the commit (only the seven generated tables, checked by the gate)
+    # fast-forwards main when main has not moved during the run; otherwise it waits in auto/maps for the next landing
+    if [ -z "$(git diff --name-only HEAD~1 HEAD | grep -vxE 'docs/ennorath/(MATRIX\.tsv|README\.md|RW_FUNCTION_MAP\.(tsv|md)|MATRIX_GAPS\.(tsv|md)|FIELD_GAPS\.tsv)')" ]; then
+      git push -q origin HEAD:main 2>/dev/null && echo "$day: maps fast-forwarded main" >> "$LOG" || echo "$day: main moved during the run, maps wait in auto/maps" >> "$LOG"
+    fi
   fi
   { echo "# Nightly maps $day (main $rev, sandbox $SB)"; echo; echo "red buttons / specific gaps: $red"; echo
     echo '## Function map'; tail -3 "$RUNS/nightly_map.log"; echo; echo '## MATRIX_GAPS'; tail -2 "$RUNS/nightly_gaps.log"
