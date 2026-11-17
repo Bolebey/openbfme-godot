@@ -7,8 +7,9 @@
 //     RW 0x64A492), RW 0x8B50BE (the load fixup: + 0xC4 index to + 0x9C pointer over the + 0x90 vector's ends), RW 0x8B5492 (the class name RW 0xC0B038),
 //     RW 0x8B5FD0 (xfer), RW 0x8B5498 (the typed data factory RW 0x5487EC by the same name), then the interface thunks RW 0x63F3BF / RW 0x8851E4 / RW 0x851E97.
 //     RW 0x8B56EB is the + 0x20 interface's first slot (table RW 0xC6D19C, one entry) and has no caller in the class's own code: S-7444.
-//   * the fear scan's order: RW 0x8B5B35 measures the edge distance (RW 0x66352C) before the AfraidOf / AlwaysAfraidOf filters (RW 0x7640C1) read the
-//     candidate, and that one value serves the fear and the point branch (RW 0x8B5B41, RW 0x8B5BF7).
+//   * the fear scan's order: RW 0x8B5B35 measures the edge distance (RW 0x66352C) into [ebp - 0x2C] and RW 0x8B5B41 compares the fear radius squared
+//     with it; a node past it goes to the point branch (RW 0x8B5BF7) with that same value, and only a node inside it reaches the AfraidOf /
+//     AlwaysAfraidOf filters (RW 0x7640C1, RW 0x8B5B4E .. 0x8B5B6A) and canSee (RW 0x68FA3D).
 //   * BoredUpdate's data (constructor RW 0x899E8C / RW 0x89A145: ScanDelayTime RW 0xD9F608, ScanDistance RW 0xBD9E90, the default BoredFilter
 //     RW 0x763D11) and its update RW 0x899F9D with the countdown RW 0x8B66B4 (a neighbour case). Its six previously uncited functions are the shared
 //     module plumbing (RW 0x464A09 operator delete, RW 0x4B612F the data registry's entry fixup, RW 0x899E41 the class name, RW 0x899E47 the data
@@ -146,7 +147,7 @@ TEST_CASE("PORT-263 EmotionTrackerUpdate: the object's nuggets are the ones its 
 	CHECK(d->m_heroScanDistance == 0.0f);        // + 0x20: not in this INI
 }
 
-TEST_CASE("PORT-263 EmotionTrackerUpdate: the fear scan asks the edge distance (RW 0x8B5B35 -> RW 0x66352C) before the AfraidOf filter (RW 0x7640C1), one value serving the fear and the point branch (RW 0x8B5BF7)")
+TEST_CASE("PORT-263 EmotionTrackerUpdate: the edge distance (RW 0x8B5B35 -> RW 0x66352C) is compared with the fear radius (RW 0x8B5B41) before the AfraidOf filter (RW 0x7640C1 runs at RW 0x8B5B4E), one value serving the point branch too (RW 0x8B5BF7)")
 {
 	EmotionsFixture f;
 	Object *scared = f.at("Port263Scared", "Alice", 500.0f, 500.0f);

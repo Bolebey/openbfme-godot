@@ -723,9 +723,12 @@ UpdateSleepTime EmotionTrackerUpdate::update()
 				};
 				if (!(rel == ALLIES && !always()))
 				{
-					// RW 0x8B5B35: the edge distance (RW 0x66352C) is taken before the AfraidOf / AlwaysAfraidOf filters (RW 0x7640C1) read the
-					// candidate, and that one value serves the fear and the point branch: the node walk that measures it moves on the link, so a filter
-					// that touched the node first would make the port's distance another one
+					// RW 0x8B5B0C..0x8B5B2F: the SCARY bit (object template + 0x11A), and for an ALLY the AlwaysAfraidOf filter (data + 0x18,
+					// RW 0x7640C1) that sends a candidate it refuses on to the hero part (RW 0x8B5CDA) before anything is measured. Then
+					// RW 0x8B5B35 measures the edge distance (RW 0x66352C) into [ebp - 0x2C]; RW 0x8B5B41 compares the fear radius squared
+					// ([ebp - 0x60], RW 0x8B5AC8) with it and a node past it jumps to the point branch (RW 0x8B5BF7) with this same value. Only
+					// then do the AfraidOf (data + 0x14) and AlwaysAfraidOf (+ 0x18) filters run (RW 0x8B5B4E..0x8B5B6A) and canSee
+					// (RW 0x68FA3D) with + 0x24. The port reads the filters in the same order, each at most once (they are pure).
 					const float d2 = edgeDistanceSquared(*obj, *o);
 					bool feared = false;
 					if (fear2 > d2 && (afraid() || always()) && canSee(*obj, *o, m_data->m_fearScanDistance))
