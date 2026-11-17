@@ -638,6 +638,7 @@ public:
 	static void buildFieldParse(MultiIniFieldParse &p);
 };
 
+// RW vtable 0x00C64E8C; name/key RW 0x0089640F / 0x0089643F; s1 no-op RW 0x008E38D8
 class TeleportSpecialAbilityUpdate : public SpecialAbilityUpdate
 {
 public:
