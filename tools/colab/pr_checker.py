@@ -32,6 +32,7 @@ from __future__ import annotations
 
 import argparse
 import concurrent.futures as cf
+import hashlib
 import json
 import os
 import re
@@ -393,8 +394,23 @@ def cycle(args) -> int:
     prs = json.loads(gh("pr", "list", "--state", "open", "--limit", "100", "--json",
                         "number,title,body,headRefOid,headRefName,files,isDraft,updatedAt"))
     sh(["git", "fetch", "-q", "origin", "+refs/pull/*/head:refs/prcheck/*"], cwd=REPO)  # the heads, for the batch test below
+    # A red PR whose description changed is checked again without a new commit: an agent that only names a pin's cause in the PR body
+    # (the named-pin rule reads the body) gets its new verdict (PR 583, 2026-11-17).
+    bodies = state.setdefault("body", {})
+
+    def body_hash(p) -> str:
+        return hashlib.sha1((p.get("body") or "").encode("utf-8")).hexdigest()
+
+    def body_changed(p) -> bool:
+        n, h = str(p["number"]), body_hash(p)
+        if n not in bodies:
+            bodies[n] = h
+            return False
+        report = REPORTS / f"{n}-{p['headRefOid'][:8]}.md"
+        return bodies[n] != h and report.exists() and "❌" in report.read_text(encoding="utf-8", errors="replace")
+
     todo = [p for p in prs if (args.pr is None or p["number"] == args.pr) and not p["isDraft"]
-            and state["checked"].get(str(p["number"])) != p["headRefOid"]
+            and (state["checked"].get(str(p["number"])) != p["headRefOid"] or body_changed(p))
             and state.get("errors", {}).get(str(p["number"])) != p["headRefOid"]
             and not p["headRefName"].startswith(("claude/", "agent/claude/"))]
     skipped = state.setdefault("skipped", {})
@@ -419,6 +435,7 @@ def cycle(args) -> int:
     todo = sorted(todo, key=lambda p: str(p["number"]) not in state["checked"])
     # one PR per cycle, then the list again: a PR reworked while another is being checked waits for that one check only, not the whole queue
     for p in todo[:1]:
+        bodies[str(p["number"])] = body_hash(p)
         t0 = time.time()
         try:
             body = check_pr(p, state, main_sha, prs, not args.no_comment)
