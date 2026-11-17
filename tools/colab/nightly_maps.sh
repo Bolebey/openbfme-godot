@@ -1,8 +1,9 @@
 #!/bin/bash
-# Nightly maps (owner 2026-11-16): on today's main, the button matrix, the RotWK function map and their joins, pushed to the branch
-# auto/maps for Claude to land (never into main from here), with a summary on the Drive (openbfme-runs/maps/<date>.md).
+# Maps (owner 2026-11-16; 2026-11-17: one run of all three tools on one main, after every landing): the button matrix, the field audit,
+# the RotWK function map and their joins (MATRIX_GAPS, FIELD_GAPS), pushed to the branch auto/maps for Claude to land (never into main from
+# here), with one summary on the Drive (openbfme-runs/maps/<date>.md, and latest.md: the PR checker and the agents read it).
 #
-#   bash tools/colab/nightly_maps.sh          # wait for 01:00 UTC, run, repeat every night (autostart.d)
+#   bash tools/colab/nightly_maps.sh          # every 15 min: when origin/main moved since the last run and has been still for 15 min, run
 #   bash tools/colab/nightly_maps.sh --now    # one run now
 # The result goes to the branch auto/maps; without push rights in the sandbox it waits on the Drive as openbfme-runs/maps/<date>.patch.
 #
@@ -16,10 +17,13 @@ set -uo pipefail
 export RW_GAME_DAT="${RW_GAME_DAT:-${OPENBFME_GAME_DAT:-}}"
 SB=$(cat /content/sandbox_id 2>/dev/null || echo 3)
 REPO=/content/sandbox/openbfme-godot
-T=${MAPS_TREE:-$REPO/workspace/wt/local-sb$SB-st3}
+# its own tree (2026-11-17): a run after a landing comes in the day, while Claude works in station 3
+T=${MAPS_TREE:-$REPO/workspace/wt/maps}
 DRIVE=/content/drive/MyDrive
 INI=$DRIVE/for-arena/ennorath-ini-1.9.8.3.zip
 INV=$DRIVE/openbfme-audit/rw_function_blocks.json
+INV_FULL=$DRIVE/openbfme-audit/rw_function_blocks_full.json   # the whole-image inventory (Port 241): more readers for FIELD_GAPS
+AUDIT=$DRIVE/openbfme-audit/field-audit-auto                  # this run's field audit (the numbered vN stay hand releases)
 RUNS=$DRIVE/openbfme-runs/maps
 mkdir -p "$RUNS"
 LOG=$RUNS/nightly_maps.log   # every log on the Drive: /content dies with the runtime (owner 2026-11-16)
@@ -50,6 +54,13 @@ run() {
   local rev; rev=$(git rev-parse --short=8 HEAD)
   bash tools/colab/build_tests.sh > "$RUNS/nightly_build.log" 2>&1 || { echo "build failed at $rev" >> "$LOG"; return 1; }
   python3 tools/matrix_run.py all --jobs 5 > "$RUNS/nightly_matrix.log" 2>&1 || { echo "matrix failed at $rev" >> "$LOG"; return 1; }
+  # the field audit on this main (2026-11-17): the engine's module coverage table, then field_audit.py with the newest hand verdicts
+  mkdir -p "$AUDIT"
+  OPENBFME_MODULE_COVERAGE_OUT="$AUDIT/module-coverage.tsv" engine/build/openbfme_tests "-tc=module coverage: every registry class*" \
+      > "$RUNS/nightly_audit.log" 2>&1
+  local manual; manual=$(ls -d "$DRIVE"/openbfme-audit/field-audit-v* 2>/dev/null | sort -V | tail -1)/manual-check.tsv
+  python3 tools/mod/field_audit.py --base "$ROTWK_INSTALL" --overlay "$OPENBFME_ENNORATH_INSTALL" --coverage "$AUDIT/module-coverage.tsv" \
+      --manual "$manual" --out "$AUDIT" >> "$RUNS/nightly_audit.log" 2>&1 || { echo "field audit failed at $rev" >> "$LOG"; return 1; }
   [ -d /content/py219/angr ] || python3 -m pip install -q --target /content/py219 angr==9.2.213 bitstring==4.4.0 pycparser==3.0 > /dev/null 2>&1
   export PYTHONPATH=/content/py219
   cp -f "$INV" workspace/rebuild_inventory.json 2>/dev/null
@@ -59,8 +70,11 @@ run() {
   cmp -s workspace/rebuild_inventory.json "$INV" || cp -f workspace/rebuild_inventory.json "$INV"   # a new game.dat: share the new cache
   python3 tools/mod/matrix_gaps.py --base "$ROTWK_INSTALL" --overlay "$OPENBFME_ENNORATH_INSTALL" --inventory workspace/rebuild_inventory.json \
       --game "$RW_GAME_DAT" > "$RUNS/nightly_gaps.log" 2>&1 || { echo "matrix_gaps failed at $rev" >> "$LOG"; return 1; }
-  local audit; audit=$(ls -d "$DRIVE"/openbfme-audit/field-audit-v* 2>/dev/null | sort -V | tail -1)/field-audit.tsv
-  python3 tools/mod/field_gaps.py --audit "$audit" --inventory workspace/rebuild_inventory.json --game "$RW_GAME_DAT" \
+  # FIELD_GAPS on this run's audit, with the template getters of the decomp map and the whole-image inventory when they exist
+  local finv=workspace/rebuild_inventory.json xm=()
+  [ -f "$INV_FULL" ] && finv=$INV_FULL
+  [ -f "$XMAP/rw_map.csv" ] && xm=(--xmap "$XMAP/rw_map.csv")
+  python3 tools/mod/field_gaps.py --audit "$AUDIT/field-audit.tsv" --inventory "$finv" --game "$RW_GAME_DAT" "${xm[@]}" \
       > "$RUNS/nightly_fgaps.log" 2>&1 || { echo "field_gaps failed at $rev" >> "$LOG"; return 1; }
   rm -f workspace/rebuild_inventory.json
   git checkout -q -B auto/maps
@@ -78,7 +92,10 @@ run() {
   fi
   { echo "# Nightly maps $day (main $rev, sandbox $SB)"; echo; echo "red buttons / specific gaps: $red"; echo
     echo '## Function map'; tail -3 "$RUNS/nightly_map.log"; echo; echo '## MATRIX_GAPS'; tail -2 "$RUNS/nightly_gaps.log"
-    echo; echo '## FIELD_GAPS'; tail -2 "$RUNS/nightly_fgaps.log"; echo; echo '## Matrix'; tail -5 "$RUNS/nightly_matrix.log"; } > "$RUNS/$day.md"
+    echo; echo '## FIELD_GAPS'; tail -2 "$RUNS/nightly_fgaps.log"; echo; echo '## Matrix'; tail -5 "$RUNS/nightly_matrix.log"
+    echo; echo '## Field audit (changes against the previous run)'; head -40 "$AUDIT/field-audit-diff.md" 2>/dev/null; } > "$RUNS/$day.md"
+  cp -f "$RUNS/$day.md" "$RUNS/latest.md"
+  echo "$rev" > "$RUNS/last_rev"
   echo "== $day $(date -u +%T) done ($red)" >> "$LOG"
 }
 
@@ -86,9 +103,14 @@ if [ "${1:-}" = "--now" ]; then
   run
   exit $?
 fi
+# after every landing (owner 2026-11-17): main moved since the last run and has not moved for 15 minutes (a landing pushes several commits)
 while true; do
-  now=$(date -u +%s); next=$(date -u -d "tomorrow 01:00" +%s)
-  [ "$(date -u +%H)" -lt 1 ] && next=$(date -u -d "today 01:00" +%s)
-  sleep $((next - now))
-  run
+  git -C "$REPO" fetch -q origin 2>/dev/null
+  head=$(git -C "$REPO" rev-parse --short=8 origin/main 2>/dev/null)
+  last=$(cat "$RUNS/last_rev" 2>/dev/null)
+  age=$(( $(date +%s) - $(git -C "$REPO" log -1 --format=%ct origin/main 2>/dev/null || echo 0) ))
+  if [ -n "$head" ] && [ "$head" != "$last" ] && [ "$age" -ge 900 ]; then
+    run || echo "$head" > "$RUNS/last_rev"   # a failed run is not retried on the same main (its log says why)
+  fi
+  sleep 900
 done
