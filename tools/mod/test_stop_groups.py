@@ -118,3 +118,47 @@ def test_seh_entry_after_ret_and_ret_imm():
     assert seh_after_return(b'\xc2\x04\x00' + prologue, 3)
     assert not seh_after_return(b'\x90\x90\x90' + prologue, 3)
     assert not seh_after_return(b'\xc3', 0)
+
+
+def test_port_and_rotwk_named_classes_are_reported_separately(tmp_path):
+    p = tmp_path/'stops.md'
+    p.write_text(row(1, 'PortWidget calls RetailWidget::update'))
+    stops = read_stops([p])
+    funcs = {0x401000: {'names': {'RetailWidget::update (tier A)'}, 'classes': {'ModuleX'}, 'status': 'none'}}
+    enrich(stops, funcs, {'ModuleX'}, Inventory([]), {'PortWidget'})
+    assert stops['S-1'].port_classes == {'PortWidget'}
+    assert stops['S-1'].rotwk_classes == {'RetailWidget'}
+    assert not stops['S-1'].primary_classes
+
+
+def test_cross_group_references_remain_visible_after_split(tmp_path):
+    import csv
+    from stop_groups import output
+    p = tmp_path/'stops.md'
+    p.write_text(row(1, 'RW 0x401002 waits for S-2') + row(2, 'RW 0x402002'))
+    stops = read_stops([p])
+    inv = Inventory([{'address': 0x401000, 'blocks': [[0x401000, 32]]},
+                     {'address': 0x402000, 'blocks': [[0x402000, 32]]}])
+    enrich(stops, {}, set(), inv)
+    groups, unplaced = cluster(stops, {}, limit=1)
+    out = tmp_path/'report'
+    output(stops, groups, unplaced, {}, [], [], None, out, 'regenerate')
+    with out.with_suffix('.tsv').open() as f:
+        rows = {r['id']: r for r in csv.DictReader(f, delimiter='\t')}
+    assert rows['S-1']['group'] != rows['S-2']['group']
+    assert 'cross-group reference S-2' in rows['S-1']['why']
+    assert 'cross-group reference S-1' in rows['S-2']['why']
+    assert rows['S-2']['referenced by'] == 'S-1'
+
+
+def test_generic_class_names_are_metadata_not_placement(tmp_path):
+    p = tmp_path/'stops.md'
+    p.write_text(row(1, 'Object and Player are named without a mechanism'))
+    stops = read_stops([p])
+    funcs = {0x401000: {'names': {'Object::setTeam (tier A)', 'Player::update (tier A)'},
+                        'classes': {'ModuleX'}, 'status': 'none'}}
+    enrich(stops, funcs, {'ModuleX'}, Inventory([]), {'Object', 'Player'})
+    assert stops['S-1'].port_classes == {'Object', 'Player'}
+    assert stops['S-1'].rotwk_classes == {'Object', 'Player'}
+    assert not stops['S-1'].classes
+    assert cluster(stops, funcs)[1] == ['S-1']

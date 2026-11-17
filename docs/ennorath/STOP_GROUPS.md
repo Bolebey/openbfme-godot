@@ -4,9 +4,9 @@ Regenerate: `python tools/mod/stop_groups.py --game workspace/RotWK/game.dat --o
 
 For --game install Python packages `capstone` and `pefile`; issue matching uses `gh` or an explicit --issues JSON snapshot. A discovered or explicitly supplied whole-function inventory takes precedence over the game heuristic; without either, only exact map starts are resolved.
 
-Candidates are heuristic, not proof. Class merges use the area or the first named class of the gap; all mentions remain listed. Common utility functions, the manually reviewed broad draw dispatcher RW 0x004BE587, and citations in explicitly historical-fix sentences are not merge pivots; every citation is retained. Check ownership, dependencies and issue overlap before implementation. Large transitive components are split by function; links can cross groups. Unknown function status is reported separately and is not counted as none, but is included as unverified work in the ranking denominator. Unavailable issue lookup is not evidence of no coverage.
+Candidates are heuristic, not proof. Class merges use the area or the first named class of the gap; literal port and map-decomp name matches remain listed separately in TSV; generic names do not place a stop. Cross-group references remain visible after splitting. Common utility functions, the manually reviewed broad draw dispatcher RW 0x004BE587, and citations in explicitly historical-fix sentences are not merge pivots; every citation is retained. Check ownership, dependencies and issue overlap before implementation. Large transitive components are split by function; links can cross groups. Unknown function status is reported separately and is not counted as none, but is included as unverified work in the ranking denominator. Unavailable issue lookup is not evidence of no coverage.
 
-949 open stops; 537 groups; 61 unplaced.
+949 open stops; 542 groups; 56 unplaced.
 
 ## Ranked groups
 
@@ -437,125 +437,130 @@ Candidates are heuristic, not proof. Class merges use the area or the first name
 | 423 | CreateObjectDie | 1 | 0 | 0 | 1 | none matched |
 | 424 | linked stops S-003 | 1 | 0 | 0 | 0 | none matched |
 | 425 | linked stops S-004 | 1 | 0 | 0 | 0 | none matched |
-| 426 | linked stops S-007 | 1 | 0 | 0 | 0 | none matched |
-| 427 | linked stops S-010 | 1 | 0 | 0 | 0 | none matched |
-| 428 | linked stops S-011 | 1 | 0 | 0 | 0 | none matched |
-| 429 | linked stops S-012 | 1 | 0 | 0 | 0 | none matched |
-| 430 | linked stops S-015 | 1 | 0 | 0 | 0 | none matched |
-| 431 | linked stops S-016, S-042 | 2 | 0 | 0 | 0 | none matched |
-| 432 | linked stops S-020, S-021 | 3 | 0 | 0 | 0 | none matched |
-| 433 | linked stops S-027 | 1 | 0 | 0 | 0 | none matched |
-| 434 | linked stops S-028, S-460 | 2 | 0 | 0 | 0 | none matched |
-| 435 | linked stops S-030 | 1 | 0 | 0 | 0 | none matched |
-| 436 | linked stops S-038 | 1 | 0 | 0 | 0 | none matched |
-| 437 | linked stops S-039 | 1 | 0 | 0 | 0 | none matched |
-| 438 | linked stops S-060 | 1 | 0 | 0 | 0 | none matched |
-| 439 | linked stops S-070 | 1 | 0 | 0 | 0 | none matched |
-| 440 | linked stops S-083 | 1 | 0 | 0 | 0 | none matched |
-| 441 | linked stops S-100, S-109 | 3 | 0 | 0 | 0 | none matched |
-| 442 | linked stops S-102 | 1 | 0 | 0 | 0 | none matched |
-| 443 | linked stops S-108, S-130 | 3 | 0 | 0 | 0 | none matched |
-| 444 | RW 0x00608D0B | 1 | 0 | 0 | 0 | none matched |
-| 445 | linked stops S-133 | 1 | 0 | 0 | 0 | none matched |
-| 446 | linked stops S-134 | 1 | 0 | 0 | 0 | none matched |
-| 447 | linked stops S-138 | 1 | 0 | 0 | 0 | none matched |
-| 448 | linked stops S-146 | 1 | 0 | 0 | 0 | none matched |
-| 449 | RW 0x00674B1F | 1 | 0 | 0 | 0 | none matched |
-| 450 | linked stops S-1540 | 1 | 0 | 0 | 0 | none matched |
-| 451 | linked stops S-1541, S-232 | 2 | 0 | 0 | 0 | none matched |
-| 452 | linked stops S-1561 | 1 | 0 | 0 | 0 | none matched |
-| 453 | RW 0x004BE587 | 1 | 0 | 0 | 0 | none matched |
-| 454 | linked stops S-170, S-175 | 2 | 0 | 0 | 0 | none matched |
-| 455 | linked stops S-171, S-5140 | 2 | 0 | 0 | 0 | none matched |
-| 456 | linked stops S-1730 | 1 | 0 | 0 | 0 | none matched |
-| 457 | linked stops S-174 | 1 | 0 | 0 | 0 | none matched |
-| 458 | linked stops S-176 | 1 | 0 | 0 | 0 | none matched |
-| 459 | W3DTruckDraw | 1 | 0 | 0 | 0 | none matched |
-| 460 | linked stops S-181 | 1 | 0 | 0 | 0 | none matched |
-| 461 | RW 0x0063F3BF | 1 | 0 | 0 | 0 | none matched |
-| 462 | linked stops S-184 | 1 | 0 | 0 | 0 | none matched |
-| 463 | linked stops S-187 | 1 | 0 | 0 | 0 | none matched |
-| 464 | RW 0x006628CD | 1 | 0 | 0 | 0 | none matched |
-| 465 | linked stops S-1890 | 1 | 0 | 0 | 0 | none matched |
-| 466 | linked stops S-1891 | 1 | 0 | 0 | 0 | none matched |
-| 467 | RW 0x0089C1A4 | 1 | 0 | 0 | 0 | none matched |
-| 468 | RW 0x0067055A | 1 | 0 | 0 | 0 | none matched |
-| 469 | ReplaceSelfUpgrade | 1 | 0 | 0 | 0 | #601 Port 253: Upgrade modules: SubObjectsUpgrade (logic side), GeometryUpgrade, ReplaceSelfUpgrade, CostModifierUpgrade, InheritUpgradeCreate, SpellRechargeModifierUpgrade |
-| 470 | linked stops S-2004 | 1 | 0 | 0 | 0 | none matched |
-| 471 | linked stops S-2005 | 1 | 0 | 0 | 0 | none matched |
-| 472 | linked stops S-204 | 1 | 0 | 0 | 0 | #601 Port 253: Upgrade modules: SubObjectsUpgrade (logic side), GeometryUpgrade, ReplaceSelfUpgrade, CostModifierUpgrade, InheritUpgradeCreate, SpellRechargeModifierUpgrade |
-| 473 | RW 0x006AAB85 | 1 | 0 | 0 | 0 | none matched |
-| 474 | RW 0x0070BCE7 | 1 | 0 | 0 | 0 | none matched |
-| 475 | linked stops S-231 | 1 | 0 | 0 | 0 | none matched |
-| 476 | linked stops S-234 | 1 | 0 | 0 | 0 | none matched |
-| 477 | RW 0x0067B4B7 | 1 | 0 | 0 | 0 | none matched |
-| 478 | linked stops S-249 | 1 | 0 | 0 | 0 | none matched |
-| 479 | RW 0x0089DB5D | 2 | 0 | 0 | 0 | #601 Port 253: Upgrade modules: SubObjectsUpgrade (logic side), GeometryUpgrade, ReplaceSelfUpgrade, CostModifierUpgrade, InheritUpgradeCreate, SpellRechargeModifierUpgrade |
-| 480 | RW 0x00642002 | 1 | 0 | 0 | 0 | none matched |
-| 481 | RW 0x006A8630 | 1 | 0 | 0 | 0 | none matched |
-| 482 | linked stops S-2704 | 1 | 0 | 0 | 0 | none matched |
-| 483 | linked stops S-274 | 1 | 0 | 0 | 0 | none matched |
-| 484 | linked stops S-284 | 1 | 0 | 0 | 0 | none matched |
-| 485 | linked stops S-290 | 1 | 0 | 0 | 0 | none matched |
-| 486 | RW 0x0068F430 | 1 | 0 | 0 | 0 | none matched |
-| 487 | linked stops S-3403 | 1 | 0 | 0 | 0 | none matched |
-| 488 | RW 0x00936B7D | 1 | 0 | 0 | 0 | #601 Port 253: Upgrade modules: SubObjectsUpgrade (logic side), GeometryUpgrade, ReplaceSelfUpgrade, CostModifierUpgrade, InheritUpgradeCreate, SpellRechargeModifierUpgrade |
-| 489 | linked stops S-3507 | 1 | 0 | 0 | 0 | none matched |
-| 490 | RW 0x00441C56 | 1 | 0 | 0 | 0 | none matched |
-| 491 | RW 0x00690BD2 | 1 | 0 | 0 | 0 | none matched |
-| 492 | linked stops S-3711 | 1 | 0 | 0 | 0 | none matched |
-| 493 | RW 0x00862A88 | 1 | 0 | 0 | 0 | #465 Port 198: SpawnBehavior: the spawn interface's attack / idle orders and Player::onUnitCreated (S-1425) |
-| 494 | linked stops S-4000 | 1 | 0 | 0 | 0 | none matched |
-| 495 | linked stops S-4001 | 1 | 0 | 0 | 0 | none matched |
-| 496 | linked stops S-4002 | 1 | 0 | 0 | 0 | none matched |
-| 497 | RW 0x00667416 | 1 | 0 | 0 | 0 | #612 Port 264: AIUpdateInterface: the 64 uncited own functions of the AI every Ennorath unit runs (classify, then port the missing ones) |
-| 498 | linked stops S-4222, S-5013 | 2 | 0 | 0 | 0 | none matched |
-| 499 | linked stops S-4280, S-810 | 2 | 0 | 0 | 0 | none matched |
-| 500 | RW 0x00441C56 | 1 | 0 | 0 | 0 | none matched |
-| 501 | linked stops S-4550 | 1 | 0 | 0 | 0 | none matched |
-| 502 | linked stops S-4752 | 1 | 0 | 0 | 0 | none matched |
-| 503 | linked stops S-4753 | 1 | 0 | 0 | 0 | none matched |
-| 504 | linked stops S-4850 | 1 | 0 | 0 | 0 | none matched |
-| 505 | linked stops S-4860 | 1 | 0 | 0 | 0 | none matched |
-| 506 | linked stops S-4874 | 1 | 0 | 0 | 0 | none matched |
-| 507 | linked stops S-4876 | 1 | 0 | 0 | 0 | none matched |
-| 508 | linked stops S-4878 | 1 | 0 | 0 | 0 | none matched |
-| 509 | linked stops S-4931 | 1 | 0 | 0 | 0 | none matched |
-| 510 | linked stops S-4981 | 1 | 0 | 0 | 0 | none matched |
-| 511 | linked stops S-5014 | 1 | 0 | 0 | 0 | none matched |
-| 512 | linked stops S-5016 | 1 | 0 | 0 | 0 | none matched |
-| 513 | linked stops S-5017 | 1 | 0 | 0 | 0 | none matched |
-| 514 | linked stops S-5143 | 1 | 0 | 0 | 0 | none matched |
-| 515 | DoCommandUpgrade | 1 | 0 | 0 | 0 | none matched |
-| 516 | linked stops S-5204 | 1 | 0 | 0 | 0 | none matched |
-| 517 | linked stops S-5306 | 1 | 0 | 0 | 0 | none matched |
-| 518 | EntEnragedUpdate | 1 | 0 | 0 | 0 | #610 Port 262: Burning: FlammableUpdate and FireWeaponWhenDamagedBehavior (catching fire, burning damage, the fire weapon on damage) |
-| 519 | AimWeaponBehavior | 1 | 0 | 0 | 0 | none matched |
-| 520 | RW 0x0082C167 | 1 | 0 | 0 | 0 | none matched |
-| 521 | linked stops S-566 | 1 | 0 | 0 | 0 | none matched |
-| 522 | RW 0x004BE587 | 1 | 0 | 0 | 0 | none matched |
-| 523 | BoredUpdate | 1 | 0 | 0 | 0 | #611 Port 263: Emotions: EmotionTrackerUpdate (terror, fear, cheering, idle emotions) and BoredUpdate |
-| 524 | AODCrushCollide | 1 | 0 | 0 | 0 | none matched |
-| 525 | linked stops S-6009 | 1 | 0 | 0 | 0 | none matched |
-| 526 | AnnounceBirthAndDeathBehavior | 1 | 0 | 0 | 0 | none matched |
-| 527 | TooltipUpgrade | 1 | 0 | 0 | 0 | none matched |
-| 528 | linked stops S-6101 | 1 | 0 | 0 | 0 | none matched |
-| 529 | RW 0x0079D12A | 1 | 0 | 0 | 0 | none matched |
-| 530 | linked stops S-7202 | 1 | 0 | 0 | 0 | none matched |
-| 531 | linked stops S-725 | 1 | 0 | 0 | 0 | none matched |
-| 532 | RW 0x004C72BE | 1 | 0 | 0 | 0 | none matched |
-| 533 | AIUpdateInterface | 1 | 0 | 0 | 0 | #612 Port 264: AIUpdateInterface: the 64 uncited own functions of the AI every Ennorath unit runs (classify, then port the missing ones) |
-| 534 | linked stops S-7364 | 1 | 0 | 0 | 0 | none matched |
-| 535 | linked stops S-7385 | 1 | 0 | 0 | 0 | none matched |
-| 536 | linked stops S-815 | 1 | 0 | 0 | 0 | none matched |
-| 537 | linked stops S-831 | 1 | 0 | 0 | 0 | none matched |
+| 426 | linked stops S-006 | 1 | 0 | 0 | 0 | none matched |
+| 427 | linked stops S-007 | 1 | 0 | 0 | 0 | none matched |
+| 428 | linked stops S-010 | 1 | 0 | 0 | 0 | none matched |
+| 429 | linked stops S-011 | 1 | 0 | 0 | 0 | none matched |
+| 430 | linked stops S-012 | 1 | 0 | 0 | 0 | none matched |
+| 431 | linked stops S-015 | 1 | 0 | 0 | 0 | none matched |
+| 432 | linked stops S-016, S-042 | 2 | 0 | 0 | 0 | none matched |
+| 433 | linked stops S-020, S-021 | 3 | 0 | 0 | 0 | none matched |
+| 434 | linked stops S-027 | 1 | 0 | 0 | 0 | none matched |
+| 435 | linked stops S-028, S-460 | 2 | 0 | 0 | 0 | none matched |
+| 436 | linked stops S-030 | 1 | 0 | 0 | 0 | none matched |
+| 437 | linked stops S-038 | 1 | 0 | 0 | 0 | none matched |
+| 438 | linked stops S-039 | 1 | 0 | 0 | 0 | none matched |
+| 439 | linked stops S-060 | 1 | 0 | 0 | 0 | none matched |
+| 440 | linked stops S-070 | 1 | 0 | 0 | 0 | none matched |
+| 441 | linked stops S-083 | 1 | 0 | 0 | 0 | none matched |
+| 442 | linked stops S-100, S-109 | 3 | 0 | 0 | 0 | none matched |
+| 443 | linked stops S-102 | 1 | 0 | 0 | 0 | none matched |
+| 444 | linked stops S-108, S-130 | 3 | 0 | 0 | 0 | none matched |
+| 445 | linked stops S-114 | 1 | 0 | 0 | 0 | none matched |
+| 446 | RW 0x00608D0B | 1 | 0 | 0 | 0 | none matched |
+| 447 | linked stops S-133 | 1 | 0 | 0 | 0 | none matched |
+| 448 | linked stops S-134 | 1 | 0 | 0 | 0 | none matched |
+| 449 | linked stops S-138 | 1 | 0 | 0 | 0 | none matched |
+| 450 | linked stops S-146 | 1 | 0 | 0 | 0 | none matched |
+| 451 | RW 0x00674B1F | 1 | 0 | 0 | 0 | none matched |
+| 452 | linked stops S-1540 | 1 | 0 | 0 | 0 | none matched |
+| 453 | linked stops S-1541, S-232 | 2 | 0 | 0 | 0 | none matched |
+| 454 | linked stops S-1561 | 1 | 0 | 0 | 0 | none matched |
+| 455 | RW 0x004BE587 | 1 | 0 | 0 | 0 | none matched |
+| 456 | linked stops S-170, S-175 | 2 | 0 | 0 | 0 | none matched |
+| 457 | linked stops S-171, S-5140 | 2 | 0 | 0 | 0 | none matched |
+| 458 | linked stops S-1730 | 1 | 0 | 0 | 0 | none matched |
+| 459 | linked stops S-174 | 1 | 0 | 0 | 0 | none matched |
+| 460 | linked stops S-176 | 1 | 0 | 0 | 0 | none matched |
+| 461 | W3DTruckDraw | 1 | 0 | 0 | 0 | none matched |
+| 462 | linked stops S-181 | 1 | 0 | 0 | 0 | none matched |
+| 463 | RW 0x0063F3BF | 1 | 0 | 0 | 0 | none matched |
+| 464 | linked stops S-184 | 1 | 0 | 0 | 0 | none matched |
+| 465 | linked stops S-187 | 1 | 0 | 0 | 0 | none matched |
+| 466 | RW 0x006628CD | 1 | 0 | 0 | 0 | none matched |
+| 467 | linked stops S-188 | 1 | 0 | 0 | 0 | none matched |
+| 468 | linked stops S-1890 | 1 | 0 | 0 | 0 | none matched |
+| 469 | linked stops S-1891 | 1 | 0 | 0 | 0 | none matched |
+| 470 | RW 0x0089C1A4 | 1 | 0 | 0 | 0 | none matched |
+| 471 | RW 0x0067055A | 1 | 0 | 0 | 0 | none matched |
+| 472 | linked stops S-1981 | 1 | 0 | 0 | 0 | none matched |
+| 473 | ReplaceSelfUpgrade | 1 | 0 | 0 | 0 | #601 Port 253: Upgrade modules: SubObjectsUpgrade (logic side), GeometryUpgrade, ReplaceSelfUpgrade, CostModifierUpgrade, InheritUpgradeCreate, SpellRechargeModifierUpgrade |
+| 474 | linked stops S-2004 | 1 | 0 | 0 | 0 | none matched |
+| 475 | linked stops S-2005 | 1 | 0 | 0 | 0 | none matched |
+| 476 | linked stops S-204 | 1 | 0 | 0 | 0 | #601 Port 253: Upgrade modules: SubObjectsUpgrade (logic side), GeometryUpgrade, ReplaceSelfUpgrade, CostModifierUpgrade, InheritUpgradeCreate, SpellRechargeModifierUpgrade |
+| 477 | RW 0x006AAB85 | 1 | 0 | 0 | 0 | none matched |
+| 478 | RW 0x0070BCE7 | 1 | 0 | 0 | 0 | none matched |
+| 479 | linked stops S-231 | 1 | 0 | 0 | 0 | none matched |
+| 480 | linked stops S-234 | 1 | 0 | 0 | 0 | none matched |
+| 481 | RW 0x0067B4B7 | 1 | 0 | 0 | 0 | none matched |
+| 482 | linked stops S-249 | 1 | 0 | 0 | 0 | none matched |
+| 483 | RW 0x0089DB5D | 2 | 0 | 0 | 0 | #601 Port 253: Upgrade modules: SubObjectsUpgrade (logic side), GeometryUpgrade, ReplaceSelfUpgrade, CostModifierUpgrade, InheritUpgradeCreate, SpellRechargeModifierUpgrade |
+| 484 | RW 0x00642002 | 1 | 0 | 0 | 0 | none matched |
+| 485 | RW 0x006A8630 | 1 | 0 | 0 | 0 | none matched |
+| 486 | linked stops S-2704 | 1 | 0 | 0 | 0 | none matched |
+| 487 | linked stops S-274 | 1 | 0 | 0 | 0 | none matched |
+| 488 | linked stops S-284 | 1 | 0 | 0 | 0 | none matched |
+| 489 | linked stops S-290 | 1 | 0 | 0 | 0 | none matched |
+| 490 | RW 0x0068F430 | 1 | 0 | 0 | 0 | none matched |
+| 491 | linked stops S-3403 | 1 | 0 | 0 | 0 | none matched |
+| 492 | RW 0x00936B7D | 1 | 0 | 0 | 0 | #601 Port 253: Upgrade modules: SubObjectsUpgrade (logic side), GeometryUpgrade, ReplaceSelfUpgrade, CostModifierUpgrade, InheritUpgradeCreate, SpellRechargeModifierUpgrade |
+| 493 | linked stops S-3507 | 1 | 0 | 0 | 0 | none matched |
+| 494 | RW 0x00441C56 | 1 | 0 | 0 | 0 | none matched |
+| 495 | RW 0x00690BD2 | 1 | 0 | 0 | 0 | none matched |
+| 496 | linked stops S-3711 | 1 | 0 | 0 | 0 | none matched |
+| 497 | RW 0x00862A88 | 1 | 0 | 0 | 0 | #465 Port 198: SpawnBehavior: the spawn interface's attack / idle orders and Player::onUnitCreated (S-1425) |
+| 498 | linked stops S-4000 | 1 | 0 | 0 | 0 | none matched |
+| 499 | linked stops S-4001 | 1 | 0 | 0 | 0 | none matched |
+| 500 | linked stops S-4002 | 1 | 0 | 0 | 0 | none matched |
+| 501 | RW 0x00667416 | 1 | 0 | 0 | 0 | #612 Port 264: AIUpdateInterface: the 64 uncited own functions of the AI every Ennorath unit runs (classify, then port the missing ones) |
+| 502 | linked stops S-4222, S-5013 | 2 | 0 | 0 | 0 | none matched |
+| 503 | linked stops S-4280, S-810 | 2 | 0 | 0 | 0 | none matched |
+| 504 | RW 0x00441C56 | 1 | 0 | 0 | 0 | none matched |
+| 505 | linked stops S-4550 | 1 | 0 | 0 | 0 | none matched |
+| 506 | linked stops S-4752 | 1 | 0 | 0 | 0 | none matched |
+| 507 | linked stops S-4753 | 1 | 0 | 0 | 0 | none matched |
+| 508 | linked stops S-4850 | 1 | 0 | 0 | 0 | none matched |
+| 509 | linked stops S-4860 | 1 | 0 | 0 | 0 | none matched |
+| 510 | linked stops S-4874 | 1 | 0 | 0 | 0 | none matched |
+| 511 | linked stops S-4876 | 1 | 0 | 0 | 0 | none matched |
+| 512 | linked stops S-4878 | 1 | 0 | 0 | 0 | none matched |
+| 513 | linked stops S-4931 | 1 | 0 | 0 | 0 | none matched |
+| 514 | linked stops S-4981 | 1 | 0 | 0 | 0 | none matched |
+| 515 | linked stops S-5014 | 1 | 0 | 0 | 0 | none matched |
+| 516 | linked stops S-5016 | 1 | 0 | 0 | 0 | none matched |
+| 517 | linked stops S-5017 | 1 | 0 | 0 | 0 | none matched |
+| 518 | linked stops S-5141 | 1 | 0 | 0 | 0 | none matched |
+| 519 | linked stops S-5143 | 1 | 0 | 0 | 0 | none matched |
+| 520 | DoCommandUpgrade | 1 | 0 | 0 | 0 | none matched |
+| 521 | linked stops S-5204 | 1 | 0 | 0 | 0 | none matched |
+| 522 | linked stops S-5306 | 1 | 0 | 0 | 0 | none matched |
+| 523 | EntEnragedUpdate | 1 | 0 | 0 | 0 | #610 Port 262: Burning: FlammableUpdate and FireWeaponWhenDamagedBehavior (catching fire, burning damage, the fire weapon on damage) |
+| 524 | AimWeaponBehavior | 1 | 0 | 0 | 0 | none matched |
+| 525 | RW 0x0082C167 | 1 | 0 | 0 | 0 | none matched |
+| 526 | linked stops S-566 | 1 | 0 | 0 | 0 | none matched |
+| 527 | RW 0x004BE587 | 1 | 0 | 0 | 0 | none matched |
+| 528 | BoredUpdate | 1 | 0 | 0 | 0 | #611 Port 263: Emotions: EmotionTrackerUpdate (terror, fear, cheering, idle emotions) and BoredUpdate |
+| 529 | AODCrushCollide | 1 | 0 | 0 | 0 | none matched |
+| 530 | linked stops S-6009 | 1 | 0 | 0 | 0 | none matched |
+| 531 | AnnounceBirthAndDeathBehavior | 1 | 0 | 0 | 0 | none matched |
+| 532 | TooltipUpgrade | 1 | 0 | 0 | 0 | none matched |
+| 533 | linked stops S-6101 | 1 | 0 | 0 | 0 | none matched |
+| 534 | RW 0x0079D12A | 1 | 0 | 0 | 0 | none matched |
+| 535 | linked stops S-7202 | 1 | 0 | 0 | 0 | none matched |
+| 536 | linked stops S-725 | 1 | 0 | 0 | 0 | none matched |
+| 537 | RW 0x004C72BE | 1 | 0 | 0 | 0 | none matched |
+| 538 | AIUpdateInterface | 1 | 0 | 0 | 0 | #612 Port 264: AIUpdateInterface: the 64 uncited own functions of the AI every Ennorath unit runs (classify, then port the missing ones) |
+| 539 | linked stops S-7364 | 1 | 0 | 0 | 0 | none matched |
+| 540 | linked stops S-7385 | 1 | 0 | 0 | 0 | none matched |
+| 541 | linked stops S-815 | 1 | 0 | 0 | 0 | none matched |
+| 542 | linked stops S-831 | 1 | 0 | 0 | 0 | none matched |
 
 ## Group details
 
 ### G001: RW 0x005D893C
 
 Stops: S-185, S-322, S-636. Kinds: code.
-Functions: RW 0x005D893C (unknown), RW 0x0068FB63 (ported), RW 0x008C3FA3 (ported). Classes: AIBurningDeathState, ActiveBody, DamageHost, DelayedDeathBody, HighlanderBody, ImmortalBody, InactiveBody, RespawnBody, StructureBody, SymbioticStructuresBody.
+Functions: RW 0x005D893C (unknown), RW 0x0068FB63 (ported), RW 0x008C3FA3 (ported). Classes: AIBurningDeathState, ActiveBody, DamageHost, DelayedDeathBody, GlobalData, HighlanderBody, ImmortalBody, InactiveBody, RespawnBody, StructureBody, SymbioticStructuresBody.
 Candidates: 0 none/partial functions; 1 unknown status.
 Red buttons: none linked.
 Unused fields: ActiveBody.EnteringDamagedTransitionTime, ActiveBody.ReallyDamagedAttributeModifier, RespawnBody.DamagedAttributeModifier, RespawnBody.ReallyDamagedAttributeModifier, SymbioticStructuresBody.Symbiote.
@@ -681,7 +686,7 @@ Existing task matches: #613 Port 265: HordeContain: the 65 uncited own functions
 ### G015: linked stops S-564, S-7100
 
 Stops: S-564, S-7100. Kinds: code.
-Functions: RW 0x0068C234 (ported), RW 0x0068E4E2 (ported), RW 0x0069264D (unknown), RW 0x00694A45 (unknown), RW 0x00804F39 (ported), RW 0x00872B9E (ported), RW 0x00872BAB (ported), RW 0x0088E6AF (ported), RW 0x0088E87F (ported), RW 0x0088E8C7 (ported), RW 0x0088E9B0 (ported). Classes: DynamicShroudClearingRangeUpdate, HordeContain.
+Functions: RW 0x0068C234 (ported), RW 0x0068E4E2 (ported), RW 0x0069264D (unknown), RW 0x00694A45 (unknown), RW 0x00804F39 (ported), RW 0x00872B9E (ported), RW 0x00872BAB (ported), RW 0x0088E6AF (ported), RW 0x0088E87F (ported), RW 0x0088E8C7 (ported), RW 0x0088E9B0 (ported). Classes: DynamicShroudClearingRangeUpdate, HordeContain, RadiusDecal.
 Candidates: 0 none/partial functions; 2 unknown status.
 Red buttons: none linked.
 Unused fields: HordeContain.LivingWorldOverloadTemplate, HordeContain.RanksToJustFreeWhenAttacking, HordeContain.SplitHordeNumber.
@@ -816,7 +821,7 @@ Existing task matches: none.
 ### G030: RW 0x0077AEAA
 
 Stops: S-1201. Kinds: code.
-Functions: RW 0x0077AEAA (unknown). Classes: CommandTranslator.
+Functions: RW 0x0077AEAA (unknown). Classes: ActionManager, CommandTranslator.
 Candidates: 0 none/partial functions; 1 unknown status.
 Red buttons: none linked.
 Unused fields: none linked.
@@ -888,7 +893,7 @@ Existing task matches: none.
 ### G038: RW 0x0068BF75
 
 Stops: S-148. Kinds: code.
-Functions: RW 0x0068BF75 (ported), RW 0x006907F1 (ported), RW 0x00690A42 (unknown), RW 0x00692443 (ported). Classes: none.
+Functions: RW 0x0068BF75 (ported), RW 0x006907F1 (ported), RW 0x00690A42 (unknown), RW 0x00692443 (ported). Classes: ObjectTypes.
 Candidates: 0 none/partial functions; 1 unknown status.
 Red buttons: none linked.
 Unused fields: none linked.
@@ -897,7 +902,7 @@ Existing task matches: none.
 ### G039: RW 0x004BF2D8
 
 Stops: S-1601, S-1791. Kinds: code.
-Functions: RW 0x004BF2D8 (ported), RW 0x004C3731 (ported), RW 0x0067651E (unknown), RW 0x00868E5C (unknown), RW 0x008B3313 (ported). Classes: DrawableManager, SMCHelper.
+Functions: RW 0x004BF2D8 (ported), RW 0x004C3731 (ported), RW 0x0067651E (unknown), RW 0x00868E5C (unknown), RW 0x008B3313 (ported). Classes: DrawableManager, SMCHelper, W3DModelDraw.
 Candidates: 0 none/partial functions; 2 unknown status.
 Red buttons: none linked.
 Unused fields: none linked.
@@ -942,7 +947,7 @@ Existing task matches: none.
 ### G044: RW 0x0068C327
 
 Stops: S-1871. Kinds: code.
-Functions: RW 0x0068C327 (ported), RW 0x00691421 (ported), RW 0x00694914 (ported), RW 0x0075CC3E (ported), RW 0x0075CF21 (unknown). Classes: AISpecialPowerUpdate.
+Functions: RW 0x0068C327 (ported), RW 0x00691421 (ported), RW 0x00694914 (ported), RW 0x0075CC3E (ported), RW 0x0075CF21 (unknown). Classes: AISpecialPowerUpdate, ActionManager.
 Candidates: 0 none/partial functions; 1 unknown status.
 Red buttons: none linked.
 Unused fields: none linked.
@@ -996,7 +1001,7 @@ Existing task matches: none.
 ### G050: RW 0x0068D524
 
 Stops: S-220. Kinds: code.
-Functions: RW 0x0068D524 (ported), RW 0x0069A760 (unknown). Classes: AIWorld, ThingTemplate.
+Functions: RW 0x0068D524 (ported), RW 0x0069A760 (unknown). Classes: AIWorld, LocomotorSet, ThingTemplate.
 Candidates: 0 none/partial functions; 1 unknown status.
 Red buttons: none linked.
 Unused fields: none linked.
@@ -1122,7 +1127,7 @@ Existing task matches: none.
 ### G064: RW 0x0075C7AE
 
 Stops: S-4253. Kinds: code.
-Functions: RW 0x0075C7AE (unknown). Classes: TerrainResourceManager.
+Functions: RW 0x0075C7AE (unknown). Classes: Region3D, TerrainResourceManager.
 Candidates: 0 none/partial functions; 1 unknown status.
 Red buttons: none linked.
 Unused fields: none linked.
@@ -1257,7 +1262,7 @@ Existing task matches: none.
 ### G079: RW 0x00470176
 
 Stops: S-7340. Kinds: code.
-Functions: RW 0x00470176 (unknown), RW 0x0049A2EB (ported), RW 0x004F24A8 (ported). Classes: none.
+Functions: RW 0x00470176 (unknown), RW 0x0049A2EB (ported), RW 0x004F24A8 (ported). Classes: W3DShadowManager.
 Candidates: 0 none/partial functions; 1 unknown status.
 Red buttons: none linked.
 Unused fields: none linked.
@@ -1392,7 +1397,7 @@ Existing task matches: #613 Port 265: HordeContain: the 65 uncited own functions
 ### G094: linked stops S-482, S-5202
 
 Stops: S-482, S-5202, S-5203. Kinds: code.
-Functions: RW 0x0068D7AB (ported), RW 0x006ABABD (ported), RW 0x006ABBB7 (unknown), RW 0x0082C5A6 (unknown), RW 0x0082C65C (unknown), RW 0x008ADAA0 (unknown), RW 0x008AE798 (ported), RW 0x008FABC8 (unknown). Classes: DozerAIUpdate, PlayerEconomyHost, ResourceGatheringManager, SupplyWarehouseCreate, SupplyWarehouseDockUpdate, WorkerAIUpdate.
+Functions: RW 0x0068D7AB (ported), RW 0x006ABABD (ported), RW 0x006ABBB7 (unknown), RW 0x0082C5A6 (unknown), RW 0x0082C65C (unknown), RW 0x008ADAA0 (unknown), RW 0x008AE798 (ported), RW 0x008FABC8 (unknown). Classes: ActionManager, DozerAIUpdate, PlayerEconomyHost, ResourceGatheringManager, SupplyWarehouseCreate, SupplyWarehouseDockUpdate, WorkerAIUpdate.
 Candidates: 0 none/partial functions; 5 unknown status.
 Red buttons: none linked.
 Unused fields: none linked.
@@ -1401,7 +1406,7 @@ Existing task matches: none.
 ### G095: RW 0x00628882
 
 Stops: S-1024, S-110, S-129, S-147, S-4191, S-5015, S-532, S-920. Kinds: code.
-Functions: RW 0x004C238A (ported), RW 0x004C451D (ported), RW 0x004C7C56 (unknown), RW 0x00628882 (ported), RW 0x00663E32 (unknown), RW 0x006695EF (unknown), RW 0x0067449C (ported), RW 0x006789B4 (ported), RW 0x00679512 (ported), RW 0x0068B53C (ported), RW 0x0068C234 (ported), RW 0x0068C409 (unknown), RW 0x0068C7E9 (unknown), RW 0x0068D30E (ported), RW 0x0068E31F (ported), RW 0x00693D0C (ported), RW 0x00695A06 (unknown), RW 0x00697F28 (unknown), RW 0x006B183D (unknown), RW 0x006D165E (ported), RW 0x006D328E (ported), RW 0x006F74D0 (unknown), RW 0x00733FAF (unknown), RW 0x00735941 (ported), RW 0x00735F53 (ported), RW 0x00804FCC (ported), RW 0x00853EDF (ported), RW 0x0085C30F (ported), RW 0x0085C8C9 (ported), RW 0x0088B737 (unknown), RW 0x0088B830 (unknown), RW 0x00896FD9 (unknown), RW 0x0089713F (ported), RW 0x0089763B (ported), RW 0x008977BF (unknown), RW 0x00897987 (ported), RW 0x008980A3 (ported), RW 0x008980EF (ported), RW 0x0089816C (ported), RW 0x00A39090 (ported), RW 0x00B4F410 (unknown). Classes: AIUpdateInterface, ClickReactionBehavior, CreationScriptData, DelayedLuaEventUpdate, DeletionUpdate, EventList, HitReactionBehavior, LiveGame, LiveScripting, LuaEventNugget, LuaGameHost, LuaScriptEngine, MapObjectReport, MapObjectRuntime, MapRuntimeReport, SidesList, SpecialAbilityUpdate, SpecialDisguiseUpdate, SubObjectsUpgrade, UpgradeModule, W3DFloorDraw.
+Functions: RW 0x004C238A (ported), RW 0x004C451D (ported), RW 0x004C7C56 (unknown), RW 0x00628882 (ported), RW 0x00663E32 (unknown), RW 0x006695EF (unknown), RW 0x0067449C (ported), RW 0x006789B4 (ported), RW 0x00679512 (ported), RW 0x0068B53C (ported), RW 0x0068C234 (ported), RW 0x0068C409 (unknown), RW 0x0068C7E9 (unknown), RW 0x0068D30E (ported), RW 0x0068E31F (ported), RW 0x00693D0C (ported), RW 0x00695A06 (unknown), RW 0x00697F28 (unknown), RW 0x006B183D (unknown), RW 0x006D165E (ported), RW 0x006D328E (ported), RW 0x006F74D0 (unknown), RW 0x00733FAF (unknown), RW 0x00735941 (ported), RW 0x00735F53 (ported), RW 0x00804FCC (ported), RW 0x00853EDF (ported), RW 0x0085C30F (ported), RW 0x0085C8C9 (ported), RW 0x0088B737 (unknown), RW 0x0088B830 (unknown), RW 0x00896FD9 (unknown), RW 0x0089713F (ported), RW 0x0089763B (ported), RW 0x008977BF (unknown), RW 0x00897987 (ported), RW 0x008980A3 (ported), RW 0x008980EF (ported), RW 0x0089816C (ported), RW 0x00A39090 (ported), RW 0x00B4F410 (unknown). Classes: AIUpdateInterface, ClickReactionBehavior, CreationScriptData, DelayedLuaEventUpdate, DeletionUpdate, EventList, GlobalData, HitReactionBehavior, LiveGame, LiveScripting, LuaEventNugget, LuaGameHost, LuaScriptEngine, MapObjectReport, MapObjectRuntime, MapRuntimeReport, SidesList, SpecialAbilityUpdate, SpecialDisguiseUpdate, SubObjectsUpgrade, UpgradeModule, W3DFloorDraw.
 Candidates: 0 none/partial functions; 15 unknown status.
 Red buttons: Command_AngmarTrollChargeAttack, Command_SpecialAbilityLoneRangerSummonFinal, Command_SpecialAbilityMeisterderHornburg, Command_SpecialAbilityNaturmagierErntesegen, Command_ThranduilKnigDsterwalds.
 Unused fields: SubObjectsUpgrade.WaitBeforeFadeInSeconds, W3DFloorDraw.FloorFadeRateOnObjectDeath.
@@ -1455,7 +1460,7 @@ Existing task matches: none.
 ### G101: RW 0x00734E94
 
 Stops: S-126, S-1520, S-830. Kinds: code.
-Functions: RW 0x004C3B25 (ported), RW 0x00670AA2 (ported), RW 0x00672823 (ported), RW 0x006789B4 (ported), RW 0x00734E94 (unknown), RW 0x0073501F (unknown), RW 0x00737654 (unknown), RW 0x007953DB (unknown), RW 0x00795468 (unknown), RW 0x00795496 (unknown). Classes: GettingBuiltBehavior, TextFile, W3DDrawScriptApi, W3DFloorDraw, W3DLuaDrawScriptHost.
+Functions: RW 0x004C3B25 (ported), RW 0x00670AA2 (ported), RW 0x00672823 (ported), RW 0x006789B4 (ported), RW 0x00734E94 (unknown), RW 0x0073501F (unknown), RW 0x00737654 (unknown), RW 0x007953DB (unknown), RW 0x00795468 (unknown), RW 0x00795496 (unknown). Classes: BuildAssistant, GettingBuiltBehavior, TextFile, W3DDrawScriptApi, W3DFloorDraw, W3DLuaDrawScriptHost.
 Candidates: 0 none/partial functions; 6 unknown status.
 Red buttons: none linked.
 Unused fields: W3DFloorDraw.FloorFadeRateOnObjectDeath.
@@ -1464,7 +1469,7 @@ Existing task matches: #626 Port 267: The floor buffer's fade on death (W3DFloor
 ### G102: RW 0x004D6FFA
 
 Stops: S-036. Kinds: code.
-Functions: RW 0x004D6FFA (unknown), RW 0x004D7C45 (unknown). Classes: none.
+Functions: RW 0x004D6FFA (unknown), RW 0x004D7C45 (unknown). Classes: GlobalData.
 Candidates: 0 none/partial functions; 2 unknown status.
 Red buttons: none linked.
 Unused fields: none linked.
@@ -1473,7 +1478,7 @@ Existing task matches: none.
 ### G103: RW 0x007405B1
 
 Stops: S-071. Kinds: code.
-Functions: RW 0x0073FAC4 (unknown), RW 0x007405B1 (unknown). Classes: ArmorTemplateSet, ProductionPrerequisite, RawBlock, WeaponTemplateSet.
+Functions: RW 0x0073FAC4 (unknown), RW 0x007405B1 (unknown). Classes: ArmorTemplateSet, LocomotorSet, ProductionPrerequisite, RawBlock, WeaponSet, WeaponTemplateSet.
 Candidates: 0 none/partial functions; 2 unknown status.
 Red buttons: none linked.
 Unused fields: none linked.
@@ -1527,7 +1532,7 @@ Existing task matches: none.
 ### G109: RW 0x00AD3520
 
 Stops: S-121, S-1423. Kinds: code.
-Functions: RW 0x006503A4 (unknown), RW 0x00660D2C (ported), RW 0x00688354 (ported), RW 0x0068836C (ported), RW 0x0068B244 (ported), RW 0x0068F37F (ported), RW 0x0079FD6F (ported), RW 0x008AEC79 (unknown), RW 0x008BAB72 (ported), RW 0x008BABCB (unknown), RW 0x008BAC96 (ported), RW 0x008BADC0 (ported), RW 0x00AD3520 (ported), RW 0x00B6C700 (partial). Classes: GeometryUpgrade, WallUpgradeUpdate.
+Functions: RW 0x006503A4 (unknown), RW 0x00660D2C (ported), RW 0x00688354 (ported), RW 0x0068836C (ported), RW 0x0068B244 (ported), RW 0x0068F37F (ported), RW 0x0079FD6F (ported), RW 0x008AEC79 (unknown), RW 0x008BAB72 (ported), RW 0x008BABCB (unknown), RW 0x008BAC96 (ported), RW 0x008BADC0 (ported), RW 0x00AD3520 (ported), RW 0x00B6C700 (partial). Classes: GeometryInfo, GeometryUpgrade, WallUpgradeUpdate.
 Candidates: 1 none/partial functions; 3 unknown status.
 Red buttons: none linked.
 Unused fields: none linked.
@@ -1608,7 +1613,7 @@ Existing task matches: #612 Port 264: AIUpdateInterface: the 64 uncited own func
 ### G118: RW 0x005FE852
 
 Stops: S-144. Kinds: code.
-Functions: RW 0x005FE852 (unknown), RW 0x005FE9AA (unknown). Classes: PlayerTemplate.
+Functions: RW 0x005FE852 (unknown), RW 0x005FE9AA (unknown). Classes: GlobalData, PlayerTemplate.
 Candidates: 0 none/partial functions; 2 unknown status.
 Red buttons: none linked.
 Unused fields: none linked.
@@ -1815,7 +1820,7 @@ Existing task matches: none.
 ### G141: RW 0x00691602
 
 Stops: S-561. Kinds: code.
-Functions: RW 0x00691602 (unknown), RW 0x00B4E190 (unknown). Classes: W3DDefaultDraw.
+Functions: RW 0x00691602 (unknown), RW 0x00B4E190 (unknown). Classes: GlobalData, W3DDefaultDraw.
 Candidates: 0 none/partial functions; 2 unknown status.
 Red buttons: none linked.
 Unused fields: none linked.
@@ -1860,7 +1865,7 @@ Existing task matches: none.
 ### G146: RW 0x004C6514
 
 Stops: S-684. Kinds: code.
-Functions: RW 0x004C6514 (ported), RW 0x005F889B (ported), RW 0x005FC7DB (unknown), RW 0x0073AECB (unknown). Classes: ParticleSystem.
+Functions: RW 0x004C6514 (ported), RW 0x005F889B (ported), RW 0x005FC7DB (unknown), RW 0x0073AECB (unknown). Classes: FXParticleSystem, ParticleSystem.
 Candidates: 0 none/partial functions; 2 unknown status.
 Red buttons: none linked.
 Unused fields: none linked.
@@ -1878,7 +1883,7 @@ Existing task matches: none.
 ### G148: RW 0x0082D0A1
 
 Stops: S-7140. Kinds: code.
-Functions: RW 0x0068DF46 (ported), RW 0x007640C1 (ported), RW 0x0082C167 (ported), RW 0x0082C366 (ported), RW 0x0082D0A1 (ported), RW 0x0082D7F2 (ported), RW 0x0082D925 (ported), RW 0x0082DB5D (unknown), RW 0x00897E01 (ported), RW 0x00898C17 (unknown). Classes: CommandButtonHuntUpdate, ObjectFilter.
+Functions: RW 0x0068DF46 (ported), RW 0x007640C1 (ported), RW 0x0082C167 (ported), RW 0x0082C366 (ported), RW 0x0082D0A1 (ported), RW 0x0082D7F2 (ported), RW 0x0082D925 (ported), RW 0x0082DB5D (unknown), RW 0x00897E01 (ported), RW 0x00898C17 (unknown). Classes: ActionManager, CommandButtonHuntUpdate, ObjectFilter.
 Candidates: 0 none/partial functions; 2 unknown status.
 Red buttons: none linked.
 Unused fields: none linked.
@@ -1896,7 +1901,7 @@ Existing task matches: none.
 ### G150: RW 0x005F11A8
 
 Stops: S-7219. Kinds: code.
-Functions: RW 0x005F11A8 (unknown), RW 0x005F1B5A (unknown), RW 0x005F32D7 (ported), RW 0x005F526A (ported), RW 0x0067449C (ported), RW 0x0068BBE0 (ported), RW 0x0070E013 (ported). Classes: ClientEvent, ObjectCreationList, ParticleSystem.
+Functions: RW 0x005F11A8 (unknown), RW 0x005F1B5A (unknown), RW 0x005F32D7 (ported), RW 0x005F526A (ported), RW 0x0067449C (ported), RW 0x0068BBE0 (ported), RW 0x0070E013 (ported). Classes: ClientEvent, FXParticleSystem, ObjectCreationList, ParticleSystem.
 Candidates: 0 none/partial functions; 2 unknown status.
 Red buttons: none linked.
 Unused fields: none linked.
@@ -1995,7 +2000,7 @@ Existing task matches: #602 Port 254: Auras and passive buffs: AttributeModifier
 ### G161: RW 0x0054BDE0
 
 Stops: S-022, S-1408, S-6022, S-7190. Kinds: code, project.
-Functions: RW 0x004A897D (unknown), RW 0x004A8983 (unknown), RW 0x004B877D (ported), RW 0x00531C77 (unknown), RW 0x00535BCF (ported), RW 0x00536A40 (unknown), RW 0x0054BDE0 (unknown), RW 0x006727B0 (unknown), RW 0x0080959A (unknown), RW 0x008B91AD (ported), RW 0x00B55146 (unknown), RW 0x00B552BF (unknown), RW 0x00B5570B (unknown). Classes: ClientEvent, ObjectClientHooks, SubObjectsUpgrade, W3DInstancer, W3DScriptedModelDraw.
+Functions: RW 0x004A897D (unknown), RW 0x004A8983 (unknown), RW 0x004B877D (ported), RW 0x00531C77 (unknown), RW 0x00535BCF (ported), RW 0x00536A40 (unknown), RW 0x0054BDE0 (unknown), RW 0x006727B0 (unknown), RW 0x0080959A (unknown), RW 0x008B91AD (ported), RW 0x00B55146 (unknown), RW 0x00B552BF (unknown), RW 0x00B5570B (unknown). Classes: ClientEvent, ObjectClientHooks, SubObjectsUpgrade, W3DInstancer, W3DModelDraw, W3DScriptedModelDraw.
 Candidates: 0 none/partial functions; 10 unknown status.
 Red buttons: none linked.
 Unused fields: SubObjectsUpgrade.WaitBeforeFadeInSeconds, W3DScriptedModelDraw.BirthFadeAdditive, W3DScriptedModelDraw.HighDetailOnly, W3DScriptedModelDraw.MinLODRequired, W3DScriptedModelDraw.UseDefaultAnimation, W3DScriptedModelDraw.UseProducerTexture.
@@ -2031,7 +2036,7 @@ Existing task matches: none.
 ### G165: RW 0x00693D0C
 
 Stops: S-142, S-5031, S-580. Kinds: code.
-Functions: RW 0x00470D34 (unknown), RW 0x00627C1F (unknown), RW 0x0068D4D0 (ported), RW 0x0068D524 (ported), RW 0x00692223 (ported), RW 0x0069320D (ported), RW 0x00693D0C (ported), RW 0x00695070 (ported), RW 0x00696800 (ported), RW 0x0069990F (unknown), RW 0x006AD2B5 (ported), RW 0x006B099B (unknown), RW 0x006CA3DA (unknown), RW 0x006CF328 (ported), RW 0x006D9042 (ported), RW 0x00840485 (unknown), RW 0x00840B9D (unknown), RW 0x008476E6 (unknown), RW 0x008BFB5E (ported), RW 0x008BFB86 (ported), RW 0x008BFBAE (ported), RW 0x008C6244 (ported), RW 0x008C62BB (ported), RW 0x008C63C4 (ported), RW 0x008DBACE (ported), RW 0x00AD2CE0 (ported). Classes: ActiveBody, DamageInfo, GiantBirdAIUpdate, ObjectWeapons, PartitionManager, PhysicsBehavior, PorcupineFormationBodyModule, SquishCollide.
+Functions: RW 0x00470D34 (unknown), RW 0x00627C1F (unknown), RW 0x0068D4D0 (ported), RW 0x0068D524 (ported), RW 0x00692223 (ported), RW 0x0069320D (ported), RW 0x00693D0C (ported), RW 0x00695070 (ported), RW 0x00696800 (ported), RW 0x0069990F (unknown), RW 0x006AD2B5 (ported), RW 0x006B099B (unknown), RW 0x006CA3DA (unknown), RW 0x006CF328 (ported), RW 0x006D9042 (ported), RW 0x00840485 (unknown), RW 0x00840B9D (unknown), RW 0x008476E6 (unknown), RW 0x008BFB5E (ported), RW 0x008BFB86 (ported), RW 0x008BFBAE (ported), RW 0x008C6244 (ported), RW 0x008C62BB (ported), RW 0x008C63C4 (ported), RW 0x008DBACE (ported), RW 0x00AD2CE0 (ported). Classes: ActionManager, ActiveBody, AptMpGameSetup, DamageInfo, GameInfo, GameSlot, GiantBirdAIUpdate, HijackerUpdate, ObjectWeapons, PartitionManager, PhysicsBehavior, PorcupineFormationBodyModule, SquishCollide.
 Candidates: 0 none/partial functions; 8 unknown status.
 Red buttons: none linked.
 Unused fields: ActiveBody.EnteringDamagedTransitionTime, ActiveBody.ReallyDamagedAttributeModifier, PorcupineFormationBodyModule.CrushDamageWeaponTemplate, PorcupineFormationBodyModule.CrusherLevelResisted, PorcupineFormationBodyModule.DamageWeaponTemplate.
@@ -2040,7 +2045,7 @@ Existing task matches: #567 Port 243: Body damage states: ActiveBody EnteringDam
 ### G166: ActiveBody
 
 Stops: S-149, S-342, S-686. Kinds: code.
-Functions: RW 0x0042ED00 (unknown), RW 0x005EFFE7 (ported), RW 0x005F0126 (ported), RW 0x0068B2CB (ported), RW 0x0073A368 (unknown), RW 0x0073A5C9 (unknown), RW 0x0079DA66 (ported), RW 0x00871B9B (ported), RW 0x008727F9 (unknown), RW 0x008BDA75 (unknown), RW 0x008BDCF7 (ported), RW 0x008BDDAC (unknown), RW 0x008BDF08 (ported), RW 0x008BE077 (ported), RW 0x008C1BB7 (ported), RW 0x008C2A5D (ported), RW 0x008C2F02 (ported), RW 0x008C2FC1 (ported), RW 0x008C31A5 (ported), RW 0x008C3841 (unknown), RW 0x008C3F1F (unknown), RW 0x008C3FA3 (ported). Classes: ActiveBody, ExperienceTracker, HordeContain, TransitionDamageFX.
+Functions: RW 0x0042ED00 (unknown), RW 0x005EFFE7 (ported), RW 0x005F0126 (ported), RW 0x0068B2CB (ported), RW 0x0073A368 (unknown), RW 0x0073A5C9 (unknown), RW 0x0079DA66 (ported), RW 0x00871B9B (ported), RW 0x008727F9 (unknown), RW 0x008BDA75 (unknown), RW 0x008BDCF7 (ported), RW 0x008BDDAC (unknown), RW 0x008BDF08 (ported), RW 0x008BE077 (ported), RW 0x008C1BB7 (ported), RW 0x008C2A5D (ported), RW 0x008C2F02 (ported), RW 0x008C2FC1 (ported), RW 0x008C31A5 (ported), RW 0x008C3841 (unknown), RW 0x008C3F1F (unknown), RW 0x008C3FA3 (ported). Classes: ActiveBody, CreateModule, ExperienceTracker, GlobalData, HordeContain, TransitionDamageFX.
 Candidates: 0 none/partial functions; 8 unknown status.
 Red buttons: none linked.
 Unused fields: ActiveBody.EnteringDamagedTransitionTime, ActiveBody.ReallyDamagedAttributeModifier, HordeContain.LivingWorldOverloadTemplate, HordeContain.RanksToJustFreeWhenAttacking, HordeContain.SplitHordeNumber.
@@ -2166,7 +2171,7 @@ Existing task matches: none.
 ### G180: RW 0x00680B70
 
 Stops: S-1280, S-301. Kinds: code.
-Functions: RW 0x00680B70 (unknown), RW 0x006851F1 (unknown), RW 0x0068592D (ported), RW 0x00794A9C (unknown), RW 0x00794C34 (unknown), RW 0x00796912 (unknown), RW 0x007969C9 (unknown), RW 0x00797A96 (ported). Classes: GeometryUpgrade, TerrainLogic.
+Functions: RW 0x00680B70 (unknown), RW 0x006851F1 (unknown), RW 0x0068592D (ported), RW 0x00794A9C (unknown), RW 0x00794C34 (unknown), RW 0x00796912 (unknown), RW 0x007969C9 (unknown), RW 0x00797A96 (ported). Classes: GeometryInfo, GeometryUpgrade, TerrainLogic.
 Candidates: 0 none/partial functions; 6 unknown status.
 Red buttons: none linked.
 Unused fields: none linked.
@@ -2220,7 +2225,7 @@ Existing task matches: none.
 ### G186: RW 0x006235E2
 
 Stops: S-173, S-4610. Kinds: code.
-Functions: RW 0x005EE1A6 (ported), RW 0x005EE7A8 (unknown), RW 0x006235E2 (unknown), RW 0x00624C68 (unknown), RW 0x00782CA0 (unknown), RW 0x00782CDC (unknown), RW 0x00782DD9 (unknown). Classes: AptButtonTooltipMap, AptHoverInventory, ScriptEngine, WindowManager.
+Functions: RW 0x005EE1A6 (ported), RW 0x005EE7A8 (unknown), RW 0x006235E2 (unknown), RW 0x00624C68 (unknown), RW 0x00782CA0 (unknown), RW 0x00782CDC (unknown), RW 0x00782DD9 (unknown). Classes: AptButtonTooltipMap, AptHoverInventory, AptPlayer, ScriptEngine, WindowManager.
 Candidates: 0 none/partial functions; 6 unknown status.
 Red buttons: none linked.
 Unused fields: none linked.
@@ -2265,7 +2270,7 @@ Existing task matches: none.
 ### G191: RW 0x006429AD
 
 Stops: S-285. Kinds: code.
-Functions: RW 0x006429AD (unknown), RW 0x006E61D4 (unknown), RW 0x009205C4 (unknown). Classes: SelectionTranslator.
+Functions: RW 0x006429AD (unknown), RW 0x006E61D4 (unknown), RW 0x009205C4 (unknown). Classes: GlobalData, SelectionTranslator.
 Candidates: 0 none/partial functions; 3 unknown status.
 Red buttons: none linked.
 Unused fields: none linked.
@@ -2283,7 +2288,7 @@ Existing task matches: none.
 ### G193: RW 0x006AAA2E
 
 Stops: S-305. Kinds: code.
-Functions: RW 0x006AAA2E (unknown), RW 0x0077A91B (unknown), RW 0x0077B011 (unknown), RW 0x0088C217 (ported). Classes: DozerAIUpdate.
+Functions: RW 0x006AAA2E (unknown), RW 0x0077A91B (unknown), RW 0x0077B011 (unknown), RW 0x0088C217 (ported). Classes: BuildAssistant, DozerAIUpdate.
 Candidates: 0 none/partial functions; 3 unknown status.
 Red buttons: none linked.
 Unused fields: none linked.
@@ -2418,7 +2423,7 @@ Existing task matches: none.
 ### G208: RW 0x0068C3A3
 
 Stops: S-653. Kinds: code.
-Functions: RW 0x0068C3A3 (ported), RW 0x0070BA38 (unknown), RW 0x007940E8 (unknown), RW 0x00796576 (ported), RW 0x00797465 (ported), RW 0x007977B3 (unknown), RW 0x0079F0E1 (ported), RW 0x008566DF (ported), RW 0x00856992 (ported), RW 0x00857E77 (ported), RW 0x008C1D53 (ported), RW 0x00A3C6F0 (ported). Classes: none.
+Functions: RW 0x0068C3A3 (ported), RW 0x0070BA38 (unknown), RW 0x007940E8 (unknown), RW 0x00796576 (ported), RW 0x00797465 (ported), RW 0x007977B3 (unknown), RW 0x0079F0E1 (ported), RW 0x008566DF (ported), RW 0x00856992 (ported), RW 0x00857E77 (ported), RW 0x008C1D53 (ported), RW 0x00A3C6F0 (ported). Classes: BuildAssistant.
 Candidates: 0 none/partial functions; 3 unknown status.
 Red buttons: none linked.
 Unused fields: none linked.
@@ -2427,7 +2432,7 @@ Existing task matches: none.
 ### G209: RW 0x005F3664
 
 Stops: S-7290. Kinds: project.
-Functions: RW 0x005F3664 (unknown), RW 0x005F44F4 (ported), RW 0x005F461D (unknown), RW 0x005F4F97 (unknown), RW 0x005FBE28 (ported). Classes: none.
+Functions: RW 0x005F3664 (unknown), RW 0x005F44F4 (ported), RW 0x005F461D (unknown), RW 0x005F4F97 (unknown), RW 0x005FBE28 (ported). Classes: FXParticleSystem.
 Candidates: 0 none/partial functions; 3 unknown status.
 Red buttons: none linked.
 Unused fields: none linked.
@@ -2472,7 +2477,7 @@ Existing task matches: none.
 ### G214: RW 0x0070E911
 
 Stops: S-035, S-1335, S-160, S-1653, S-7220. Kinds: code, project.
-Functions: RW 0x0042E59E (unknown), RW 0x00442D32 (unknown), RW 0x00449CF8 (unknown), RW 0x004628BF (unknown), RW 0x0047E865 (unknown), RW 0x00482A0C (unknown), RW 0x004AEC41 (unknown), RW 0x004B055D (unknown), RW 0x00500313 (unknown), RW 0x0060047C (unknown), RW 0x0063F3BF (ported), RW 0x0065D189 (unknown), RW 0x0067DAE6 (unknown), RW 0x00681F0A (unknown), RW 0x00709DD8 (unknown), RW 0x0070D6EE (unknown), RW 0x0070E0B8 (unknown), RW 0x0070E911 (unknown). Classes: MapInfo, SkyboxSettings, StandingWaterArea, TerrainLogic, W3DInstancer, W3DModelBuilder.
+Functions: RW 0x0042E59E (unknown), RW 0x00442D32 (unknown), RW 0x00449CF8 (unknown), RW 0x004628BF (unknown), RW 0x0047E865 (unknown), RW 0x00482A0C (unknown), RW 0x004AEC41 (unknown), RW 0x004B055D (unknown), RW 0x00500313 (unknown), RW 0x0060047C (unknown), RW 0x0063F3BF (ported), RW 0x0065D189 (unknown), RW 0x0067DAE6 (unknown), RW 0x00681F0A (unknown), RW 0x00709DD8 (unknown), RW 0x0070D6EE (unknown), RW 0x0070E0B8 (unknown), RW 0x0070E911 (unknown). Classes: GlobalData, LivingWorld, MapInfo, SkyboxSettings, StandingWaterArea, TerrainLogic, W3DInstancer, W3DModelBuilder.
 Candidates: 0 none/partial functions; 17 unknown status.
 Red buttons: none linked.
 Unused fields: none linked.
@@ -2499,7 +2504,7 @@ Existing task matches: none.
 ### G217: RW 0x0091BE64
 
 Stops: S-3303, S-4902. Kinds: code.
-Functions: RW 0x0075D9B1 (unknown), RW 0x0091B1D2 (unknown), RW 0x0091BE64 (unknown), RW 0x0091C108 (unknown), RW 0x0091C262 (unknown), RW 0x00925699 (unknown), RW 0x009275EC (unknown). Classes: AptMainMenu.
+Functions: RW 0x0075D9B1 (unknown), RW 0x0091B1D2 (unknown), RW 0x0091BE64 (unknown), RW 0x0091C108 (unknown), RW 0x0091C262 (unknown), RW 0x00925699 (unknown), RW 0x009275EC (unknown). Classes: AptMainMenu, GameInfo, GlobalData.
 Candidates: 0 none/partial functions; 7 unknown status.
 Red buttons: none linked.
 Unused fields: none linked.
@@ -2508,7 +2513,7 @@ Existing task matches: none.
 ### G218: RW 0x0082DFB7
 
 Stops: S-4640, S-4641, S-531. Kinds: code.
-Functions: RW 0x0050C485 (unknown), RW 0x00693919 (ported), RW 0x006A077A (unknown), RW 0x006A3B77 (unknown), RW 0x006A4260 (unknown), RW 0x006A4E27 (unknown), RW 0x006AA8FB (unknown), RW 0x006AA91D (ported), RW 0x006B183D (unknown), RW 0x0073232B (ported), RW 0x00732888 (ported), RW 0x00732926 (ported), RW 0x00732DE7 (ported), RW 0x0076F788 (unknown), RW 0x0076F7FB (unknown), RW 0x0081EAD3 (unknown), RW 0x0082DFB7 (unknown), RW 0x00AD2CE0 (ported). Classes: AIGroup, InGameUI, RadiusDecalTemplate.
+Functions: RW 0x0050C485 (unknown), RW 0x00693919 (ported), RW 0x006A077A (unknown), RW 0x006A3B77 (unknown), RW 0x006A4260 (unknown), RW 0x006A4E27 (unknown), RW 0x006AA8FB (unknown), RW 0x006AA91D (ported), RW 0x006B183D (unknown), RW 0x0073232B (ported), RW 0x00732888 (ported), RW 0x00732926 (ported), RW 0x00732DE7 (ported), RW 0x0076F788 (unknown), RW 0x0076F7FB (unknown), RW 0x0081EAD3 (unknown), RW 0x0082DFB7 (unknown), RW 0x00AD2CE0 (ported). Classes: AIGroup, ActionManager, GeometryInfo, InGameUI, RadiusDecal, RadiusDecalTemplate.
 Candidates: 0 none/partial functions; 11 unknown status.
 Red buttons: none linked.
 Unused fields: none linked.
@@ -2517,7 +2522,7 @@ Existing task matches: none.
 ### G219: RW 0x0087F7B4
 
 Stops: S-1103, S-1105, S-4943, S-813. Kinds: code.
-Functions: RW 0x005E821A (ported), RW 0x006316EF (unknown), RW 0x0066246B (ported), RW 0x0066276B (ported), RW 0x00674B1F (ported), RW 0x0068449B (ported), RW 0x0068B3AB (unknown), RW 0x0068BF11 (unknown), RW 0x0068DA67 (unknown), RW 0x00696E63 (ported), RW 0x00697F0F (ported), RW 0x006FF412 (ported), RW 0x0076F466 (unknown), RW 0x00781FAF (unknown), RW 0x00795221 (unknown), RW 0x0079ADE9 (partial), RW 0x007A4606 (unknown), RW 0x007C3FD1 (unknown), RW 0x00858701 (ported), RW 0x0086D881 (ported), RW 0x0086D8FE (ported), RW 0x00870A92 (ported), RW 0x00873AE3 (ported), RW 0x0087ECC7 (ported), RW 0x0087ED45 (ported), RW 0x0087ED55 (ported), RW 0x0087EE17 (ported), RW 0x0087EE53 (ported), RW 0x0087EFF8 (ported), RW 0x0087F341 (ported), RW 0x0087F5B4 (ported), RW 0x0087F7B4 (ported), RW 0x0087FD0F (none), RW 0x0087FFC7 (none), RW 0x008807CA (ported), RW 0x008A4D09 (unknown), RW 0x008A7BF9 (ported), RW 0x008AEC79 (unknown), RW 0x008B3313 (ported), RW 0x008BF2BF (ported), RW 0x008D1979 (unknown). Classes: AIGroup, AttachUpdate, BridgeBehavior, CastleBehavior, DynamicPortalBehaviour, FoundationAIUpdate, HordeContain, HordeSiegeEngineContain, HordeTransportContainDamage, ProductionUpdate, QueueProductionExitUpdate, ReplaceSelfUpgrade, SiegeAIUpdate, SiegeDeployHordeSpecialPower, SiegeDeploySpecialPower, SiegeDockingBehavior, SiegeEngineContain, SlowDeathBehavior, StopSpecialPower, StructureCollapseUpdate, StructureToppleUpdate, TeleportToCasterSpecialPower, TerrainLogic, TunnelContain, TurretAI, WallUpgradeUpdate.
+Functions: RW 0x005E821A (ported), RW 0x006316EF (unknown), RW 0x0066246B (ported), RW 0x0066276B (ported), RW 0x00674B1F (ported), RW 0x0068449B (ported), RW 0x0068B3AB (unknown), RW 0x0068BF11 (unknown), RW 0x0068DA67 (unknown), RW 0x00696E63 (ported), RW 0x00697F0F (ported), RW 0x006FF412 (ported), RW 0x0076F466 (unknown), RW 0x00781FAF (unknown), RW 0x00795221 (unknown), RW 0x0079ADE9 (partial), RW 0x007A4606 (unknown), RW 0x007C3FD1 (unknown), RW 0x00858701 (ported), RW 0x0086D881 (ported), RW 0x0086D8FE (ported), RW 0x00870A92 (ported), RW 0x00873AE3 (ported), RW 0x0087ECC7 (ported), RW 0x0087ED45 (ported), RW 0x0087ED55 (ported), RW 0x0087EE17 (ported), RW 0x0087EE53 (ported), RW 0x0087EFF8 (ported), RW 0x0087F341 (ported), RW 0x0087F5B4 (ported), RW 0x0087F7B4 (ported), RW 0x0087FD0F (none), RW 0x0087FFC7 (none), RW 0x008807CA (ported), RW 0x008A4D09 (unknown), RW 0x008A7BF9 (ported), RW 0x008AEC79 (unknown), RW 0x008B3313 (ported), RW 0x008BF2BF (ported), RW 0x008D1979 (unknown). Classes: AIGroup, AttachUpdate, BridgeBehavior, BuildAssistant, CastleBehavior, DynamicPortalBehaviour, FoundationAIUpdate, HordeContain, HordeSiegeEngineContain, HordeTransportContainDamage, ProductionUpdate, QueueProductionExitUpdate, ReplaceSelfUpgrade, SiegeAIUpdate, SiegeDeployHordeSpecialPower, SiegeDeploySpecialPower, SiegeDockingBehavior, SiegeEngineContain, SlowDeathBehavior, StopSpecialPower, StructureCollapseUpdate, StructureToppleUpdate, TeleportToCasterSpecialPower, TerrainLogic, TunnelContain, TurretAI, WallUpgradeUpdate.
 Candidates: 3 none/partial functions; 12 unknown status.
 Red buttons: none linked.
 Unused fields: CastleBehavior.CrewPrepareFX, CastleBehavior.CrewPrepareInterval, CastleBehavior.CrewReleaseFX, HordeContain.LivingWorldOverloadTemplate, HordeContain.RanksToJustFreeWhenAttacking, HordeContain.SplitHordeNumber, ProductionUpdate.BonusForType, ProductionUpdate.SetBonusModelConditionOnSpeedBonus, ProductionUpdate.SpeedBonusAudioLoop, SiegeDeploySpecialPower.InitiateSound.
@@ -2535,7 +2540,7 @@ Existing task matches: none.
 ### G221: RW 0x004C451D
 
 Stops: S-090, S-098, S-3304, S-5032, S-5231. Kinds: code.
-Functions: RW 0x0046FE84 (unknown), RW 0x0047005F (unknown), RW 0x00476C3F (unknown), RW 0x00477969 (unknown), RW 0x0047A0AD (ported), RW 0x004876C6 (unknown), RW 0x004B1BC6 (ported), RW 0x004B2C18 (ported), RW 0x004B304E (none), RW 0x004B67D4 (unknown), RW 0x004B92D3 (unknown), RW 0x004B931E (ported), RW 0x004BF15E (ported), RW 0x004BF2D8 (ported), RW 0x004BF560 (ported), RW 0x004BFAF4 (ported), RW 0x004C060B (unknown), RW 0x004C1068 (ported), RW 0x004C2FC0 (unknown), RW 0x004C451D (ported), RW 0x004C70C3 (none), RW 0x004C72BE (ported), RW 0x004FA526 (unknown), RW 0x004FA909 (unknown), RW 0x00508B2D (unknown), RW 0x0050977A (unknown), RW 0x0050B85D (unknown), RW 0x0050BF6A (ported), RW 0x0050D92C (unknown), RW 0x00601C62 (unknown), RW 0x00672D28 (ported), RW 0x00675655 (none), RW 0x0073228B (ported), RW 0x007323CE (ported), RW 0x007BD74F (unknown), RW 0x00A3CFA4 (ported). Classes: GlowEffect, W3DInstancer, W3DScriptedModelDraw.
+Functions: RW 0x0046FE84 (unknown), RW 0x0047005F (unknown), RW 0x00476C3F (unknown), RW 0x00477969 (unknown), RW 0x0047A0AD (ported), RW 0x004876C6 (unknown), RW 0x004B1BC6 (ported), RW 0x004B2C18 (ported), RW 0x004B304E (none), RW 0x004B67D4 (unknown), RW 0x004B92D3 (unknown), RW 0x004B931E (ported), RW 0x004BF15E (ported), RW 0x004BF2D8 (ported), RW 0x004BF560 (ported), RW 0x004BFAF4 (ported), RW 0x004C060B (unknown), RW 0x004C1068 (ported), RW 0x004C2FC0 (unknown), RW 0x004C451D (ported), RW 0x004C70C3 (none), RW 0x004C72BE (ported), RW 0x004FA526 (unknown), RW 0x004FA909 (unknown), RW 0x00508B2D (unknown), RW 0x0050977A (unknown), RW 0x0050B85D (unknown), RW 0x0050BF6A (ported), RW 0x0050D92C (unknown), RW 0x00601C62 (unknown), RW 0x00672D28 (ported), RW 0x00675655 (none), RW 0x0073228B (ported), RW 0x007323CE (ported), RW 0x007BD74F (unknown), RW 0x00A3CFA4 (ported). Classes: GlobalData, GlowEffect, W3DInstancer, W3DModelDraw, W3DScriptedModelDraw.
 Candidates: 3 none/partial functions; 17 unknown status.
 Red buttons: none linked.
 Unused fields: W3DScriptedModelDraw.BirthFadeAdditive, W3DScriptedModelDraw.HighDetailOnly, W3DScriptedModelDraw.MinLODRequired, W3DScriptedModelDraw.UseDefaultAnimation, W3DScriptedModelDraw.UseProducerTexture.
@@ -2553,7 +2558,7 @@ Existing task matches: none.
 ### G223: RW 0x00756C87
 
 Stops: S-1282, S-589. Kinds: code.
-Functions: RW 0x00664127 (unknown), RW 0x0068C0C5 (unknown), RW 0x0068C213 (ported), RW 0x00756C87 (unknown), RW 0x0079D8EF (ported), RW 0x0082C84C (partial), RW 0x0082D7F2 (ported), RW 0x00861E6E (ported), RW 0x008620DD (ported), RW 0x008700AC (ported), RW 0x00875FB2 (ported), RW 0x00876A08 (ported), RW 0x0088C51B (unknown), RW 0x0088CC08 (unknown), RW 0x0088DBB3 (unknown), RW 0x0088E17F (unknown). Classes: AIMover, HordeContain, HudInput.
+Functions: RW 0x00664127 (unknown), RW 0x0068C0C5 (unknown), RW 0x0068C213 (ported), RW 0x00756C87 (unknown), RW 0x0079D8EF (ported), RW 0x0082C84C (partial), RW 0x0082D7F2 (ported), RW 0x00861E6E (ported), RW 0x008620DD (ported), RW 0x008700AC (ported), RW 0x00875FB2 (ported), RW 0x00876A08 (ported), RW 0x0088C51B (unknown), RW 0x0088CC08 (unknown), RW 0x0088DBB3 (unknown), RW 0x0088E17F (unknown). Classes: AIMover, ActionManager, HordeContain, HudInput.
 Candidates: 1 none/partial functions; 7 unknown status.
 Red buttons: none linked.
 Unused fields: HordeContain.LivingWorldOverloadTemplate, HordeContain.RanksToJustFreeWhenAttacking, HordeContain.SplitHordeNumber.
@@ -2589,7 +2594,7 @@ Existing task matches: none.
 ### G227: RW 0x004052F9
 
 Stops: S-1281. Kinds: code.
-Functions: RW 0x004052F9 (none), RW 0x00406585 (ported), RW 0x00667C76 (unknown), RW 0x00690BD2 (ported), RW 0x006EA0EC (unknown), RW 0x00AD2CE0 (ported), RW 0x00AD30E0 (ported), RW 0x00AD3D30 (unknown). Classes: AIUpdateInterface, GeometryUpgrade.
+Functions: RW 0x004052F9 (none), RW 0x00406585 (ported), RW 0x00667C76 (unknown), RW 0x00690BD2 (ported), RW 0x006EA0EC (unknown), RW 0x00AD2CE0 (ported), RW 0x00AD30E0 (ported), RW 0x00AD3D30 (unknown). Classes: AIUpdateInterface, GeometryInfo, GeometryUpgrade.
 Candidates: 1 none/partial functions; 3 unknown status.
 Red buttons: none linked.
 Unused fields: none linked.
@@ -2643,7 +2648,7 @@ Existing task matches: none.
 ### G233: RW 0x0091EC52
 
 Stops: S-1913, S-4510, S-4670. Kinds: code.
-Functions: RW 0x004591D4 (unknown), RW 0x00641DED (unknown), RW 0x006DA95E (ported), RW 0x006E5FB3 (unknown), RW 0x007234EC (unknown), RW 0x007237F8 (unknown), RW 0x0091EB77 (unknown), RW 0x0091EBD1 (unknown), RW 0x0091EC52 (unknown), RW 0x0091ED91 (unknown), RW 0x0091F90D (unknown), RW 0x0091FC9C (unknown), RW 0x009205C4 (unknown). Classes: AptButtonTooltipMap, AptOptionsScreen, AudioManager, GameLODManager, MiscAudio, ShellEnvironment.
+Functions: RW 0x004591D4 (unknown), RW 0x00641DED (unknown), RW 0x006DA95E (ported), RW 0x006E5FB3 (unknown), RW 0x007234EC (unknown), RW 0x007237F8 (unknown), RW 0x0091EB77 (unknown), RW 0x0091EBD1 (unknown), RW 0x0091EC52 (unknown), RW 0x0091ED91 (unknown), RW 0x0091F90D (unknown), RW 0x0091FC9C (unknown), RW 0x009205C4 (unknown). Classes: AptButtonTooltipMap, AptOptionsScreen, AudioManager, GameLODManager, GlobalData, MiscAudio, ShellEnvironment.
 Candidates: 0 none/partial functions; 12 unknown status.
 Red buttons: none linked.
 Unused fields: none linked.
@@ -2652,7 +2657,7 @@ Existing task matches: none.
 ### G234: RW 0x006D1305
 
 Stops: S-1980. Kinds: code.
-Functions: RW 0x006D1305 (ported), RW 0x0079468B (unknown), RW 0x007966BB (unknown), RW 0x007967C1 (unknown), RW 0x0086561F (unknown). Classes: GarrisonContain, PlayerTemplate.
+Functions: RW 0x006D1305 (ported), RW 0x0079468B (unknown), RW 0x007966BB (unknown), RW 0x007967C1 (unknown), RW 0x0086561F (unknown). Classes: BuildAssistant, GarrisonContain, PlayerTemplate.
 Candidates: 0 none/partial functions; 4 unknown status.
 Red buttons: none linked.
 Unused fields: none linked.
@@ -2697,7 +2702,7 @@ Existing task matches: none.
 ### G239: RW 0x00795221
 
 Stops: S-307. Kinds: code.
-Functions: RW 0x00795221 (unknown), RW 0x0079586E (unknown), RW 0x00855EC7 (unknown), RW 0x008560C0 (unknown). Classes: WallHubBehavior.
+Functions: RW 0x00795221 (unknown), RW 0x0079586E (unknown), RW 0x00855EC7 (unknown), RW 0x008560C0 (unknown). Classes: BuildAssistant, WallHubBehavior.
 Candidates: 0 none/partial functions; 4 unknown status.
 Red buttons: none linked.
 Unused fields: none linked.
@@ -2832,7 +2837,7 @@ Existing task matches: none.
 ### G254: RW 0x0081E60B
 
 Stops: S-1427, S-2000, S-2002, S-286, S-4840, S-4944, S-5902, S-7321. Kinds: code.
-Functions: RW 0x0041B730 (unknown), RW 0x0044DDEC (ported), RW 0x004B7BA0 (unknown), RW 0x004B9696 (none), RW 0x005F11A8 (unknown), RW 0x005F2078 (unknown), RW 0x0062DCE4 (unknown), RW 0x0063F3BF (ported), RW 0x00663EF4 (none), RW 0x0066403D (unknown), RW 0x0066826E (unknown), RW 0x0066C609 (ported), RW 0x00672F44 (partial), RW 0x0067CAC6 (unknown), RW 0x0067F2D0 (ported), RW 0x0067FFA6 (unknown), RW 0x0068044E (unknown), RW 0x00680A75 (ported), RW 0x0068BBE0 (ported), RW 0x0068C02E (ported), RW 0x0068C05A (unknown), RW 0x0069029B (ported), RW 0x0069472D (unknown), RW 0x00698EC3 (ported), RW 0x00699349 (ported), RW 0x0069D27E (unknown), RW 0x0069D674 (unknown), RW 0x006A4260 (unknown), RW 0x006C8652 (ported), RW 0x006C9147 (ported), RW 0x006CC07C (ported), RW 0x006E4D2C (ported), RW 0x006EA4E7 (unknown), RW 0x006F0741 (ported), RW 0x006F0B27 (unknown), RW 0x006F1B3E (unknown), RW 0x006F25FE (unknown), RW 0x006F5BB0 (ported), RW 0x006FF7FA (ported), RW 0x00740049 (unknown), RW 0x0079350E (ported), RW 0x0081DB0C (unknown), RW 0x0081E147 (unknown), RW 0x0081E60B (unknown), RW 0x0081E7B2 (unknown), RW 0x0082C5A6 (unknown), RW 0x0082CBD5 (ported), RW 0x0082D0A1 (ported), RW 0x0082D780 (unknown), RW 0x0082D925 (ported), RW 0x0082DDE1 (unknown), RW 0x0083BCB1 (unknown), RW 0x00871536 (ported), RW 0x00873FE8 (ported), RW 0x0088397F (ported), RW 0x00886831 (ported), RW 0x00886878 (ported), RW 0x008868C2 (ported), RW 0x00889AAF (ported), RW 0x0088C217 (ported), RW 0x008AD6A4 (ported), RW 0x0090D16A (ported), RW 0x00935051 (unknown), RW 0x0093527F (unknown), RW 0x009356DF (unknown), RW 0x00935BFF (unknown), RW 0x00935FAA (ported), RW 0x00936B7D (ported). Classes: AIWorld, BridgeBehavior, CitadelSlaughterHordeContain, CommandTranslator, DozerAIUpdate, GUICommandTranslator, HordeContain, InGameUI, ObjectFilter, RebuildHoleBehavior, RebuildHoleExposeDie, ResourceGatheringManager, SlaughterHordeContainBehaviorData, ThingTemplate, W3DScriptedModelDraw, WorkerAIUpdate.
+Functions: RW 0x0041B730 (unknown), RW 0x0044DDEC (ported), RW 0x004B7BA0 (unknown), RW 0x004B9696 (none), RW 0x005F11A8 (unknown), RW 0x005F2078 (unknown), RW 0x0062DCE4 (unknown), RW 0x0063F3BF (ported), RW 0x00663EF4 (none), RW 0x0066403D (unknown), RW 0x0066826E (unknown), RW 0x0066C609 (ported), RW 0x00672F44 (partial), RW 0x0067CAC6 (unknown), RW 0x0067F2D0 (ported), RW 0x0067FFA6 (unknown), RW 0x0068044E (unknown), RW 0x00680A75 (ported), RW 0x0068BBE0 (ported), RW 0x0068C02E (ported), RW 0x0068C05A (unknown), RW 0x0069029B (ported), RW 0x0069472D (unknown), RW 0x00698EC3 (ported), RW 0x00699349 (ported), RW 0x0069D27E (unknown), RW 0x0069D674 (unknown), RW 0x006A4260 (unknown), RW 0x006C8652 (ported), RW 0x006C9147 (ported), RW 0x006CC07C (ported), RW 0x006E4D2C (ported), RW 0x006EA4E7 (unknown), RW 0x006F0741 (ported), RW 0x006F0B27 (unknown), RW 0x006F1B3E (unknown), RW 0x006F25FE (unknown), RW 0x006F5BB0 (ported), RW 0x006FF7FA (ported), RW 0x00740049 (unknown), RW 0x0079350E (ported), RW 0x0081DB0C (unknown), RW 0x0081E147 (unknown), RW 0x0081E60B (unknown), RW 0x0081E7B2 (unknown), RW 0x0082C5A6 (unknown), RW 0x0082CBD5 (ported), RW 0x0082D0A1 (ported), RW 0x0082D780 (unknown), RW 0x0082D925 (ported), RW 0x0082DDE1 (unknown), RW 0x0083BCB1 (unknown), RW 0x00871536 (ported), RW 0x00873FE8 (ported), RW 0x0088397F (ported), RW 0x00886831 (ported), RW 0x00886878 (ported), RW 0x008868C2 (ported), RW 0x00889AAF (ported), RW 0x0088C217 (ported), RW 0x008AD6A4 (ported), RW 0x0090D16A (ported), RW 0x00935051 (unknown), RW 0x0093527F (unknown), RW 0x009356DF (unknown), RW 0x00935BFF (unknown), RW 0x00935FAA (ported), RW 0x00936B7D (ported). Classes: AIWorld, ActionManager, BridgeBehavior, CitadelSlaughterHordeContain, CommandTranslator, DozerAIUpdate, GUICommandTranslator, GeometryInfo, HordeContain, InGameUI, ObjectFilter, RebuildHoleBehavior, RebuildHoleExposeDie, ResourceGatheringManager, SlaughterHordeContainBehaviorData, ThingTemplate, W3DModelDraw, W3DScriptedModelDraw, WeaponSet, WorkerAIUpdate.
 Candidates: 3 none/partial functions; 32 unknown status.
 Red buttons: none linked.
 Unused fields: HordeContain.LivingWorldOverloadTemplate, HordeContain.RanksToJustFreeWhenAttacking, HordeContain.SplitHordeNumber, W3DScriptedModelDraw.BirthFadeAdditive, W3DScriptedModelDraw.HighDetailOnly, W3DScriptedModelDraw.MinLODRequired, W3DScriptedModelDraw.UseDefaultAnimation, W3DScriptedModelDraw.UseProducerTexture.
@@ -2850,7 +2855,7 @@ Existing task matches: none.
 ### G256: RW 0x00989449
 
 Stops: S-1121, S-3900, S-3901, S-4075, S-720, S-721. Kinds: code.
-Functions: RW 0x00441B7C (ported), RW 0x00610A21 (unknown), RW 0x00625AF1 (unknown), RW 0x0064322E (unknown), RW 0x0065DBFC (unknown), RW 0x0065DD0F (unknown), RW 0x006B5E3E (unknown), RW 0x008445C9 (unknown), RW 0x008D2EC6 (unknown), RW 0x008D3AF1 (unknown), RW 0x008D3FD9 (unknown), RW 0x008D4301 (unknown), RW 0x008D4761 (unknown), RW 0x008D4E89 (unknown), RW 0x008D57D8 (unknown), RW 0x008D75AC (unknown), RW 0x008D77B5 (unknown), RW 0x008D7C78 (unknown), RW 0x008D7F77 (unknown), RW 0x008D8233 (unknown), RW 0x008D826F (unknown), RW 0x008D836B (unknown), RW 0x008D8553 (unknown), RW 0x008D861A (unknown), RW 0x008D86D0 (unknown), RW 0x008D8735 (unknown), RW 0x008D8A90 (unknown), RW 0x00989449 (unknown). Classes: AptQuitMenu, DisconnectManager, GameWorld, LobbyStart, NetGameSession.
+Functions: RW 0x00441B7C (ported), RW 0x00610A21 (unknown), RW 0x00625AF1 (unknown), RW 0x0064322E (unknown), RW 0x0065DBFC (unknown), RW 0x0065DD0F (unknown), RW 0x006B5E3E (unknown), RW 0x008445C9 (unknown), RW 0x008D2EC6 (unknown), RW 0x008D3AF1 (unknown), RW 0x008D3FD9 (unknown), RW 0x008D4301 (unknown), RW 0x008D4761 (unknown), RW 0x008D4E89 (unknown), RW 0x008D57D8 (unknown), RW 0x008D75AC (unknown), RW 0x008D77B5 (unknown), RW 0x008D7C78 (unknown), RW 0x008D7F77 (unknown), RW 0x008D8233 (unknown), RW 0x008D826F (unknown), RW 0x008D836B (unknown), RW 0x008D8553 (unknown), RW 0x008D861A (unknown), RW 0x008D86D0 (unknown), RW 0x008D8735 (unknown), RW 0x008D8A90 (unknown), RW 0x00989449 (unknown). Classes: AptQuitMenu, DisconnectManager, GameWorld, GlobalData, LobbyStart, NetGameSession.
 Candidates: 0 none/partial functions; 27 unknown status.
 Red buttons: none linked.
 Unused fields: none linked.
@@ -2877,7 +2882,7 @@ Existing task matches: none.
 ### G259: linked stops S-179, S-3504
 
 Stops: S-179, S-3504. Kinds: code.
-Functions: RW 0x00821AB4 (unknown), RW 0x00821EBD (unknown), RW 0x008220A3 (unknown), RW 0x008221F5 (unknown), RW 0x0082259F (unknown), RW 0x00822626 (unknown), RW 0x00928CDB (unknown), RW 0x0093BD82 (unknown), RW 0x0093BF28 (unknown). Classes: AptSkirmish, SkirmishPreferences.
+Functions: RW 0x00821AB4 (unknown), RW 0x00821EBD (unknown), RW 0x008220A3 (unknown), RW 0x008221F5 (unknown), RW 0x0082259F (unknown), RW 0x00822626 (unknown), RW 0x00928CDB (unknown), RW 0x0093BD82 (unknown), RW 0x0093BF28 (unknown). Classes: AptSkirmish, GameInfo, SkirmishPreferences.
 Candidates: 0 none/partial functions; 9 unknown status.
 Red buttons: none linked.
 Unused fields: none linked.
@@ -2886,7 +2891,7 @@ Existing task matches: none.
 ### G260: linked stops S-1892, S-1920
 
 Stops: S-1892, S-1920. Kinds: code.
-Functions: RW 0x0048EDED (unknown), RW 0x0066403D (unknown), RW 0x00680A75 (ported), RW 0x006819D9 (unknown), RW 0x00690E97 (ported), RW 0x0069B76C (unknown), RW 0x0069E8D0 (unknown), RW 0x0069F54F (unknown), RW 0x006F5BB0 (ported), RW 0x0081E7B2 (unknown), RW 0x0081F743 (unknown), RW 0x0083816E (unknown). Classes: LockstepDriver, SmoothStats, TerrainLogic, UnitVoiceResponse.
+Functions: RW 0x0048EDED (unknown), RW 0x0066403D (unknown), RW 0x00680A75 (ported), RW 0x006819D9 (unknown), RW 0x00690E97 (ported), RW 0x0069B76C (unknown), RW 0x0069E8D0 (unknown), RW 0x0069F54F (unknown), RW 0x006F5BB0 (ported), RW 0x0081E7B2 (unknown), RW 0x0081F743 (unknown), RW 0x0083816E (unknown). Classes: GlobalData, LockstepDriver, SmoothStats, TerrainLogic, UnitVoiceResponse.
 Candidates: 0 none/partial functions; 9 unknown status.
 Red buttons: none linked.
 Unused fields: none linked.
@@ -2940,7 +2945,7 @@ Existing task matches: #613 Port 265: HordeContain: the 65 uncited own functions
 ### G266: RW 0x00763D11
 
 Stops: S-1874, S-523, S-7160, S-7161. Kinds: code.
-Functions: RW 0x004B0A98 (unknown), RW 0x0064DD3A (unknown), RW 0x0064DDC3 (unknown), RW 0x0067F52B (ported), RW 0x00680A75 (ported), RW 0x0068449B (ported), RW 0x0068C8DE (ported), RW 0x0068E5A3 (ported), RW 0x0068E67A (ported), RW 0x006A4260 (unknown), RW 0x0076379C (unknown), RW 0x00763D11 (ported), RW 0x0076A247 (unknown), RW 0x0076FB3F (unknown), RW 0x0077B51B (unknown), RW 0x007B1F5B (unknown), RW 0x0081E7B2 (unknown), RW 0x0082D5DA (ported), RW 0x0082D925 (ported), RW 0x0082DFB7 (unknown), RW 0x0082E20F (unknown), RW 0x0082E8F3 (unknown), RW 0x00899405 (partial), RW 0x008994BF (unknown), RW 0x00899562 (ported), RW 0x0089958F (ported), RW 0x00899A96 (unknown), RW 0x00899C7D (unknown), RW 0x00899E8C (unknown), RW 0x00899F1F (unknown), RW 0x00899F9D (ported), RW 0x008B0125 (ported), RW 0x008B66B4 (ported). Classes: AutoPickUpUpdate, BoredUpdate, CommandTranslator, CostModifierUpgrade, GrabPassengerSpecialPower, ObjectFilter, SpecialPowerTemplate, WeaponFireSpecialAbilityUpdate, WorldHeightMap.
+Functions: RW 0x004B0A98 (unknown), RW 0x0064DD3A (unknown), RW 0x0064DDC3 (unknown), RW 0x0067F52B (ported), RW 0x00680A75 (ported), RW 0x0068449B (ported), RW 0x0068C8DE (ported), RW 0x0068E5A3 (ported), RW 0x0068E67A (ported), RW 0x006A4260 (unknown), RW 0x0076379C (unknown), RW 0x00763D11 (ported), RW 0x0076A247 (unknown), RW 0x0076FB3F (unknown), RW 0x0077B51B (unknown), RW 0x007B1F5B (unknown), RW 0x0081E7B2 (unknown), RW 0x0082D5DA (ported), RW 0x0082D925 (ported), RW 0x0082DFB7 (unknown), RW 0x0082E20F (unknown), RW 0x0082E8F3 (unknown), RW 0x00899405 (partial), RW 0x008994BF (unknown), RW 0x00899562 (ported), RW 0x0089958F (ported), RW 0x00899A96 (unknown), RW 0x00899C7D (unknown), RW 0x00899E8C (unknown), RW 0x00899F1F (unknown), RW 0x00899F9D (ported), RW 0x008B0125 (ported), RW 0x008B66B4 (ported). Classes: ActionManager, AutoPickUpUpdate, BoredUpdate, CommandTranslator, CostModifierUpgrade, GrabPassengerSpecialPower, ObjectFilter, SpecialPowerTemplate, WeaponFireSpecialAbilityUpdate, WorldHeightMap.
 Candidates: 1 none/partial functions; 18 unknown status.
 Red buttons: Command_AngmarRangersIceArrowAbility, Command_AngmarRogashLeap, Command_AxtschwingerAxeThrow, Command_DuhrburLeap, Command_FireDrakeBroodInferno, Command_FireWeaponAngmarFortressSanctumFrostball, Command_FireWeaponMenFortressBoilingOil, Command_FireWeaponMightyCatapult, Command_FireWeaponMordorFortressMagmaCauldrons, Command_FireWeaponMordorFortressSpireFireball, Command_GoblinKingGiftangriff, Command_GorkilBombThrow, Command_GwaihirBlastNew, Command_HwaldarVerbrannteErde, Command_IsenfurtWchterSmite, Command_IsengardMineDetonate, Command_MenLongShotAbility, Command_MordorBloodThirstySacrificeUruk, Command_NecromancerFrostArmorStructure, Command_PorterExtinguishFire, Command_RohanGimliLeap, Command_SalemeBlendfalleDetonate, Command_SalemeExplosionsfalleDetonate, Command_SalemeGiftfalleDetonate, Command_SpecialAbilityAgandaurLighting, Command_SpecialAbilityAngmarGiftFortress, Command_SpecialAbilityBalrogWings, Command_SpecialAbilityBetrayer, Command_SpecialAbilityBuhrdurFressen, Command_SpecialAbilityDenethorErnennung, Command_SpecialAbilityDrarSpeerfeuer, Command_SpecialAbilityDunklesWortderMacht, Command_SpecialAbilityDwalinErdenhammer, Command_SpecialAbilityErinnerunganTelperion, Command_SpecialAbilityFortressHaradSpyTech, Command_SpecialAbilityFortressHaradSpyTechAI, Command_SpecialAbilityGloinSmash, Command_SpecialAbilityGrishnakGiftwolke, Command_SpecialAbilityGulzarMOrgulSeucheAcolyte, Command_SpecialAbilityGwahirScreechManve, Command_SpecialAbilityGwahirScreechNew, Command_SpecialAbilityHaradSlavesBuildBoost, Command_SpecialAbilityMordorDrummerRoar, Command_SpecialAbilityNaturmagierHeilung, Command_SpecialAbilityNetzausDunkelheit, Command_SpecialAbilityRohanTraitors, Command_SpecialAbilitySaatdesgoldenenWaldes, Command_SpecialAbilitySchmiedAlle, Command_SpecialAbilitySchutzbannLoriens, Command_SpecialAbilitySharkuManEater, Command_SpecialAbilitySoulLink, Command_SpecialAbilityWizardBlastGeprfte, Command_SpecialAbilityWordOfPowerEdainGeprfte.
 Unused fields: none linked.
@@ -2985,7 +2990,7 @@ Existing task matches: #611 Port 263: Emotions: EmotionTrackerUpdate (terror, fe
 ### G271: RW 0x006BBD55
 
 Stops: S-1332. Kinds: code.
-Functions: RW 0x006BBD55 (unknown), RW 0x006BC634 (unknown), RW 0x006DCFDF (unknown), RW 0x006DEA25 (unknown), RW 0x006E04AD (unknown). Classes: GameState, LivingWorldLogic, NewGameMessage.
+Functions: RW 0x006BBD55 (unknown), RW 0x006BC634 (unknown), RW 0x006DCFDF (unknown), RW 0x006DEA25 (unknown), RW 0x006E04AD (unknown). Classes: GameState, LivingWorld, LivingWorldLogic, NewGameMessage.
 Candidates: 0 none/partial functions; 5 unknown status.
 Red buttons: none linked.
 Unused fields: none linked.
@@ -3021,7 +3026,7 @@ Existing task matches: none.
 ### G275: RW 0x00490EE6
 
 Stops: S-1710, S-2341. Kinds: code.
-Functions: RW 0x00490D08 (unknown), RW 0x00490EE6 (unknown), RW 0x0049112C (unknown), RW 0x0063C5E2 (unknown), RW 0x0063CB3E (unknown), RW 0x006429AD (unknown), RW 0x0064838D (unknown), RW 0x0065C67E (unknown), RW 0x0065CBEF (unknown), RW 0x0065D3F5 (unknown). Classes: OptionPreferences, VideoPlayer.
+Functions: RW 0x00490D08 (unknown), RW 0x00490EE6 (unknown), RW 0x0049112C (unknown), RW 0x0063C5E2 (unknown), RW 0x0063CB3E (unknown), RW 0x006429AD (unknown), RW 0x0064838D (unknown), RW 0x0065C67E (unknown), RW 0x0065CBEF (unknown), RW 0x0065D3F5 (unknown). Classes: GlobalData, OptionPreferences, VideoPlayer.
 Candidates: 0 none/partial functions; 10 unknown status.
 Red buttons: none linked.
 Unused fields: none linked.
@@ -3093,7 +3098,7 @@ Existing task matches: none.
 ### G283: PhysicsBehavior
 
 Stops: S-782. Kinds: code.
-Functions: RW 0x00441C56 (ported), RW 0x005E3A1B (ported), RW 0x006260E1 (unknown), RW 0x006630D7 (ported), RW 0x00693919 (ported), RW 0x006CF590 (ported), RW 0x006EF8A8 (unknown), RW 0x006F0741 (ported), RW 0x0070BA76 (ported), RW 0x0070C201 (ported), RW 0x00792559 (unknown), RW 0x0079261A (unknown), RW 0x00792997 (unknown), RW 0x00792A41 (ported), RW 0x00792A69 (ported), RW 0x00792AFF (ported), RW 0x00792DBD (ported), RW 0x0079308D (ported), RW 0x00793224 (ported), RW 0x00793372 (ported), RW 0x0079350E (ported), RW 0x009188EB (ported), RW 0x00B26610 (ported). Classes: PhysicsBehavior.
+Functions: RW 0x00441C56 (ported), RW 0x005E3A1B (ported), RW 0x006260E1 (unknown), RW 0x006630D7 (ported), RW 0x00693919 (ported), RW 0x006CF590 (ported), RW 0x006EF8A8 (unknown), RW 0x006F0741 (ported), RW 0x0070BA76 (ported), RW 0x0070C201 (ported), RW 0x00792559 (unknown), RW 0x0079261A (unknown), RW 0x00792997 (unknown), RW 0x00792A41 (ported), RW 0x00792A69 (ported), RW 0x00792AFF (ported), RW 0x00792DBD (ported), RW 0x0079308D (ported), RW 0x00793224 (ported), RW 0x00793372 (ported), RW 0x0079350E (ported), RW 0x009188EB (ported), RW 0x00B26610 (ported). Classes: GlobalData, PhysicsBehavior.
 Candidates: 0 none/partial functions; 5 unknown status.
 Red buttons: none linked.
 Unused fields: none linked.
@@ -3111,7 +3116,7 @@ Existing task matches: none.
 ### G285: RW 0x00940435
 
 Stops: S-1990, S-1992, S-3460, S-7285, S-7292, S-7337, S-7444, S-923. Kinds: code, project.
-Functions: RW 0x00674FFE (ported), RW 0x0071F933 (unknown), RW 0x0073EDD0 (ported), RW 0x00748418 (unknown), RW 0x0075CDFC (unknown), RW 0x0075CE47 (unknown), RW 0x0075CECD (unknown), RW 0x0075D082 (unknown), RW 0x0075D0B9 (ported), RW 0x0075D0F8 (unknown), RW 0x0075D137 (unknown), RW 0x0075D22E (unknown), RW 0x0075D366 (unknown), RW 0x0075D3E9 (unknown), RW 0x0075D516 (unknown), RW 0x00779A3D (unknown), RW 0x0077A91B (unknown), RW 0x0077B011 (unknown), RW 0x0077B6AB (unknown), RW 0x007C3C88 (unknown), RW 0x007C3D61 (unknown), RW 0x008227BB (unknown), RW 0x00822A98 (unknown), RW 0x00822BE3 (unknown), RW 0x00822DD7 (unknown), RW 0x00822E43 (unknown), RW 0x008232ED (unknown), RW 0x0082379A (unknown), RW 0x0083EE14 (unknown), RW 0x0085D7B6 (unknown), RW 0x00872B69 (ported), RW 0x008DDB2A (ported), RW 0x008DEDBB (ported), RW 0x00930E6E (unknown), RW 0x009312B9 (unknown), RW 0x00931698 (unknown), RW 0x0093178C (unknown), RW 0x00940435 (unknown), RW 0x009407AE (unknown), RW 0x009412EB (unknown), RW 0x00941365 (unknown), RW 0x00941A22 (unknown), RW 0x00941ABB (unknown), RW 0x00941B9F (unknown), RW 0x00942733 (unknown), RW 0x00944534 (unknown), RW 0x009D28D4 (unknown), RW 0x009D2B49 (unknown), RW 0x009D6F9C (unknown). Classes: AIAttackState, AptPalantir, AptSpellStore, AutoAbilityBehavior, CommandButton, CommandSet, ControlBar, HordeContainInterface, MappedImageCollection, PlayerTemplate.
+Functions: RW 0x00674FFE (ported), RW 0x0071F933 (unknown), RW 0x0073EDD0 (ported), RW 0x00748418 (unknown), RW 0x0075CDFC (unknown), RW 0x0075CE47 (unknown), RW 0x0075CECD (unknown), RW 0x0075D082 (unknown), RW 0x0075D0B9 (ported), RW 0x0075D0F8 (unknown), RW 0x0075D137 (unknown), RW 0x0075D22E (unknown), RW 0x0075D366 (unknown), RW 0x0075D3E9 (unknown), RW 0x0075D516 (unknown), RW 0x00779A3D (unknown), RW 0x0077A91B (unknown), RW 0x0077B011 (unknown), RW 0x0077B6AB (unknown), RW 0x007C3C88 (unknown), RW 0x007C3D61 (unknown), RW 0x008227BB (unknown), RW 0x00822A98 (unknown), RW 0x00822BE3 (unknown), RW 0x00822DD7 (unknown), RW 0x00822E43 (unknown), RW 0x008232ED (unknown), RW 0x0082379A (unknown), RW 0x0083EE14 (unknown), RW 0x0085D7B6 (unknown), RW 0x00872B69 (ported), RW 0x008DDB2A (ported), RW 0x008DEDBB (ported), RW 0x00930E6E (unknown), RW 0x009312B9 (unknown), RW 0x00931698 (unknown), RW 0x0093178C (unknown), RW 0x00940435 (unknown), RW 0x009407AE (unknown), RW 0x009412EB (unknown), RW 0x00941365 (unknown), RW 0x00941A22 (unknown), RW 0x00941ABB (unknown), RW 0x00941B9F (unknown), RW 0x00942733 (unknown), RW 0x00944534 (unknown), RW 0x009D28D4 (unknown), RW 0x009D2B49 (unknown), RW 0x009D6F9C (unknown). Classes: AIAttackState, AptPalantir, AptSpellStore, AutoAbilityBehavior, BuildAssistant, CommandButton, CommandSet, ControlBar, HordeContainInterface, MappedImageCollection, PlayerTemplate.
 Candidates: 0 none/partial functions; 43 unknown status.
 Red buttons: Command_AngmarRangersIceArrowAbility, Command_AxtschwingerAxeThrow, Command_BalinBaukunstMorias, Command_BalinBaukunstderZwerge, Command_FireWeaponAngmarFortressSanctumFrostball, Command_FireWeaponMightyCatapult, Command_GoblinKingGiftangriff, Command_GondorGandalfLightningSwordGeprfte, Command_IsenfurtWchterSmite, Command_Repair, Command_RepairAI, Command_SalemeBlendfalleDetonate, Command_SalemeExplosionsfalleDetonate, Command_SalemeGiftfalleDetonate, Command_SarumanPower, Command_SpecialAbilityAdvisorMarketTrade, Command_SpecialAbilityBoromirHorn, Command_SpecialAbilityBoromirHornRing, Command_SpecialAbilityBoromirTapfererWiderstand, Command_SpecialAbilityDenethorErnennung, Command_SpecialAbilityErinnerunganTelperion, Command_SpecialAbilityFortressHaradSpyTech, Command_SpecialAbilityFortressHaradSpyTechAI, Command_SpecialAbilityGulmatRunes, Command_SpecialAbilityGulmatRunesPoison, Command_SpecialAbilityGwahirScreechManve, Command_SpecialAbilityGwahirScreechNew, Command_SpecialAbilityMalbethOnFarm, Command_SpecialAbilityMeisterderHornburg, Command_SpecialAbilityNaturmagierErntesegen, Command_SpecialAbilityTameTheBeastNew, Command_SpecialAbilityUrukHauptmannCrossbow, Command_SpecialAbilityWizardBlastGeprfte, Command_TheodredReparaturarbeiten.
 Unused fields: AutoAbilityBehavior.WorkingRadius.
@@ -3138,7 +3143,7 @@ Existing task matches: #613 Port 265: HordeContain: the 65 uncited own functions
 ### G288: RW 0x006A2AE5
 
 Stops: S-1770, S-306, S-5030. Kinds: code.
-Functions: RW 0x00405406 (ported), RW 0x00405482 (ported), RW 0x00492AC8 (unknown), RW 0x004AD985 (unknown), RW 0x0050C485 (unknown), RW 0x0068B6F5 (ported), RW 0x0069CCEC (unknown), RW 0x006A2AE5 (unknown), RW 0x006A3755 (unknown), RW 0x006A8695 (ported), RW 0x00707141 (unknown), RW 0x0073228B (ported), RW 0x0073232B (ported), RW 0x0075B561 (unknown), RW 0x0075B8CC (ported), RW 0x0075C02D (unknown), RW 0x0075C1A9 (unknown), RW 0x00793E33 (unknown), RW 0x00794C63 (unknown), RW 0x00796810 (unknown), RW 0x00797A96 (ported), RW 0x0081F8D8 (unknown), RW 0x0083E486 (unknown), RW 0x008E951F (ported), RW 0x008E9744 (ported), RW 0x008E99EE (ported), RW 0x008E9B34 (ported), RW 0x008E9B9A (ported), RW 0x008E9C35 (unknown), RW 0x008EC1D6 (ported), RW 0x0094089B (unknown). Classes: CommandTranslator, Coord2D, InGameUI, MiscAudio, PlaceEventTranslator, TerrainResourceBehavior, TerrainResourceClientBehavior, TerrainResourceManager.
+Functions: RW 0x00405406 (ported), RW 0x00405482 (ported), RW 0x00492AC8 (unknown), RW 0x004AD985 (unknown), RW 0x0050C485 (unknown), RW 0x0068B6F5 (ported), RW 0x0069CCEC (unknown), RW 0x006A2AE5 (unknown), RW 0x006A3755 (unknown), RW 0x006A8695 (ported), RW 0x00707141 (unknown), RW 0x0073228B (ported), RW 0x0073232B (ported), RW 0x0075B561 (unknown), RW 0x0075B8CC (ported), RW 0x0075C02D (unknown), RW 0x0075C1A9 (unknown), RW 0x00793E33 (unknown), RW 0x00794C63 (unknown), RW 0x00796810 (unknown), RW 0x00797A96 (ported), RW 0x0081F8D8 (unknown), RW 0x0083E486 (unknown), RW 0x008E951F (ported), RW 0x008E9744 (ported), RW 0x008E99EE (ported), RW 0x008E9B34 (ported), RW 0x008E9B9A (ported), RW 0x008E9C35 (unknown), RW 0x008EC1D6 (ported), RW 0x0094089B (unknown). Classes: BuildAssistant, CommandTranslator, Coord2D, InGameUI, MiscAudio, PlaceEventTranslator, TerrainResourceBehavior, TerrainResourceClientBehavior, TerrainResourceManager.
 Candidates: 0 none/partial functions; 17 unknown status.
 Red buttons: none linked.
 Unused fields: none linked.
@@ -3156,7 +3161,7 @@ Existing task matches: none.
 ### G290: RW 0x0081F8D8
 
 Stops: S-1202, S-1673, S-1675, S-1954, S-280, S-287, S-4964. Kinds: code.
-Functions: RW 0x004474A0 (unknown), RW 0x00485B79 (unknown), RW 0x0048AB28 (unknown), RW 0x004B583C (ported), RW 0x00646771 (unknown), RW 0x0068DE58 (ported), RW 0x00691F7F (unknown), RW 0x00691FCE (unknown), RW 0x0069B5ED (unknown), RW 0x0069B6A8 (unknown), RW 0x0069B9C8 (unknown), RW 0x0069BF39 (unknown), RW 0x0069D90C (unknown), RW 0x006A67EA (unknown), RW 0x006A7232 (unknown), RW 0x006AAE79 (unknown), RW 0x006ABABD (ported), RW 0x006AC722 (unknown), RW 0x006AD722 (unknown), RW 0x0071077B (unknown), RW 0x0071083F (unknown), RW 0x0071C6AF (unknown), RW 0x0071CF3E (unknown), RW 0x0071D041 (unknown), RW 0x0075B068 (unknown), RW 0x007BC586 (unknown), RW 0x007BC5E9 (unknown), RW 0x008076CD (unknown), RW 0x0081DABC (unknown), RW 0x0081DB0C (unknown), RW 0x0081E4B5 (unknown), RW 0x0081F791 (unknown), RW 0x0081F8D8 (unknown), RW 0x0082076C (unknown), RW 0x00838EBA (unknown), RW 0x0083AB5D (unknown), RW 0x0083AC4A (unknown), RW 0x0083C29E (unknown), RW 0x0083D353 (unknown), RW 0x0083D7AD (unknown), RW 0x0083EE14 (unknown), RW 0x008DB103 (ported), RW 0x009403ED (unknown), RW 0x0096F890 (unknown). Classes: CommandTranslator, ControlBar, HotKeyTranslator, InGameUI, SelectionTranslator.
+Functions: RW 0x004474A0 (unknown), RW 0x00485B79 (unknown), RW 0x0048AB28 (unknown), RW 0x004B583C (ported), RW 0x00646771 (unknown), RW 0x0068DE58 (ported), RW 0x00691F7F (unknown), RW 0x00691FCE (unknown), RW 0x0069B5ED (unknown), RW 0x0069B6A8 (unknown), RW 0x0069B9C8 (unknown), RW 0x0069BF39 (unknown), RW 0x0069D90C (unknown), RW 0x006A67EA (unknown), RW 0x006A7232 (unknown), RW 0x006AAE79 (unknown), RW 0x006ABABD (ported), RW 0x006AC722 (unknown), RW 0x006AD722 (unknown), RW 0x0071077B (unknown), RW 0x0071083F (unknown), RW 0x0071C6AF (unknown), RW 0x0071CF3E (unknown), RW 0x0071D041 (unknown), RW 0x0075B068 (unknown), RW 0x007BC586 (unknown), RW 0x007BC5E9 (unknown), RW 0x008076CD (unknown), RW 0x0081DABC (unknown), RW 0x0081DB0C (unknown), RW 0x0081E4B5 (unknown), RW 0x0081F791 (unknown), RW 0x0081F8D8 (unknown), RW 0x0082076C (unknown), RW 0x00838EBA (unknown), RW 0x0083AB5D (unknown), RW 0x0083AC4A (unknown), RW 0x0083C29E (unknown), RW 0x0083D353 (unknown), RW 0x0083D7AD (unknown), RW 0x0083EE14 (unknown), RW 0x008DB103 (ported), RW 0x009403ED (unknown), RW 0x0096F890 (unknown). Classes: CommandTranslator, ControlBar, HotKeyTranslator, InGameUI, SelectionTranslator, W3DModelDraw, WeaponSet.
 Candidates: 0 none/partial functions; 40 unknown status.
 Red buttons: none linked.
 Unused fields: none linked.
@@ -3183,7 +3188,7 @@ Existing task matches: none.
 ### G293: RW 0x00683D89
 
 Stops: S-111, S-530, S-930. Kinds: code.
-Functions: RW 0x004622AC (unknown), RW 0x004CE3A8 (unknown), RW 0x004E70F5 (unknown), RW 0x004E8B8F (unknown), RW 0x004EA068 (unknown), RW 0x004EA107 (unknown), RW 0x004EC93A (unknown), RW 0x004EEB15 (unknown), RW 0x005E07F7 (unknown), RW 0x005EF8D8 (unknown), RW 0x005EF96D (unknown), RW 0x005F0126 (ported), RW 0x005F0328 (unknown), RW 0x005F0462 (unknown), RW 0x005F0D68 (unknown), RW 0x005F1A60 (unknown), RW 0x0067D400 (ported), RW 0x0067D519 (unknown), RW 0x0067D6E1 (ported), RW 0x0067D742 (ported), RW 0x0067E078 (ported), RW 0x0067F52B (ported), RW 0x006808ED (ported), RW 0x00683D89 (ported), RW 0x006849F8 (ported), RW 0x0068C6C8 (unknown), RW 0x00776294 (ported), RW 0x0081ABDF (ported), RW 0x008CC711 (ported), RW 0x008E3ABB (unknown). Classes: DefectionHelper, DevastateSpecialPower, FadeAndDieOrnamentUpdate, OCLSpecialPower, ObjectCreationList, StealthUpdate, TerrainTrees, TransitionDamageFX, TreeTopple, W3DTreeDraw.
+Functions: RW 0x004622AC (unknown), RW 0x004CE3A8 (unknown), RW 0x004E70F5 (unknown), RW 0x004E8B8F (unknown), RW 0x004EA068 (unknown), RW 0x004EA107 (unknown), RW 0x004EC93A (unknown), RW 0x004EEB15 (unknown), RW 0x005E07F7 (unknown), RW 0x005EF8D8 (unknown), RW 0x005EF96D (unknown), RW 0x005F0126 (ported), RW 0x005F0328 (unknown), RW 0x005F0462 (unknown), RW 0x005F0D68 (unknown), RW 0x005F1A60 (unknown), RW 0x0067D400 (ported), RW 0x0067D519 (unknown), RW 0x0067D6E1 (ported), RW 0x0067D742 (ported), RW 0x0067E078 (ported), RW 0x0067F52B (ported), RW 0x006808ED (ported), RW 0x00683D89 (ported), RW 0x006849F8 (ported), RW 0x0068C6C8 (unknown), RW 0x00776294 (ported), RW 0x0081ABDF (ported), RW 0x008CC711 (ported), RW 0x008E3ABB (unknown). Classes: DefectionHelper, DevastateSpecialPower, FadeAndDieOrnamentUpdate, GlobalData, OCLSpecialPower, ObjectCreationList, StealthUpdate, TerrainTrees, TransitionDamageFX, TreeTopple, W3DTreeDraw.
 Candidates: 0 none/partial functions; 18 unknown status.
 Red buttons: Command_GaladrielMirrorDissent, Command_GaladrielMirrorWardByMirror, Command_IsengardMineDetonate, Command_MenLongShotAbility, Command_SalemeBlendfalleDetonate, Command_SalemeExplosionsfalleDetonate, Command_SalemeGiftfalleDetonate, Command_SpecialAbilityAdvisorMarketTrade, Command_SpecialAbilityArnorPalantirEye, Command_SpecialAbilityBeutekarrendesGroorks, Command_SpecialAbilityBoromirVerteidigungderweienStadt, Command_SpecialAbilityDrarSpeerfeuer, Command_SpecialAbilityGorbagUngolEmpowered, Command_SpecialAbilityGothmogMorgulEmpowered, Command_SpecialAbilityGuldurEmpowered, Command_SpecialAbilityGulmatRunes, Command_SpecialAbilityGulmatRunesPoison, Command_SpecialAbilityKhamulGuldurEmpowered, Command_SpecialAbilityKokonausDunkelheit, Command_SpecialAbilityLoneRangerSummonFinal, Command_SpecialAbilityMorgulEmpowered, Command_SpecialAbilityOpferannehmen, Command_SpecialAbilitySpawnKochtopf, Command_SpecialAbilitySuladanSummonGuard, Command_SpecialAbilityTheodenAusbeutesteuer, Command_SpecialAbilityUngolEmpowered, Command_ramridercaptain.
 Unused fields: StealthUpdate.HintDetectableConditions, W3DTreeDraw.DarkeningFactor, W3DTreeDraw.FadeDistance, W3DTreeDraw.FadeTarget.
@@ -3201,7 +3206,7 @@ Existing task matches: #600 Port 252: The SpecialAbilityUpdate family: the share
 ### G295: RW 0x0073FB7A
 
 Stops: S-072, S-1300, S-7319. Kinds: code, project.
-Functions: RW 0x0042ECB2 (unknown), RW 0x0042EE15 (unknown), RW 0x0068F0EC (ported), RW 0x006915AF (unknown), RW 0x00691A2F (unknown), RW 0x006C644C (unknown), RW 0x006C650B (unknown), RW 0x006C6623 (unknown), RW 0x006C6975 (unknown), RW 0x006D1D80 (unknown), RW 0x0073FB7A (unknown), RW 0x007ED963 (unknown), RW 0x007EDB72 (unknown), RW 0x007EDC2F (unknown), RW 0x007EE057 (ported), RW 0x007EE166 (ported), RW 0x0086CA78 (none), RW 0x008BFBAE (ported), RW 0x008C1D75 (ported), RW 0x008ED505 (unknown), RW 0x008ED575 (unknown), RW 0x008F98E1 (unknown), RW 0x00936B7D (ported), RW 0x00AD2860 (ported), RW 0x00AD4310 (unknown). Classes: Coord3D, HordeContain, HordeContainInterface, InactiveBody, RawTokens, SquishCollide, ThingTemplate.
+Functions: RW 0x0042ECB2 (unknown), RW 0x0042EE15 (unknown), RW 0x0068F0EC (ported), RW 0x006915AF (unknown), RW 0x00691A2F (unknown), RW 0x006C644C (unknown), RW 0x006C650B (unknown), RW 0x006C6623 (unknown), RW 0x006C6975 (unknown), RW 0x006D1D80 (unknown), RW 0x0073FB7A (unknown), RW 0x007ED963 (unknown), RW 0x007EDB72 (unknown), RW 0x007EDC2F (unknown), RW 0x007EE057 (ported), RW 0x007EE166 (ported), RW 0x0086CA78 (none), RW 0x008BFBAE (ported), RW 0x008C1D75 (ported), RW 0x008ED505 (unknown), RW 0x008ED575 (unknown), RW 0x008F98E1 (unknown), RW 0x00936B7D (ported), RW 0x00AD2860 (ported), RW 0x00AD4310 (unknown). Classes: Coord3D, GeometryInfo, HordeContain, HordeContainInterface, InactiveBody, RawTokens, SquishCollide, ThingTemplate.
 Candidates: 1 none/partial functions; 17 unknown status.
 Red buttons: none linked.
 Unused fields: HordeContain.LivingWorldOverloadTemplate, HordeContain.RanksToJustFreeWhenAttacking, HordeContain.SplitHordeNumber.
@@ -3210,7 +3215,7 @@ Existing task matches: #613 Port 265: HordeContain: the 65 uncited own functions
 ### G296: SymbioticStructuresBody
 
 Stops: S-7195. Kinds: code.
-Functions: RW 0x006512BE (unknown), RW 0x008C4C82 (unknown), RW 0x008C4CF4 (none), RW 0x008C4F2D (none), RW 0x008C5304 (none), RW 0x008C53D0 (none), RW 0x00AD1920 (ported). Classes: SymbioticStructuresBody.
+Functions: RW 0x006512BE (unknown), RW 0x008C4C82 (unknown), RW 0x008C4CF4 (none), RW 0x008C4F2D (none), RW 0x008C5304 (none), RW 0x008C53D0 (none), RW 0x00AD1920 (ported). Classes: GlobalData, SymbioticStructuresBody.
 Candidates: 4 none/partial functions; 2 unknown status.
 Red buttons: none linked.
 Unused fields: SymbioticStructuresBody.Symbiote.
@@ -3273,7 +3278,7 @@ Existing task matches: none.
 ### G303: RW 0x0073D0BA
 
 Stops: S-2521. Kinds: code.
-Functions: RW 0x0073D0BA (ported), RW 0x0092BA91 (unknown), RW 0x0092BF34 (unknown), RW 0x0092BFED (ported), RW 0x0092C428 (unknown), RW 0x0092C734 (ported), RW 0x0092C809 (ported), RW 0x0092C8C4 (unknown), RW 0x0092CD78 (ported), RW 0x0092CF64 (unknown), RW 0x0092D9F4 (unknown). Classes: CreateAHeroHero, DrawableManager, InGameHeroSelect, InGameHudNode, InGameUI.
+Functions: RW 0x0073D0BA (ported), RW 0x0092BA91 (unknown), RW 0x0092BF34 (unknown), RW 0x0092BFED (ported), RW 0x0092C428 (unknown), RW 0x0092C734 (ported), RW 0x0092C809 (ported), RW 0x0092C8C4 (unknown), RW 0x0092CD78 (ported), RW 0x0092CF64 (unknown), RW 0x0092D9F4 (unknown). Classes: CreateAHeroHero, DrawableManager, InGameHeroSelect, InGameHeroSelectInterface, InGameHudNode, InGameUI.
 Candidates: 0 none/partial functions; 6 unknown status.
 Red buttons: none linked.
 Unused fields: none linked.
@@ -3291,7 +3296,7 @@ Existing task matches: none.
 ### G305: RW 0x006A3755
 
 Stops: S-3302, S-7361. Kinds: code.
-Functions: RW 0x0048EAD8 (unknown), RW 0x0049249D (unknown), RW 0x00670AF4 (unknown), RW 0x006718FB (ported), RW 0x00674504 (ported), RW 0x0069C5E6 (unknown), RW 0x0069CCEC (unknown), RW 0x006A2AE5 (unknown), RW 0x006A3457 (unknown), RW 0x006A3755 (unknown), RW 0x006A3ABE (unknown), RW 0x00707141 (unknown), RW 0x00796C5A (unknown), RW 0x00796D1F (unknown), RW 0x00797A96 (ported), RW 0x00798F70 (ported). Classes: PlaceEventTranslator, PlacementIcons, PortSnapView, W3DInstancer, W3DShaderKey.
+Functions: RW 0x0048EAD8 (unknown), RW 0x0049249D (unknown), RW 0x00670AF4 (unknown), RW 0x006718FB (ported), RW 0x00674504 (ported), RW 0x0069C5E6 (unknown), RW 0x0069CCEC (unknown), RW 0x006A2AE5 (unknown), RW 0x006A3457 (unknown), RW 0x006A3755 (unknown), RW 0x006A3ABE (unknown), RW 0x00707141 (unknown), RW 0x00796C5A (unknown), RW 0x00796D1F (unknown), RW 0x00797A96 (ported), RW 0x00798F70 (ported). Classes: BuildAssistant, GeometryInfo, PlaceEventTranslator, PlacementIcons, PortSnapView, W3DInstancer, W3DShaderKey.
 Candidates: 0 none/partial functions; 12 unknown status.
 Red buttons: none linked.
 Unused fields: none linked.
@@ -3345,7 +3350,7 @@ Existing task matches: none.
 ### G311: RW 0x0062E4E8
 
 Stops: S-1062, S-143, S-223, S-562, S-581, S-630, S-7216, S-780, S-922. Kinds: code, project.
-Functions: RW 0x0042ED00 (unknown), RW 0x006159B1 (unknown), RW 0x00615A68 (unknown), RW 0x00625F7C (unknown), RW 0x0062E4E8 (unknown), RW 0x0062EE54 (unknown), RW 0x006311ED (unknown), RW 0x0063AD4F (unknown), RW 0x00670216 (ported), RW 0x00689E3C (ported), RW 0x0068A928 (unknown), RW 0x0068BA2A (unknown), RW 0x0068C18F (ported), RW 0x0068C7B2 (unknown), RW 0x0068D8F7 (ported), RW 0x0068E31F (ported), RW 0x00693D0C (ported), RW 0x00695475 (ported), RW 0x006955BC (ported), RW 0x00696266 (ported), RW 0x00698F06 (ported), RW 0x006ABE7C (unknown), RW 0x006ABF5E (unknown), RW 0x006AF598 (unknown), RW 0x006B5DE0 (ported), RW 0x006C7518 (unknown), RW 0x006DF73E (unknown), RW 0x006DF940 (unknown), RW 0x006FAA6D (unknown), RW 0x00719C69 (ported), RW 0x00719DEE (unknown), RW 0x00719EBE (unknown), RW 0x00719FDB (unknown), RW 0x0071A024 (unknown), RW 0x0071A04F (unknown), RW 0x0071A09E (unknown), RW 0x0071A13D (unknown), RW 0x007640C1 (ported), RW 0x0076ED16 (unknown), RW 0x0076F115 (ported), RW 0x0077348C (ported), RW 0x007747DE (ported), RW 0x00774897 (ported), RW 0x00774E2F (ported), RW 0x0077CA47 (unknown), RW 0x0079D3DA (unknown), RW 0x0079DA9D (unknown), RW 0x0079DB50 (unknown), RW 0x0079DB6B (unknown), RW 0x00800C8F (unknown), RW 0x00806909 (unknown), RW 0x00806926 (unknown), RW 0x00806CC5 (unknown), RW 0x00806D18 (none), RW 0x00806EA2 (unknown), RW 0x00806F5F (unknown), RW 0x00808D3C (unknown), RW 0x00808F53 (unknown), RW 0x00809253 (unknown), RW 0x00821567 (unknown), RW 0x008659D8 (unknown), RW 0x00867C40 (unknown), RW 0x00867E1B (unknown), RW 0x00873A02 (ported), RW 0x00897987 (ported), RW 0x0094FCBA (ported), RW 0x00973C81 (unknown), RW 0x00A39020 (unknown), RW 0x00A3B4E0 (unknown), RW 0x00AD2CE0 (ported), RW 0x00B4D940 (unknown), RW 0x00B4E890 (ported), RW 0x00B6C420 (unknown), RW 0x00B6C470 (ported), RW 0x00B6C480 (ported), RW 0x00B6CF90 (unknown), RW 0x00B6D060 (unknown), RW 0x00B6D5E0 (unknown), RW 0x00B6D730 (unknown), RW 0x00B6D8A0 (unknown), RW 0x00B6E6B0 (unknown). Classes: AICommands, AIGroup, AISkirmishPlayer, AIWorld, BezierProjectileBehavior, CombatState, CommandList, ExperienceTracker, ExperienceWorld, GameLogicDispatch, GateOpenAndCloseBehavior, HordeContain, MoveToGroupOrder, OpenContain, ScoreKeeper, VictoryConditions, WeatherClient.
+Functions: RW 0x0042ED00 (unknown), RW 0x006159B1 (unknown), RW 0x00615A68 (unknown), RW 0x00625F7C (unknown), RW 0x0062E4E8 (unknown), RW 0x0062EE54 (unknown), RW 0x006311ED (unknown), RW 0x0063AD4F (unknown), RW 0x00670216 (ported), RW 0x00689E3C (ported), RW 0x0068A928 (unknown), RW 0x0068BA2A (unknown), RW 0x0068C18F (ported), RW 0x0068C7B2 (unknown), RW 0x0068D8F7 (ported), RW 0x0068E31F (ported), RW 0x00693D0C (ported), RW 0x00695475 (ported), RW 0x006955BC (ported), RW 0x00696266 (ported), RW 0x00698F06 (ported), RW 0x006ABE7C (unknown), RW 0x006ABF5E (unknown), RW 0x006AF598 (unknown), RW 0x006B5DE0 (ported), RW 0x006C7518 (unknown), RW 0x006DF73E (unknown), RW 0x006DF940 (unknown), RW 0x006FAA6D (unknown), RW 0x00719C69 (ported), RW 0x00719DEE (unknown), RW 0x00719EBE (unknown), RW 0x00719FDB (unknown), RW 0x0071A024 (unknown), RW 0x0071A04F (unknown), RW 0x0071A09E (unknown), RW 0x0071A13D (unknown), RW 0x007640C1 (ported), RW 0x0076ED16 (unknown), RW 0x0076F115 (ported), RW 0x0077348C (ported), RW 0x007747DE (ported), RW 0x00774897 (ported), RW 0x00774E2F (ported), RW 0x0077CA47 (unknown), RW 0x0079D3DA (unknown), RW 0x0079DA9D (unknown), RW 0x0079DB50 (unknown), RW 0x0079DB6B (unknown), RW 0x00800C8F (unknown), RW 0x00806909 (unknown), RW 0x00806926 (unknown), RW 0x00806CC5 (unknown), RW 0x00806D18 (none), RW 0x00806EA2 (unknown), RW 0x00806F5F (unknown), RW 0x00808D3C (unknown), RW 0x00808F53 (unknown), RW 0x00809253 (unknown), RW 0x00821567 (unknown), RW 0x008659D8 (unknown), RW 0x00867C40 (unknown), RW 0x00867E1B (unknown), RW 0x00873A02 (ported), RW 0x00897987 (ported), RW 0x0094FCBA (ported), RW 0x00973C81 (unknown), RW 0x00A39020 (unknown), RW 0x00A3B4E0 (unknown), RW 0x00AD2CE0 (ported), RW 0x00B4D940 (unknown), RW 0x00B4E890 (ported), RW 0x00B6C420 (unknown), RW 0x00B6C470 (ported), RW 0x00B6C480 (ported), RW 0x00B6CF90 (unknown), RW 0x00B6D060 (unknown), RW 0x00B6D5E0 (unknown), RW 0x00B6D730 (unknown), RW 0x00B6D8A0 (unknown), RW 0x00B6E6B0 (unknown). Classes: AICommands, AIGroup, AISkirmishPlayer, AIWorld, BezierProjectileBehavior, CellGrid, CombatState, CommandList, ExperienceTracker, ExperienceWorld, GameInfo, GameLogicDispatch, GateOpenAndCloseBehavior, GeometryInfo, HordeContain, MoveToGroupOrder, OpenContain, ScoreKeeper, VictoryConditions, WeatherClient.
 Candidates: 1 none/partial functions; 55 unknown status.
 Red buttons: none linked.
 Unused fields: HordeContain.LivingWorldOverloadTemplate, HordeContain.RanksToJustFreeWhenAttacking, HordeContain.SplitHordeNumber.
@@ -3372,7 +3377,7 @@ Existing task matches: none.
 ### G314: RW 0x0068C053
 
 Stops: S-163, S-4851. Kinds: code.
-Functions: RW 0x0068229C (unknown), RW 0x0068B3CF (unknown), RW 0x0068B425 (ported), RW 0x0068C053 (ported), RW 0x006A950B (ported), RW 0x006AAC66 (ported), RW 0x006ECF1D (unknown), RW 0x006EF3C3 (unknown), RW 0x006F3082 (unknown), RW 0x006F70D5 (unknown), RW 0x006FCE1A (unknown), RW 0x006FD06F (unknown), RW 0x006FD716 (unknown), RW 0x006FDB3D (unknown), RW 0x006FDC15 (unknown), RW 0x006FDDE5 (unknown), RW 0x00767B0E (unknown). Classes: AIGroup, FakePathfindPortalBehaviour, SkirmishAIManager.
+Functions: RW 0x0068229C (unknown), RW 0x0068B3CF (unknown), RW 0x0068B425 (ported), RW 0x0068C053 (ported), RW 0x006A950B (ported), RW 0x006AAC66 (ported), RW 0x006ECF1D (unknown), RW 0x006EF3C3 (unknown), RW 0x006F3082 (unknown), RW 0x006F70D5 (unknown), RW 0x006FCE1A (unknown), RW 0x006FD06F (unknown), RW 0x006FD716 (unknown), RW 0x006FDB3D (unknown), RW 0x006FDC15 (unknown), RW 0x006FDDE5 (unknown), RW 0x00767B0E (unknown). Classes: AIGroup, ActionManager, FakePathfindPortalBehaviour, SkirmishAIManager.
 Candidates: 0 none/partial functions; 13 unknown status.
 Red buttons: none linked.
 Unused fields: none linked.
@@ -3426,7 +3431,7 @@ Existing task matches: none.
 ### G320: RW 0x00A149A2
 
 Stops: S-5160, S-5300, S-5301. Kinds: code.
-Functions: RW 0x0042C33B (unknown), RW 0x00490D08 (unknown), RW 0x006417DC (unknown), RW 0x006427C8 (unknown), RW 0x0070254F (unknown), RW 0x00704BDE (unknown), RW 0x00706A71 (unknown), RW 0x00706F1E (unknown), RW 0x007B9EBE (unknown), RW 0x007BAA44 (unknown), RW 0x007BADB9 (unknown), RW 0x007BAE93 (unknown), RW 0x00A14275 (unknown), RW 0x00A14313 (unknown), RW 0x00A14419 (unknown), RW 0x00A149A2 (unknown), RW 0x00A14AEB (unknown), RW 0x00A14D2B (ported), RW 0x00A1766D (unknown), RW 0x00A17FB0 (unknown), RW 0x00A183AA (unknown). Classes: ArchiveFileSystem, GameState, GameWorld, MapObjectBuilder, MapTerrainBuilder, PathfindView.
+Functions: RW 0x0042C33B (unknown), RW 0x00490D08 (unknown), RW 0x006417DC (unknown), RW 0x006427C8 (unknown), RW 0x0070254F (unknown), RW 0x00704BDE (unknown), RW 0x00706A71 (unknown), RW 0x00706F1E (unknown), RW 0x007B9EBE (unknown), RW 0x007BAA44 (unknown), RW 0x007BADB9 (unknown), RW 0x007BAE93 (unknown), RW 0x00A14275 (unknown), RW 0x00A14313 (unknown), RW 0x00A14419 (unknown), RW 0x00A149A2 (unknown), RW 0x00A14AEB (unknown), RW 0x00A14D2B (ported), RW 0x00A1766D (unknown), RW 0x00A17FB0 (unknown), RW 0x00A183AA (unknown). Classes: ArchiveFileSystem, AsciiString, GameState, GameWorld, GlobalData, MapObjectBuilder, MapTerrainBuilder, PathfindView.
 Candidates: 0 none/partial functions; 20 unknown status.
 Red buttons: none linked.
 Unused fields: none linked.
@@ -3444,7 +3449,7 @@ Existing task matches: #611 Port 263: Emotions: EmotionTrackerUpdate (terror, fe
 ### G322: RW 0x0068C7E9
 
 Stops: S-1000, S-587, S-852. Kinds: code.
-Functions: RW 0x00449681 (ported), RW 0x004B1B5A (ported), RW 0x00625E0A (ported), RW 0x00671913 (unknown), RW 0x0067449C (ported), RW 0x0068B645 (ported), RW 0x0068B934 (unknown), RW 0x0068BB14 (ported), RW 0x0068C7E9 (unknown), RW 0x0068C933 (ported), RW 0x0068D19A (unknown), RW 0x0068E197 (unknown), RW 0x00690053 (unknown), RW 0x0069036C (unknown), RW 0x006B16EC (unknown), RW 0x0070E013 (ported), RW 0x0073CE2A (ported), RW 0x0074C4A7 (unknown), RW 0x00780EF0 (unknown), RW 0x0079DC9E (ported), RW 0x00804F02 (unknown), RW 0x00809FFB (unknown), RW 0x0080FD9C (ported), RW 0x008311B1 (unknown), RW 0x00855830 (ported), RW 0x0085EBEE (ported), RW 0x0086C81E (ported), RW 0x0086EBF4 (ported), RW 0x0086EE52 (ported), RW 0x00870204 (ported), RW 0x008718ED (ported), RW 0x00871915 (unknown), RW 0x008719E4 (ported), RW 0x008720C2 (ported), RW 0x00872A8D (none), RW 0x0087370B (ported), RW 0x0087393E (ported), RW 0x00873A02 (ported), RW 0x00873AE3 (ported), RW 0x008759FF (ported), RW 0x00876406 (unknown), RW 0x0089A258 (unknown), RW 0x0089A308 (unknown), RW 0x0089A392 (ported), RW 0x0089A5C5 (unknown), RW 0x0089A90F (unknown), RW 0x0089AB8F (ported), RW 0x0089ACE4 (ported), RW 0x008B4F39 (ported), RW 0x008B50A5 (ported), RW 0x008E3C58 (unknown). Classes: AllowBannerSpawnUpgrade, BannerCarrierUpdate, EmotionTrackerUpdate, ExperienceTracker, HordeContain, WeaponStatusHelper.
+Functions: RW 0x00449681 (ported), RW 0x004B1B5A (ported), RW 0x00625E0A (ported), RW 0x00671913 (unknown), RW 0x0067449C (ported), RW 0x0068B645 (ported), RW 0x0068B934 (unknown), RW 0x0068BB14 (ported), RW 0x0068C7E9 (unknown), RW 0x0068C933 (ported), RW 0x0068D19A (unknown), RW 0x0068E197 (unknown), RW 0x00690053 (unknown), RW 0x0069036C (unknown), RW 0x006B16EC (unknown), RW 0x0070E013 (ported), RW 0x0073CE2A (ported), RW 0x0074C4A7 (unknown), RW 0x00780EF0 (unknown), RW 0x0079DC9E (ported), RW 0x00804F02 (unknown), RW 0x00809FFB (unknown), RW 0x0080FD9C (ported), RW 0x008311B1 (unknown), RW 0x00855830 (ported), RW 0x0085EBEE (ported), RW 0x0086C81E (ported), RW 0x0086EBF4 (ported), RW 0x0086EE52 (ported), RW 0x00870204 (ported), RW 0x008718ED (ported), RW 0x00871915 (unknown), RW 0x008719E4 (ported), RW 0x008720C2 (ported), RW 0x00872A8D (none), RW 0x0087370B (ported), RW 0x0087393E (ported), RW 0x00873A02 (ported), RW 0x00873AE3 (ported), RW 0x008759FF (ported), RW 0x00876406 (unknown), RW 0x0089A258 (unknown), RW 0x0089A308 (unknown), RW 0x0089A392 (ported), RW 0x0089A5C5 (unknown), RW 0x0089A90F (unknown), RW 0x0089AB8F (ported), RW 0x0089ACE4 (ported), RW 0x008B4F39 (ported), RW 0x008B50A5 (ported), RW 0x008E3C58 (unknown). Classes: AllowBannerSpawnUpgrade, ArmySummarySystem, BannerCarrierUpdate, EmotionTrackerUpdate, ExperienceTracker, HordeContain, WeaponStatusHelper.
 Candidates: 1 none/partial functions; 20 unknown status.
 Red buttons: none linked.
 Unused fields: HordeContain.LivingWorldOverloadTemplate, HordeContain.RanksToJustFreeWhenAttacking, HordeContain.SplitHordeNumber.
@@ -3480,7 +3485,7 @@ Existing task matches: #626 Port 267: The floor buffer's fade on death (W3DFloor
 ### G326: RW 0x00816655
 
 Stops: S-1126, S-4003, S-4980. Kinds: code.
-Functions: RW 0x006221E0 (ported), RW 0x00622463 (ported), RW 0x006DD795 (unknown), RW 0x006DE38D (unknown), RW 0x006E04AD (unknown), RW 0x0075E3B7 (unknown), RW 0x00812913 (unknown), RW 0x00812A37 (unknown), RW 0x008162E5 (unknown), RW 0x008165A1 (unknown), RW 0x00816655 (unknown), RW 0x00816927 (unknown), RW 0x00816DBF (unknown), RW 0x00816F24 (unknown), RW 0x00816FA3 (unknown), RW 0x00817B5F (unknown), RW 0x008180A8 (unknown), RW 0x0081874E (unknown), RW 0x00818D41 (unknown), RW 0x00819548 (unknown), RW 0x0091C2FC (unknown), RW 0x0091ED91 (unknown), RW 0x00921B0F (unknown). Classes: AptQuitMenu, AptSaveLoad, AptScreen, ShellAction, WindowManager.
+Functions: RW 0x006221E0 (ported), RW 0x00622463 (ported), RW 0x006DD795 (unknown), RW 0x006DE38D (unknown), RW 0x006E04AD (unknown), RW 0x0075E3B7 (unknown), RW 0x00812913 (unknown), RW 0x00812A37 (unknown), RW 0x008162E5 (unknown), RW 0x008165A1 (unknown), RW 0x00816655 (unknown), RW 0x00816927 (unknown), RW 0x00816DBF (unknown), RW 0x00816F24 (unknown), RW 0x00816FA3 (unknown), RW 0x00817B5F (unknown), RW 0x008180A8 (unknown), RW 0x0081874E (unknown), RW 0x00818D41 (unknown), RW 0x00819548 (unknown), RW 0x0091C2FC (unknown), RW 0x0091ED91 (unknown), RW 0x00921B0F (unknown). Classes: AptPlayer, AptQuitMenu, AptSaveLoad, AptScreen, ShellAction, WindowManager.
 Candidates: 0 none/partial functions; 21 unknown status.
 Red buttons: none linked.
 Unused fields: none linked.
@@ -3516,7 +3521,7 @@ Existing task matches: none.
 ### G330: RW 0x007846EE
 
 Stops: S-3610. Kinds: code.
-Functions: RW 0x007846EE (unknown), RW 0x007BA37A (unknown), RW 0x008431B8 (unknown), RW 0x008433D4 (unknown), RW 0x00847508 (unknown), RW 0x009758E3 (unknown), RW 0x0097597F (unknown). Classes: PlayerTemplate, SkirmishGameSetup.
+Functions: RW 0x007846EE (unknown), RW 0x007BA37A (unknown), RW 0x008431B8 (unknown), RW 0x008433D4 (unknown), RW 0x00847508 (unknown), RW 0x009758E3 (unknown), RW 0x0097597F (unknown). Classes: GlobalData, PlayerTemplate, SkirmishGameSetup.
 Candidates: 0 none/partial functions; 7 unknown status.
 Red buttons: none linked.
 Unused fields: none linked.
@@ -3552,7 +3557,7 @@ Existing task matches: none.
 ### G334: RW 0x00701443
 
 Stops: S-1188, S-1227, S-1228, S-3802, S-420, S-4462, S-583, S-702. Kinds: code.
-Functions: RW 0x004035AC (unknown), RW 0x00405553 (ported), RW 0x004627C1 (unknown), RW 0x005E2DF4 (ported), RW 0x0065F4A2 (ported), RW 0x0065F4DC (ported), RW 0x00660CA4 (unknown), RW 0x0066276B (ported), RW 0x00662A21 (unknown), RW 0x00664485 (ported), RW 0x006644E6 (ported), RW 0x00667144 (ported), RW 0x0066B1D0 (unknown), RW 0x0066C4CA (ported), RW 0x0068BBE0 (ported), RW 0x0068D6A6 (ported), RW 0x0068E43B (ported), RW 0x0068E5A3 (ported), RW 0x0068E67A (ported), RW 0x0068E754 (unknown), RW 0x0068FA3D (ported), RW 0x00691269 (ported), RW 0x006950F3 (ported), RW 0x0069519A (ported), RW 0x00696266 (ported), RW 0x006AF150 (unknown), RW 0x006AF4B1 (unknown), RW 0x006C8652 (ported), RW 0x006C9147 (ported), RW 0x006E8BBA (unknown), RW 0x006EEBC1 (unknown), RW 0x006EF387 (ported), RW 0x006F0AFE (unknown), RW 0x006F0DA3 (unknown), RW 0x006F2F8F (ported), RW 0x006F58C3 (unknown), RW 0x006F5BB0 (ported), RW 0x006FAA6D (unknown), RW 0x006FF412 (ported), RW 0x006FF7FA (ported), RW 0x006FFBEF (unknown), RW 0x007006D7 (ported), RW 0x00701443 (ported), RW 0x0070146A (unknown), RW 0x0074109B (unknown), RW 0x00741133 (unknown), RW 0x00741450 (unknown), RW 0x00742271 (unknown), RW 0x0074379D (unknown), RW 0x00743818 (unknown), RW 0x00743BD2 (unknown), RW 0x00743C14 (unknown), RW 0x00744D6E (unknown), RW 0x00747EF4 (unknown), RW 0x0074B1B7 (unknown), RW 0x0074D326 (unknown), RW 0x0074F21A (unknown), RW 0x0074F31F (unknown), RW 0x007510EC (unknown), RW 0x00752C4D (unknown), RW 0x00765BF6 (unknown), RW 0x0076F037 (partial), RW 0x0076F115 (ported), RW 0x0076F426 (ported), RW 0x0076FFF0 (ported), RW 0x0077122F (unknown), RW 0x0077348C (ported), RW 0x007747DE (ported), RW 0x00774897 (ported), RW 0x00774E2F (ported), RW 0x00792973 (unknown), RW 0x0079FDEA (unknown), RW 0x007A3E36 (unknown), RW 0x007BBCF9 (unknown), RW 0x007C0347 (unknown), RW 0x007C9531 (unknown), RW 0x00855830 (ported), RW 0x0085730B (ported), RW 0x0085750D (ported), RW 0x0085D4B5 (unknown), RW 0x0085D5EA (ported), RW 0x0085D6AD (unknown), RW 0x0085D76C (unknown), RW 0x0085D930 (unknown), RW 0x0085D9D1 (ported), RW 0x0085DF88 (ported), RW 0x008983B5 (ported), RW 0x0089841E (ported), RW 0x008C3A33 (ported), RW 0x008DBDFF (unknown), RW 0x008E302A (ported), RW 0x00949994 (unknown), RW 0x00949A10 (unknown), RW 0x00949BD3 (unknown), RW 0x00949CA7 (unknown), RW 0x0094A29F (unknown), RW 0x0094A407 (unknown), RW 0x0099116C (unknown), RW 0x0099135D (unknown), RW 0x009913BC (unknown), RW 0x00991500 (unknown), RW 0x00991660 (unknown). Classes: AIAttackState, AIGoingIdleState, AIGuardState, AutoAbilityBehavior, DualWeaponBehavior, GettingBuiltBehavior, GiantBirdAIUpdate, PhysicsBehavior, TargetFinder, UnpauseSpecialPowerUpgrade, WeaponModeSpecialPowerUpdate.
+Functions: RW 0x004035AC (unknown), RW 0x00405553 (ported), RW 0x004627C1 (unknown), RW 0x005E2DF4 (ported), RW 0x0065F4A2 (ported), RW 0x0065F4DC (ported), RW 0x00660CA4 (unknown), RW 0x0066276B (ported), RW 0x00662A21 (unknown), RW 0x00664485 (ported), RW 0x006644E6 (ported), RW 0x00667144 (ported), RW 0x0066B1D0 (unknown), RW 0x0066C4CA (ported), RW 0x0068BBE0 (ported), RW 0x0068D6A6 (ported), RW 0x0068E43B (ported), RW 0x0068E5A3 (ported), RW 0x0068E67A (ported), RW 0x0068E754 (unknown), RW 0x0068FA3D (ported), RW 0x00691269 (ported), RW 0x006950F3 (ported), RW 0x0069519A (ported), RW 0x00696266 (ported), RW 0x006AF150 (unknown), RW 0x006AF4B1 (unknown), RW 0x006C8652 (ported), RW 0x006C9147 (ported), RW 0x006E8BBA (unknown), RW 0x006EEBC1 (unknown), RW 0x006EF387 (ported), RW 0x006F0AFE (unknown), RW 0x006F0DA3 (unknown), RW 0x006F2F8F (ported), RW 0x006F58C3 (unknown), RW 0x006F5BB0 (ported), RW 0x006FAA6D (unknown), RW 0x006FF412 (ported), RW 0x006FF7FA (ported), RW 0x006FFBEF (unknown), RW 0x007006D7 (ported), RW 0x00701443 (ported), RW 0x0070146A (unknown), RW 0x0074109B (unknown), RW 0x00741133 (unknown), RW 0x00741450 (unknown), RW 0x00742271 (unknown), RW 0x0074379D (unknown), RW 0x00743818 (unknown), RW 0x00743BD2 (unknown), RW 0x00743C14 (unknown), RW 0x00744D6E (unknown), RW 0x00747EF4 (unknown), RW 0x0074B1B7 (unknown), RW 0x0074D326 (unknown), RW 0x0074F21A (unknown), RW 0x0074F31F (unknown), RW 0x007510EC (unknown), RW 0x00752C4D (unknown), RW 0x00765BF6 (unknown), RW 0x0076F037 (partial), RW 0x0076F115 (ported), RW 0x0076F426 (ported), RW 0x0076FFF0 (ported), RW 0x0077122F (unknown), RW 0x0077348C (ported), RW 0x007747DE (ported), RW 0x00774897 (ported), RW 0x00774E2F (ported), RW 0x00792973 (unknown), RW 0x0079FDEA (unknown), RW 0x007A3E36 (unknown), RW 0x007BBCF9 (unknown), RW 0x007C0347 (unknown), RW 0x007C9531 (unknown), RW 0x00855830 (ported), RW 0x0085730B (ported), RW 0x0085750D (ported), RW 0x0085D4B5 (unknown), RW 0x0085D5EA (ported), RW 0x0085D6AD (unknown), RW 0x0085D76C (unknown), RW 0x0085D930 (unknown), RW 0x0085D9D1 (ported), RW 0x0085DF88 (ported), RW 0x008983B5 (ported), RW 0x0089841E (ported), RW 0x008C3A33 (ported), RW 0x008DBDFF (unknown), RW 0x008E302A (ported), RW 0x00949994 (unknown), RW 0x00949A10 (unknown), RW 0x00949BD3 (unknown), RW 0x00949CA7 (unknown), RW 0x0094A29F (unknown), RW 0x0094A407 (unknown), RW 0x0099116C (unknown), RW 0x0099135D (unknown), RW 0x009913BC (unknown), RW 0x00991500 (unknown), RW 0x00991660 (unknown). Classes: AIAttackState, AIGoingIdleState, AIGuardState, AutoAbilityBehavior, DualWeaponBehavior, GettingBuiltBehavior, GiantBirdAIUpdate, PhysicsBehavior, StateMachine, TargetFinder, UnpauseSpecialPowerUpgrade, WeaponModeSpecialPowerUpdate, WeaponSet.
 Candidates: 1 none/partial functions; 56 unknown status.
 Red buttons: Command_AngmarRangersIceArrowAbility, Command_AngmarRogashLeap, Command_AngmarTrollChargeAttack, Command_AxtschwingerAxeThrow, Command_BalinBaukunstMorias, Command_BalinBaukunstderZwerge, Command_BeregondMountNew, Command_DuhrburLeap, Command_FireDrakeBroodInferno, Command_FireWeaponAngmarFortressSanctumFrostball, Command_FireWeaponMenFortressBoilingOil, Command_FireWeaponMightyCatapult, Command_FireWeaponMordorFortressMagmaCauldrons, Command_FireWeaponMordorFortressSpireFireball, Command_GoblinKingGiftangriff, Command_GondorGandalfLightningSwordGeprfte, Command_GorkilBombThrow, Command_GwaihirBlastNew, Command_HalftrollChargeAttack, Command_HwaldarVerbrannteErde, Command_IndustriellerWahn, Command_IsenfurtWchterSmite, Command_MenLongShotAbility, Command_MordorBloodThirstySacrificeUruk, Command_NecromancerFrostArmorStructure, Command_PippinSongs, Command_RavenPostSecondBonus, Command_Repair, Command_RepairAI, Command_RohanGimliLeap, Command_SalemeBlendfalleDetonate, Command_SalemeExplosionsfalleDetonate, Command_SalemeGiftfalleDetonate, Command_SarumanPower, Command_SpecialAbilityAdvisorMarketTrade, Command_SpecialAbilityAgandaurLighting, Command_SpecialAbilityAlatarTeleportAlly, Command_SpecialAbilityAlatarTeleportRing, Command_SpecialAbilityAngmarGiftFortress, Command_SpecialAbilityArnorPalantirEye, Command_SpecialAbilityArrowStorm, Command_SpecialAbilityBalinExpidition, Command_SpecialAbilityBetrayer, Command_SpecialAbilityBeutekarrendesGroorks, Command_SpecialAbilityBoromirHorn, Command_SpecialAbilityBoromirHornRing, Command_SpecialAbilityBoromirTapfererWiderstand, Command_SpecialAbilityBoromirVerteidigungderweienStadt, Command_SpecialAbilityDenethorErnennung, Command_SpecialAbilityDrarSpeerfeuer, Command_SpecialAbilityDunklesWortderMacht, Command_SpecialAbilityDurinMeisterGestein, Command_SpecialAbilityDwalinErdenhammer, Command_SpecialAbilityElendilSummoned, Command_SpecialAbilityErinnerunganTelperion, Command_SpecialAbilityFortressHaradSpyTech, Command_SpecialAbilityFortressHaradSpyTechAI, Command_SpecialAbilityGaladrielVilya, Command_SpecialAbilityGloinSmash, Command_SpecialAbilityGolfimbulRaid, Command_SpecialAbilityGorbagUngolEmpowered, Command_SpecialAbilityGothmogMorgulEmpowered, Command_SpecialAbilityGrishnakGiftwolke, Command_SpecialAbilityGuldurEmpowered, Command_SpecialAbilityGulmatRunes, Command_SpecialAbilityGulmatRunesPoison, Command_SpecialAbilityGulzarMOrgulSeucheAcolyte, Command_SpecialAbilityGwahirScreechManve, Command_SpecialAbilityGwahirScreechNew, Command_SpecialAbilityHamerheldHorn, Command_SpecialAbilityKhamulGuldurEmpowered, Command_SpecialAbilityKokonausDunkelheit, Command_SpecialAbilityLoneRangerSummonFinal, Command_SpecialAbilityMalbethOnFarm, Command_SpecialAbilityMeisterderHornburg, Command_SpecialAbilityMorgulEmpowered, Command_SpecialAbilityNarinExp, Command_SpecialAbilityNaturmagierErntesegen, Command_SpecialAbilityNaturmagierHeilung, Command_SpecialAbilityNetzausDunkelheit, Command_SpecialAbilityScreechDunklerMarschall, Command_SpecialAbilitySharkuManEater, Command_SpecialAbilitySoulLink, Command_SpecialAbilitySpawnKochtopf, Command_SpecialAbilitySuladanSummonGuard, Command_SpecialAbilityTameTheBeastNew, Command_SpecialAbilityTrainArchers, Command_SpecialAbilityTrainSoldersLorgan, Command_SpecialAbilityTributeGainTwo, Command_SpecialAbilityUngolEmpowered, Command_SpecialAbilityUrukHauptmannCrossbow, Command_SpecialAbilityUrukHauptmannLanzentrger, Command_SpecialAbilityUrukHauptmannSchwertkmpfer, Command_SpecialAbilityVerkrperungderDunkelheit, Command_SpecialAbilityWargHowlNew, Command_SpecialAbilityWizardBlastGeprfte, Command_SpecialAbilityWordOfPowerEdainGeprfte, Command_SpecialAbilityWortedesElends, Command_SpecialAbilityWulfgarRufderPlnderer, Command_TheodredReparaturarbeiten, Command_ThranduilKnigDsterwalds, Command_ramridercaptain.
 Unused fields: AutoAbilityBehavior.WorkingRadius.
@@ -3561,7 +3566,7 @@ Existing task matches: #604 Port 256: Weapon-switching powers: WeaponModeSpecial
 ### G335: RW 0x00779A3D
 
 Stops: S-1364, S-1875, S-2480, S-281. Kinds: code.
-Functions: RW 0x005DA83D (unknown), RW 0x0062F397 (unknown), RW 0x0063874B (unknown), RW 0x0063AD4F (unknown), RW 0x0063F024 (unknown), RW 0x0066DE02 (ported), RW 0x0068449B (ported), RW 0x0068DF11 (ported), RW 0x0069121A (ported), RW 0x006961F1 (ported), RW 0x006A950B (ported), RW 0x006AAC78 (unknown), RW 0x006AD555 (unknown), RW 0x006AD5CA (unknown), RW 0x006AD677 (unknown), RW 0x006AD722 (unknown), RW 0x006AE36F (unknown), RW 0x006E5E16 (unknown), RW 0x007572FA (unknown), RW 0x007575F4 (unknown), RW 0x0076FAB7 (unknown), RW 0x0076FB64 (unknown), RW 0x0076FD04 (unknown), RW 0x0077229A (unknown), RW 0x00779A3D (unknown), RW 0x0077AED6 (unknown), RW 0x0077C1C0 (unknown), RW 0x007BD210 (unknown), RW 0x008656D6 (unknown), RW 0x0086570B (unknown), RW 0x008F7B3B (unknown), RW 0x008F833B (unknown), RW 0x008F9705 (unknown), RW 0x00927EC6 (unknown), RW 0x0099FB84 (unknown). Classes: AIAttackState, GameLogicDispatch, MetaMap, OptionPreferences, TerrainLogic, TerrainTrees.
+Functions: RW 0x005DA83D (unknown), RW 0x0062F397 (unknown), RW 0x0063874B (unknown), RW 0x0063AD4F (unknown), RW 0x0063F024 (unknown), RW 0x0066DE02 (ported), RW 0x0068449B (ported), RW 0x0068DF11 (ported), RW 0x0069121A (ported), RW 0x006961F1 (ported), RW 0x006A950B (ported), RW 0x006AAC78 (unknown), RW 0x006AD555 (unknown), RW 0x006AD5CA (unknown), RW 0x006AD677 (unknown), RW 0x006AD722 (unknown), RW 0x006AE36F (unknown), RW 0x006E5E16 (unknown), RW 0x007572FA (unknown), RW 0x007575F4 (unknown), RW 0x0076FAB7 (unknown), RW 0x0076FB64 (unknown), RW 0x0076FD04 (unknown), RW 0x0077229A (unknown), RW 0x00779A3D (unknown), RW 0x0077AED6 (unknown), RW 0x0077C1C0 (unknown), RW 0x007BD210 (unknown), RW 0x008656D6 (unknown), RW 0x0086570B (unknown), RW 0x008F7B3B (unknown), RW 0x008F833B (unknown), RW 0x008F9705 (unknown), RW 0x00927EC6 (unknown), RW 0x0099FB84 (unknown). Classes: AIAttackState, AiOrdersManager, GameLogicDispatch, MetaMap, OptionPreferences, TerrainLogic, TerrainTrees.
 Candidates: 0 none/partial functions; 29 unknown status.
 Red buttons: none linked.
 Unused fields: none linked.
@@ -3570,7 +3575,7 @@ Existing task matches: #490 Port 208: Force attack: from garrisons and spawners,
 ### G336: RW 0x0080ACE3
 
 Stops: S-1226, S-1401. Kinds: code.
-Functions: RW 0x0061A10F (unknown), RW 0x0061B103 (unknown), RW 0x0061B17D (ported), RW 0x0061E7EE (unknown), RW 0x0061E9CD (unknown), RW 0x0061EB52 (unknown), RW 0x0061F82B (unknown), RW 0x0061FFF2 (unknown), RW 0x006314CD (unknown), RW 0x0068AB07 (ported), RW 0x006D32E4 (ported), RW 0x0073C25F (ported), RW 0x0075CD7A (ported), RW 0x00780EF0 (unknown), RW 0x0080959A (unknown), RW 0x008096B0 (ported), RW 0x00809CA6 (ported), RW 0x00809FFB (unknown), RW 0x0080A190 (ported), RW 0x0080AA38 (ported), RW 0x0080ACE3 (unknown), RW 0x0080B339 (ported), RW 0x0080B4F5 (unknown), RW 0x0080C3AB (ported), RW 0x00A200A3 (unknown), RW 0x00A2D770 (unknown). Classes: AptCreateAHero, AptMyHero, CreateAHeroSystem, GameWorld, GroupOrder.
+Functions: RW 0x0061A10F (unknown), RW 0x0061B103 (unknown), RW 0x0061B17D (ported), RW 0x0061E7EE (unknown), RW 0x0061E9CD (unknown), RW 0x0061EB52 (unknown), RW 0x0061F82B (unknown), RW 0x0061FFF2 (unknown), RW 0x006314CD (unknown), RW 0x0068AB07 (ported), RW 0x006D32E4 (ported), RW 0x0073C25F (ported), RW 0x0075CD7A (ported), RW 0x00780EF0 (unknown), RW 0x0080959A (unknown), RW 0x008096B0 (ported), RW 0x00809CA6 (ported), RW 0x00809FFB (unknown), RW 0x0080A190 (ported), RW 0x0080AA38 (ported), RW 0x0080ACE3 (unknown), RW 0x0080B339 (ported), RW 0x0080B4F5 (unknown), RW 0x0080C3AB (ported), RW 0x00A200A3 (unknown), RW 0x00A2D770 (unknown). Classes: AptCreateAHero, AptMyHero, CreateAHeroSystem, GameInfo, GameWorld, GroupOrder.
 Candidates: 0 none/partial functions; 15 unknown status.
 Red buttons: none linked.
 Unused fields: none linked.
@@ -3579,7 +3584,7 @@ Existing task matches: none.
 ### G337: RW 0x00669932
 
 Stops: S-084, S-161, S-166, S-1750, S-7384. Kinds: code.
-Functions: RW 0x004B37A3 (ported), RW 0x004C72BE (ported), RW 0x005E2F24 (unknown), RW 0x005E3BA5 (ported), RW 0x005E4CA7 (ported), RW 0x005E4CD3 (ported), RW 0x005E4F44 (unknown), RW 0x005E5785 (unknown), RW 0x005E5D9A (unknown), RW 0x005E613F (unknown), RW 0x005E6D4F (unknown), RW 0x005E737B (unknown), RW 0x005E742E (unknown), RW 0x005E74C1 (unknown), RW 0x005E76AC (ported), RW 0x005E77E6 (unknown), RW 0x005E7CC7 (ported), RW 0x005E8865 (ported), RW 0x005E91E2 (unknown), RW 0x005E98D6 (ported), RW 0x00662A0E (ported), RW 0x00663E32 (unknown), RW 0x00664127 (unknown), RW 0x00664485 (ported), RW 0x00665186 (none), RW 0x006654AD (unknown), RW 0x00665C33 (ported), RW 0x006668CA (ported), RW 0x00668E94 (ported), RW 0x006695EF (unknown), RW 0x00669932 (ported), RW 0x0066D16E (ported), RW 0x00680A75 (ported), RW 0x0068B3CF (unknown), RW 0x0068D7AB (ported), RW 0x00694BF8 (ported), RW 0x0069519A (ported), RW 0x006D328E (ported), RW 0x006EA42D (ported), RW 0x006EB792 (unknown), RW 0x006EE600 (unknown), RW 0x006EF3C3 (unknown), RW 0x006EF591 (unknown), RW 0x006F0741 (ported), RW 0x006F1B3E (unknown), RW 0x006F5547 (unknown), RW 0x006F5BB0 (ported), RW 0x006F6286 (unknown), RW 0x006F8B6E (unknown), RW 0x006FB869 (unknown), RW 0x006FC9DA (unknown), RW 0x0070BA76 (ported), RW 0x00765565 (unknown), RW 0x007681BB (unknown), RW 0x007687EB (unknown), RW 0x00768832 (unknown), RW 0x00768AA7 (unknown), RW 0x00768AE9 (unknown), RW 0x007767A9 (ported), RW 0x00872EFC (ported), RW 0x00934E34 (ported), RW 0x0093527F (unknown), RW 0x00937EC3 (unknown), RW 0x009389CE (unknown), RW 0x009A67E1 (unknown), RW 0x009BC1A0 (unknown). Classes: AIMover, BridgeBehavior, GiantBirdAIUpdate, HordeContain, PhysicsBehavior, StealthUpdate, ThingTemplate.
+Functions: RW 0x004B37A3 (ported), RW 0x004C72BE (ported), RW 0x005E2F24 (unknown), RW 0x005E3BA5 (ported), RW 0x005E4CA7 (ported), RW 0x005E4CD3 (ported), RW 0x005E4F44 (unknown), RW 0x005E5785 (unknown), RW 0x005E5D9A (unknown), RW 0x005E613F (unknown), RW 0x005E6D4F (unknown), RW 0x005E737B (unknown), RW 0x005E742E (unknown), RW 0x005E74C1 (unknown), RW 0x005E76AC (ported), RW 0x005E77E6 (unknown), RW 0x005E7CC7 (ported), RW 0x005E8865 (ported), RW 0x005E91E2 (unknown), RW 0x005E98D6 (ported), RW 0x00662A0E (ported), RW 0x00663E32 (unknown), RW 0x00664127 (unknown), RW 0x00664485 (ported), RW 0x00665186 (none), RW 0x006654AD (unknown), RW 0x00665C33 (ported), RW 0x006668CA (ported), RW 0x00668E94 (ported), RW 0x006695EF (unknown), RW 0x00669932 (ported), RW 0x0066D16E (ported), RW 0x00680A75 (ported), RW 0x0068B3CF (unknown), RW 0x0068D7AB (ported), RW 0x00694BF8 (ported), RW 0x0069519A (ported), RW 0x006D328E (ported), RW 0x006EA42D (ported), RW 0x006EB792 (unknown), RW 0x006EE600 (unknown), RW 0x006EF3C3 (unknown), RW 0x006EF591 (unknown), RW 0x006F0741 (ported), RW 0x006F1B3E (unknown), RW 0x006F5547 (unknown), RW 0x006F5BB0 (ported), RW 0x006F6286 (unknown), RW 0x006F8B6E (unknown), RW 0x006FB869 (unknown), RW 0x006FC9DA (unknown), RW 0x0070BA76 (ported), RW 0x00765565 (unknown), RW 0x007681BB (unknown), RW 0x007687EB (unknown), RW 0x00768832 (unknown), RW 0x00768AA7 (unknown), RW 0x00768AE9 (unknown), RW 0x007767A9 (ported), RW 0x00872EFC (ported), RW 0x00934E34 (ported), RW 0x0093527F (unknown), RW 0x00937EC3 (unknown), RW 0x009389CE (unknown), RW 0x009A67E1 (unknown), RW 0x009BC1A0 (unknown). Classes: AIMover, BridgeBehavior, GiantBirdAIUpdate, HordeContain, PathfindLayer, PhysicsBehavior, StealthUpdate, ThingTemplate.
 Candidates: 1 none/partial functions; 37 unknown status.
 Red buttons: none linked.
 Unused fields: HordeContain.LivingWorldOverloadTemplate, HordeContain.RanksToJustFreeWhenAttacking, HordeContain.SplitHordeNumber, StealthUpdate.HintDetectableConditions.
@@ -3615,7 +3620,7 @@ Existing task matches: #600 Port 252: The SpecialAbilityUpdate family: the share
 ### G341: RW 0x00868759
 
 Stops: S-1107, S-4320. Kinds: code.
-Functions: RW 0x00664ABF (ported), RW 0x0068BB14 (ported), RW 0x0068DF11 (ported), RW 0x006F5547 (unknown), RW 0x006F5F65 (ported), RW 0x00743AA6 (unknown), RW 0x00743B40 (unknown), RW 0x00747EAA (unknown), RW 0x00753755 (unknown), RW 0x0077ACCE (unknown), RW 0x007CA692 (unknown), RW 0x008655DC (ported), RW 0x00865679 (unknown), RW 0x00865EB6 (ported), RW 0x008666F4 (unknown), RW 0x00868759 (unknown), RW 0x0087A361 (ported), RW 0x0087A606 (ported), RW 0x0087CE3D (ported), RW 0x0087CE66 (ported), RW 0x0087CF57 (none), RW 0x00880E29 (ported), RW 0x008810C9 (ported), RW 0x008811DD (ported), RW 0x0088121A (ported), RW 0x008812B0 (ported), RW 0x00881367 (ported), RW 0x008FA451 (unknown), RW 0x008FA4C9 (unknown), RW 0x008FA4E8 (ported), RW 0x008FA569 (unknown), RW 0x008FA702 (unknown), RW 0x0094C8D0 (unknown), RW 0x00AD1AE0 (ported). Classes: AITNGuardMachine, AITunnelNetworkGuardState, GarrisonContain, HordeGarrisonContain, HordeTransportContain, OpenContain, ProductionUpdate, TunnelContain, TunnelTracker.
+Functions: RW 0x00664ABF (ported), RW 0x0068BB14 (ported), RW 0x0068DF11 (ported), RW 0x006F5547 (unknown), RW 0x006F5F65 (ported), RW 0x00743AA6 (unknown), RW 0x00743B40 (unknown), RW 0x00747EAA (unknown), RW 0x00753755 (unknown), RW 0x0077ACCE (unknown), RW 0x007CA692 (unknown), RW 0x008655DC (ported), RW 0x00865679 (unknown), RW 0x00865EB6 (ported), RW 0x008666F4 (unknown), RW 0x00868759 (unknown), RW 0x0087A361 (ported), RW 0x0087A606 (ported), RW 0x0087CE3D (ported), RW 0x0087CE66 (ported), RW 0x0087CF57 (none), RW 0x00880E29 (ported), RW 0x008810C9 (ported), RW 0x008811DD (ported), RW 0x0088121A (ported), RW 0x008812B0 (ported), RW 0x00881367 (ported), RW 0x008FA451 (unknown), RW 0x008FA4C9 (unknown), RW 0x008FA4E8 (ported), RW 0x008FA569 (unknown), RW 0x008FA702 (unknown), RW 0x0094C8D0 (unknown), RW 0x00AD1AE0 (ported). Classes: AITNGuardMachine, AITunnelNetworkGuardState, ActionManager, GarrisonContain, HordeGarrisonContain, HordeTransportContain, OpenContain, ProductionUpdate, TunnelContain, TunnelTracker.
 Candidates: 1 none/partial functions; 15 unknown status.
 Red buttons: none linked.
 Unused fields: ProductionUpdate.BonusForType, ProductionUpdate.SetBonusModelConditionOnSpeedBonus, ProductionUpdate.SpeedBonusAudioLoop.
@@ -3633,7 +3638,7 @@ Existing task matches: #613 Port 265: HordeContain: the 65 uncited own functions
 ### G343: RW 0x00697F28
 
 Stops: S-4190, S-4220. Kinds: code.
-Functions: RW 0x005E68A4 (unknown), RW 0x005E7F12 (unknown), RW 0x00667416 (ported), RW 0x00697F28 (unknown), RW 0x006CEA67 (unknown), RW 0x007082E2 (ported), RW 0x00755174 (unknown), RW 0x00850C60 (ported), RW 0x00868FEF (ported), RW 0x0088927E (ported), RW 0x0088B863 (ported), RW 0x0088C966 (ported), RW 0x008C3388 (ported), RW 0x008CD4AA (ported), RW 0x008D27E8 (ported), RW 0x008D284A (ported), RW 0x008DBAEC (unknown), RW 0x008DC2C3 (unknown), RW 0x008F03FA (unknown), RW 0x008F3F6C (unknown), RW 0x008F5756 (unknown), RW 0x008FA569 (unknown), RW 0x0093AC0F (unknown), RW 0x00A39260 (unknown), RW 0x00A3B040 (unknown), RW 0x00B51A50 (unknown), RW 0x00B52D50 (unknown). Classes: AISkirmishPlayer, AIStateMachine, AIUpdateInterface, AIWorld, ActiveBody, BehaviorModule, DamageFilteredCreateObjectDie, DeletionUpdate, DozerAIUpdate, ObjectModule, OpenContain, PathfindZoneManager, TunnelTracker, TurretAI, UpdateModule.
+Functions: RW 0x005E68A4 (unknown), RW 0x005E7F12 (unknown), RW 0x00667416 (ported), RW 0x00697F28 (unknown), RW 0x006CEA67 (unknown), RW 0x007082E2 (ported), RW 0x00755174 (unknown), RW 0x00850C60 (ported), RW 0x00868FEF (ported), RW 0x0088927E (ported), RW 0x0088B863 (ported), RW 0x0088C966 (ported), RW 0x008C3388 (ported), RW 0x008CD4AA (ported), RW 0x008D27E8 (ported), RW 0x008D284A (ported), RW 0x008DBAEC (unknown), RW 0x008DC2C3 (unknown), RW 0x008F03FA (unknown), RW 0x008F3F6C (unknown), RW 0x008F5756 (unknown), RW 0x008FA569 (unknown), RW 0x0093AC0F (unknown), RW 0x00A39260 (unknown), RW 0x00A3B040 (unknown), RW 0x00B51A50 (unknown), RW 0x00B52D50 (unknown). Classes: AIBuilder, AISkirmishPlayer, AIStateMachine, AIUpdateInterface, AIWorld, ActiveBody, BehaviorModule, DamageFilteredCreateObjectDie, DeletionUpdate, DozerAIUpdate, LocomotorSet, ObjectModule, OpenContain, PathfindZoneManager, SkirmishAI, StateMachine, TunnelTracker, TurretAI, UpdateModule.
 Candidates: 0 none/partial functions; 16 unknown status.
 Red buttons: none linked.
 Unused fields: ActiveBody.EnteringDamagedTransitionTime, ActiveBody.ReallyDamagedAttributeModifier.
@@ -3642,7 +3647,7 @@ Existing task matches: #612 Port 264: AIUpdateInterface: the 64 uncited own func
 ### G344: RW 0x0068B244
 
 Stops: S-1020. Kinds: code.
-Functions: RW 0x0068B244 (ported), RW 0x0068E31F (ported), RW 0x0068EE53 (unknown), RW 0x00A39570 (ported), RW 0x00A3A6B0 (unknown), RW 0x00A3A700 (unknown), RW 0x00A3A860 (unknown), RW 0x00A3B450 (unknown), RW 0x00A3B4E0 (unknown), RW 0x00A3B580 (ported), RW 0x00A3BBB0 (unknown), RW 0x00A3BD20 (unknown), RW 0x00A3BDB0 (ported), RW 0x00A3C4E0 (ported), RW 0x00AD2CE0 (ported). Classes: PartitionManager.
+Functions: RW 0x0068B244 (ported), RW 0x0068E31F (ported), RW 0x0068EE53 (unknown), RW 0x00A39570 (ported), RW 0x00A3A6B0 (unknown), RW 0x00A3A700 (unknown), RW 0x00A3A860 (unknown), RW 0x00A3B450 (unknown), RW 0x00A3B4E0 (unknown), RW 0x00A3B580 (ported), RW 0x00A3BBB0 (unknown), RW 0x00A3BD20 (unknown), RW 0x00A3BDB0 (ported), RW 0x00A3C4E0 (ported), RW 0x00AD2CE0 (ported). Classes: GeometryInfo, PartitionManager.
 Candidates: 0 none/partial functions; 8 unknown status.
 Red buttons: none linked.
 Unused fields: none linked.
@@ -3660,7 +3665,7 @@ Existing task matches: none.
 ### G346: RW 0x0069990F
 
 Stops: S-141, S-7295. Kinds: code.
-Functions: RW 0x00533860 (unknown), RW 0x00534864 (unknown), RW 0x00534C4C (unknown), RW 0x0063F3BF (ported), RW 0x0064BECC (unknown), RW 0x0064BF04 (unknown), RW 0x0064FF7C (unknown), RW 0x006957B9 (unknown), RW 0x0069990F (unknown), RW 0x006AD2B5 (ported), RW 0x006AD3E6 (partial), RW 0x006CA434 (ported), RW 0x006CA4B5 (ported), RW 0x006CA7AC (ported), RW 0x006CB559 (unknown), RW 0x0087BEC8 (ported), RW 0x00884CF1 (unknown), RW 0x008A5319 (unknown), RW 0x008B97C0 (unknown), RW 0x008B980D (unknown), RW 0x008CF957 (ported), RW 0x008CFB87 (unknown), RW 0x008CFC29 (unknown), RW 0x008E3174 (ported). Classes: DefectionHelper, ObjectHelperShell, SMCHelper, WeaponBonus, WeaponBonusUpgrade, WeaponStatusHelper.
+Functions: RW 0x00533860 (unknown), RW 0x00534864 (unknown), RW 0x00534C4C (unknown), RW 0x0063F3BF (ported), RW 0x0064BECC (unknown), RW 0x0064BF04 (unknown), RW 0x0064FF7C (unknown), RW 0x006957B9 (unknown), RW 0x0069990F (unknown), RW 0x006AD2B5 (ported), RW 0x006AD3E6 (partial), RW 0x006CA434 (ported), RW 0x006CA4B5 (ported), RW 0x006CA7AC (ported), RW 0x006CB559 (unknown), RW 0x0087BEC8 (ported), RW 0x00884CF1 (unknown), RW 0x008A5319 (unknown), RW 0x008B97C0 (unknown), RW 0x008B980D (unknown), RW 0x008CF957 (ported), RW 0x008CFB87 (unknown), RW 0x008CFC29 (unknown), RW 0x008E3174 (ported). Classes: DefectionHelper, GlobalData, ObjectHelperShell, SMCHelper, WeaponBonus, WeaponBonusUpgrade, WeaponSet, WeaponStatusHelper.
 Candidates: 1 none/partial functions; 15 unknown status.
 Red buttons: none linked.
 Unused fields: none linked.
@@ -3669,7 +3674,7 @@ Existing task matches: none.
 ### G347: RW 0x005E9BEF
 
 Stops: S-1711, S-2520. Kinds: code.
-Functions: RW 0x0042D753 (unknown), RW 0x005E9BEF (unknown), RW 0x005E9D3C (unknown), RW 0x0069B7BE (unknown), RW 0x0069CE5F (unknown), RW 0x0069FF85 (unknown), RW 0x0091B5E9 (unknown), RW 0x0091B603 (unknown), RW 0x0091C2FC (unknown), RW 0x009C667F (unknown), RW 0x009C6737 (unknown), RW 0x009C6748 (unknown), RW 0x009C6765 (unknown), RW 0x009C6A7F (unknown), RW 0x009C6BB5 (unknown), RW 0x009C7113 (unknown). Classes: AptMainMenu, CommandButtonHelp, CreditsManager, GameFont, GlobalLanguage, InGameUI, MilitaryCaptionSettings, MiscAudio.
+Functions: RW 0x0042D753 (unknown), RW 0x005E9BEF (unknown), RW 0x005E9D3C (unknown), RW 0x0069B7BE (unknown), RW 0x0069CE5F (unknown), RW 0x0069FF85 (unknown), RW 0x0091B5E9 (unknown), RW 0x0091B603 (unknown), RW 0x0091C2FC (unknown), RW 0x009C667F (unknown), RW 0x009C6737 (unknown), RW 0x009C6748 (unknown), RW 0x009C6765 (unknown), RW 0x009C6A7F (unknown), RW 0x009C6BB5 (unknown), RW 0x009C7113 (unknown). Classes: AptMainMenu, CommandButtonHelp, CreditsManager, GameFont, GlobalLanguage, InGameUI, MilitaryCaptionSettings, MiscAudio, UnicodeString.
 Candidates: 0 none/partial functions; 16 unknown status.
 Red buttons: none linked.
 Unused fields: none linked.
@@ -3687,7 +3692,7 @@ Existing task matches: none.
 ### G349: RW 0x008F3EFE
 
 Stops: S-7188. Kinds: project.
-Functions: RW 0x008F3EFE (unknown), RW 0x008F54BA (unknown), RW 0x008F6DE9 (unknown), RW 0x008F7F2B (unknown), RW 0x008F805D (unknown), RW 0x008F81BE (unknown), RW 0x008F9487 (unknown), RW 0x008F994F (unknown), RW 0x00A3CFA4 (ported). Classes: GameLogicSettings, TeamPrototype.
+Functions: RW 0x008F3EFE (unknown), RW 0x008F54BA (unknown), RW 0x008F6DE9 (unknown), RW 0x008F7F2B (unknown), RW 0x008F805D (unknown), RW 0x008F81BE (unknown), RW 0x008F9487 (unknown), RW 0x008F994F (unknown), RW 0x00A3CFA4 (ported). Classes: GameLogicSettings, SkirmishAI, TeamPrototype.
 Candidates: 0 none/partial functions; 8 unknown status.
 Red buttons: none linked.
 Unused fields: none linked.
@@ -3705,7 +3710,7 @@ Existing task matches: #465 Port 198: SpawnBehavior: the spawn interface's attac
 ### G351: RW 0x00885CD5
 
 Stops: S-140, S-924. Kinds: code.
-Functions: RW 0x00625685 (unknown), RW 0x006533E5 (unknown), RW 0x006CEF6D (ported), RW 0x006CF3AE (unknown), RW 0x006CF3D2 (ported), RW 0x0077A0B2 (unknown), RW 0x007C46A0 (unknown), RW 0x0082D925 (ported), RW 0x008554D6 (ported), RW 0x0085C5DE (ported), RW 0x0085C655 (unknown), RW 0x0085C704 (ported), RW 0x0085C75E (ported), RW 0x0085C8C9 (ported), RW 0x00885A6F (unknown), RW 0x00885CD5 (ported), RW 0x00885D90 (ported), RW 0x0088B7B0 (unknown), RW 0x0088B84F (ported), RW 0x0088F0AA (ported), RW 0x0088F554 (ported), RW 0x0088F731 (unknown), RW 0x00898A2D (unknown), RW 0x00898A5D (unknown), RW 0x00898B7C (ported), RW 0x00898C17 (unknown), RW 0x00898EE8 (unknown), RW 0x0089903C (ported), RW 0x008BBCB6 (ported), RW 0x008BBD1E (unknown), RW 0x008BBE71 (ported), RW 0x008BBEFE (ported), RW 0x008BBF5A (ported), RW 0x008BBF93 (ported), RW 0x008C942D (unknown), RW 0x008C94D7 (ported), RW 0x008C9629 (ported), RW 0x008C98AA (unknown), RW 0x008CD1F6 (ported), RW 0x008CD256 (ported), RW 0x008CD297 (ported), RW 0x008CD313 (unknown), RW 0x00B6C480 (ported). Classes: ActiveBody, AudioLoopUpgrade, ClickReactionBehavior, CommandButtonHuntUpdate, CritterEmitterUpdate, DeletionUpdate, FireWeaponUpdate, FireWeaponWhenDamagedBehavior, GrabPassengerSpecialPower, HordeContain, ModEngineFeature, ObjectWeapons.
+Functions: RW 0x00625685 (unknown), RW 0x006533E5 (unknown), RW 0x006CEF6D (ported), RW 0x006CF3AE (unknown), RW 0x006CF3D2 (ported), RW 0x0077A0B2 (unknown), RW 0x007C46A0 (unknown), RW 0x0082D925 (ported), RW 0x008554D6 (ported), RW 0x0085C5DE (ported), RW 0x0085C655 (unknown), RW 0x0085C704 (ported), RW 0x0085C75E (ported), RW 0x0085C8C9 (ported), RW 0x00885A6F (unknown), RW 0x00885CD5 (ported), RW 0x00885D90 (ported), RW 0x0088B7B0 (unknown), RW 0x0088B84F (ported), RW 0x0088F0AA (ported), RW 0x0088F554 (ported), RW 0x0088F731 (unknown), RW 0x00898A2D (unknown), RW 0x00898A5D (unknown), RW 0x00898B7C (ported), RW 0x00898C17 (unknown), RW 0x00898EE8 (unknown), RW 0x0089903C (ported), RW 0x008BBCB6 (ported), RW 0x008BBD1E (unknown), RW 0x008BBE71 (ported), RW 0x008BBEFE (ported), RW 0x008BBF5A (ported), RW 0x008BBF93 (ported), RW 0x008C942D (unknown), RW 0x008C94D7 (ported), RW 0x008C9629 (ported), RW 0x008C98AA (unknown), RW 0x008CD1F6 (ported), RW 0x008CD256 (ported), RW 0x008CD297 (ported), RW 0x008CD313 (unknown), RW 0x00B6C480 (ported). Classes: ActiveBody, AudioLoopUpgrade, ClickReactionBehavior, CommandButtonHuntUpdate, CritterEmitterUpdate, DeletionUpdate, FireWeaponUpdate, FireWeaponWhenDamagedBehavior, GrabPassengerSpecialPower, HordeContain, ModEngineFeature, ObjectWeapons, WeaponSet.
 Candidates: 0 none/partial functions; 17 unknown status.
 Red buttons: none linked.
 Unused fields: ActiveBody.EnteringDamagedTransitionTime, ActiveBody.ReallyDamagedAttributeModifier, HordeContain.LivingWorldOverloadTemplate, HordeContain.RanksToJustFreeWhenAttacking, HordeContain.SplitHordeNumber.
@@ -3714,7 +3719,7 @@ Existing task matches: #613 Port 265: HordeContain: the 65 uncited own functions
 ### G352: RW 0x009288D0
 
 Stops: S-1406, S-3701. Kinds: code.
-Functions: RW 0x005FC95B (unknown), RW 0x006199EB (unknown), RW 0x00619D3B (unknown), RW 0x0061A424 (unknown), RW 0x00800A25 (unknown), RW 0x00801289 (unknown), RW 0x0080204C (unknown), RW 0x008023C1 (unknown), RW 0x00802DBA (unknown), RW 0x00841A9E (unknown), RW 0x00842C93 (unknown), RW 0x00843B4C (unknown), RW 0x00927FEF (unknown), RW 0x009288D0 (unknown), RW 0x00928A29 (unknown), RW 0x009293F5 (unknown), RW 0x009609D9 (unknown). Classes: AptSkirmish, PlayerTemplate, SkirmishGameInfo.
+Functions: RW 0x005FC95B (unknown), RW 0x006199EB (unknown), RW 0x00619D3B (unknown), RW 0x0061A424 (unknown), RW 0x00800A25 (unknown), RW 0x00801289 (unknown), RW 0x0080204C (unknown), RW 0x008023C1 (unknown), RW 0x00802DBA (unknown), RW 0x00841A9E (unknown), RW 0x00842C93 (unknown), RW 0x00843B4C (unknown), RW 0x00927FEF (unknown), RW 0x009288D0 (unknown), RW 0x00928A29 (unknown), RW 0x009293F5 (unknown), RW 0x009609D9 (unknown). Classes: AptSkirmish, GameInfo, GameSlot, PlayerTemplate, SkirmishGameInfo.
 Candidates: 0 none/partial functions; 17 unknown status.
 Red buttons: none linked.
 Unused fields: none linked.
@@ -3723,7 +3728,7 @@ Existing task matches: none.
 ### G353: RW 0x0082FCAB
 
 Stops: S-415, S-416. Kinds: code.
-Functions: RW 0x0082FCAB (unknown), RW 0x008E3FD6 (unknown), RW 0x008E4591 (ported), RW 0x008E480C (ported), RW 0x008F069A (ported), RW 0x008F0C47 (ported), RW 0x009A03A1 (unknown), RW 0x009A0426 (unknown), RW 0x009A051D (ported), RW 0x009A05DB (unknown), RW 0x009A0705 (unknown), RW 0x009A0838 (ported), RW 0x009A0993 (unknown), RW 0x009A0B26 (unknown), RW 0x009A0BC0 (unknown), RW 0x009A0D4F (unknown), RW 0x009A0E2B (unknown), RW 0x009A1051 (unknown), RW 0x009A1196 (unknown), RW 0x009ED764 (unknown), RW 0x009EDA17 (unknown), RW 0x009EDB44 (unknown), RW 0x009EDBC6 (unknown). Classes: ArmyDefinition, CommandPoints.
+Functions: RW 0x0082FCAB (unknown), RW 0x008E3FD6 (unknown), RW 0x008E4591 (ported), RW 0x008E480C (ported), RW 0x008F069A (ported), RW 0x008F0C47 (ported), RW 0x009A03A1 (unknown), RW 0x009A0426 (unknown), RW 0x009A051D (ported), RW 0x009A05DB (unknown), RW 0x009A0705 (unknown), RW 0x009A0838 (ported), RW 0x009A0993 (unknown), RW 0x009A0B26 (unknown), RW 0x009A0BC0 (unknown), RW 0x009A0D4F (unknown), RW 0x009A0E2B (unknown), RW 0x009A1051 (unknown), RW 0x009A1196 (unknown), RW 0x009ED764 (unknown), RW 0x009EDA17 (unknown), RW 0x009EDB44 (unknown), RW 0x009EDBC6 (unknown). Classes: AIUnitBuilder, ArmyDefinition, BuildAssistant, CommandPoints, SkirmishAI.
 Candidates: 0 none/partial functions; 17 unknown status.
 Red buttons: none linked.
 Unused fields: none linked.
@@ -3732,7 +3737,7 @@ Existing task matches: none.
 ### G354: RW 0x008A1B9F
 
 Stops: S-1180, S-202, S-203, S-2452, S-486, S-7294, S-7323, S-855. Kinds: code, project.
-Functions: RW 0x0044DE58 (unknown), RW 0x0048B7B1 (unknown), RW 0x005DD1F3 (unknown), RW 0x00608397 (unknown), RW 0x00608504 (unknown), RW 0x006092A9 (ported), RW 0x0060A1D5 (unknown), RW 0x0060C1C9 (ported), RW 0x00657A6E (unknown), RW 0x00659CE0 (unknown), RW 0x0066F5E5 (ported), RW 0x0067B4B7 (ported), RW 0x0068B749 (ported), RW 0x006917BB (unknown), RW 0x0069264D (unknown), RW 0x006939DF (ported), RW 0x00693A1A (ported), RW 0x00694BF8 (ported), RW 0x00698F06 (ported), RW 0x006996DC (unknown), RW 0x006A950B (ported), RW 0x006AA450 (unknown), RW 0x006ABD0B (ported), RW 0x006ABDC2 (ported), RW 0x006D5B23 (unknown), RW 0x006D5BD9 (unknown), RW 0x006D881F (ported), RW 0x006D8E2B (unknown), RW 0x006D93EB (ported), RW 0x006D98FA (ported), RW 0x006D9A71 (unknown), RW 0x006D9B4D (ported), RW 0x006D9BF3 (ported), RW 0x006E2D92 (unknown), RW 0x006E2E18 (unknown), RW 0x006E85E9 (ported), RW 0x006EF225 (unknown), RW 0x006F85A6 (unknown), RW 0x006FE456 (unknown), RW 0x00715C81 (unknown), RW 0x0071C7E4 (ported), RW 0x0071C81A (unknown), RW 0x0071E1E7 (unknown), RW 0x0071EBDA (unknown), RW 0x0071F207 (unknown), RW 0x0071FC08 (unknown), RW 0x0073A429 (unknown), RW 0x00758DE5 (unknown), RW 0x00759A1C (ported), RW 0x0075A243 (ported), RW 0x007767A9 (ported), RW 0x00779544 (unknown), RW 0x00779A3D (unknown), RW 0x00780EB6 (unknown), RW 0x007812B2 (unknown), RW 0x007815E0 (unknown), RW 0x00782214 (unknown), RW 0x00792DBD (ported), RW 0x007996D3 (unknown), RW 0x0079A5EC (ported), RW 0x0079D322 (ported), RW 0x0079D833 (ported), RW 0x007A07D8 (unknown), RW 0x007A0ECD (ported), RW 0x007BC221 (unknown), RW 0x007BC250 (unknown), RW 0x007BD6A8 (unknown), RW 0x007BED64 (unknown), RW 0x007BEE14 (unknown), RW 0x007C0B61 (unknown), RW 0x007C2AAC (unknown), RW 0x007C37C9 (unknown), RW 0x007C3F9B (unknown), RW 0x007C595A (unknown), RW 0x007C7D12 (unknown), RW 0x007CAFA5 (unknown), RW 0x007D01C0 (unknown), RW 0x007D5270 (unknown), RW 0x007E4866 (unknown), RW 0x007E4F6A (unknown), RW 0x007E5142 (unknown), RW 0x007E5BF4 (unknown), RW 0x007E64CD (unknown), RW 0x007E9356 (unknown), RW 0x007E9F44 (unknown), RW 0x007EB7CD (unknown), RW 0x0081ACD7 (ported), RW 0x0086EC2D (ported), RW 0x0087566B (ported), RW 0x0088459B (unknown), RW 0x0088D993 (unknown), RW 0x0089B7AE (unknown), RW 0x008A03A0 (ported), RW 0x008A0FDA (ported), RW 0x008A1666 (ported), RW 0x008A1B9F (ported), RW 0x008A3AB4 (ported), RW 0x008A3DD5 (ported), RW 0x008B307E (ported), RW 0x008B3637 (unknown), RW 0x008B36B2 (unknown), RW 0x008B3744 (unknown), RW 0x008B38A2 (unknown), RW 0x008B3A35 (ported), RW 0x008B3C54 (unknown), RW 0x008B4271 (none), RW 0x008C3FA3 (ported), RW 0x008C553F (ported), RW 0x008CDCE9 (ported), RW 0x008F7599 (unknown). Classes: ActiveBody, CastleBehavior, ControlBar, HordeContain, InGameHud, InGameUI, MiscAudio, ProductionQueueHordeContain, ProductionUpdate, RespawnBody, RespawnUpdate, ScriptActions, ScriptConditions, ScriptEngine, ThingTemplate, UpgradeTemplate.
+Functions: RW 0x0044DE58 (unknown), RW 0x0048B7B1 (unknown), RW 0x005DD1F3 (unknown), RW 0x00608397 (unknown), RW 0x00608504 (unknown), RW 0x006092A9 (ported), RW 0x0060A1D5 (unknown), RW 0x0060C1C9 (ported), RW 0x00657A6E (unknown), RW 0x00659CE0 (unknown), RW 0x0066F5E5 (ported), RW 0x0067B4B7 (ported), RW 0x0068B749 (ported), RW 0x006917BB (unknown), RW 0x0069264D (unknown), RW 0x006939DF (ported), RW 0x00693A1A (ported), RW 0x00694BF8 (ported), RW 0x00698F06 (ported), RW 0x006996DC (unknown), RW 0x006A950B (ported), RW 0x006AA450 (unknown), RW 0x006ABD0B (ported), RW 0x006ABDC2 (ported), RW 0x006D5B23 (unknown), RW 0x006D5BD9 (unknown), RW 0x006D881F (ported), RW 0x006D8E2B (unknown), RW 0x006D93EB (ported), RW 0x006D98FA (ported), RW 0x006D9A71 (unknown), RW 0x006D9B4D (ported), RW 0x006D9BF3 (ported), RW 0x006E2D92 (unknown), RW 0x006E2E18 (unknown), RW 0x006E85E9 (ported), RW 0x006EF225 (unknown), RW 0x006F85A6 (unknown), RW 0x006FE456 (unknown), RW 0x00715C81 (unknown), RW 0x0071C7E4 (ported), RW 0x0071C81A (unknown), RW 0x0071E1E7 (unknown), RW 0x0071EBDA (unknown), RW 0x0071F207 (unknown), RW 0x0071FC08 (unknown), RW 0x0073A429 (unknown), RW 0x00758DE5 (unknown), RW 0x00759A1C (ported), RW 0x0075A243 (ported), RW 0x007767A9 (ported), RW 0x00779544 (unknown), RW 0x00779A3D (unknown), RW 0x00780EB6 (unknown), RW 0x007812B2 (unknown), RW 0x007815E0 (unknown), RW 0x00782214 (unknown), RW 0x00792DBD (ported), RW 0x007996D3 (unknown), RW 0x0079A5EC (ported), RW 0x0079D322 (ported), RW 0x0079D833 (ported), RW 0x007A07D8 (unknown), RW 0x007A0ECD (ported), RW 0x007BC221 (unknown), RW 0x007BC250 (unknown), RW 0x007BD6A8 (unknown), RW 0x007BED64 (unknown), RW 0x007BEE14 (unknown), RW 0x007C0B61 (unknown), RW 0x007C2AAC (unknown), RW 0x007C37C9 (unknown), RW 0x007C3F9B (unknown), RW 0x007C595A (unknown), RW 0x007C7D12 (unknown), RW 0x007CAFA5 (unknown), RW 0x007D01C0 (unknown), RW 0x007D5270 (unknown), RW 0x007E4866 (unknown), RW 0x007E4F6A (unknown), RW 0x007E5142 (unknown), RW 0x007E5BF4 (unknown), RW 0x007E64CD (unknown), RW 0x007E9356 (unknown), RW 0x007E9F44 (unknown), RW 0x007EB7CD (unknown), RW 0x0081ACD7 (ported), RW 0x0086EC2D (ported), RW 0x0087566B (ported), RW 0x0088459B (unknown), RW 0x0088D993 (unknown), RW 0x0089B7AE (unknown), RW 0x008A03A0 (ported), RW 0x008A0FDA (ported), RW 0x008A1666 (ported), RW 0x008A1B9F (ported), RW 0x008A3AB4 (ported), RW 0x008A3DD5 (ported), RW 0x008B307E (ported), RW 0x008B3637 (unknown), RW 0x008B36B2 (unknown), RW 0x008B3744 (unknown), RW 0x008B38A2 (unknown), RW 0x008B3A35 (ported), RW 0x008B3C54 (unknown), RW 0x008B4271 (none), RW 0x008C3FA3 (ported), RW 0x008C553F (ported), RW 0x008CDCE9 (ported), RW 0x008F7599 (unknown). Classes: ActiveBody, CastleBehavior, ControlBar, GlobalData, HordeContain, InGameHud, InGameUI, MiscAudio, ProductionQueueHordeContain, ProductionUpdate, RespawnBody, RespawnUpdate, ScriptActions, ScriptConditions, ScriptEngine, ThingTemplate, UpgradeTemplate.
 Candidates: 1 none/partial functions; 68 unknown status.
 Red buttons: none linked.
 Unused fields: ActiveBody.EnteringDamagedTransitionTime, ActiveBody.ReallyDamagedAttributeModifier, CastleBehavior.CrewPrepareFX, CastleBehavior.CrewPrepareInterval, CastleBehavior.CrewReleaseFX, HordeContain.LivingWorldOverloadTemplate, HordeContain.RanksToJustFreeWhenAttacking, HordeContain.SplitHordeNumber, ProductionUpdate.BonusForType, ProductionUpdate.SetBonusModelConditionOnSpeedBonus, ProductionUpdate.SpeedBonusAudioLoop, RespawnBody.DamagedAttributeModifier, RespawnBody.ReallyDamagedAttributeModifier, RespawnUpdate.DeathAnimationTime.
@@ -3750,7 +3755,7 @@ Existing task matches: none.
 ### G356: linked stops S-4751
 
 Stops: S-4751. Kinds: code.
-Functions: RW 0x00800ACE (unknown), RW 0x00801360 (unknown), RW 0x00802B04 (unknown), RW 0x008311B1 (unknown), RW 0x0084A8AD (unknown), RW 0x00851E97 (ported), RW 0x009881DE (unknown), RW 0x0098824E (unknown), RW 0x00988418 (unknown), RW 0x009888B7 (unknown). Classes: GameSorter.
+Functions: RW 0x00800ACE (unknown), RW 0x00801360 (unknown), RW 0x00802B04 (unknown), RW 0x008311B1 (unknown), RW 0x0084A8AD (unknown), RW 0x00851E97 (ported), RW 0x009881DE (unknown), RW 0x0098824E (unknown), RW 0x00988418 (unknown), RW 0x009888B7 (unknown). Classes: GameInfo, GameSorter.
 Candidates: 0 none/partial functions; 9 unknown status.
 Red buttons: none linked.
 Unused fields: none linked.
@@ -3768,7 +3773,7 @@ Existing task matches: none.
 ### G358: RW 0x0082FF49
 
 Stops: S-7336. Kinds: code.
-Functions: RW 0x0082FF49 (unknown), RW 0x008EE765 (unknown), RW 0x009A1696 (unknown), RW 0x009B8D81 (unknown), RW 0x009B9B9B (unknown), RW 0x009BAA0E (unknown), RW 0x009EFAD6 (unknown), RW 0x009EFAF0 (unknown), RW 0x009EFAFB (unknown). Classes: AITactic, ArmyDefinition.
+Functions: RW 0x0082FF49 (unknown), RW 0x008EE765 (unknown), RW 0x009A1696 (unknown), RW 0x009B8D81 (unknown), RW 0x009B9B9B (unknown), RW 0x009BAA0E (unknown), RW 0x009EFAD6 (unknown), RW 0x009EFAF0 (unknown), RW 0x009EFAFB (unknown). Classes: AITactic, AITacticsGenerator, ArmyDefinition.
 Candidates: 0 none/partial functions; 9 unknown status.
 Red buttons: none linked.
 Unused fields: none linked.
@@ -3777,7 +3782,7 @@ Existing task matches: none.
 ### G359: RW 0x00643374
 
 Stops: S-1061, S-1831, S-451, S-657, S-7197. Kinds: code, project.
-Functions: RW 0x004B3D8D (ported), RW 0x006429AD (unknown), RW 0x00643374 (unknown), RW 0x0066C4CA (ported), RW 0x0066E58F (ported), RW 0x0068B3CF (unknown), RW 0x0068F3F2 (unknown), RW 0x00696266 (ported), RW 0x006A9999 (ported), RW 0x006AF60A (unknown), RW 0x006CA525 (ported), RW 0x00754B18 (unknown), RW 0x00756E5C (unknown), RW 0x007571A7 (unknown), RW 0x007572FA (unknown), RW 0x0075748C (unknown), RW 0x0076CDFB (ported), RW 0x00770D27 (unknown), RW 0x00774897 (ported), RW 0x0077B0C8 (unknown), RW 0x0077B2A7 (unknown), RW 0x00793DB9 (unknown), RW 0x0079561F (unknown), RW 0x007958DD (unknown), RW 0x00797A96 (ported), RW 0x0079DBC6 (unknown), RW 0x0079DF0E (unknown), RW 0x0079DFC2 (ported), RW 0x0079DFFA (unknown), RW 0x0079E2A8 (unknown), RW 0x0079E404 (unknown), RW 0x0079ECCB (unknown), RW 0x0079F0E1 (ported), RW 0x0079F303 (ported), RW 0x0079F486 (ported), RW 0x0079F704 (unknown), RW 0x00853EDF (ported), RW 0x008566DF (ported), RW 0x00856C7E (none), RW 0x00856E1F (unknown), RW 0x00856E5C (unknown), RW 0x00858701 (ported), RW 0x00875FB2 (ported), RW 0x008840FC (none), RW 0x0088C5C7 (unknown), RW 0x0088CFFE (ported), RW 0x0088D272 (ported), RW 0x008A11D2 (ported), RW 0x008A13EE (ported), RW 0x008AD6A4 (ported), RW 0x008B140D (unknown), RW 0x008B228C (unknown), RW 0x0094D4F5 (unknown), RW 0x0094D79D (unknown), RW 0x0094DA57 (unknown), RW 0x0094DB32 (unknown), RW 0x0094DC37 (unknown), RW 0x0094DF1B (unknown), RW 0x0094DF97 (unknown), RW 0x0094E184 (unknown), RW 0x0094E232 (unknown), RW 0x0094E857 (unknown), RW 0x0094ED4C (unknown), RW 0x00A28B60 (unknown), RW 0x00A28BC0 (unknown), RW 0x00A28D70 (unknown), RW 0x00AAD950 (unknown), RW 0x00AB9CA0 (unknown). Classes: AIOrdersManager, AIWorld, AttackObjectGroupOrder, CastleUpgrade, GarrisonObjectGroupOrder, MoveToFormationGroupOrder, MoveToGroupOrder, ObjectOrderQueue, PlayerList, ScoreKeeper, WallUpgradeUpdate.
+Functions: RW 0x004B3D8D (ported), RW 0x006429AD (unknown), RW 0x00643374 (unknown), RW 0x0066C4CA (ported), RW 0x0066E58F (ported), RW 0x0068B3CF (unknown), RW 0x0068F3F2 (unknown), RW 0x00696266 (ported), RW 0x006A9999 (ported), RW 0x006AF60A (unknown), RW 0x006CA525 (ported), RW 0x00754B18 (unknown), RW 0x00756E5C (unknown), RW 0x007571A7 (unknown), RW 0x007572FA (unknown), RW 0x0075748C (unknown), RW 0x0076CDFB (ported), RW 0x00770D27 (unknown), RW 0x00774897 (ported), RW 0x0077B0C8 (unknown), RW 0x0077B2A7 (unknown), RW 0x00793DB9 (unknown), RW 0x0079561F (unknown), RW 0x007958DD (unknown), RW 0x00797A96 (ported), RW 0x0079DBC6 (unknown), RW 0x0079DF0E (unknown), RW 0x0079DFC2 (ported), RW 0x0079DFFA (unknown), RW 0x0079E2A8 (unknown), RW 0x0079E404 (unknown), RW 0x0079ECCB (unknown), RW 0x0079F0E1 (ported), RW 0x0079F303 (ported), RW 0x0079F486 (ported), RW 0x0079F704 (unknown), RW 0x00853EDF (ported), RW 0x008566DF (ported), RW 0x00856C7E (none), RW 0x00856E1F (unknown), RW 0x00856E5C (unknown), RW 0x00858701 (ported), RW 0x00875FB2 (ported), RW 0x008840FC (none), RW 0x0088C5C7 (unknown), RW 0x0088CFFE (ported), RW 0x0088D272 (ported), RW 0x008A11D2 (ported), RW 0x008A13EE (ported), RW 0x008AD6A4 (ported), RW 0x008B140D (unknown), RW 0x008B228C (unknown), RW 0x0094D4F5 (unknown), RW 0x0094D79D (unknown), RW 0x0094DA57 (unknown), RW 0x0094DB32 (unknown), RW 0x0094DC37 (unknown), RW 0x0094DF1B (unknown), RW 0x0094DF97 (unknown), RW 0x0094E184 (unknown), RW 0x0094E232 (unknown), RW 0x0094E857 (unknown), RW 0x0094ED4C (unknown), RW 0x00A28B60 (unknown), RW 0x00A28BC0 (unknown), RW 0x00A28D70 (unknown), RW 0x00AAD950 (unknown), RW 0x00AB9CA0 (unknown). Classes: AIOrdersManager, AIWorld, AttackObjectGroupOrder, BuildAssistant, CastleUpgrade, GarrisonObjectGroupOrder, GlobalData, MoveToFormationGroupOrder, MoveToGroupOrder, ObjectOrderQueue, PlayerList, ScoreKeeper, WallUpgradeUpdate.
 Candidates: 2 none/partial functions; 44 unknown status.
 Red buttons: none linked.
 Unused fields: none linked.
@@ -3786,7 +3791,7 @@ Existing task matches: none.
 ### G360: RW 0x0046448B
 
 Stops: S-113, S-4642. Kinds: code.
-Functions: RW 0x00464453 (unknown), RW 0x0046448B (unknown), RW 0x004645EE (unknown), RW 0x00464930 (unknown), RW 0x004B1B5A (ported), RW 0x004CE61A (unknown), RW 0x004CE74B (unknown), RW 0x004CF121 (unknown), RW 0x004CF246 (none), RW 0x004CF2B5 (none), RW 0x004CF5EE (ported), RW 0x004D054B (unknown), RW 0x004D12FA (unknown), RW 0x004D1417 (unknown), RW 0x004D1981 (unknown), RW 0x004D20C6 (unknown), RW 0x004D3376 (unknown), RW 0x00671E56 (unknown), RW 0x00676711 (ported), RW 0x00707FFF (unknown), RW 0x007641A2 (unknown), RW 0x00764483 (unknown), RW 0x008CEF91 (ported), RW 0x009F3A3C (ported). Classes: ClientBuffs, FXPlayback, LightPulsePool, PlayerHealSpecialPower, W3DBuffDraw, W3DBuffDrawModuleData, W3DDebrisDraw, W3DDefaultDraw, W3DLaserDraw, W3DLightDraw, W3DLightDrawModuleData, W3DProjectileStreamDraw, W3DProjectileStreamDrawModuleData, W3DStreakDraw, W3DTornadoDraw, W3DTornadoDrawModuleData.
+Functions: RW 0x00464453 (unknown), RW 0x0046448B (unknown), RW 0x004645EE (unknown), RW 0x00464930 (unknown), RW 0x004B1B5A (ported), RW 0x004CE61A (unknown), RW 0x004CE74B (unknown), RW 0x004CF121 (unknown), RW 0x004CF246 (none), RW 0x004CF2B5 (none), RW 0x004CF5EE (ported), RW 0x004D054B (unknown), RW 0x004D12FA (unknown), RW 0x004D1417 (unknown), RW 0x004D1981 (unknown), RW 0x004D20C6 (unknown), RW 0x004D3376 (unknown), RW 0x00671E56 (unknown), RW 0x00676711 (ported), RW 0x00707FFF (unknown), RW 0x007641A2 (unknown), RW 0x00764483 (unknown), RW 0x008CEF91 (ported), RW 0x009F3A3C (ported). Classes: BuffInstance, BuffManager, ClientBuffs, FXPlayback, LightPulsePool, PlayerHealSpecialPower, W3DBuffDraw, W3DBuffDrawModuleData, W3DDebrisDraw, W3DDefaultDraw, W3DLaserDraw, W3DLightDraw, W3DLightDrawModuleData, W3DProjectileStreamDraw, W3DProjectileStreamDrawModuleData, W3DStreakDraw, W3DTornadoDraw, W3DTornadoDrawModuleData.
 Candidates: 2 none/partial functions; 17 unknown status.
 Red buttons: Command_BalinBaukunstMorias, Command_BalinBaukunstderZwerge, Command_TheodredReparaturarbeiten.
 Unused fields: W3DLightDraw.Radius, W3DProjectileStreamDraw.MaxSegments, W3DProjectileStreamDraw.ScrollRate, W3DProjectileStreamDraw.Texture, W3DProjectileStreamDraw.TileFactor, W3DProjectileStreamDraw.Width.
@@ -3804,7 +3809,7 @@ Existing task matches: #457 Local 60: LargeGroupAudio runtime as RotWK: members 
 ### G362: RW 0x00470F44
 
 Stops: S-033, S-4891. Kinds: code.
-Functions: RW 0x00467073 (unknown), RW 0x00468CC0 (unknown), RW 0x0046DEA9 (unknown), RW 0x0046F52A (unknown), RW 0x0046F6DB (unknown), RW 0x00470F44 (unknown), RW 0x0048470D (unknown), RW 0x004948AB (unknown), RW 0x00494DBA (unknown), RW 0x00495228 (unknown), RW 0x00497D00 (unknown), RW 0x004AC4ED (unknown), RW 0x004E28F0 (unknown), RW 0x004E44FB (unknown), RW 0x004EDE13 (unknown), RW 0x00614AB6 (unknown), RW 0x00614C71 (unknown), RW 0x0061501A (unknown), RW 0x00615124 (unknown). Classes: CloudEffect, GameWorld, GodotWeather, MapObjectBuilder, MapTerrainBuilder, TerrainLogic, TerrainScorchBuffer.
+Functions: RW 0x00467073 (unknown), RW 0x00468CC0 (unknown), RW 0x0046DEA9 (unknown), RW 0x0046F52A (unknown), RW 0x0046F6DB (unknown), RW 0x00470F44 (unknown), RW 0x0048470D (unknown), RW 0x004948AB (unknown), RW 0x00494DBA (unknown), RW 0x00495228 (unknown), RW 0x00497D00 (unknown), RW 0x004AC4ED (unknown), RW 0x004E28F0 (unknown), RW 0x004E44FB (unknown), RW 0x004EDE13 (unknown), RW 0x00614AB6 (unknown), RW 0x00614C71 (unknown), RW 0x0061501A (unknown), RW 0x00615124 (unknown). Classes: CloudEffect, GameWorld, GlobalData, GodotWeather, MapObjectBuilder, MapTerrainBuilder, TerrainLogic, TerrainScorchBuffer.
 Candidates: 0 none/partial functions; 19 unknown status.
 Red buttons: none linked.
 Unused fields: none linked.
@@ -3849,7 +3854,7 @@ Existing task matches: #613 Port 265: HordeContain: the 65 uncited own functions
 ### G367: RW 0x00814EFA
 
 Stops: S-1333, S-1480, S-1911, S-2342. Kinds: code.
-Functions: RW 0x004A1130 (unknown), RW 0x0060E8DB (ported), RW 0x00630078 (unknown), RW 0x006DD947 (unknown), RW 0x007018E0 (unknown), RW 0x007019A0 (unknown), RW 0x00701F81 (unknown), RW 0x00702689 (unknown), RW 0x00702E2B (unknown), RW 0x007052BE (unknown), RW 0x00718D93 (unknown), RW 0x007190B4 (unknown), RW 0x0071928A (unknown), RW 0x007234EC (unknown), RW 0x007237F8 (unknown), RW 0x00779F20 (unknown), RW 0x007F2440 (unknown), RW 0x007F2A76 (unknown), RW 0x0081487B (unknown), RW 0x00814E3A (unknown), RW 0x00814EFA (unknown), RW 0x00845830 (unknown), RW 0x0097572C (unknown), RW 0x00975942 (unknown), RW 0x00975C3A (unknown), RW 0x00975D3F (unknown), RW 0x00975E04 (unknown), RW 0x00975F23 (unknown), RW 0x0097606B (unknown), RW 0x0097640C (unknown), RW 0x00976497 (unknown), RW 0x00976877 (unknown), RW 0x00976B49 (unknown), RW 0x00976C4D (unknown), RW 0x00976D64 (unknown), RW 0x00976F59 (unknown), RW 0x009770CF (unknown), RW 0x009772E6 (unknown), RW 0x00977542 (unknown), RW 0x0097759F (unknown). Classes: AptMapPreview, AptMenuPlayer, AptRenderList, GameWindow, StartingRestriction, VP6MovieStream, VictoryType.
+Functions: RW 0x004A1130 (unknown), RW 0x0060E8DB (ported), RW 0x00630078 (unknown), RW 0x006DD947 (unknown), RW 0x007018E0 (unknown), RW 0x007019A0 (unknown), RW 0x00701F81 (unknown), RW 0x00702689 (unknown), RW 0x00702E2B (unknown), RW 0x007052BE (unknown), RW 0x00718D93 (unknown), RW 0x007190B4 (unknown), RW 0x0071928A (unknown), RW 0x007234EC (unknown), RW 0x007237F8 (unknown), RW 0x00779F20 (unknown), RW 0x007F2440 (unknown), RW 0x007F2A76 (unknown), RW 0x0081487B (unknown), RW 0x00814E3A (unknown), RW 0x00814EFA (unknown), RW 0x00845830 (unknown), RW 0x0097572C (unknown), RW 0x00975942 (unknown), RW 0x00975C3A (unknown), RW 0x00975D3F (unknown), RW 0x00975E04 (unknown), RW 0x00975F23 (unknown), RW 0x0097606B (unknown), RW 0x0097640C (unknown), RW 0x00976497 (unknown), RW 0x00976877 (unknown), RW 0x00976B49 (unknown), RW 0x00976C4D (unknown), RW 0x00976D64 (unknown), RW 0x00976F59 (unknown), RW 0x009770CF (unknown), RW 0x009772E6 (unknown), RW 0x00977542 (unknown), RW 0x0097759F (unknown). Classes: AptMapPreview, AptMenuPlayer, AptRenderList, GameWindow, LivingWorld, StartingRestriction, VP6MovieStream, VictoryType.
 Candidates: 0 none/partial functions; 39 unknown status.
 Red buttons: none linked.
 Unused fields: none linked.
@@ -3876,7 +3881,7 @@ Existing task matches: #607 Port 259: Horde-level powers: SplitHordeSpecialPower
 ### G370: RW 0x00648CF1
 
 Stops: S-1064, S-1339. Kinds: code.
-Functions: RW 0x00625E36 (unknown), RW 0x00625FC2 (unknown), RW 0x00648CF1 (unknown), RW 0x006497EC (unknown), RW 0x006B23FB (unknown), RW 0x006B5E3E (unknown), RW 0x00779B67 (unknown), RW 0x008385A3 (unknown), RW 0x008445C9 (unknown), RW 0x009001FB (unknown), RW 0x0090313E (unknown), RW 0x00921841 (unknown), RW 0x00921904 (unknown), RW 0x00921D5B (unknown), RW 0x009220DE (unknown), RW 0x009222B2 (unknown), RW 0x0097E137 (unknown), RW 0x0097EFB2 (unknown), RW 0x0098430E (unknown), RW 0x00984640 (unknown). Classes: AptLanLobby, AptQuitMenu, GameWorld.
+Functions: RW 0x00625E36 (unknown), RW 0x00625FC2 (unknown), RW 0x00648CF1 (unknown), RW 0x006497EC (unknown), RW 0x006B23FB (unknown), RW 0x006B5E3E (unknown), RW 0x00779B67 (unknown), RW 0x008385A3 (unknown), RW 0x008445C9 (unknown), RW 0x009001FB (unknown), RW 0x0090313E (unknown), RW 0x00921841 (unknown), RW 0x00921904 (unknown), RW 0x00921D5B (unknown), RW 0x009220DE (unknown), RW 0x009222B2 (unknown), RW 0x0097E137 (unknown), RW 0x0097EFB2 (unknown), RW 0x0098430E (unknown), RW 0x00984640 (unknown). Classes: AptLanLobby, AptQuitMenu, GameWorld, LivingWorld.
 Candidates: 0 none/partial functions; 20 unknown status.
 Red buttons: none linked.
 Unused fields: none linked.
@@ -3894,7 +3899,7 @@ Existing task matches: none.
 ### G372: RW 0x00667174
 
 Stops: S-1027, S-363, S-7181. Kinds: code.
-Functions: RW 0x005E821A (ported), RW 0x00625759 (ported), RW 0x00662EB1 (ported), RW 0x00662FC8 (ported), RW 0x00663C6B (unknown), RW 0x0066498A (ported), RW 0x00664D5D (unknown), RW 0x00664D7E (ported), RW 0x00667174 (ported), RW 0x0068E43B (ported), RW 0x0068F383 (ported), RW 0x00690B8C (partial), RW 0x00693919 (ported), RW 0x00699282 (ported), RW 0x006CB6EA (ported), RW 0x006CC79C (unknown), RW 0x006EF225 (unknown), RW 0x006FCE1A (unknown), RW 0x00738481 (unknown), RW 0x00740C97 (unknown), RW 0x00741675 (ported), RW 0x0074168E (ported), RW 0x00741D3E (unknown), RW 0x00743E6C (unknown), RW 0x00745FBB (unknown), RW 0x00748E46 (unknown), RW 0x00749693 (unknown), RW 0x0074983C (unknown), RW 0x0074D68C (unknown), RW 0x0074D6EA (unknown), RW 0x0074D7C7 (unknown), RW 0x0074D826 (unknown), RW 0x0074E3E7 (unknown), RW 0x0075187A (unknown), RW 0x00751D34 (unknown), RW 0x00751DA9 (ported), RW 0x00751DFC (unknown), RW 0x00751E3A (unknown), RW 0x0075307D (unknown), RW 0x0075464E (unknown), RW 0x007546DD (unknown), RW 0x007547D5 (unknown), RW 0x0075638B (unknown), RW 0x0075681A (unknown), RW 0x00852E2A (ported), RW 0x0085EA5F (ported), RW 0x0085EF6A (ported), RW 0x0085F28A (ported), RW 0x0085F85B (ported), RW 0x0085FDB7 (ported), RW 0x0087A321 (ported), RW 0x008AAF8E (unknown), RW 0x008B4FA1 (unknown), RW 0x008C57A1 (ported). Classes: AIRampageState, AIState, AIUpdateInterface, CombatState, DelayedDeathBody, HordeTransportContain.
+Functions: RW 0x005E821A (ported), RW 0x00625759 (ported), RW 0x00662EB1 (ported), RW 0x00662FC8 (ported), RW 0x00663C6B (unknown), RW 0x0066498A (ported), RW 0x00664D5D (unknown), RW 0x00664D7E (ported), RW 0x00667174 (ported), RW 0x0068E43B (ported), RW 0x0068F383 (ported), RW 0x00690B8C (partial), RW 0x00693919 (ported), RW 0x00699282 (ported), RW 0x006CB6EA (ported), RW 0x006CC79C (unknown), RW 0x006EF225 (unknown), RW 0x006FCE1A (unknown), RW 0x00738481 (unknown), RW 0x00740C97 (unknown), RW 0x00741675 (ported), RW 0x0074168E (ported), RW 0x00741D3E (unknown), RW 0x00743E6C (unknown), RW 0x00745FBB (unknown), RW 0x00748E46 (unknown), RW 0x00749693 (unknown), RW 0x0074983C (unknown), RW 0x0074D68C (unknown), RW 0x0074D6EA (unknown), RW 0x0074D7C7 (unknown), RW 0x0074D826 (unknown), RW 0x0074E3E7 (unknown), RW 0x0075187A (unknown), RW 0x00751D34 (unknown), RW 0x00751DA9 (ported), RW 0x00751DFC (unknown), RW 0x00751E3A (unknown), RW 0x0075307D (unknown), RW 0x0075464E (unknown), RW 0x007546DD (unknown), RW 0x007547D5 (unknown), RW 0x0075638B (unknown), RW 0x0075681A (unknown), RW 0x00852E2A (ported), RW 0x0085EA5F (ported), RW 0x0085EF6A (ported), RW 0x0085F28A (ported), RW 0x0085F85B (ported), RW 0x0085FDB7 (ported), RW 0x0087A321 (ported), RW 0x008AAF8E (unknown), RW 0x008B4FA1 (unknown), RW 0x008C57A1 (ported). Classes: AIRampageState, AIState, AIUpdateInterface, CombatState, DelayedDeathBody, GeometryInfo, HordeTransportContain.
 Candidates: 1 none/partial functions; 30 unknown status.
 Red buttons: none linked.
 Unused fields: none linked.
@@ -3903,7 +3908,7 @@ Existing task matches: #612 Port 264: AIUpdateInterface: the 64 uncited own func
 ### G373: RW 0x005E39CE
 
 Stops: S-1101, S-4321, S-785. Kinds: code.
-Functions: RW 0x004B12E8 (ported), RW 0x005E39CE (ported), RW 0x005E83FD (unknown), RW 0x0066276B (ported), RW 0x00662B3C (ported), RW 0x0066434E (ported), RW 0x006643FC (ported), RW 0x00664579 (ported), RW 0x006645F3 (ported), RW 0x0066468F (ported), RW 0x00664767 (ported), RW 0x00665C33 (ported), RW 0x006668CA (ported), RW 0x0066831A (ported), RW 0x00668E94 (ported), RW 0x0066C66E (ported), RW 0x0066C6E3 (unknown), RW 0x0066D85F (ported), RW 0x0066DA5F (ported), RW 0x0067C81E (unknown), RW 0x0068D6A6 (ported), RW 0x00690E97 (ported), RW 0x006F503B (unknown), RW 0x006F53AF (unknown), RW 0x006FB231 (unknown), RW 0x006FE456 (unknown), RW 0x0070D41A (ported), RW 0x00741675 (ported), RW 0x0074168E (ported), RW 0x007433E3 (unknown), RW 0x00743437 (unknown), RW 0x0074352D (unknown), RW 0x0074356A (unknown), RW 0x00747C37 (unknown), RW 0x00747CD1 (unknown), RW 0x00747D04 (unknown), RW 0x00748E46 (unknown), RW 0x00749497 (unknown), RW 0x0074949C (unknown), RW 0x007515E1 (unknown), RW 0x00751A8A (unknown), RW 0x00752B0F (unknown), RW 0x00753755 (unknown), RW 0x00755572 (unknown), RW 0x00756067 (unknown), RW 0x00756452 (unknown), RW 0x0076FB64 (unknown), RW 0x007725DF (unknown), RW 0x00774EDF (unknown), RW 0x0077AC36 (unknown), RW 0x0077AD4D (unknown), RW 0x007FEAC1 (ported), RW 0x0082C8A7 (unknown), RW 0x0082CBD5 (ported), RW 0x0082CFD4 (unknown), RW 0x008BD372 (ported), RW 0x008C1D75 (ported). Classes: AIEnterState, AIExitState, AIHordeEnterState, AIMoveToPositionAndEnterState, AIMoveToState, AIWorld, AODCrushCollide, CivilianSpawnCollide, HordeMemberCollide, InactiveBody, ObjectWeapons, SquishCollide.
+Functions: RW 0x004B12E8 (ported), RW 0x005E39CE (ported), RW 0x005E83FD (unknown), RW 0x0066276B (ported), RW 0x00662B3C (ported), RW 0x0066434E (ported), RW 0x006643FC (ported), RW 0x00664579 (ported), RW 0x006645F3 (ported), RW 0x0066468F (ported), RW 0x00664767 (ported), RW 0x00665C33 (ported), RW 0x006668CA (ported), RW 0x0066831A (ported), RW 0x00668E94 (ported), RW 0x0066C66E (ported), RW 0x0066C6E3 (unknown), RW 0x0066D85F (ported), RW 0x0066DA5F (ported), RW 0x0067C81E (unknown), RW 0x0068D6A6 (ported), RW 0x00690E97 (ported), RW 0x006F503B (unknown), RW 0x006F53AF (unknown), RW 0x006FB231 (unknown), RW 0x006FE456 (unknown), RW 0x0070D41A (ported), RW 0x00741675 (ported), RW 0x0074168E (ported), RW 0x007433E3 (unknown), RW 0x00743437 (unknown), RW 0x0074352D (unknown), RW 0x0074356A (unknown), RW 0x00747C37 (unknown), RW 0x00747CD1 (unknown), RW 0x00747D04 (unknown), RW 0x00748E46 (unknown), RW 0x00749497 (unknown), RW 0x0074949C (unknown), RW 0x007515E1 (unknown), RW 0x00751A8A (unknown), RW 0x00752B0F (unknown), RW 0x00753755 (unknown), RW 0x00755572 (unknown), RW 0x00756067 (unknown), RW 0x00756452 (unknown), RW 0x0076FB64 (unknown), RW 0x007725DF (unknown), RW 0x00774EDF (unknown), RW 0x0077AC36 (unknown), RW 0x0077AD4D (unknown), RW 0x007FEAC1 (ported), RW 0x0082C8A7 (unknown), RW 0x0082CBD5 (ported), RW 0x0082CFD4 (unknown), RW 0x008BD372 (ported), RW 0x008C1D75 (ported). Classes: AIEnterState, AIExitState, AIHordeEnterState, AIMoveToPositionAndEnterState, AIMoveToState, AIWorld, AODCrushCollide, ActionManager, CivilianSpawnCollide, HordeMemberCollide, InactiveBody, ObjectWeapons, Rva001E4147, SquishCollide.
 Candidates: 0 none/partial functions; 31 unknown status.
 Red buttons: none linked.
 Unused fields: none linked.
@@ -3912,7 +3917,7 @@ Existing task matches: none.
 ### G374: RW 0x0096F53C
 
 Stops: S-3803, S-7335. Kinds: code, project.
-Functions: RW 0x00449681 (ported), RW 0x0068BDA5 (ported), RW 0x00696FD2 (ported), RW 0x006A8803 (unknown), RW 0x006C106C (unknown), RW 0x0075CE47 (unknown), RW 0x0076FF27 (unknown), RW 0x0076FF4B (unknown), RW 0x00861E6E (ported), RW 0x0092FF5C (unknown), RW 0x0093023D (unknown), RW 0x00944534 (unknown), RW 0x00949CA7 (unknown), RW 0x0096F33E (unknown), RW 0x0096F53C (unknown), RW 0x0096F6E7 (unknown), RW 0x0096F7B7 (unknown), RW 0x0096F85A (unknown), RW 0x0096F890 (unknown), RW 0x0096FAC6 (unknown), RW 0x0096FCCB (unknown), RW 0x0096FDFD (unknown), RW 0x009D3380 (unknown), RW 0x009D353B (unknown), RW 0x009D72DB (unknown). Classes: AIGroup, CommandButton, ControlBar, InGameCommandButtonSubMenu, StancesBehavior.
+Functions: RW 0x00449681 (ported), RW 0x0068BDA5 (ported), RW 0x00696FD2 (ported), RW 0x006A8803 (unknown), RW 0x006C106C (unknown), RW 0x0075CE47 (unknown), RW 0x0076FF27 (unknown), RW 0x0076FF4B (unknown), RW 0x00861E6E (ported), RW 0x0092FF5C (unknown), RW 0x0093023D (unknown), RW 0x00944534 (unknown), RW 0x00949CA7 (unknown), RW 0x0096F33E (unknown), RW 0x0096F53C (unknown), RW 0x0096F6E7 (unknown), RW 0x0096F7B7 (unknown), RW 0x0096F85A (unknown), RW 0x0096F890 (unknown), RW 0x0096FAC6 (unknown), RW 0x0096FCCB (unknown), RW 0x0096FDFD (unknown), RW 0x009D3380 (unknown), RW 0x009D353B (unknown), RW 0x009D72DB (unknown). Classes: AIGroup, ChangeStanceGroupOrder, CommandButton, ControlBar, InGameCommandButtonSubMenu, StancesBehavior.
 Candidates: 0 none/partial functions; 21 unknown status.
 Red buttons: none linked.
 Unused fields: none linked.
@@ -3930,7 +3935,7 @@ Existing task matches: none.
 ### G376: RW 0x004A4CD3
 
 Stops: S-2701. Kinds: code.
-Functions: RW 0x004A4CD3 (unknown), RW 0x004A5112 (unknown), RW 0x00715A84 (unknown), RW 0x00729D9A (unknown), RW 0x009457FE (unknown), RW 0x009459D1 (unknown), RW 0x009D5BDC (unknown), RW 0x009D5CCE (unknown), RW 0x009D6250 (unknown), RW 0x009D6320 (unknown), RW 0x009D6521 (unknown). Classes: ControlBar.
+Functions: RW 0x004A4CD3 (unknown), RW 0x004A5112 (unknown), RW 0x00715A84 (unknown), RW 0x00729D9A (unknown), RW 0x009457FE (unknown), RW 0x009459D1 (unknown), RW 0x009D5BDC (unknown), RW 0x009D5CCE (unknown), RW 0x009D6250 (unknown), RW 0x009D6320 (unknown), RW 0x009D6521 (unknown). Classes: ControlBar, GlobalData.
 Candidates: 0 none/partial functions; 11 unknown status.
 Red buttons: none linked.
 Unused fields: none linked.
@@ -3966,7 +3971,7 @@ Existing task matches: none.
 ### G380: RW 0x004E70F5
 
 Stops: S-5260, S-7215. Kinds: code.
-Functions: RW 0x004E6C74 (unknown), RW 0x004E70F5 (unknown), RW 0x004E79C1 (unknown), RW 0x004E7D26 (unknown), RW 0x004E837E (unknown), RW 0x004E8B8F (unknown), RW 0x004E96D9 (unknown), RW 0x004E9E4E (unknown), RW 0x004EA005 (unknown), RW 0x004EA068 (unknown), RW 0x004EAD92 (unknown), RW 0x004EC40E (unknown), RW 0x004ED508 (unknown), RW 0x004EEB15 (unknown), RW 0x005F0EE6 (unknown), RW 0x0067F4C2 (unknown), RW 0x0067F6F0 (ported), RW 0x0068449B (ported), RW 0x00684BCA (ported), RW 0x006854FD (unknown), RW 0x006858BE (unknown), RW 0x006886E0 (unknown), RW 0x0069264D (unknown), RW 0x00695070 (ported), RW 0x00853EDF (ported), RW 0x0088D44F (ported), RW 0x0088EE6E (ported), RW 0x0089958F (ported), RW 0x008C9629 (ported), RW 0x009B90D6 (unknown), RW 0x009B92F6 (unknown), RW 0x00AD2CE0 (ported). Classes: AutoPickUpUpdate, FireSpreadUpdate, ObjectCreationList.
+Functions: RW 0x004E6C74 (unknown), RW 0x004E70F5 (unknown), RW 0x004E79C1 (unknown), RW 0x004E7D26 (unknown), RW 0x004E837E (unknown), RW 0x004E8B8F (unknown), RW 0x004E96D9 (unknown), RW 0x004E9E4E (unknown), RW 0x004EA005 (unknown), RW 0x004EA068 (unknown), RW 0x004EAD92 (unknown), RW 0x004EC40E (unknown), RW 0x004ED508 (unknown), RW 0x004EEB15 (unknown), RW 0x005F0EE6 (unknown), RW 0x0067F4C2 (unknown), RW 0x0067F6F0 (ported), RW 0x0068449B (ported), RW 0x00684BCA (ported), RW 0x006854FD (unknown), RW 0x006858BE (unknown), RW 0x006886E0 (unknown), RW 0x0069264D (unknown), RW 0x00695070 (ported), RW 0x00853EDF (ported), RW 0x0088D44F (ported), RW 0x0088EE6E (ported), RW 0x0089958F (ported), RW 0x008C9629 (ported), RW 0x009B90D6 (unknown), RW 0x009B92F6 (unknown), RW 0x00AD2CE0 (ported). Classes: AutoPickUpUpdate, FireSpreadUpdate, GlobalData, ObjectCreationList.
 Candidates: 0 none/partial functions; 22 unknown status.
 Red buttons: none linked.
 Unused fields: none linked.
@@ -3975,7 +3980,7 @@ Existing task matches: none.
 ### G381: RW 0x00601C62
 
 Stops: S-1950, S-2481, S-2522, S-3402. Kinds: code.
-Functions: RW 0x00446330 (unknown), RW 0x004B2A9B (ported), RW 0x0050977A (unknown), RW 0x00509F7D (unknown), RW 0x0050B4EB (none), RW 0x0050C23A (unknown), RW 0x0050C485 (unknown), RW 0x0050C980 (unknown), RW 0x0050CAA8 (unknown), RW 0x0050CDD6 (unknown), RW 0x0050D46A (unknown), RW 0x0050D92C (unknown), RW 0x0050DCB3 (unknown), RW 0x00516A30 (unknown), RW 0x00516AB0 (unknown), RW 0x005372AB (unknown), RW 0x006019D1 (unknown), RW 0x00601BBD (unknown), RW 0x00601C62 (unknown), RW 0x006020B4 (unknown), RW 0x00602165 (unknown), RW 0x0060252D (unknown), RW 0x00602C03 (unknown), RW 0x00646771 (unknown), RW 0x00671FD5 (unknown), RW 0x006721CC (unknown), RW 0x006723C3 (unknown), RW 0x00672943 (unknown), RW 0x00672973 (unknown), RW 0x006729A3 (ported), RW 0x006729E9 (none), RW 0x00673F6D (unknown), RW 0x0067580E (unknown), RW 0x00676346 (unknown), RW 0x00677CF9 (unknown), RW 0x006780DF (unknown), RW 0x00679129 (unknown), RW 0x0067939F (unknown), RW 0x006799E3 (unknown), RW 0x0068B6F5 (ported), RW 0x0068B749 (ported), RW 0x0068DB35 (ported), RW 0x006916CD (ported), RW 0x0073228B (ported), RW 0x007326CC (ported), RW 0x0075C1A9 (unknown), RW 0x0079DA9D (unknown), RW 0x0086F4EE (ported), RW 0x0091F175 (unknown), RW 0x0091F2AB (unknown), RW 0x0091F3B3 (unknown), RW 0x00920000 (unknown), RW 0x00920E0F (unknown), RW 0x00920F34 (unknown). Classes: AptOptionsScreen, DrawGroupInfo, DrawableIconUI, ExperienceTracker, FXPlayer, GameLODManager, GameWorld, HordeContain, SelectionDecal, StaticLODState, W3DMaterialFactory, W3DShaderKey.
+Functions: RW 0x00446330 (unknown), RW 0x004B2A9B (ported), RW 0x0050977A (unknown), RW 0x00509F7D (unknown), RW 0x0050B4EB (none), RW 0x0050C23A (unknown), RW 0x0050C485 (unknown), RW 0x0050C980 (unknown), RW 0x0050CAA8 (unknown), RW 0x0050CDD6 (unknown), RW 0x0050D46A (unknown), RW 0x0050D92C (unknown), RW 0x0050DCB3 (unknown), RW 0x00516A30 (unknown), RW 0x00516AB0 (unknown), RW 0x005372AB (unknown), RW 0x006019D1 (unknown), RW 0x00601BBD (unknown), RW 0x00601C62 (unknown), RW 0x006020B4 (unknown), RW 0x00602165 (unknown), RW 0x0060252D (unknown), RW 0x00602C03 (unknown), RW 0x00646771 (unknown), RW 0x00671FD5 (unknown), RW 0x006721CC (unknown), RW 0x006723C3 (unknown), RW 0x00672943 (unknown), RW 0x00672973 (unknown), RW 0x006729A3 (ported), RW 0x006729E9 (none), RW 0x00673F6D (unknown), RW 0x0067580E (unknown), RW 0x00676346 (unknown), RW 0x00677CF9 (unknown), RW 0x006780DF (unknown), RW 0x00679129 (unknown), RW 0x0067939F (unknown), RW 0x006799E3 (unknown), RW 0x0068B6F5 (ported), RW 0x0068B749 (ported), RW 0x0068DB35 (ported), RW 0x006916CD (ported), RW 0x0073228B (ported), RW 0x007326CC (ported), RW 0x0075C1A9 (unknown), RW 0x0079DA9D (unknown), RW 0x0086F4EE (ported), RW 0x0091F175 (unknown), RW 0x0091F2AB (unknown), RW 0x0091F3B3 (unknown), RW 0x00920000 (unknown), RW 0x00920E0F (unknown), RW 0x00920F34 (unknown). Classes: AptOptionsScreen, DrawGroupInfo, DrawableIconUI, ExperienceTracker, FXPlayer, GameLODManager, GameWorld, GlobalData, HordeContain, RadiusDecal, SelectionDecal, StaticLODState, W3DMaterialFactory, W3DShaderKey.
 Candidates: 2 none/partial functions; 43 unknown status.
 Red buttons: none linked.
 Unused fields: HordeContain.LivingWorldOverloadTemplate, HordeContain.RanksToJustFreeWhenAttacking, HordeContain.SplitHordeNumber.
@@ -4002,7 +4007,7 @@ Existing task matches: none.
 ### G384: W3DLaserDraw
 
 Stops: S-7218. Kinds: code.
-Functions: RW 0x00464159 (unknown), RW 0x004C8A6C (ported), RW 0x004C917B (unknown), RW 0x004C9450 (unknown), RW 0x0055DB80 (none), RW 0x0055DBE0 (none), RW 0x0055DC20 (none), RW 0x0055DCE0 (none), RW 0x0055E9F0 (none), RW 0x0064D1FB (unknown), RW 0x0064D233 (unknown), RW 0x00764B43 (unknown), RW 0x00764C4D (ported), RW 0x00764E88 (ported), RW 0x007651B1 (ported), RW 0x007654A8 (unknown). Classes: LaserUpdate, W3DLaserDraw, W3DLaserDrawState.
+Functions: RW 0x00464159 (unknown), RW 0x004C8A6C (ported), RW 0x004C917B (unknown), RW 0x004C9450 (unknown), RW 0x0055DB80 (none), RW 0x0055DBE0 (none), RW 0x0055DC20 (none), RW 0x0055DCE0 (none), RW 0x0055E9F0 (none), RW 0x0064D1FB (unknown), RW 0x0064D233 (unknown), RW 0x00764B43 (unknown), RW 0x00764C4D (ported), RW 0x00764E88 (ported), RW 0x007651B1 (ported), RW 0x007654A8 (unknown). Classes: LaserUpdate, SegmentedLineClass, W3DLaserDraw, W3DLaserDrawState.
 Candidates: 5 none/partial functions; 7 unknown status.
 Red buttons: none linked.
 Unused fields: none linked.
@@ -4011,7 +4016,7 @@ Existing task matches: none.
 ### G385: RW 0x00698F06
 
 Stops: S-1329, S-1940, S-709, S-7233. Kinds: code.
-Functions: RW 0x00615C01 (unknown), RW 0x006164D7 (unknown), RW 0x00616DA6 (unknown), RW 0x006265D2 (unknown), RW 0x0062679C (unknown), RW 0x00629F34 (unknown), RW 0x0062AC17 (unknown), RW 0x0062BBAB (ported), RW 0x006709A2 (unknown), RW 0x00672DFB (unknown), RW 0x0067561E (ported), RW 0x00678C69 (unknown), RW 0x00678D8B (unknown), RW 0x00678F54 (unknown), RW 0x0067B4B7 (ported), RW 0x0068B581 (ported), RW 0x0068B678 (ported), RW 0x0068BE59 (ported), RW 0x0068C3E6 (ported), RW 0x0068E31F (ported), RW 0x00694CCC (ported), RW 0x00698F06 (ported), RW 0x006AAC4B (ported), RW 0x006ABABD (ported), RW 0x006B1146 (unknown), RW 0x006B16EC (unknown), RW 0x006B34EE (unknown), RW 0x006B851C (unknown), RW 0x006BC7F0 (unknown), RW 0x006BCC5C (unknown), RW 0x006D876A (ported), RW 0x006D9042 (ported), RW 0x006DCFDF (unknown), RW 0x006E301F (unknown), RW 0x006E42CF (unknown), RW 0x006E42DA (unknown), RW 0x006E4B21 (unknown), RW 0x006E4B3E (unknown), RW 0x006E861E (ported), RW 0x006F3082 (unknown), RW 0x006FB231 (unknown), RW 0x00780172 (unknown), RW 0x0078100E (unknown), RW 0x00781FAF (unknown), RW 0x00782214 (unknown), RW 0x007F32F4 (unknown), RW 0x00808A43 (unknown), RW 0x0080F4D3 (unknown), RW 0x0080F754 (unknown), RW 0x00810C95 (unknown), RW 0x00811D91 (unknown), RW 0x00811E1F (unknown), RW 0x008122C5 (unknown), RW 0x00812563 (unknown), RW 0x008125FC (unknown), RW 0x0085FED5 (ported), RW 0x00889FA7 (ported), RW 0x0088A0E2 (unknown), RW 0x0089C04B (unknown), RW 0x0089C12F (unknown), RW 0x0089C18E (unknown), RW 0x0089C35E (ported), RW 0x0089C6F5 (ported), RW 0x0089C759 (ported), RW 0x0089CA84 (ported), RW 0x0089CC29 (ported), RW 0x008B4D34 (ported), RW 0x008ED6DC (unknown), RW 0x008ED726 (unknown), RW 0x008ED772 (ported), RW 0x008EDA39 (unknown), RW 0x00936B7D (ported), RW 0x009A0426 (unknown), RW 0x00AD2CE0 (ported), RW 0x00B6D060 (unknown), RW 0x00B6D730 (unknown). Classes: AIGateUpdate, AIWorld, AptBannerUI, CastleMemberBehavior, FakePathfindPortalBehaviour, GateOpenAndCloseBehavior, KeepObjectDie, LivingWorldBattleTags.
+Functions: RW 0x00615C01 (unknown), RW 0x006164D7 (unknown), RW 0x00616DA6 (unknown), RW 0x006265D2 (unknown), RW 0x0062679C (unknown), RW 0x00629F34 (unknown), RW 0x0062AC17 (unknown), RW 0x0062BBAB (ported), RW 0x006709A2 (unknown), RW 0x00672DFB (unknown), RW 0x0067561E (ported), RW 0x00678C69 (unknown), RW 0x00678D8B (unknown), RW 0x00678F54 (unknown), RW 0x0067B4B7 (ported), RW 0x0068B581 (ported), RW 0x0068B678 (ported), RW 0x0068BE59 (ported), RW 0x0068C3E6 (ported), RW 0x0068E31F (ported), RW 0x00694CCC (ported), RW 0x00698F06 (ported), RW 0x006AAC4B (ported), RW 0x006ABABD (ported), RW 0x006B1146 (unknown), RW 0x006B16EC (unknown), RW 0x006B34EE (unknown), RW 0x006B851C (unknown), RW 0x006BC7F0 (unknown), RW 0x006BCC5C (unknown), RW 0x006D876A (ported), RW 0x006D9042 (ported), RW 0x006DCFDF (unknown), RW 0x006E301F (unknown), RW 0x006E42CF (unknown), RW 0x006E42DA (unknown), RW 0x006E4B21 (unknown), RW 0x006E4B3E (unknown), RW 0x006E861E (ported), RW 0x006F3082 (unknown), RW 0x006FB231 (unknown), RW 0x00780172 (unknown), RW 0x0078100E (unknown), RW 0x00781FAF (unknown), RW 0x00782214 (unknown), RW 0x007F32F4 (unknown), RW 0x00808A43 (unknown), RW 0x0080F4D3 (unknown), RW 0x0080F754 (unknown), RW 0x00810C95 (unknown), RW 0x00811D91 (unknown), RW 0x00811E1F (unknown), RW 0x008122C5 (unknown), RW 0x00812563 (unknown), RW 0x008125FC (unknown), RW 0x0085FED5 (ported), RW 0x00889FA7 (ported), RW 0x0088A0E2 (unknown), RW 0x0089C04B (unknown), RW 0x0089C12F (unknown), RW 0x0089C18E (unknown), RW 0x0089C35E (ported), RW 0x0089C6F5 (ported), RW 0x0089C759 (ported), RW 0x0089CA84 (ported), RW 0x0089CC29 (ported), RW 0x008B4D34 (ported), RW 0x008ED6DC (unknown), RW 0x008ED726 (unknown), RW 0x008ED772 (ported), RW 0x008EDA39 (unknown), RW 0x00936B7D (ported), RW 0x009A0426 (unknown), RW 0x00AD2CE0 (ported), RW 0x00B6D060 (unknown), RW 0x00B6D730 (unknown). Classes: AIGateUpdate, AIWorld, AptBannerUI, ArmySummarySystem, BannerUI, CastleMemberBehavior, FakePathfindPortalBehaviour, GateOpenAndCloseBehavior, KeepObjectDie, LivingWorldBattleTags.
 Candidates: 0 none/partial functions; 50 unknown status.
 Red buttons: none linked.
 Unused fields: CastleMemberBehavior.BeingBuiltSound, CastleMemberBehavior.StoreUpgradePrice.
@@ -4029,7 +4034,7 @@ Existing task matches: none.
 ### G387: RW 0x0067CAC6
 
 Stops: S-4856. Kinds: code.
-Functions: RW 0x0067CAC6 (unknown), RW 0x00680A75 (ported), RW 0x006EE600 (unknown), RW 0x006F0741 (ported), RW 0x006F25FE (unknown), RW 0x006F6286 (unknown), RW 0x006F8601 (unknown), RW 0x006F8B6E (unknown), RW 0x007682E1 (ported), RW 0x007684F8 (ported), RW 0x0076879E (unknown), RW 0x00768832 (unknown), RW 0x0093527F (unknown), RW 0x009356DF (unknown), RW 0x00935FAA (ported), RW 0x009389CE (unknown), RW 0x00939FA8 (unknown), RW 0x0093A530 (unknown). Classes: none.
+Functions: RW 0x0067CAC6 (unknown), RW 0x00680A75 (ported), RW 0x006EE600 (unknown), RW 0x006F0741 (ported), RW 0x006F25FE (unknown), RW 0x006F6286 (unknown), RW 0x006F8601 (unknown), RW 0x006F8B6E (unknown), RW 0x007682E1 (ported), RW 0x007684F8 (ported), RW 0x0076879E (unknown), RW 0x00768832 (unknown), RW 0x0093527F (unknown), RW 0x009356DF (unknown), RW 0x00935FAA (ported), RW 0x009389CE (unknown), RW 0x00939FA8 (unknown), RW 0x0093A530 (unknown). Classes: PathfindLayer.
 Candidates: 0 none/partial functions; 13 unknown status.
 Red buttons: none linked.
 Unused fields: none linked.
@@ -4038,7 +4043,7 @@ Existing task matches: none.
 ### G388: RW 0x007B274C
 
 Stops: S-5041. Kinds: code.
-Functions: RW 0x007B274C (unknown), RW 0x007B2B7F (unknown), RW 0x0084010E (unknown), RW 0x008460B5 (unknown), RW 0x008465A4 (unknown), RW 0x009270AD (unknown), RW 0x00929745 (unknown), RW 0x0093DA51 (unknown), RW 0x0093DAC6 (unknown), RW 0x0093E669 (unknown), RW 0x0093E72F (unknown), RW 0x009CE6FE (unknown), RW 0x009CE8F3 (unknown). Classes: ScoreKeeper.
+Functions: RW 0x007B274C (unknown), RW 0x007B2B7F (unknown), RW 0x0084010E (unknown), RW 0x008460B5 (unknown), RW 0x008465A4 (unknown), RW 0x009270AD (unknown), RW 0x00929745 (unknown), RW 0x0093DA51 (unknown), RW 0x0093DAC6 (unknown), RW 0x0093E669 (unknown), RW 0x0093E72F (unknown), RW 0x009CE6FE (unknown), RW 0x009CE8F3 (unknown). Classes: GameInfo, ScoreKeeper.
 Candidates: 0 none/partial functions; 13 unknown status.
 Red buttons: none linked.
 Unused fields: none linked.
@@ -4110,7 +4115,7 @@ Existing task matches: none.
 ### G396: RW 0x0068B36F
 
 Stops: S-1876, S-861. Kinds: code.
-Functions: RW 0x005EA74E (partial), RW 0x0060A1D5 (unknown), RW 0x006682B1 (ported), RW 0x0066D7C9 (unknown), RW 0x0068B36F (ported), RW 0x00695338 (ported), RW 0x007A3E9B (unknown), RW 0x007EDAED (unknown), RW 0x00897368 (unknown), RW 0x008B1142 (ported), RW 0x008B1219 (ported), RW 0x008B125F (ported), RW 0x008B12BF (unknown), RW 0x008B140D (unknown), RW 0x008B1690 (ported), RW 0x008B1E9A (unknown), RW 0x008B1F59 (unknown), RW 0x008B1FDA (ported), RW 0x008B228C (unknown), RW 0x008E3D4C (ported), RW 0x008E3D77 (ported), RW 0x008F02CC (unknown), RW 0x0099F7EF (unknown), RW 0x0099F83D (unknown), RW 0x0099F88B (unknown), RW 0x0099FA40 (unknown), RW 0x0099FAEF (unknown), RW 0x0099FC0C (unknown), RW 0x0099FCC4 (unknown), RW 0x0099FD0E (unknown), RW 0x0099FDDE (unknown), RW 0x0099FE74 (unknown), RW 0x009A0023 (unknown), RW 0x009A018B (unknown), RW 0x009A135B (unknown), RW 0x009A155C (unknown), RW 0x009A1696 (unknown), RW 0x009EC539 (unknown), RW 0x009EC8A1 (unknown), RW 0x009ECC0D (unknown), RW 0x009ECF7F (unknown), RW 0x009ED351 (unknown), RW 0x009ED374 (unknown), RW 0x009ED45E (unknown), RW 0x009ED4D2 (unknown), RW 0x009ED764 (unknown), RW 0x009ED8C4 (unknown). Classes: CastleMemberBehavior, SpecialPowerModule, ToggleMountedSpecialAbilityUpdate.
+Functions: RW 0x005EA74E (partial), RW 0x0060A1D5 (unknown), RW 0x006682B1 (ported), RW 0x0066D7C9 (unknown), RW 0x0068B36F (ported), RW 0x00695338 (ported), RW 0x007A3E9B (unknown), RW 0x007EDAED (unknown), RW 0x00897368 (unknown), RW 0x008B1142 (ported), RW 0x008B1219 (ported), RW 0x008B125F (ported), RW 0x008B12BF (unknown), RW 0x008B140D (unknown), RW 0x008B1690 (ported), RW 0x008B1E9A (unknown), RW 0x008B1F59 (unknown), RW 0x008B1FDA (ported), RW 0x008B228C (unknown), RW 0x008E3D4C (ported), RW 0x008E3D77 (ported), RW 0x008F02CC (unknown), RW 0x0099F7EF (unknown), RW 0x0099F83D (unknown), RW 0x0099F88B (unknown), RW 0x0099FA40 (unknown), RW 0x0099FAEF (unknown), RW 0x0099FC0C (unknown), RW 0x0099FCC4 (unknown), RW 0x0099FD0E (unknown), RW 0x0099FDDE (unknown), RW 0x0099FE74 (unknown), RW 0x009A0023 (unknown), RW 0x009A018B (unknown), RW 0x009A135B (unknown), RW 0x009A155C (unknown), RW 0x009A1696 (unknown), RW 0x009EC539 (unknown), RW 0x009EC8A1 (unknown), RW 0x009ECC0D (unknown), RW 0x009ECF7F (unknown), RW 0x009ED351 (unknown), RW 0x009ED374 (unknown), RW 0x009ED45E (unknown), RW 0x009ED4D2 (unknown), RW 0x009ED764 (unknown), RW 0x009ED8C4 (unknown). Classes: CastleMemberBehavior, SkirmishAI, SpecialPowerModule, ToggleMountedSpecialAbilityUpdate.
 Candidates: 1 none/partial functions; 36 unknown status.
 Red buttons: Command_AngmarRangersIceArrowAbility, Command_AngmarRogashLeap, Command_AngmarTrollChargeAttack, Command_AxtschwingerAxeThrow, Command_BeregondMountNew, Command_DuhrburLeap, Command_FireDrakeBroodInferno, Command_FireWeaponAngmarFortressSanctumFrostball, Command_FireWeaponMenFortressBoilingOil, Command_FireWeaponMightyCatapult, Command_FireWeaponMordorFortressMagmaCauldrons, Command_FireWeaponMordorFortressSpireFireball, Command_GoblinKingGiftangriff, Command_GondorGandalfLightningSwordGeprfte, Command_GorkilBombThrow, Command_GwaihirBlastNew, Command_HalftrollChargeAttack, Command_IsenfurtWchterSmite, Command_MordorBloodThirstySacrificeUruk, Command_NecromancerFrostArmorStructure, Command_PippinSongs, Command_PorterExtinguishFire, Command_RavenPostSecondBonus, Command_RohanGimliLeap, Command_SarumanPower, Command_SpecialAbilityAdvisorDefendIniciative, Command_SpecialAbilityAgandaurLighting, Command_SpecialAbilityAlatarTeleportAlly, Command_SpecialAbilityAlatarTeleportRing, Command_SpecialAbilityAngmarGiftFortress, Command_SpecialAbilityArrowStorm, Command_SpecialAbilityBalinExpidition, Command_SpecialAbilityBalrogWings, Command_SpecialAbilityBetrayer, Command_SpecialAbilityBoromirHorn, Command_SpecialAbilityBoromirHornRing, Command_SpecialAbilityBoromirTapfererWiderstand, Command_SpecialAbilityBuhrdurFressen, Command_SpecialAbilityDenethorErnennung, Command_SpecialAbilityDenethorSehenderStein2, Command_SpecialAbilityDenethorSehenderStein3, Command_SpecialAbilityDenethorSehenderStein4, Command_SpecialAbilityDunklesWortderMacht, Command_SpecialAbilityDurinMeisterGestein, Command_SpecialAbilityDwalinErdenhammer, Command_SpecialAbilityElendilSummoned, Command_SpecialAbilityErinnerunganTelperion, Command_SpecialAbilityFortressHaradSpyTech, Command_SpecialAbilityFortressHaradSpyTechAI, Command_SpecialAbilityGaladrielVilya, Command_SpecialAbilityGeheimeWege, Command_SpecialAbilityGloinSmash, Command_SpecialAbilityGolfimbulRaid, Command_SpecialAbilityGrishnakGiftwolke, Command_SpecialAbilityGulzarMOrgulSeucheAcolyte, Command_SpecialAbilityGwahirScreechManve, Command_SpecialAbilityGwahirScreechNew, Command_SpecialAbilityHamerheldHorn, Command_SpecialAbilityHaradScoutCloak, Command_SpecialAbilityHaradSlavesBuildBoost, Command_SpecialAbilityKhamulGuldurEmpowered, Command_SpecialAbilityLoremasterAlueChoice, Command_SpecialAbilityLoremasterManveChoice, Command_SpecialAbilityLoremasterUlmoChoice, Command_SpecialAbilityLoremasterYavannaChoice, Command_SpecialAbilityMalbethOnFarm, Command_SpecialAbilityMeisterderHornburg, Command_SpecialAbilityMordorDrummerRoar, Command_SpecialAbilityNarinExp, Command_SpecialAbilityNaturmagierErntesegen, Command_SpecialAbilityNaturmagierHeilung, Command_SpecialAbilityNetzausDunkelheit, Command_SpecialAbilityRohanTraitors, Command_SpecialAbilitySaatdesgoldenenWaldes, Command_SpecialAbilitySchmiedAlle, Command_SpecialAbilitySchutzbannLoriens, Command_SpecialAbilityScreechDunklerMarschall, Command_SpecialAbilitySharkuManEater, Command_SpecialAbilitySoulLink, Command_SpecialAbilityTameTheBeastNew, Command_SpecialAbilityTrainArchers, Command_SpecialAbilityTrainSoldersLorgan, Command_SpecialAbilityTributeGainTwo, Command_SpecialAbilityVerkrperungderDunkelheit, Command_SpecialAbilityWargHowlNew, Command_SpecialAbilityWizardBlastGeprfte, Command_SpecialAbilityWordOfPowerEdainGeprfte, Command_SpecialAbilityWortedesElends, Command_ThranduilKnigDsterwalds.
 Unused fields: CastleMemberBehavior.BeingBuiltSound, CastleMemberBehavior.StoreUpgradePrice, ToggleMountedSpecialAbilityUpdate.OpacityTarget.
@@ -4119,7 +4124,7 @@ Existing task matches: #599 Port 251: The special-power chain every Ennorath abi
 ### G397: RW 0x006B47DC
 
 Stops: S-1330. Kinds: code.
-Functions: RW 0x006B47DC (unknown), RW 0x006B546B (unknown), RW 0x006B9B65 (unknown), RW 0x006BABA8 (unknown), RW 0x006BE20A (unknown), RW 0x007F0C1A (unknown), RW 0x007F7C8D (unknown), RW 0x00811951 (unknown), RW 0x0090002D (unknown), RW 0x009001FB (unknown), RW 0x00900533 (unknown), RW 0x009006E5 (unknown), RW 0x00900AA7 (unknown), RW 0x00902B96 (unknown), RW 0x00908010 (unknown), RW 0x009095A7 (unknown), RW 0x009A4205 (unknown), RW 0x009A5807 (unknown), RW 0x009A63BD (unknown), RW 0x009A747A (unknown). Classes: LivingWorldAI.
+Functions: RW 0x006B47DC (unknown), RW 0x006B546B (unknown), RW 0x006B9B65 (unknown), RW 0x006BABA8 (unknown), RW 0x006BE20A (unknown), RW 0x007F0C1A (unknown), RW 0x007F7C8D (unknown), RW 0x00811951 (unknown), RW 0x0090002D (unknown), RW 0x009001FB (unknown), RW 0x00900533 (unknown), RW 0x009006E5 (unknown), RW 0x00900AA7 (unknown), RW 0x00902B96 (unknown), RW 0x00908010 (unknown), RW 0x009095A7 (unknown), RW 0x009A4205 (unknown), RW 0x009A5807 (unknown), RW 0x009A63BD (unknown), RW 0x009A747A (unknown). Classes: ArmySummary, LivingWorldAI.
 Candidates: 0 none/partial functions; 20 unknown status.
 Red buttons: none linked.
 Unused fields: none linked.
@@ -4128,7 +4133,7 @@ Existing task matches: none.
 ### G398: RW 0x008F0EB4
 
 Stops: S-412, S-413, S-4194. Kinds: code.
-Functions: RW 0x0042EC5E (unknown), RW 0x0064501B (unknown), RW 0x006A96A0 (unknown), RW 0x006A99CB (ported), RW 0x006A9D9C (ported), RW 0x006A9E48 (unknown), RW 0x006A9EAD (unknown), RW 0x006AA030 (unknown), RW 0x006C6DB1 (unknown), RW 0x006C7581 (unknown), RW 0x006C75B5 (unknown), RW 0x006C7677 (unknown), RW 0x006C78D9 (unknown), RW 0x006C7928 (unknown), RW 0x006C7946 (unknown), RW 0x0070011F (unknown), RW 0x007A69E1 (unknown), RW 0x0082F787 (unknown), RW 0x0082FA98 (unknown), RW 0x0089C04B (unknown), RW 0x0089C12F (unknown), RW 0x0089CC29 (ported), RW 0x008E3CF3 (unknown), RW 0x008ED6DC (unknown), RW 0x008ED726 (unknown), RW 0x008ED772 (ported), RW 0x008EDA39 (unknown), RW 0x008EDA5E (ported), RW 0x008EDB2C (unknown), RW 0x008EDBB0 (unknown), RW 0x008EDDF6 (unknown), RW 0x008F02CC (unknown), RW 0x008F0502 (unknown), RW 0x008F069A (ported), RW 0x008F06FF (ported), RW 0x008F0A53 (unknown), RW 0x008F0BBC (ported), RW 0x008F0C47 (ported), RW 0x008F0EB4 (unknown), RW 0x008F736E (unknown), RW 0x008F7D71 (unknown), RW 0x008F858E (unknown), RW 0x008F8654 (unknown), RW 0x008F89D2 (unknown), RW 0x008F8B4A (unknown), RW 0x0090B3CE (unknown), RW 0x0090CADA (unknown), RW 0x0090CE35 (unknown), RW 0x0090D16A (ported), RW 0x0090D3C7 (unknown), RW 0x0096190B (unknown), RW 0x00961975 (unknown), RW 0x0097DC1A (unknown), RW 0x0097DC99 (unknown), RW 0x0097DD6B (unknown), RW 0x0097DFCD (unknown), RW 0x0099E766 (unknown), RW 0x0099E773 (unknown), RW 0x0099E79A (unknown), RW 0x0099EEF4 (unknown), RW 0x009A0993 (unknown), RW 0x009A19E0 (unknown), RW 0x009A221E (unknown), RW 0x009A23A4 (unknown), RW 0x009B53C6 (unknown), RW 0x009B6F70 (unknown), RW 0x009B9E06 (unknown), RW 0x009BA3C2 (unknown), RW 0x009BC882 (unknown), RW 0x009BCA33 (unknown), RW 0x009BCA8E (unknown), RW 0x009ED8C4 (unknown), RW 0x009EDC36 (unknown), RW 0x009EFCC4 (unknown). Classes: AISideInfo, AISkirmishPlayer, AIStatCollector, ArmyDefinition, GameLogicSettings, SkirmishAIManager.
+Functions: RW 0x0042EC5E (unknown), RW 0x0064501B (unknown), RW 0x006A96A0 (unknown), RW 0x006A99CB (ported), RW 0x006A9D9C (ported), RW 0x006A9E48 (unknown), RW 0x006A9EAD (unknown), RW 0x006AA030 (unknown), RW 0x006C6DB1 (unknown), RW 0x006C7581 (unknown), RW 0x006C75B5 (unknown), RW 0x006C7677 (unknown), RW 0x006C78D9 (unknown), RW 0x006C7928 (unknown), RW 0x006C7946 (unknown), RW 0x0070011F (unknown), RW 0x007A69E1 (unknown), RW 0x0082F787 (unknown), RW 0x0082FA98 (unknown), RW 0x0089C04B (unknown), RW 0x0089C12F (unknown), RW 0x0089CC29 (ported), RW 0x008E3CF3 (unknown), RW 0x008ED6DC (unknown), RW 0x008ED726 (unknown), RW 0x008ED772 (ported), RW 0x008EDA39 (unknown), RW 0x008EDA5E (ported), RW 0x008EDB2C (unknown), RW 0x008EDBB0 (unknown), RW 0x008EDDF6 (unknown), RW 0x008F02CC (unknown), RW 0x008F0502 (unknown), RW 0x008F069A (ported), RW 0x008F06FF (ported), RW 0x008F0A53 (unknown), RW 0x008F0BBC (ported), RW 0x008F0C47 (ported), RW 0x008F0EB4 (unknown), RW 0x008F736E (unknown), RW 0x008F7D71 (unknown), RW 0x008F858E (unknown), RW 0x008F8654 (unknown), RW 0x008F89D2 (unknown), RW 0x008F8B4A (unknown), RW 0x0090B3CE (unknown), RW 0x0090CADA (unknown), RW 0x0090CE35 (unknown), RW 0x0090D16A (ported), RW 0x0090D3C7 (unknown), RW 0x0096190B (unknown), RW 0x00961975 (unknown), RW 0x0097DC1A (unknown), RW 0x0097DC99 (unknown), RW 0x0097DD6B (unknown), RW 0x0097DFCD (unknown), RW 0x0099E766 (unknown), RW 0x0099E773 (unknown), RW 0x0099E79A (unknown), RW 0x0099EEF4 (unknown), RW 0x009A0993 (unknown), RW 0x009A19E0 (unknown), RW 0x009A221E (unknown), RW 0x009A23A4 (unknown), RW 0x009B53C6 (unknown), RW 0x009B6F70 (unknown), RW 0x009B9E06 (unknown), RW 0x009BA3C2 (unknown), RW 0x009BC882 (unknown), RW 0x009BCA33 (unknown), RW 0x009BCA8E (unknown), RW 0x009ED8C4 (unknown), RW 0x009EDC36 (unknown), RW 0x009EFCC4 (unknown). Classes: AIBuilder, AISideInfo, AISkirmishPlayer, AIStatCollector, ArmyDefinition, GameLogicSettings, SkirmishAI, SkirmishAIManager.
 Candidates: 0 none/partial functions; 64 unknown status.
 Red buttons: none linked.
 Unused fields: none linked.
@@ -4137,7 +4142,7 @@ Existing task matches: none.
 ### G399: RW 0x006AA5F5
 
 Stops: S-1421, S-7227. Kinds: code, project.
-Functions: RW 0x0063F3BF (ported), RW 0x00668303 (ported), RW 0x0066C4CA (ported), RW 0x0068AD89 (ported), RW 0x0068C26D (ported), RW 0x0068C461 (ported), RW 0x00696FD2 (ported), RW 0x006AA5F5 (unknown), RW 0x006ABD44 (unknown), RW 0x006ABDF7 (unknown), RW 0x006ABE2C (unknown), RW 0x0075CF21 (unknown), RW 0x007A07D8 (unknown), RW 0x007A0956 (unknown), RW 0x007A1129 (unknown), RW 0x007A3EF5 (unknown), RW 0x007A5582 (unknown), RW 0x00851E97 (ported), RW 0x008B708B (unknown), RW 0x008B714F (ported), RW 0x008B73B7 (ported), RW 0x008C74C4 (ported), RW 0x008E4042 (unknown), RW 0x008E4456 (ported), RW 0x008E46A5 (ported), RW 0x008F0284 (unknown), RW 0x008F457D (unknown), RW 0x008F47EB (unknown), RW 0x008F6186 (unknown), RW 0x008F6511 (unknown), RW 0x008F6B5A (unknown), RW 0x0090CD45 (unknown), RW 0x0099302D (unknown), RW 0x00993055 (unknown), RW 0x0099316A (unknown), RW 0x00993307 (unknown), RW 0x009E691D (unknown), RW 0x009E6CCB (unknown), RW 0x009E6EF4 (unknown), RW 0x009E70B6 (unknown), RW 0x009E726A (unknown), RW 0x009E74B7 (unknown), RW 0x009E7942 (unknown), RW 0x009E7A98 (unknown), RW 0x009E7F0F (unknown), RW 0x009E85C6 (unknown), RW 0x009E880B (unknown), RW 0x009E896E (unknown), RW 0x009E8A42 (unknown), RW 0x009E92CA (unknown), RW 0x009E9B37 (unknown), RW 0x009EB961 (unknown), RW 0x00A01C9C (unknown), RW 0x00A021D8 (unknown), RW 0x00A0229F (unknown), RW 0x00A0241D (unknown), RW 0x00A024DA (unknown), RW 0x00A0260A (unknown). Classes: AISkirmishPlayer, AISpecialPowerUpdate, ExperienceTracker, SlavedUpdate, SpecialAbilityUpdate, TeamPrototype, TerrainTrees, ThingTemplate.
+Functions: RW 0x0063F3BF (ported), RW 0x00668303 (ported), RW 0x0066C4CA (ported), RW 0x0068AD89 (ported), RW 0x0068C26D (ported), RW 0x0068C461 (ported), RW 0x00696FD2 (ported), RW 0x006AA5F5 (unknown), RW 0x006ABD44 (unknown), RW 0x006ABDF7 (unknown), RW 0x006ABE2C (unknown), RW 0x0075CF21 (unknown), RW 0x007A07D8 (unknown), RW 0x007A0956 (unknown), RW 0x007A1129 (unknown), RW 0x007A3EF5 (unknown), RW 0x007A5582 (unknown), RW 0x00851E97 (ported), RW 0x008B708B (unknown), RW 0x008B714F (ported), RW 0x008B73B7 (ported), RW 0x008C74C4 (ported), RW 0x008E4042 (unknown), RW 0x008E4456 (ported), RW 0x008E46A5 (ported), RW 0x008F0284 (unknown), RW 0x008F457D (unknown), RW 0x008F47EB (unknown), RW 0x008F6186 (unknown), RW 0x008F6511 (unknown), RW 0x008F6B5A (unknown), RW 0x0090CD45 (unknown), RW 0x0099302D (unknown), RW 0x00993055 (unknown), RW 0x0099316A (unknown), RW 0x00993307 (unknown), RW 0x009E691D (unknown), RW 0x009E6CCB (unknown), RW 0x009E6EF4 (unknown), RW 0x009E70B6 (unknown), RW 0x009E726A (unknown), RW 0x009E74B7 (unknown), RW 0x009E7942 (unknown), RW 0x009E7A98 (unknown), RW 0x009E7F0F (unknown), RW 0x009E85C6 (unknown), RW 0x009E880B (unknown), RW 0x009E896E (unknown), RW 0x009E8A42 (unknown), RW 0x009E92CA (unknown), RW 0x009E9B37 (unknown), RW 0x009EB961 (unknown), RW 0x00A01C9C (unknown), RW 0x00A021D8 (unknown), RW 0x00A0229F (unknown), RW 0x00A0241D (unknown), RW 0x00A024DA (unknown), RW 0x00A0260A (unknown). Classes: AISkirmishPlayer, AISpecialPowerUpdate, ActionManager, ExperienceTracker, SkirmishAI, SlavedUpdate, SpecialAbilityUpdate, TeamPrototype, TerrainTrees, ThingTemplate.
 Candidates: 0 none/partial functions; 45 unknown status.
 Red buttons: Command_AngmarTrollChargeAttack, Command_SpecialAbilityLoneRangerSummonFinal, Command_SpecialAbilityMeisterderHornburg, Command_SpecialAbilityNaturmagierErntesegen, Command_ThranduilKnigDsterwalds.
 Unused fields: none linked.
@@ -4146,7 +4151,7 @@ Existing task matches: #603 Port 255: Slaves and masters: SlavedUpdate and Slave
 ### G400: RW 0x00696266
 
 Stops: S-1301, S-893. Kinds: code.
-Functions: RW 0x0068B411 (ported), RW 0x0068C82D (ported), RW 0x00691269 (ported), RW 0x00696266 (ported), RW 0x006AA61B (ported), RW 0x006C7EDD (unknown), RW 0x006F5F65 (ported), RW 0x0076FCBF (unknown), RW 0x0076FD04 (unknown), RW 0x0077005F (unknown), RW 0x007728E8 (unknown), RW 0x00774F2B (unknown), RW 0x0077B00A (unknown), RW 0x00862A4E (ported), RW 0x008DC9AB (ported), RW 0x008E1BD4 (ported), RW 0x008F144C (unknown), RW 0x008F175A (unknown), RW 0x008F18DE (unknown), RW 0x008F232F (unknown), RW 0x0090C0EE (unknown), RW 0x0090C5E2 (unknown), RW 0x0099E766 (unknown), RW 0x009B58BF (unknown), RW 0x009B7EBD (unknown), RW 0x009B7F56 (unknown), RW 0x009B8047 (unknown), RW 0x009B80FA (unknown), RW 0x009B8160 (unknown), RW 0x009B83A6 (unknown), RW 0x009B8451 (unknown), RW 0x009B8556 (unknown), RW 0x009B8635 (unknown), RW 0x009B877C (unknown), RW 0x009B87DA (unknown), RW 0x009B88D8 (unknown), RW 0x009B8994 (unknown), RW 0x009B89CF (unknown), RW 0x009B8A06 (unknown), RW 0x009B8A47 (unknown), RW 0x009B8A7B (unknown), RW 0x009BAE5F (unknown), RW 0x009BAF02 (unknown), RW 0x009BB1C4 (unknown), RW 0x009BB226 (unknown), RW 0x009BB2A7 (unknown), RW 0x009BB2EA (unknown), RW 0x009BB3CA (unknown), RW 0x009BB479 (unknown), RW 0x009BB5E4 (unknown), RW 0x009BBA51 (unknown), RW 0x009BBE48 (unknown), RW 0x009BBFDC (unknown), RW 0x009BC1A0 (unknown), RW 0x009BC213 (unknown), RW 0x009BC39F (unknown), RW 0x009BC3F4 (unknown). Classes: AIGroup, ArmyDefinition, GateOpenAndCloseBehavior, SpawnBehavior.
+Functions: RW 0x0068B411 (ported), RW 0x0068C82D (ported), RW 0x00691269 (ported), RW 0x00696266 (ported), RW 0x006AA61B (ported), RW 0x006C7EDD (unknown), RW 0x006F5F65 (ported), RW 0x0076FCBF (unknown), RW 0x0076FD04 (unknown), RW 0x0077005F (unknown), RW 0x007728E8 (unknown), RW 0x00774F2B (unknown), RW 0x0077B00A (unknown), RW 0x00862A4E (ported), RW 0x008DC9AB (ported), RW 0x008E1BD4 (ported), RW 0x008F144C (unknown), RW 0x008F175A (unknown), RW 0x008F18DE (unknown), RW 0x008F232F (unknown), RW 0x0090C0EE (unknown), RW 0x0090C5E2 (unknown), RW 0x0099E766 (unknown), RW 0x009B58BF (unknown), RW 0x009B7EBD (unknown), RW 0x009B7F56 (unknown), RW 0x009B8047 (unknown), RW 0x009B80FA (unknown), RW 0x009B8160 (unknown), RW 0x009B83A6 (unknown), RW 0x009B8451 (unknown), RW 0x009B8556 (unknown), RW 0x009B8635 (unknown), RW 0x009B877C (unknown), RW 0x009B87DA (unknown), RW 0x009B88D8 (unknown), RW 0x009B8994 (unknown), RW 0x009B89CF (unknown), RW 0x009B8A06 (unknown), RW 0x009B8A47 (unknown), RW 0x009B8A7B (unknown), RW 0x009BAE5F (unknown), RW 0x009BAF02 (unknown), RW 0x009BB1C4 (unknown), RW 0x009BB226 (unknown), RW 0x009BB2A7 (unknown), RW 0x009BB2EA (unknown), RW 0x009BB3CA (unknown), RW 0x009BB479 (unknown), RW 0x009BB5E4 (unknown), RW 0x009BBA51 (unknown), RW 0x009BBE48 (unknown), RW 0x009BBFDC (unknown), RW 0x009BC1A0 (unknown), RW 0x009BC213 (unknown), RW 0x009BC39F (unknown), RW 0x009BC3F4 (unknown). Classes: AIGroup, AITacticsGenerator, ArmyDefinition, GateOpenAndCloseBehavior, PathfinderPosGoalManager, SpawnBehavior.
 Candidates: 0 none/partial functions; 48 unknown status.
 Red buttons: none linked.
 Unused fields: none linked.
@@ -4164,7 +4169,7 @@ Existing task matches: none.
 ### G402: RW 0x006B5F1C
 
 Stops: S-1326. Kinds: code.
-Functions: RW 0x006B5F1C (unknown), RW 0x006B7229 (unknown), RW 0x006E0B4A (unknown), RW 0x006E1970 (unknown), RW 0x006E1986 (unknown), RW 0x006E24C0 (unknown), RW 0x006E2625 (unknown), RW 0x006E4123 (unknown), RW 0x00780172 (unknown), RW 0x007F13AC (unknown), RW 0x007F19D6 (unknown), RW 0x007F32F4 (unknown), RW 0x007F3F58 (unknown), RW 0x007F4DC8 (unknown), RW 0x0080ED8C (unknown), RW 0x0080EDB8 (unknown), RW 0x0080F018 (unknown), RW 0x0080F0D8 (unknown), RW 0x0080F237 (unknown), RW 0x008E4ACD (unknown), RW 0x008E5C5C (unknown), RW 0x008FE971 (unknown), RW 0x008FF364 (unknown), RW 0x008FF50E (unknown), RW 0x008FF6F8 (unknown), RW 0x008FF849 (unknown), RW 0x008FFC4A (unknown), RW 0x008FFF41 (unknown), RW 0x009D3829 (unknown), RW 0x009D3881 (unknown). Classes: LevelUpUpgrade, LivingWorldLogic.
+Functions: RW 0x006B5F1C (unknown), RW 0x006B7229 (unknown), RW 0x006E0B4A (unknown), RW 0x006E1970 (unknown), RW 0x006E1986 (unknown), RW 0x006E24C0 (unknown), RW 0x006E2625 (unknown), RW 0x006E4123 (unknown), RW 0x00780172 (unknown), RW 0x007F13AC (unknown), RW 0x007F19D6 (unknown), RW 0x007F32F4 (unknown), RW 0x007F3F58 (unknown), RW 0x007F4DC8 (unknown), RW 0x0080ED8C (unknown), RW 0x0080EDB8 (unknown), RW 0x0080F018 (unknown), RW 0x0080F0D8 (unknown), RW 0x0080F237 (unknown), RW 0x008E4ACD (unknown), RW 0x008E5C5C (unknown), RW 0x008FE971 (unknown), RW 0x008FF364 (unknown), RW 0x008FF50E (unknown), RW 0x008FF6F8 (unknown), RW 0x008FF849 (unknown), RW 0x008FFC4A (unknown), RW 0x008FFF41 (unknown), RW 0x009D3829 (unknown), RW 0x009D3881 (unknown). Classes: LevelUpUpgrade, LivingWorldLogic, UnitRevivalTracker.
 Candidates: 0 none/partial functions; 30 unknown status.
 Red buttons: none linked.
 Unused fields: none linked.
@@ -4173,7 +4178,7 @@ Existing task matches: none.
 ### G403: RW 0x006F5BB0
 
 Stops: S-162, S-417, S-5308, S-590. Kinds: code.
-Functions: RW 0x004627C1 (unknown), RW 0x0063F3BF (ported), RW 0x00667ED1 (unknown), RW 0x0068B401 (ported), RW 0x0068BBE0 (ported), RW 0x006ADC43 (ported), RW 0x006C644C (unknown), RW 0x006C650B (unknown), RW 0x006C6975 (unknown), RW 0x006C6A24 (unknown), RW 0x006C7344 (unknown), RW 0x006C74C2 (unknown), RW 0x006C7946 (unknown), RW 0x006CA525 (ported), RW 0x006EB2EF (unknown), RW 0x006F1F0D (unknown), RW 0x006F2F8F (ported), RW 0x006F2FFF (unknown), RW 0x006F3C87 (ported), RW 0x006F49BC (unknown), RW 0x006F5BB0 (ported), RW 0x006F5EF3 (unknown), RW 0x006F5F65 (ported), RW 0x006F6454 (unknown), RW 0x006F6C18 (unknown), RW 0x006F8601 (unknown), RW 0x006F8B6E (unknown), RW 0x006F91E8 (unknown), RW 0x006F9829 (unknown), RW 0x006FA733 (unknown), RW 0x006FB67A (unknown), RW 0x006FB754 (unknown), RW 0x006FC18E (unknown), RW 0x006FE7CB (unknown), RW 0x006FF7FA (ported), RW 0x0070B9E0 (ported), RW 0x007443C0 (unknown), RW 0x007463E8 (unknown), RW 0x00746783 (unknown), RW 0x007468D5 (ported), RW 0x0074A594 (unknown), RW 0x0074A63F (unknown), RW 0x0074AA03 (unknown), RW 0x0074AC0C (unknown), RW 0x0074EB5C (unknown), RW 0x00774897 (ported), RW 0x00774E2F (ported), RW 0x00774F2B (unknown), RW 0x00774F9C (partial), RW 0x0077559F (unknown), RW 0x007A0F74 (ported), RW 0x007A12F4 (ported), RW 0x007A6295 (unknown), RW 0x007EDC2F (unknown), RW 0x0082EF7B (unknown), RW 0x00865321 (ported), RW 0x00865332 (unknown), RW 0x0086539E (unknown), RW 0x0086540A (ported), RW 0x0087631F (ported), RW 0x008E4591 (ported), RW 0x008F11DA (unknown), RW 0x008F121F (unknown), RW 0x008F135E (unknown), RW 0x008F144C (unknown), RW 0x008F1725 (unknown), RW 0x008F175A (unknown), RW 0x008F1792 (unknown), RW 0x008F17EE (unknown), RW 0x008F19E9 (unknown), RW 0x008F1D88 (ported), RW 0x008F2006 (ported), RW 0x008F21F7 (unknown), RW 0x008F243A (unknown), RW 0x008F2784 (unknown), RW 0x008F27AD (unknown), RW 0x008F28DD (unknown), RW 0x0090B1F4 (unknown), RW 0x0090B2A0 (unknown), RW 0x0090B342 (unknown), RW 0x0090B4E7 (unknown), RW 0x0090B5A9 (unknown), RW 0x0090BE31 (unknown), RW 0x0090C436 (unknown), RW 0x0090C50C (unknown), RW 0x0090C5E2 (unknown), RW 0x0090CCCB (unknown), RW 0x0090D3C7 (unknown), RW 0x0093485A (unknown), RW 0x0093491C (unknown), RW 0x00937F2D (unknown), RW 0x00937F7F (unknown), RW 0x00937FD2 (unknown), RW 0x00938240 (unknown), RW 0x00938939 (unknown), RW 0x0093894B (unknown), RW 0x009389A6 (unknown), RW 0x009389CE (unknown), RW 0x00938B3B (unknown), RW 0x00938D89 (unknown), RW 0x00938E42 (unknown), RW 0x0093A530 (unknown), RW 0x0093B3D8 (unknown), RW 0x0097CC29 (unknown), RW 0x0097CCBE (unknown), RW 0x0097CDA0 (unknown), RW 0x0097CE90 (unknown), RW 0x0097D035 (unknown), RW 0x0097D191 (unknown), RW 0x0097D425 (unknown), RW 0x0097D4E6 (unknown), RW 0x0097D74F (unknown), RW 0x0097DA21 (unknown), RW 0x0097DC99 (unknown), RW 0x00993373 (unknown), RW 0x009A2CA5 (unknown), RW 0x009A2E06 (unknown), RW 0x009A3366 (unknown), RW 0x009B2B04 (unknown), RW 0x009B2EB9 (unknown), RW 0x009B304A (unknown), RW 0x009B313C (unknown), RW 0x009B3184 (unknown), RW 0x009B31C5 (unknown), RW 0x009B31E6 (unknown), RW 0x009B333D (unknown), RW 0x009B3380 (unknown), RW 0x009B3453 (unknown), RW 0x009B3548 (unknown), RW 0x009B3734 (unknown), RW 0x009B37A7 (unknown), RW 0x009B3849 (unknown), RW 0x009B3D8B (unknown), RW 0x009B43E9 (unknown), RW 0x009B49BD (unknown), RW 0x009B4DE7 (unknown), RW 0x009B4E2B (unknown), RW 0x009B4EB7 (unknown), RW 0x009B4EF0 (unknown), RW 0x009B4F8F (unknown), RW 0x009B5020 (unknown), RW 0x009B5042 (unknown), RW 0x009B5190 (unknown), RW 0x009B52BD (unknown), RW 0x009EF783 (unknown), RW 0x009EF829 (unknown), RW 0x009EF955 (unknown), RW 0x009EF9AF (unknown), RW 0x009EFAF0 (unknown). Classes: AIGroup, AITactic, GarrisonContain, PathfindZoneManager, RunOffMapBehavior, TerrainLogic.
+Functions: RW 0x004627C1 (unknown), RW 0x0063F3BF (ported), RW 0x00667ED1 (unknown), RW 0x0068B401 (ported), RW 0x0068BBE0 (ported), RW 0x006ADC43 (ported), RW 0x006C644C (unknown), RW 0x006C650B (unknown), RW 0x006C6975 (unknown), RW 0x006C6A24 (unknown), RW 0x006C7344 (unknown), RW 0x006C74C2 (unknown), RW 0x006C7946 (unknown), RW 0x006CA525 (ported), RW 0x006EB2EF (unknown), RW 0x006F1F0D (unknown), RW 0x006F2F8F (ported), RW 0x006F2FFF (unknown), RW 0x006F3C87 (ported), RW 0x006F49BC (unknown), RW 0x006F5BB0 (ported), RW 0x006F5EF3 (unknown), RW 0x006F5F65 (ported), RW 0x006F6454 (unknown), RW 0x006F6C18 (unknown), RW 0x006F8601 (unknown), RW 0x006F8B6E (unknown), RW 0x006F91E8 (unknown), RW 0x006F9829 (unknown), RW 0x006FA733 (unknown), RW 0x006FB67A (unknown), RW 0x006FB754 (unknown), RW 0x006FC18E (unknown), RW 0x006FE7CB (unknown), RW 0x006FF7FA (ported), RW 0x0070B9E0 (ported), RW 0x007443C0 (unknown), RW 0x007463E8 (unknown), RW 0x00746783 (unknown), RW 0x007468D5 (ported), RW 0x0074A594 (unknown), RW 0x0074A63F (unknown), RW 0x0074AA03 (unknown), RW 0x0074AC0C (unknown), RW 0x0074EB5C (unknown), RW 0x00774897 (ported), RW 0x00774E2F (ported), RW 0x00774F2B (unknown), RW 0x00774F9C (partial), RW 0x0077559F (unknown), RW 0x007A0F74 (ported), RW 0x007A12F4 (ported), RW 0x007A6295 (unknown), RW 0x007EDC2F (unknown), RW 0x0082EF7B (unknown), RW 0x00865321 (ported), RW 0x00865332 (unknown), RW 0x0086539E (unknown), RW 0x0086540A (ported), RW 0x0087631F (ported), RW 0x008E4591 (ported), RW 0x008F11DA (unknown), RW 0x008F121F (unknown), RW 0x008F135E (unknown), RW 0x008F144C (unknown), RW 0x008F1725 (unknown), RW 0x008F175A (unknown), RW 0x008F1792 (unknown), RW 0x008F17EE (unknown), RW 0x008F19E9 (unknown), RW 0x008F1D88 (ported), RW 0x008F2006 (ported), RW 0x008F21F7 (unknown), RW 0x008F243A (unknown), RW 0x008F2784 (unknown), RW 0x008F27AD (unknown), RW 0x008F28DD (unknown), RW 0x0090B1F4 (unknown), RW 0x0090B2A0 (unknown), RW 0x0090B342 (unknown), RW 0x0090B4E7 (unknown), RW 0x0090B5A9 (unknown), RW 0x0090BE31 (unknown), RW 0x0090C436 (unknown), RW 0x0090C50C (unknown), RW 0x0090C5E2 (unknown), RW 0x0090CCCB (unknown), RW 0x0090D3C7 (unknown), RW 0x0093485A (unknown), RW 0x0093491C (unknown), RW 0x00937F2D (unknown), RW 0x00937F7F (unknown), RW 0x00937FD2 (unknown), RW 0x00938240 (unknown), RW 0x00938939 (unknown), RW 0x0093894B (unknown), RW 0x009389A6 (unknown), RW 0x009389CE (unknown), RW 0x00938B3B (unknown), RW 0x00938D89 (unknown), RW 0x00938E42 (unknown), RW 0x0093A530 (unknown), RW 0x0093B3D8 (unknown), RW 0x0097CC29 (unknown), RW 0x0097CCBE (unknown), RW 0x0097CDA0 (unknown), RW 0x0097CE90 (unknown), RW 0x0097D035 (unknown), RW 0x0097D191 (unknown), RW 0x0097D425 (unknown), RW 0x0097D4E6 (unknown), RW 0x0097D74F (unknown), RW 0x0097DA21 (unknown), RW 0x0097DC99 (unknown), RW 0x00993373 (unknown), RW 0x009A2CA5 (unknown), RW 0x009A2E06 (unknown), RW 0x009A3366 (unknown), RW 0x009B2B04 (unknown), RW 0x009B2EB9 (unknown), RW 0x009B304A (unknown), RW 0x009B313C (unknown), RW 0x009B3184 (unknown), RW 0x009B31C5 (unknown), RW 0x009B31E6 (unknown), RW 0x009B333D (unknown), RW 0x009B3380 (unknown), RW 0x009B3453 (unknown), RW 0x009B3548 (unknown), RW 0x009B3734 (unknown), RW 0x009B37A7 (unknown), RW 0x009B3849 (unknown), RW 0x009B3D8B (unknown), RW 0x009B43E9 (unknown), RW 0x009B49BD (unknown), RW 0x009B4DE7 (unknown), RW 0x009B4E2B (unknown), RW 0x009B4EB7 (unknown), RW 0x009B4EF0 (unknown), RW 0x009B4F8F (unknown), RW 0x009B5020 (unknown), RW 0x009B5042 (unknown), RW 0x009B5190 (unknown), RW 0x009B52BD (unknown), RW 0x009EF783 (unknown), RW 0x009EF829 (unknown), RW 0x009EF955 (unknown), RW 0x009EF9AF (unknown), RW 0x009EFAF0 (unknown). Classes: AIGroup, AITactic, AITacticsGenerator, GarrisonContain, PathfindZoneManager, RunOffMapBehavior, TerrainLogic.
 Candidates: 1 none/partial functions; 126 unknown status.
 Red buttons: none linked.
 Unused fields: RunOffMapBehavior.DieOnMap, RunOffMapBehavior.RunOffMapWaypointName.
@@ -4377,7 +4382,16 @@ Red buttons: none linked.
 Unused fields: none linked.
 Existing task matches: none.
 
-### G426: linked stops S-007
+### G426: linked stops S-006
+
+Stops: S-006. Kinds: code.
+Functions: none resolved. Classes: AptNativeHash.
+Candidates: 0 none/partial functions; 0 unknown status.
+Red buttons: none linked.
+Unused fields: none linked.
+Existing task matches: none.
+
+### G427: linked stops S-007
 
 Stops: S-007. Kinds: code.
 Functions: none resolved. Classes: AptValue.
@@ -4386,7 +4400,7 @@ Red buttons: none linked.
 Unused fields: none linked.
 Existing task matches: none.
 
-### G427: linked stops S-010
+### G428: linked stops S-010
 
 Stops: S-010. Kinds: code.
 Functions: none resolved. Classes: WindowManager.
@@ -4395,7 +4409,7 @@ Red buttons: none linked.
 Unused fields: none linked.
 Existing task matches: none.
 
-### G428: linked stops S-011
+### G429: linked stops S-011
 
 Stops: S-011. Kinds: code.
 Functions: none resolved. Classes: none.
@@ -4404,7 +4418,7 @@ Red buttons: none linked.
 Unused fields: none linked.
 Existing task matches: none.
 
-### G429: linked stops S-012
+### G430: linked stops S-012
 
 Stops: S-012. Kinds: code.
 Functions: none resolved. Classes: ArchiveHandle.
@@ -4413,7 +4427,7 @@ Red buttons: none linked.
 Unused fields: none linked.
 Existing task matches: none.
 
-### G430: linked stops S-015
+### G431: linked stops S-015
 
 Stops: S-015. Kinds: code.
 Functions: none resolved. Classes: AptObject.
@@ -4422,7 +4436,7 @@ Red buttons: none linked.
 Unused fields: none linked.
 Existing task matches: none.
 
-### G431: linked stops S-016, S-042
+### G432: linked stops S-016, S-042
 
 Stops: S-016, S-042. Kinds: code.
 Functions: none resolved. Classes: none.
@@ -4431,7 +4445,7 @@ Red buttons: none linked.
 Unused fields: none linked.
 Existing task matches: none.
 
-### G432: linked stops S-020, S-021
+### G433: linked stops S-020, S-021
 
 Stops: S-020, S-021, S-029. Kinds: code.
 Functions: none resolved. Classes: none.
@@ -4440,7 +4454,7 @@ Red buttons: none linked.
 Unused fields: none linked.
 Existing task matches: none.
 
-### G433: linked stops S-027
+### G434: linked stops S-027
 
 Stops: S-027. Kinds: code.
 Functions: none resolved. Classes: Random4Class.
@@ -4449,7 +4463,7 @@ Red buttons: none linked.
 Unused fields: none linked.
 Existing task matches: none.
 
-### G434: linked stops S-028, S-460
+### G435: linked stops S-028, S-460
 
 Stops: S-028, S-460. Kinds: code.
 Functions: RW 0x004C34A2 (ported), RW 0x006756A1 (ported). Classes: DrawableLaunchBones, W3DSupplyDraw.
@@ -4458,7 +4472,7 @@ Red buttons: none linked.
 Unused fields: none linked.
 Existing task matches: none.
 
-### G435: linked stops S-030
+### G436: linked stops S-030
 
 Stops: S-030. Kinds: code.
 Functions: none resolved. Classes: WorldHeightMap.
@@ -4467,7 +4481,7 @@ Red buttons: none linked.
 Unused fields: none linked.
 Existing task matches: none.
 
-### G436: linked stops S-038
+### G437: linked stops S-038
 
 Stops: S-038. Kinds: code.
 Functions: none resolved. Classes: SidesList.
@@ -4476,7 +4490,7 @@ Red buttons: none linked.
 Unused fields: none linked.
 Existing task matches: none.
 
-### G437: linked stops S-039
+### G438: linked stops S-039
 
 Stops: S-039. Kinds: code.
 Functions: none resolved. Classes: none.
@@ -4485,16 +4499,16 @@ Red buttons: none linked.
 Unused fields: none linked.
 Existing task matches: none.
 
-### G438: linked stops S-060
+### G439: linked stops S-060
 
 Stops: S-060. Kinds: code.
-Functions: none resolved. Classes: TerrainLogic.
+Functions: none resolved. Classes: BaseHeightMapRenderObjClass, TerrainLogic.
 Candidates: 0 none/partial functions; 0 unknown status.
 Red buttons: none linked.
 Unused fields: none linked.
 Existing task matches: none.
 
-### G439: linked stops S-070
+### G440: linked stops S-070
 
 Stops: S-070. Kinds: code.
 Functions: none resolved. Classes: ModuleData, ModuleFactory, RawModuleData.
@@ -4503,7 +4517,7 @@ Red buttons: none linked.
 Unused fields: none linked.
 Existing task matches: none.
 
-### G440: linked stops S-083
+### G441: linked stops S-083
 
 Stops: S-083. Kinds: code.
 Functions: none resolved. Classes: AudioIniState, ObjectFilter, RetailObjectWorld.
@@ -4512,7 +4526,7 @@ Red buttons: none linked.
 Unused fields: none linked.
 Existing task matches: none.
 
-### G441: linked stops S-100, S-109
+### G442: linked stops S-100, S-109
 
 Stops: S-100, S-109, S-136. Kinds: code.
 Functions: none resolved. Classes: none.
@@ -4521,7 +4535,7 @@ Red buttons: none linked.
 Unused fields: none linked.
 Existing task matches: none.
 
-### G442: linked stops S-102
+### G443: linked stops S-102
 
 Stops: S-102. Kinds: code.
 Functions: none resolved. Classes: AptSpriteInst.
@@ -4530,7 +4544,7 @@ Red buttons: none linked.
 Unused fields: none linked.
 Existing task matches: none.
 
-### G443: linked stops S-108, S-130
+### G444: linked stops S-108, S-130
 
 Stops: S-108, S-130, S-137. Kinds: code.
 Functions: none resolved. Classes: AptMenuPlayer.
@@ -4539,7 +4553,16 @@ Red buttons: none linked.
 Unused fields: none linked.
 Existing task matches: none.
 
-### G444: RW 0x00608D0B
+### G445: linked stops S-114
+
+Stops: S-114. Kinds: code.
+Functions: none resolved. Classes: GlobalData.
+Candidates: 0 none/partial functions; 0 unknown status.
+Red buttons: none linked.
+Unused fields: none linked.
+Existing task matches: none.
+
+### G446: RW 0x00608D0B
 
 Stops: S-1184. Kinds: code.
 Functions: RW 0x00608D0B (ported), RW 0x006D32E4 (ported). Classes: none.
@@ -4548,7 +4571,7 @@ Red buttons: none linked.
 Unused fields: none linked.
 Existing task matches: none.
 
-### G445: linked stops S-133
+### G447: linked stops S-133
 
 Stops: S-133. Kinds: code.
 Functions: none resolved. Classes: AptFile.
@@ -4557,7 +4580,7 @@ Red buttons: none linked.
 Unused fields: none linked.
 Existing task matches: none.
 
-### G446: linked stops S-134
+### G448: linked stops S-134
 
 Stops: S-134. Kinds: code.
 Functions: none resolved. Classes: none.
@@ -4566,7 +4589,7 @@ Red buttons: none linked.
 Unused fields: none linked.
 Existing task matches: none.
 
-### G447: linked stops S-138
+### G449: linked stops S-138
 
 Stops: S-138. Kinds: code.
 Functions: none resolved. Classes: AptMainMenu, AptMapPreview, WindowManager.
@@ -4575,7 +4598,7 @@ Red buttons: none linked.
 Unused fields: none linked.
 Existing task matches: none.
 
-### G448: linked stops S-146
+### G450: linked stops S-146
 
 Stops: S-146. Kinds: code.
 Functions: none resolved. Classes: PlayerList.
@@ -4584,7 +4607,7 @@ Red buttons: none linked.
 Unused fields: none linked.
 Existing task matches: none.
 
-### G449: RW 0x00674B1F
+### G451: RW 0x00674B1F
 
 Stops: S-151. Kinds: code.
 Functions: RW 0x00674B1F (ported), RW 0x006765B9 (ported). Classes: LiveGame, LogicSnapshot.
@@ -4593,7 +4616,7 @@ Red buttons: none linked.
 Unused fields: none linked.
 Existing task matches: none.
 
-### G450: linked stops S-1540
+### G452: linked stops S-1540
 
 Stops: S-1540. Kinds: code.
 Functions: none resolved. Classes: none.
@@ -4602,7 +4625,7 @@ Red buttons: none linked.
 Unused fields: none linked.
 Existing task matches: none.
 
-### G451: linked stops S-1541, S-232
+### G453: linked stops S-1541, S-232
 
 Stops: S-1541, S-232. Kinds: code, project.
 Functions: none resolved. Classes: none.
@@ -4611,7 +4634,7 @@ Red buttons: none linked.
 Unused fields: none linked.
 Existing task matches: none.
 
-### G452: linked stops S-1561
+### G454: linked stops S-1561
 
 Stops: S-1561. Kinds: code.
 Functions: none resolved. Classes: RetailArchivePolicy.
@@ -4620,7 +4643,7 @@ Red buttons: none linked.
 Unused fields: none linked.
 Existing task matches: none.
 
-### G453: RW 0x004BE587
+### G455: RW 0x004BE587
 
 Stops: S-1580. Kinds: code.
 Functions: RW 0x004BE587 (ported). Classes: none.
@@ -4629,7 +4652,7 @@ Red buttons: none linked.
 Unused fields: none linked.
 Existing task matches: none.
 
-### G454: linked stops S-170, S-175
+### G456: linked stops S-170, S-175
 
 Stops: S-170, S-175. Kinds: code.
 Functions: none resolved. Classes: AptMainMenu, AptStats, PlayerList, PlayerTemplate, ShellRequest.
@@ -4638,7 +4661,7 @@ Red buttons: none linked.
 Unused fields: none linked.
 Existing task matches: none.
 
-### G455: linked stops S-171, S-5140
+### G457: linked stops S-171, S-5140
 
 Stops: S-171, S-5140. Kinds: code.
 Functions: none resolved. Classes: WindowManager.
@@ -4647,7 +4670,7 @@ Red buttons: none linked.
 Unused fields: none linked.
 Existing task matches: none.
 
-### G456: linked stops S-1730
+### G458: linked stops S-1730
 
 Stops: S-1730. Kinds: code.
 Functions: none resolved. Classes: W3DInstancer.
@@ -4656,7 +4679,7 @@ Red buttons: none linked.
 Unused fields: none linked.
 Existing task matches: none.
 
-### G457: linked stops S-174
+### G459: linked stops S-174
 
 Stops: S-174. Kinds: code.
 Functions: none resolved. Classes: AptHost.
@@ -4665,7 +4688,7 @@ Red buttons: none linked.
 Unused fields: none linked.
 Existing task matches: none.
 
-### G458: linked stops S-176
+### G460: linked stops S-176
 
 Stops: S-176. Kinds: code.
 Functions: none resolved. Classes: DefaultFontMetrics, FontMetricsSource, GameFont, GameWindowManager, GlobalLanguage.
@@ -4674,7 +4697,7 @@ Red buttons: none linked.
 Unused fields: none linked.
 Existing task matches: none.
 
-### G459: W3DTruckDraw
+### G461: W3DTruckDraw
 
 Stops: S-1792. Kinds: code.
 Functions: RW 0x0046E918 (ported), RW 0x004CBFFB (ported), RW 0x0068B34C (ported). Classes: W3DTruckDraw.
@@ -4683,7 +4706,7 @@ Red buttons: none linked.
 Unused fields: none linked.
 Existing task matches: none.
 
-### G460: linked stops S-181
+### G462: linked stops S-181
 
 Stops: S-181. Kinds: code.
 Functions: none resolved. Classes: DamageFX, ParticleSystem, WeaponReferenceHost, WeaponStore.
@@ -4692,16 +4715,16 @@ Red buttons: none linked.
 Unused fields: none linked.
 Existing task matches: none.
 
-### G461: RW 0x0063F3BF
+### G463: RW 0x0063F3BF
 
 Stops: S-182. Kinds: code.
-Functions: RW 0x0063F3BF (ported). Classes: WeaponBonus, WeaponBonusSet, WeaponStore.
+Functions: RW 0x0063F3BF (ported). Classes: SubsystemInterface, WeaponBonus, WeaponBonusSet, WeaponStore.
 Candidates: 0 none/partial functions; 0 unknown status.
 Red buttons: none linked.
 Unused fields: none linked.
 Existing task matches: none.
 
-### G462: linked stops S-184
+### G464: linked stops S-184
 
 Stops: S-184. Kinds: code.
 Functions: RW 0x008E326D (ported). Classes: FiringTracker.
@@ -4710,7 +4733,7 @@ Red buttons: none linked.
 Unused fields: none linked.
 Existing task matches: none.
 
-### G463: linked stops S-187
+### G465: linked stops S-187
 
 Stops: S-187. Kinds: code.
 Functions: none resolved. Classes: GrabNugget.
@@ -4719,16 +4742,25 @@ Red buttons: none linked.
 Unused fields: none linked.
 Existing task matches: none.
 
-### G464: RW 0x006628CD
+### G466: RW 0x006628CD
 
 Stops: S-1872. Kinds: code.
-Functions: RW 0x006628CD (ported), RW 0x006EACB9 (ported), RW 0x00765522 (ported), RW 0x0082C366 (ported). Classes: none.
+Functions: RW 0x006628CD (ported), RW 0x006EACB9 (ported), RW 0x00765522 (ported), RW 0x0082C366 (ported). Classes: ActionManager.
 Candidates: 0 none/partial functions; 0 unknown status.
 Red buttons: none linked.
 Unused fields: none linked.
 Existing task matches: none.
 
-### G465: linked stops S-1890
+### G467: linked stops S-188
+
+Stops: S-188. Kinds: code.
+Functions: none resolved. Classes: WeaponSet.
+Candidates: 0 none/partial functions; 0 unknown status.
+Red buttons: none linked.
+Unused fields: none linked.
+Existing task matches: none.
+
+### G468: linked stops S-1890
 
 Stops: S-1890. Kinds: code.
 Functions: none resolved. Classes: NetImpairment.
@@ -4737,7 +4769,7 @@ Red buttons: none linked.
 Unused fields: none linked.
 Existing task matches: none.
 
-### G466: linked stops S-1891
+### G469: linked stops S-1891
 
 Stops: S-1891. Kinds: code.
 Functions: none resolved. Classes: none.
@@ -4746,7 +4778,7 @@ Red buttons: none linked.
 Unused fields: none linked.
 Existing task matches: none.
 
-### G467: RW 0x0089C1A4
+### G470: RW 0x0089C1A4
 
 Stops: S-1942. Kinds: code.
 Functions: RW 0x0089C1A4 (ported), RW 0x0089C261 (ported). Classes: GateOpenAndCloseBehavior.
@@ -4755,7 +4787,7 @@ Red buttons: none linked.
 Unused fields: none linked.
 Existing task matches: none.
 
-### G468: RW 0x0067055A
+### G471: RW 0x0067055A
 
 Stops: S-1951. Kinds: code.
 Functions: RW 0x0067055A (ported), RW 0x0068D8F7 (ported). Classes: HordeContainCore, InGameUI.
@@ -4764,7 +4796,16 @@ Red buttons: none linked.
 Unused fields: none linked.
 Existing task matches: none.
 
-### G469: ReplaceSelfUpgrade
+### G472: linked stops S-1981
+
+Stops: S-1981. Kinds: code.
+Functions: none resolved. Classes: GlobalData.
+Candidates: 0 none/partial functions; 0 unknown status.
+Red buttons: none linked.
+Unused fields: none linked.
+Existing task matches: none.
+
+### G473: ReplaceSelfUpgrade
 
 Stops: S-1986. Kinds: code.
 Functions: RW 0x0068C3E6 (ported), RW 0x008BB23F (ported), RW 0x008BB5FA (ported), RW 0x00AD22F0 (ported). Classes: ReplaceSelfUpgrade.
@@ -4773,7 +4814,7 @@ Red buttons: none linked.
 Unused fields: none linked.
 Existing task matches: #601 Port 253: Upgrade modules: SubObjectsUpgrade (logic side), GeometryUpgrade, ReplaceSelfUpgrade, CostModifierUpgrade, InheritUpgradeCreate, SpellRechargeModifierUpgrade.
 
-### G470: linked stops S-2004
+### G474: linked stops S-2004
 
 Stops: S-2004. Kinds: code.
 Functions: none resolved. Classes: AttributeModifierNugget, DOTNugget, DamageNugget.
@@ -4782,7 +4823,7 @@ Red buttons: none linked.
 Unused fields: none linked.
 Existing task matches: none.
 
-### G471: linked stops S-2005
+### G475: linked stops S-2005
 
 Stops: S-2005. Kinds: code.
 Functions: RW 0x006ED843 (ported). Classes: none.
@@ -4791,7 +4832,7 @@ Red buttons: none linked.
 Unused fields: none linked.
 Existing task matches: none.
 
-### G472: linked stops S-204
+### G476: linked stops S-204
 
 Stops: S-204. Kinds: code.
 Functions: RW 0x006AD8A7 (ported). Classes: CostModifierUpgrade, ProductionModifier.
@@ -4800,7 +4841,7 @@ Red buttons: none linked.
 Unused fields: none linked.
 Existing task matches: #601 Port 253: Upgrade modules: SubObjectsUpgrade (logic side), GeometryUpgrade, ReplaceSelfUpgrade, CostModifierUpgrade, InheritUpgradeCreate, SpellRechargeModifierUpgrade.
 
-### G473: RW 0x006AAB85
+### G477: RW 0x006AAB85
 
 Stops: S-208. Kinds: code.
 Functions: RW 0x006AAB85 (ported). Classes: AIGroup.
@@ -4809,7 +4850,7 @@ Red buttons: none linked.
 Unused fields: none linked.
 Existing task matches: none.
 
-### G474: RW 0x0070BCE7
+### G478: RW 0x0070BCE7
 
 Stops: S-209. Kinds: code.
 Functions: RW 0x0070BCE7 (ported), RW 0x008A7363 (ported), RW 0x008A74B7 (ported), RW 0x008A9DBA (ported), RW 0x00B261F0 (ported). Classes: SpawnPointProductionExitUpdate, SupplyCenterProductionExitUpdate.
@@ -4818,7 +4859,7 @@ Red buttons: none linked.
 Unused fields: none linked.
 Existing task matches: none.
 
-### G475: linked stops S-231
+### G479: linked stops S-231
 
 Stops: S-231. Kinds: code.
 Functions: none resolved. Classes: HordeContainCore, LiveGame, MapChunks, TerrainLogic, TerrainPathfindSource.
@@ -4827,16 +4868,16 @@ Red buttons: none linked.
 Unused fields: none linked.
 Existing task matches: none.
 
-### G476: linked stops S-234
+### G480: linked stops S-234
 
 Stops: S-234. Kinds: code.
-Functions: none resolved. Classes: GameMessage.
+Functions: none resolved. Classes: GameInfo, GameMessage.
 Candidates: 0 none/partial functions; 0 unknown status.
 Red buttons: none linked.
 Unused fields: none linked.
 Existing task matches: none.
 
-### G477: RW 0x0067B4B7
+### G481: RW 0x0067B4B7
 
 Stops: S-2457. Kinds: code.
 Functions: RW 0x0067B4B7 (ported), RW 0x006968BC (ported). Classes: InGameHud.
@@ -4845,7 +4886,7 @@ Red buttons: none linked.
 Unused fields: none linked.
 Existing task matches: none.
 
-### G478: linked stops S-249
+### G482: linked stops S-249
 
 Stops: S-249. Kinds: code.
 Functions: none resolved. Classes: AudioSettings.
@@ -4854,7 +4895,7 @@ Red buttons: none linked.
 Unused fields: none linked.
 Existing task matches: none.
 
-### G479: RW 0x0089DB5D
+### G483: RW 0x0089DB5D
 
 Stops: S-253, S-256. Kinds: code.
 Functions: RW 0x0046E918 (ported), RW 0x0068C818 (ported), RW 0x0068C82D (ported), RW 0x0068F1A8 (ported), RW 0x0068F259 (ported), RW 0x006A7C01 (ported), RW 0x006AC06F (ported), RW 0x006AD8A7 (ported), RW 0x0079D833 (ported), RW 0x007A075A (ported), RW 0x008854D3 (ported), RW 0x0089DB5D (ported), RW 0x008A4574 (ported). Classes: AutoDepositUpdate, CostModifierUpgrade, ExperienceTracker, ExperienceWorld.
@@ -4863,16 +4904,16 @@ Red buttons: none linked.
 Unused fields: none linked.
 Existing task matches: #601 Port 253: Upgrade modules: SubObjectsUpgrade (logic side), GeometryUpgrade, ReplaceSelfUpgrade, CostModifierUpgrade, InheritUpgradeCreate, SpellRechargeModifierUpgrade.
 
-### G480: RW 0x00642002
+### G484: RW 0x00642002
 
 Stops: S-255. Kinds: code.
-Functions: RW 0x00642002 (ported). Classes: none.
+Functions: RW 0x00642002 (ported). Classes: GlobalData.
 Candidates: 0 none/partial functions; 0 unknown status.
 Red buttons: none linked.
 Unused fields: none linked.
 Existing task matches: none.
 
-### G481: RW 0x006A8630
+### G485: RW 0x006A8630
 
 Stops: S-259. Kinds: code.
 Functions: RW 0x006A8630 (ported). Classes: none.
@@ -4881,7 +4922,7 @@ Red buttons: none linked.
 Unused fields: none linked.
 Existing task matches: none.
 
-### G482: linked stops S-2704
+### G486: linked stops S-2704
 
 Stops: S-2704. Kinds: code.
 Functions: none resolved. Classes: AptLoader.
@@ -4890,7 +4931,7 @@ Red buttons: none linked.
 Unused fields: none linked.
 Existing task matches: none.
 
-### G483: linked stops S-274
+### G487: linked stops S-274
 
 Stops: S-274. Kinds: code.
 Functions: none resolved. Classes: AptPalantir, AptScreenFactoryTable.
@@ -4899,7 +4940,7 @@ Red buttons: none linked.
 Unused fields: none linked.
 Existing task matches: none.
 
-### G484: linked stops S-284
+### G488: linked stops S-284
 
 Stops: S-284. Kinds: code.
 Functions: none resolved. Classes: HudContext, HudInput, InGameHud.
@@ -4908,7 +4949,7 @@ Red buttons: none linked.
 Unused fields: none linked.
 Existing task matches: none.
 
-### G485: linked stops S-290
+### G489: linked stops S-290
 
 Stops: S-290. Kinds: code.
 Functions: none resolved. Classes: ControlBar.
@@ -4917,16 +4958,16 @@ Red buttons: none linked.
 Unused fields: none linked.
 Existing task matches: none.
 
-### G486: RW 0x0068F430
+### G490: RW 0x0068F430
 
 Stops: S-320. Kinds: code.
-Functions: RW 0x0068F430 (ported), RW 0x006ED843 (ported), RW 0x0073D89F (ported). Classes: WeaponStatusHelper.
+Functions: RW 0x0068F430 (ported), RW 0x006ED843 (ported), RW 0x0073D89F (ported). Classes: WeaponSet, WeaponStatusHelper.
 Candidates: 0 none/partial functions; 0 unknown status.
 Red buttons: none linked.
 Unused fields: none linked.
 Existing task matches: none.
 
-### G487: linked stops S-3403
+### G491: linked stops S-3403
 
 Stops: S-3403. Kinds: code.
 Functions: none resolved. Classes: AptOptionsScreen, OpenBFMEOptionsPage.
@@ -4935,7 +4976,7 @@ Red buttons: none linked.
 Unused fields: none linked.
 Existing task matches: none.
 
-### G488: RW 0x00936B7D
+### G492: RW 0x00936B7D
 
 Stops: S-341. Kinds: code.
 Functions: RW 0x00936B7D (ported), RW 0x00AD14F0 (ported), RW 0x00AD1920 (ported), RW 0x00AD1D60 (ported), RW 0x00AD2700 (ported), RW 0x00AD2770 (ported), RW 0x00AD2860 (ported). Classes: GeometryUpgrade.
@@ -4944,7 +4985,7 @@ Red buttons: none linked.
 Unused fields: none linked.
 Existing task matches: #601 Port 253: Upgrade modules: SubObjectsUpgrade (logic side), GeometryUpgrade, ReplaceSelfUpgrade, CostModifierUpgrade, InheritUpgradeCreate, SpellRechargeModifierUpgrade.
 
-### G489: linked stops S-3507
+### G493: linked stops S-3507
 
 Stops: S-3507. Kinds: code.
 Functions: none resolved. Classes: InGameHud.
@@ -4953,7 +4994,7 @@ Red buttons: none linked.
 Unused fields: none linked.
 Existing task matches: none.
 
-### G490: RW 0x00441C56
+### G494: RW 0x00441C56
 
 Stops: S-361. Kinds: code.
 Functions: RW 0x00441C56 (ported), RW 0x00960E8D (ported), RW 0x009612A3 (ported), RW 0x009D6A35 (ported). Classes: BezierSegment.
@@ -4962,7 +5003,7 @@ Red buttons: none linked.
 Unused fields: none linked.
 Existing task matches: none.
 
-### G491: RW 0x00690BD2
+### G495: RW 0x00690BD2
 
 Stops: S-362. Kinds: code.
 Functions: RW 0x00690BD2 (ported), RW 0x006CB81A (ported), RW 0x006CB85A (ported), RW 0x00AD30E0 (ported). Classes: none.
@@ -4971,7 +5012,7 @@ Red buttons: none linked.
 Unused fields: none linked.
 Existing task matches: none.
 
-### G492: linked stops S-3711
+### G496: linked stops S-3711
 
 Stops: S-3711. Kinds: code.
 Functions: none resolved. Classes: NetAddress.
@@ -4980,7 +5021,7 @@ Red buttons: none linked.
 Unused fields: none linked.
 Existing task matches: none.
 
-### G493: RW 0x00862A88
+### G497: RW 0x00862A88
 
 Stops: S-3800. Kinds: code.
 Functions: RW 0x00862A88 (ported), RW 0x00862B07 (ported), RW 0x008633A4 (ported). Classes: LiveGame, SpawnBehavior, SpawnPointProductionExitUpdate.
@@ -4989,7 +5030,7 @@ Red buttons: none linked.
 Unused fields: none linked.
 Existing task matches: #465 Port 198: SpawnBehavior: the spawn interface's attack / idle orders and Player::onUnitCreated (S-1425).
 
-### G494: linked stops S-4000
+### G498: linked stops S-4000
 
 Stops: S-4000. Kinds: code.
 Functions: none resolved. Classes: CommandLogLoad, SaveGameFile.
@@ -4998,7 +5039,7 @@ Red buttons: none linked.
 Unused fields: none linked.
 Existing task matches: none.
 
-### G495: linked stops S-4001
+### G499: linked stops S-4001
 
 Stops: S-4001. Kinds: code.
 Functions: none resolved. Classes: FrameBatch, ReplayPlayback.
@@ -5007,7 +5048,7 @@ Red buttons: none linked.
 Unused fields: none linked.
 Existing task matches: none.
 
-### G496: linked stops S-4002
+### G500: linked stops S-4002
 
 Stops: S-4002. Kinds: code.
 Functions: none resolved. Classes: GameWorld, NewGameMessage.
@@ -5016,7 +5057,7 @@ Red buttons: none linked.
 Unused fields: none linked.
 Existing task matches: none.
 
-### G497: RW 0x00667416
+### G501: RW 0x00667416
 
 Stops: S-4193. Kinds: code.
 Functions: RW 0x00667416 (ported). Classes: AIUpdateInterface, AIWorld, DozerAIUpdate, GiantBirdAIUpdate, HordeAIUpdate, UpdateModule.
@@ -5025,7 +5066,7 @@ Red buttons: none linked.
 Unused fields: none linked.
 Existing task matches: #612 Port 264: AIUpdateInterface: the 64 uncited own functions of the AI every Ennorath unit runs (classify, then port the missing ones).
 
-### G498: linked stops S-4222, S-5013
+### G502: linked stops S-4222, S-5013
 
 Stops: S-4222, S-5013. Kinds: code, project.
 Functions: none resolved. Classes: AIWorld.
@@ -5034,7 +5075,7 @@ Red buttons: none linked.
 Unused fields: none linked.
 Existing task matches: none.
 
-### G499: linked stops S-4280, S-810
+### G503: linked stops S-4280, S-810
 
 Stops: S-4280, S-810. Kinds: code.
 Functions: none resolved. Classes: GameWorld, InGameHudNode, LiveGame, LiveGameFrameDriver, LockstepDriver, LogicSnapshot, ModuleFactory, ReplayWriter, ShroudManager, TacticalCamera.
@@ -5043,7 +5084,7 @@ Red buttons: none linked.
 Unused fields: none linked.
 Existing task matches: none.
 
-### G500: RW 0x00441C56
+### G504: RW 0x00441C56
 
 Stops: S-452. Kinds: code.
 Functions: RW 0x00441C56 (ported). Classes: none.
@@ -5052,7 +5093,7 @@ Red buttons: none linked.
 Unused fields: none linked.
 Existing task matches: none.
 
-### G501: linked stops S-4550
+### G505: linked stops S-4550
 
 Stops: S-4550. Kinds: code.
 Functions: none resolved. Classes: AptMessenger.
@@ -5061,7 +5102,7 @@ Red buttons: none linked.
 Unused fields: none linked.
 Existing task matches: none.
 
-### G502: linked stops S-4752
+### G506: linked stops S-4752
 
 Stops: S-4752. Kinds: code.
 Functions: none resolved. Classes: AptLanLobby.
@@ -5070,7 +5111,7 @@ Red buttons: none linked.
 Unused fields: none linked.
 Existing task matches: none.
 
-### G503: linked stops S-4753
+### G507: linked stops S-4753
 
 Stops: S-4753. Kinds: code.
 Functions: none resolved. Classes: AptLanLobby.
@@ -5079,7 +5120,7 @@ Red buttons: none linked.
 Unused fields: none linked.
 Existing task matches: none.
 
-### G504: linked stops S-4850
+### G508: linked stops S-4850
 
 Stops: S-4850. Kinds: code.
 Functions: none resolved. Classes: AptCanvasInputs, GameWindow, PlatformKind, TextBadge.
@@ -5088,16 +5129,16 @@ Red buttons: none linked.
 Unused fields: none linked.
 Existing task matches: none.
 
-### G505: linked stops S-4860
+### G509: linked stops S-4860
 
 Stops: S-4860. Kinds: code.
-Functions: none resolved. Classes: GameWorld, OnlineLobbyClient.
+Functions: none resolved. Classes: GameInfo, GameWorld, OnlineLobbyClient.
 Candidates: 0 none/partial functions; 0 unknown status.
 Red buttons: none linked.
 Unused fields: none linked.
 Existing task matches: none.
 
-### G506: linked stops S-4874
+### G510: linked stops S-4874
 
 Stops: S-4874. Kinds: code.
 Functions: none resolved. Classes: none.
@@ -5106,7 +5147,7 @@ Red buttons: none linked.
 Unused fields: none linked.
 Existing task matches: none.
 
-### G507: linked stops S-4876
+### G511: linked stops S-4876
 
 Stops: S-4876. Kinds: code.
 Functions: none resolved. Classes: PlayerTemplate.
@@ -5115,7 +5156,7 @@ Red buttons: none linked.
 Unused fields: none linked.
 Existing task matches: none.
 
-### G508: linked stops S-4878
+### G512: linked stops S-4878
 
 Stops: S-4878. Kinds: code.
 Functions: none resolved. Classes: GameWorld.
@@ -5124,7 +5165,7 @@ Red buttons: none linked.
 Unused fields: none linked.
 Existing task matches: none.
 
-### G509: linked stops S-4931
+### G513: linked stops S-4931
 
 Stops: S-4931. Kinds: code.
 Functions: none resolved. Classes: LiveGame.
@@ -5133,7 +5174,7 @@ Red buttons: none linked.
 Unused fields: none linked.
 Existing task matches: none.
 
-### G510: linked stops S-4981
+### G514: linked stops S-4981
 
 Stops: S-4981. Kinds: code.
 Functions: none resolved. Classes: MenuNavigator.
@@ -5142,7 +5183,7 @@ Red buttons: none linked.
 Unused fields: none linked.
 Existing task matches: none.
 
-### G511: linked stops S-5014
+### G515: linked stops S-5014
 
 Stops: S-5014. Kinds: code.
 Functions: none resolved. Classes: TeamFactory.
@@ -5151,16 +5192,16 @@ Red buttons: none linked.
 Unused fields: none linked.
 Existing task matches: none.
 
-### G512: linked stops S-5016
+### G516: linked stops S-5016
 
 Stops: S-5016. Kinds: code.
-Functions: none resolved. Classes: MappedImageCollection, PlacementIcons, TerrainResourceBehavior, TerrainResourceFeedback.
+Functions: none resolved. Classes: AptPlayer, MappedImageCollection, PlacementIcons, TerrainResourceBehavior, TerrainResourceFeedback.
 Candidates: 0 none/partial functions; 0 unknown status.
 Red buttons: none linked.
 Unused fields: none linked.
 Existing task matches: none.
 
-### G513: linked stops S-5017
+### G517: linked stops S-5017
 
 Stops: S-5017. Kinds: code.
 Functions: none resolved. Classes: InGameUI, LivingWorldStores, ThingTemplate.
@@ -5169,7 +5210,16 @@ Red buttons: none linked.
 Unused fields: none linked.
 Existing task matches: none.
 
-### G514: linked stops S-5143
+### G518: linked stops S-5141
+
+Stops: S-5141. Kinds: code.
+Functions: none resolved. Classes: GameInfo.
+Candidates: 0 none/partial functions; 0 unknown status.
+Red buttons: none linked.
+Unused fields: none linked.
+Existing task matches: none.
+
+### G519: linked stops S-5143
 
 Stops: S-5143. Kinds: code.
 Functions: none resolved. Classes: AptOnlineShell.
@@ -5178,7 +5228,7 @@ Red buttons: none linked.
 Unused fields: none linked.
 Existing task matches: none.
 
-### G515: DoCommandUpgrade
+### G520: DoCommandUpgrade
 
 Stops: S-5145. Kinds: code.
 Functions: RW 0x0068E5A3 (ported), RW 0x00695338 (ported), RW 0x00696FD2 (ported), RW 0x008B8DFC (ported), RW 0x008B8E2E (ported). Classes: DoCommandUpgrade.
@@ -5187,16 +5237,16 @@ Red buttons: none linked.
 Unused fields: none linked.
 Existing task matches: none.
 
-### G516: linked stops S-5204
+### G521: linked stops S-5204
 
 Stops: S-5204. Kinds: code.
-Functions: none resolved. Classes: DrawEntry.
+Functions: none resolved. Classes: DrawEntry, W3DModelDraw.
 Candidates: 0 none/partial functions; 0 unknown status.
 Red buttons: none linked.
 Unused fields: none linked.
 Existing task matches: none.
 
-### G517: linked stops S-5306
+### G522: linked stops S-5306
 
 Stops: S-5306. Kinds: code.
 Functions: none resolved. Classes: GameWorld.
@@ -5205,7 +5255,7 @@ Red buttons: none linked.
 Unused fields: none linked.
 Existing task matches: none.
 
-### G518: EntEnragedUpdate
+### G523: EntEnragedUpdate
 
 Stops: S-5605. Kinds: code.
 Functions: RW 0x00890738 (ported), RW 0x008B6866 (ported). Classes: EntEnragedUpdate, FlammableUpdate.
@@ -5214,7 +5264,7 @@ Red buttons: none linked.
 Unused fields: none linked.
 Existing task matches: #610 Port 262: Burning: FlammableUpdate and FireWeaponWhenDamagedBehavior (catching fire, burning damage, the fire weapon on damage).
 
-### G519: AimWeaponBehavior
+### G524: AimWeaponBehavior
 
 Stops: S-5607. Kinds: code.
 Functions: RW 0x0070E013 (ported), RW 0x0085E30B (ported). Classes: AimWeaponBehavior.
@@ -5223,16 +5273,16 @@ Red buttons: none linked.
 Unused fields: none linked.
 Existing task matches: none.
 
-### G520: RW 0x0082C167
+### G525: RW 0x0082C167
 
 Stops: S-565. Kinds: code.
-Functions: RW 0x0082C167 (ported). Classes: ObjectWeapons.
+Functions: RW 0x0082C167 (ported). Classes: ActionManager, ObjectWeapons.
 Candidates: 0 none/partial functions; 0 unknown status.
 Red buttons: none linked.
 Unused fields: none linked.
 Existing task matches: none.
 
-### G521: linked stops S-566
+### G526: linked stops S-566
 
 Stops: S-566. Kinds: code.
 Functions: none resolved. Classes: none.
@@ -5241,7 +5291,7 @@ Red buttons: none linked.
 Unused fields: none linked.
 Existing task matches: none.
 
-### G522: RW 0x004BE587
+### G527: RW 0x004BE587
 
 Stops: S-5920. Kinds: code.
 Functions: RW 0x004BE587 (ported). Classes: none.
@@ -5250,16 +5300,16 @@ Red buttons: none linked.
 Unused fields: none linked.
 Existing task matches: none.
 
-### G523: BoredUpdate
+### G528: BoredUpdate
 
 Stops: S-6000. Kinds: code.
-Functions: RW 0x0082D5DA (ported). Classes: BoredUpdate.
+Functions: RW 0x0082D5DA (ported). Classes: ActionManager, BoredUpdate.
 Candidates: 0 none/partial functions; 0 unknown status.
 Red buttons: none linked.
 Unused fields: none linked.
 Existing task matches: #611 Port 263: Emotions: EmotionTrackerUpdate (terror, fear, cheering, idle emotions) and BoredUpdate.
 
-### G524: AODCrushCollide
+### G529: AODCrushCollide
 
 Stops: S-6007. Kinds: code.
 Functions: RW 0x0087DEFB (ported), RW 0x0087E894 (ported). Classes: AODCrushCollide, AODHordeContain, HordeContainInterface.
@@ -5268,7 +5318,7 @@ Red buttons: none linked.
 Unused fields: none linked.
 Existing task matches: none.
 
-### G525: linked stops S-6009
+### G530: linked stops S-6009
 
 Stops: S-6009. Kinds: code.
 Functions: none resolved. Classes: none.
@@ -5277,7 +5327,7 @@ Red buttons: none linked.
 Unused fields: none linked.
 Existing task matches: none.
 
-### G526: AnnounceBirthAndDeathBehavior
+### G531: AnnounceBirthAndDeathBehavior
 
 Stops: S-6012. Kinds: code.
 Functions: RW 0x006A03A9 (ported), RW 0x00888439 (ported), RW 0x00888453 (ported). Classes: AnnounceBirthAndDeathBehavior, InGameUI.
@@ -5286,7 +5336,7 @@ Red buttons: none linked.
 Unused fields: none linked.
 Existing task matches: none.
 
-### G527: TooltipUpgrade
+### G532: TooltipUpgrade
 
 Stops: S-6013. Kinds: code.
 Functions: RW 0x00674FAE (ported), RW 0x006796DA (ported), RW 0x008BBBCC (ported), RW 0x008BBC0A (ported). Classes: TooltipUpgrade, UnitHelpSource.
@@ -5295,7 +5345,7 @@ Red buttons: none linked.
 Unused fields: none linked.
 Existing task matches: none.
 
-### G528: linked stops S-6101
+### G533: linked stops S-6101
 
 Stops: S-6101. Kinds: code.
 Functions: none resolved. Classes: InGameUIMessages.
@@ -5304,7 +5354,7 @@ Red buttons: none linked.
 Unused fields: none linked.
 Existing task matches: none.
 
-### G529: RW 0x0079D12A
+### G534: RW 0x0079D12A
 
 Stops: S-705. Kinds: code.
 Functions: RW 0x0079D12A (ported), RW 0x008DE522 (ported). Classes: none.
@@ -5313,16 +5363,16 @@ Red buttons: none linked.
 Unused fields: none linked.
 Existing task matches: none.
 
-### G530: linked stops S-7202
+### G535: linked stops S-7202
 
 Stops: S-7202. Kinds: code.
-Functions: none resolved. Classes: DrawableManager.
+Functions: none resolved. Classes: DrawableManager, W3DModelDraw.
 Candidates: 0 none/partial functions; 0 unknown status.
 Red buttons: none linked.
 Unused fields: none linked.
 Existing task matches: none.
 
-### G531: linked stops S-725
+### G536: linked stops S-725
 
 Stops: S-725. Kinds: code.
 Functions: none resolved. Classes: none.
@@ -5331,16 +5381,16 @@ Red buttons: none linked.
 Unused fields: none linked.
 Existing task matches: none.
 
-### G532: RW 0x004C72BE
+### G537: RW 0x004C72BE
 
 Stops: S-7287. Kinds: code.
-Functions: RW 0x004C72BE (ported). Classes: GameWorld, HudDevice.
+Functions: RW 0x004C72BE (ported). Classes: GameWorld, HudDevice, W3DModelDraw.
 Candidates: 0 none/partial functions; 0 unknown status.
 Red buttons: none linked.
 Unused fields: none linked.
 Existing task matches: none.
 
-### G533: AIUpdateInterface
+### G538: AIUpdateInterface
 
 Stops: S-7342. Kinds: code.
 Functions: none resolved. Classes: AIUpdateInterface, DozerAIUpdate, GiantBirdAIUpdate.
@@ -5349,7 +5399,7 @@ Red buttons: none linked.
 Unused fields: none linked.
 Existing task matches: #612 Port 264: AIUpdateInterface: the 64 uncited own functions of the AI every Ennorath unit runs (classify, then port the missing ones).
 
-### G534: linked stops S-7364
+### G539: linked stops S-7364
 
 Stops: S-7364. Kinds: code.
 Functions: none resolved. Classes: ControlBar.
@@ -5358,7 +5408,7 @@ Red buttons: none linked.
 Unused fields: none linked.
 Existing task matches: none.
 
-### G535: linked stops S-7385
+### G540: linked stops S-7385
 
 Stops: S-7385. Kinds: code.
 Functions: none resolved. Classes: ParabolicEase, ScriptCameraDirector, TacticalCamera, TacticalView.
@@ -5367,7 +5417,7 @@ Red buttons: none linked.
 Unused fields: none linked.
 Existing task matches: none.
 
-### G536: linked stops S-815
+### G541: linked stops S-815
 
 Stops: S-815. Kinds: code.
 Functions: none resolved. Classes: GameWorld, LevelUpFx.
@@ -5376,7 +5426,7 @@ Red buttons: none linked.
 Unused fields: none linked.
 Existing task matches: none.
 
-### G537: linked stops S-831
+### G542: linked stops S-831
 
 Stops: S-831. Kinds: code.
 Functions: none resolved. Classes: GameWorld, GammaCompositeHost, MapTerrainBuilder.
@@ -5388,7 +5438,7 @@ Existing task matches: none.
 
 ## Unplaced
 
-S-001, S-005, S-006, S-008, S-009, S-013, S-014, S-024, S-025, S-026, S-032, S-034, S-040, S-101, S-103, S-105, S-106, S-114, S-122, S-125, S-131, S-132, S-1542, S-180, S-188, S-1923, S-1931, S-1981, S-199, S-230, S-244, S-246, S-3710, S-4004, S-4020, S-4077, S-4100, S-4101, S-4102, S-4103, S-4482, S-455, S-4554, S-456, S-4700, S-4701, S-4702, S-4830, S-4831, S-4871, S-4872, S-4875, S-4877, S-4879, S-4880, S-4930, S-5141, S-5144, S-706, S-7363, S-7434
+S-001, S-005, S-008, S-009, S-013, S-014, S-024, S-025, S-026, S-032, S-034, S-040, S-101, S-103, S-105, S-106, S-122, S-125, S-131, S-132, S-1542, S-180, S-1923, S-1931, S-199, S-230, S-244, S-246, S-3710, S-4004, S-4020, S-4077, S-4100, S-4101, S-4102, S-4103, S-4482, S-455, S-4554, S-456, S-4700, S-4701, S-4702, S-4830, S-4831, S-4871, S-4872, S-4875, S-4877, S-4879, S-4880, S-4930, S-5144, S-706, S-7363, S-7434
 
 ## Top 30 task drafts
 
@@ -5401,7 +5451,7 @@ S-001, S-005, S-006, S-008, S-009, S-013, S-014, S-024, S-025, S-026, S-032, S-0
 - S-636 (code): Armour attribute queries (XP-1) — AdjustDamage's INVULNERABLE and ARMOR queries (RW 0x5D8A64, 0x5D8AF1) call into the community-added `.danetta` section of the available binary; they are ported as the victim's pool sums with the damage type's name (Damage.h's contract), unverified against a clean 2.01.
 
 #### Known
-Kinds: code. Classes: AIBurningDeathState, ActiveBody, DamageHost, DelayedDeathBody, HighlanderBody, ImmortalBody, InactiveBody, RespawnBody, StructureBody, SymbioticStructuresBody.
+Kinds: code. Classes: AIBurningDeathState, ActiveBody, DamageHost, DelayedDeathBody, GlobalData, HighlanderBody, ImmortalBody, InactiveBody, RespawnBody, StructureBody, SymbioticStructuresBody.
 Functions: RW 0x005D893C (unknown), RW 0x0068FB63 (ported), RW 0x008C3FA3 (ported).
 Addresses: S-185: RW 0x005D8A64, RW 0x005D8AF1; S-322: RW 0x005D893C, RW 0x0068FB63, RW 0x008C3FE7, RW 0x008C4012, RW 0x008C4169, RW 0x008C4214, RW 0x008C476C, RW 0x008C47BD, RW 0x00C00490; S-636: RW 0x005D8A64, RW 0x005D8AF1.
 Red buttons: none linked.
@@ -5822,7 +5872,7 @@ RW instructions and tests justify each change; report any remaining stops and in
 - S-7100 (code): DynamicShroudClearingRangeUpdate grid decal (LOCAL-35, issue #285) — The module drives the shroud clearing range (RW 0x88E9B0 -> `Object::setShroudClearingRange` RW 0x68C234), but the 30 `RadiusDecal` grid decals retail also creates / animates / clears (RW 0x88E87F / 0x88E8C7 / 0x88E6AF) are not drawn; `m_decalsCreated` is kept so the logic and the save match retail.
 
 #### Known
-Kinds: code. Classes: DynamicShroudClearingRangeUpdate, HordeContain.
+Kinds: code. Classes: DynamicShroudClearingRangeUpdate, HordeContain, RadiusDecal.
 Functions: RW 0x0068C234 (ported), RW 0x0068E4E2 (ported), RW 0x0069264D (unknown), RW 0x00694A45 (unknown), RW 0x00804F39 (ported), RW 0x00872B9E (ported), RW 0x00872BAB (ported), RW 0x0088E6AF (ported), RW 0x0088E87F (ported), RW 0x0088E8C7 (ported), RW 0x0088E9B0 (ported).
 Addresses: S-564: RW 0x0068C234, RW 0x0068E4E2, RW 0x0068E500, RW 0x0069264D, RW 0x00694A45, RW 0x00694B79, RW 0x00694B9B, RW 0x00804F39, RW 0x00872B9E, RW 0x00872BAB; S-7100: RW 0x0068C234, RW 0x0088E6AF, RW 0x0088E87F, RW 0x0088E8C7, RW 0x0088E9B0.
 Red buttons: none linked.
@@ -6259,7 +6309,7 @@ RW instructions and tests justify each change; report any remaining stops and in
 - S-1201 (code): Context commands (QA-1) — A click with a selected builder (DOZER of the same player) on our structure that is still rising is MSG_RESUME_CONSTRUCTION, on our damaged finished structure MSG_DO_REPAIR (ZH evaluateContextCommand ACTIONTYPE_RESUME_CONSTRUCTION / ACTIONTYPE_REPAIR_OBJECT, ActionManager::canResumeConstructionOf / canRepairObject; the logic cases exist: RW 0x77AEB6 resume, S-656 repair). Not read from RotWK: its ActionManager checks (who may resume or repair wha.
 
 #### Known
-Kinds: code. Classes: CommandTranslator.
+Kinds: code. Classes: ActionManager, CommandTranslator.
 Functions: RW 0x0077AEAA (unknown).
 Addresses: S-1201: RW 0x0077AEB6.
 Red buttons: none linked.

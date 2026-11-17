@@ -42,6 +42,8 @@ class Stop:
     functions: set[int] = field(default_factory=set)
     link_functions: set[int] = field(default_factory=set)
     classes: set[str] = field(default_factory=set)
+    port_classes: set[str] = field(default_factory=set)
+    rotwk_classes: set[str] = field(default_factory=set)
     primary_classes: set[str] = field(default_factory=set)
     refs: set[str] = field(default_factory=set)
     all_refs: set[str] = field(default_factory=set)
@@ -211,7 +213,17 @@ class BinaryResolver:
 
 
 def enrich(stops, funcs, classes, resolver, port_classes=frozenset()):
-    known_classes = classes | port_classes
+    # The decomp column supplies RotWK counterpart names, which need not
+    # coincide with module names or any port class. They are descriptive only.
+    rotwk_classes = {owner for info in funcs.values() for name in info.get('names', ())
+                     for owner in re.findall(r'\b([A-Za-z_]\w*)::', name)
+                     if len(owner) >= 4 and owner[0].isupper()}
+    # Keep broad literal names in metadata, but do not let generic names such
+    # as Object or Player make an otherwise unplaced stop a mechanism.
+    specific_port = {c for c in port_classes if len(c) >= 7 and any(ch.isupper() for ch in c[1:])} - {'GameLogic'}
+    specific_rw = {c for c in rotwk_classes if len(c) >= 7 and any(ch.isupper() for ch in c[1:])} - {'GameLogic'}
+    mechanism_classes = classes | specific_port | specific_rw
+    known_classes = classes | port_classes | rotwk_classes
     pattern = re.compile(r'(?<![\w])(?:' + '|'.join(map(re.escape, sorted(known_classes, key=lambda x: (-len(x), x)))) + r')(?![\w])') if known_classes else None
     for s in stops.values():
         # Pinned-by contains test-title ranges, not dependencies.
@@ -227,7 +239,10 @@ def enrich(stops, funcs, classes, resolver, port_classes=frozenset()):
             if not historical or unresolved:
                 live.append(sentence)
         s.link_functions = {f for a in rw_addresses(' '.join(live)) if (f := resolver.owner(a)) is not None}
-        s.classes = set(pattern.findall(' '.join(s.cells[2:4] + s.cells[6:]))) if pattern else set()
+        named = set(pattern.findall(' '.join(s.cells[2:4] + s.cells[6:]))) if pattern else set()
+        s.classes = named & mechanism_classes
+        s.port_classes = named & port_classes
+        s.rotwk_classes = named & rotwk_classes
         # Named subjects are stronger than classes mentioned only as callers,
         # reports or historical context in a long gap description.
         s.primary_classes = set(pattern.findall(s.cells[2])) & classes if pattern else set()
@@ -317,7 +332,7 @@ def open_issues(path):
         return None
 
 
-def output(stops, groups, unplaced, funcs, matrix, fields, issues, out, command):
+def output(stops, groups, unplaced, funcs, matrix, fields, issues, out, command, stoplist=frozenset()):
     map_classes = set().union(*(v['classes'] for v in funcs.values())) if funcs else set()
     details = []
     for ids in groups:
@@ -340,17 +355,31 @@ def output(stops, groups, unplaced, funcs, matrix, fields, issues, out, command)
                                 -len(x[5]), -len(x[6]), x[0]))
     out.parent.mkdir(parents=True, exist_ok=True)
     assigned = {sid: f'G{n:03d}' for n, g in enumerate(details, 1) for sid in g[0]}
+    incoming = collections.defaultdict(set)
+    for source in stops.values():
+        for target in source.all_refs & stops.keys():
+            incoming[target].add(source.id)
     with out.with_suffix('.tsv').open('w', encoding='utf-8', newline='') as f:
         w = csv.writer(f, delimiter='\t', lineterminator='\n')
-        w.writerow(['id', 'kind', 'group', 'why', 'functions', 'classes', 'references', 'reported tasks'])
+        w.writerow(['id', 'kind', 'group', 'why', 'functions', 'classes', 'port classes', 'RotWK classes', 'references', 'referenced by', 'reported tasks'])
         for sid, s in sorted(stops.items()):
             peers = [stops[x] for x in next((g[0] for g in details if sid in g[0]), []) if x != sid]
-            shared_f = sorted(set().union(*(s.link_functions & p.link_functions for p in peers)))
+            shared_f = sorted(a for a in set().union(*(s.link_functions & p.link_functions for p in peers))
+                              if a not in stoplist and len(funcs.get(a, {}).get('classes', ())) <= 3)
             shared_c = sorted(set().union(*(s.primary_classes & p.primary_classes for p in peers)))
             shared_r = sorted(p.id for p in peers if p.id in s.refs or sid in p.refs)
-            why = '; '.join(([f'shared RW 0x{x:08X}' for x in shared_f] + [f'shared class {x}' for x in shared_c] + [f'reference {x}' for x in shared_r])) or ('singleton' if sid in assigned else 'no resolvable mechanism')
-            w.writerow([sid, s.kind, assigned.get(sid, 'unplaced'), why, ', '.join(f'0x{x:08X}' for x in sorted(s.functions)), ', '.join(sorted(s.classes)), ', '.join(sorted(s.all_refs)), ', '.join(sorted(s.tasks))])
-    lines = ['# Open stop mechanism candidates', '', f'Regenerate: `{command}`', '', 'For --game install Python packages `capstone` and `pefile`; issue matching uses `gh` or an explicit --issues JSON snapshot. A discovered or explicitly supplied whole-function inventory takes precedence over the game heuristic; without either, only exact map starts are resolved.', '', 'Candidates are heuristic, not proof. Class merges use the area or the first named class of the gap; all mentions remain listed. Common utility functions, the manually reviewed broad draw dispatcher RW 0x004BE587, and citations in explicitly historical-fix sentences are not merge pivots; every citation is retained. Check ownership, dependencies and issue overlap before implementation. Large transitive components are split by function; links can cross groups. Unknown function status is reported separately and is not counted as none, but is included as unverified work in the ranking denominator. Unavailable issue lookup is not evidence of no coverage.', '', f'{len(stops)} open stops; {len(details)} groups; {len(unplaced)} unplaced.', '', '## Ranked groups', '', '| Rank | Mechanism | Stops | none/partial functions | Red buttons | Unused fields | Open task |', '|---:|---|---:|---:|---:|---:|---|']
+            cross_refs = sorted(other for other in (s.refs | incoming[sid])
+                                if other in assigned and assigned[other] != assigned.get(sid)
+                                and (other in s.refs or sid in stops[other].refs))
+            reasons = ([f'shared RW 0x{x:08X}' for x in shared_f] +
+                       [f'shared class {x}' for x in shared_c] + [f'reference {x}' for x in shared_r] +
+                       [f'cross-group reference {x} ({assigned[x]})' for x in cross_refs])
+            why = '; '.join(reasons) or ('singleton' if sid in assigned else 'no resolvable mechanism')
+            w.writerow([sid, s.kind, assigned.get(sid, 'unplaced'), why,
+                        ', '.join(f'0x{x:08X}' for x in sorted(s.functions)), ', '.join(sorted(s.classes)),
+                        ', '.join(sorted(s.port_classes)), ', '.join(sorted(s.rotwk_classes)),
+                        ', '.join(sorted(s.all_refs)), ', '.join(sorted(incoming[sid])), ', '.join(sorted(s.tasks))])
+    lines = ['# Open stop mechanism candidates', '', f'Regenerate: `{command}`', '', 'For --game install Python packages `capstone` and `pefile`; issue matching uses `gh` or an explicit --issues JSON snapshot. A discovered or explicitly supplied whole-function inventory takes precedence over the game heuristic; without either, only exact map starts are resolved.', '', 'Candidates are heuristic, not proof. Class merges use the area or the first named class of the gap; literal port and map-decomp name matches remain listed separately in TSV; generic names do not place a stop. Cross-group references remain visible after splitting. Common utility functions, the manually reviewed broad draw dispatcher RW 0x004BE587, and citations in explicitly historical-fix sentences are not merge pivots; every citation is retained. Check ownership, dependencies and issue overlap before implementation. Large transitive components are split by function; links can cross groups. Unknown function status is reported separately and is not counted as none, but is included as unverified work in the ranking denominator. Unavailable issue lookup is not evidence of no coverage.', '', f'{len(stops)} open stops; {len(details)} groups; {len(unplaced)} unplaced.', '', '## Ranked groups', '', '| Rank | Mechanism | Stops | none/partial functions | Red buttons | Unused fields | Open task |', '|---:|---|---:|---:|---:|---:|---|']
     for n, (ids, fs, cs, name, missing, buttons, fl, covers) in enumerate(details, 1):
         coverage = 'lookup unavailable' if covers is None else ', '.join(covers) if covers else 'none matched'
         lines.append(f'| {n} | {name} | {len(ids)} | {missing} | {len(buttons)} | {len(fl)} | {coverage.replace("|", "/")} |')
@@ -401,8 +430,7 @@ def main():
         if path.suffix in ('.h', '.hpp', '.cpp'):
             text = path.read_text(encoding='utf-8', errors='replace')
             port_classes.update(re.findall(r'\b(?:class|struct)\s+([A-Z][A-Za-z0-9_]{3,})\b', text))
-    port_classes = {c for c in port_classes if len(c) >= 7 and any(ch.isupper() for ch in c[1:])}
-    port_classes -= {'GameLogic'}
+    port_classes = {c for c in port_classes if len(c) >= 4 and c[0].isupper()}
     enrich(stops, funcs, classes, resolver, port_classes)
     map_report = (ROOT/'docs/ennorath/RW_FUNCTION_MAP.md').read_text(encoding='utf-8')
     stop_section = map_report.split('## Stop list', 1)[1].split('## ', 1)[0]
@@ -423,7 +451,7 @@ def main():
         out_arg = str(args.out)
     command_parts += ['--out', out_arg]
     command = shlex.join(command_parts)
-    output(stops, groups, unplaced, funcs, table(ROOT/'docs/ennorath/MATRIX_GAPS.tsv'), table(ROOT/'docs/ennorath/FIELD_GAPS.tsv'), issues, args.out, command)
+    output(stops, groups, unplaced, funcs, table(ROOT/'docs/ennorath/MATRIX_GAPS.tsv'), table(ROOT/'docs/ennorath/FIELD_GAPS.tsv'), issues, args.out, command, stoplist | BROAD_DISPATCHERS)
     print(f'{len(stops)} stops, {len(groups)} groups, {len(unplaced)} unplaced; resolver: {mode}; issues: {"available" if issues is not None else "unavailable"}')
 
 

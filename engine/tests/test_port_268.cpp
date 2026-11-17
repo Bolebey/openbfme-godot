@@ -28,3 +28,7 @@ TEST_CASE("PORT-268: unplaced and closed rows remain separate") {
 TEST_CASE("PORT-268: oversized groups split by function without losing stops") {
     CHECK(run_port268_test("test_large_component_splits_by_function") == 0);
 }
+
+TEST_CASE("PORT-268: named classes and cross-group references remain visible") {
+    CHECK(run_port268_test("test_class_names_and_split_reference") == 0);
+}
