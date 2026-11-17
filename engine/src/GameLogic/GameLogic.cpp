@@ -39,6 +39,7 @@
 #include "GameLogic/BuildAssistantSell.h"
 #include "GameLogic/Module/UpdateModule.h"
 #include "GameLogic/Module/ConstructionModules.h"
+#include "GameLogic/Construction.h" // S-253: the model condition flag index by the binary's name (RW 0xD9FAD8)
 #include "GameLogic/Economy.h"
 #include "GameLogic/ExperienceWorld.h"
 #include "GameLogic/CreateAHeroSystem.h"
@@ -85,10 +86,22 @@ GameLogic::GameLogic(ThingFactory &things, ModuleFactory &modules, PlayerList &p
 	// sites call it (TerrainResourceBehavior RW 0x88558D, SupplyCenterDockUpdate RW 0x8A4614): Industry, Dwarven Riches, Blight and the levelled farms'
 	// PRODUCTION lists now scale income. BFME2 1.06 the same.
 	m_economy->setAttributeModifierProvider([](const Object &obj, int type, float &product) { return obj.attributeModifierProduct(type, nullptr, true, product); });
-	// P-86: the sum seam answers COMMAND_POINT_BONUS (0x18) from the object's pool, RW 0x68C818(0x18, &out, name 0) as RW 0x6A7C21 calls it; the recount
-	// of a sum that changes is Object::addAttributeModifier / removeAttributeModifier (RW 0x68F207 / 0x68F2AE). BOUNTY_PERCENTAGE (0x11) stays off: S-253
+	// P-86 / S-253: the sum seam answers the object's own modifier sums. RW 0x68C818 (Object::getAttributeModifierSum: RW 0x68C4A6's
+	// AttributeModifierPoolUpdate, then RW 0x804F39's walk) carries no type test, so the same walk answers COMMAND_POINT_BONUS (0x18) as RW 0x6A7C21
+	// calls it and BOUNTY_PERCENTAGE (0x11) as RW 0x6AC0BA pushes it before RW 0x6AC0BC: at RW 0x6AC0D1 the killer's sum wins unless it is exactly
+	// 0.0, when the player's own percent (RW 0x6AC0D3, Player + 0x334) is used. The recount of a sum that changes is Object::addAttributeModifier /
+	// removeAttributeModifier (RW 0x68F207 / RW 0x68F2AE). INFERENCE (the seam, not the binary): an object with no AttributeModifierPoolUpdate module
+	// answers false here, so the player's own percent is used; RW 0x68C818's early return leaves its caller's stack slot unread and that slot holds the
+	// victim pointer, which is not reproducible.
 	m_economy->setAttributeModifierSumProvider([](const Object &obj, int type, float &sum) {
-		return type == Economy::ATTRIBUTE_MODIFIER_COMMAND_POINT_BONUS && obj.attributeModifierSum(type, nullptr, sum);
+		return obj.attributeModifierSum(type, nullptr, sum); // RW 0x68C818
+	});
+	// S-253: AutoDepositUpdate's model condition tests read the object's own flags. RW 0x89DBA9 pushes bit 10 (GARRISONED) into RW 0x46E918
+	// (`and eax, [esi + edx*4 + 0x10C]`: the 19-word array at Object + 0x10C) and RW 0x89DBF0 .. 0x89DC25 asks the bits 5 / 59 / 60 (RUBBLE,
+	// POST_RUBBLE, POST_COLLAPSE) of the same array, each one returning before the deposit. Object carries the array, so the economy's provider asks
+	// it there; with no provider every test answered false and a rubble keep kept paying (stop S-253).
+	m_economy->setModelConditionProvider([](const Object &obj, const char *name) {
+		return obj.testModelCondition(Construction::modelConditionIndex(name)); // RW 0x46E918
 	});
 	m_partition = std::make_unique<PartitionManager>(*this);
 	m_emotions = std::make_unique<EmotionWorld>(*this);
@@ -1822,9 +1835,9 @@ GameLogic::Report GameLogic::report() const
 	{
 		helpers += kv.second;
 	}
-	r.stops.push_back("[S-141] helper modules: " + std::to_string(helpers) + " live helper modules (SMC, Recovery, Repulsor, Defection, Guarding, WeaponStatus, FiringTracker) created in the retail order; the Recovery, Repulsor, Defection, Guarding and FiringTracker shells do nothing (the SMCHelper and the WeaponStatusHelper act: lanes PROD-1, PROJ-2)");
-	r.stops.push_back("[S-142] objects: creation steps not ported: the special power mask and "
-		"what else initObject (RW 0x693D0C, tier B edited, no decomp source) does beyond Object::friend_initObject; ported since (lane BACKLOG2 audit): the experience tracker (XP-1, RW 0x69A606), "
+	r.stops.push_back("[S-141] helper modules: " + std::to_string(helpers) + " live helper modules (SMC, Recovery, Repulsor, Defection, Guarding, WeaponStatus, FiringTracker) created in the retail order; the Recovery, Repulsor, Guarding and FiringTracker shells do nothing (SMCHelper, WeaponStatusHelper and DefectionHelper act: lanes PROD-1, PROJ-2, PORT-237)");
+	r.stops.push_back("[S-142] objects: creation steps not ported: Object + 0x3C0 m_specialPowerBits cache (ActionManager::hasSpecialPowerOfType walks modules) and "
+		"what else initObject (RW 0x693D0C, tier B edited, no decomp source) does beyond Object::friend_initObject (BattlePlan bonuses ported in PORT-237); ported since (lane BACKLOG2 audit): the experience tracker (XP-1, RW 0x69A606), "
 		"partition registration (MODULES-2, the world entry RW 0x69A6C6), the radar step (RW 0x69A66D -> Radar::addObject RW 0x6D9042: RADAR-1 applies its rules to the live objects at "
 		"every draw; the radar lists are client state), initObject's upgrade refresh and command points (RW 0x693D38 / 0x693D51), the safe occlusion frame (OCCLUDE-1: RW 0x69A687)");
 	r.stops.push_back("[S-146] players: a Player carries the index, name, faction template, type, colour, money, default team and relationships only; energy, sciences, upgrades, build list, AI, command points and the spell book belong to the lanes that port them");
