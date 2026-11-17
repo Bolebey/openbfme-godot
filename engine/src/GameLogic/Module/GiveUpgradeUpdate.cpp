@@ -268,16 +268,13 @@ void GiveUpgradeUpdate::triggerAbilityEffect()
 UpdateSleepTime GiveUpgradeUpdate::update()
 {
 	const UpdateSleepTime result = SpecialAbilityUpdate::update(); // RW 0x8A00DF -> RW 0x854DF7
-	// RW 0x8A00C9: Object + 0x260 (the AI) vslot 0x23C must answer CMD_FROM_AI (2); otherwise the search flag clears
-	// (RW 0x8A00EE) and the ability ends (RW 0x8A00F2 -> RW 0x8513E4 = vtable slot 0x34, finishAbility(0, 1)).
-	AIUpdateInterface *ai = getObject()->getAIUpdateInterface();
-	if (!ai || ai->lastCommandSource() != CMD_FROM_AI)
-	{
-		m_searching = false;
-		finishAbility(false, true);
-		return result;
-	}
-	if (m_searching) findDeliveryTarget(); // RW 0x8A0100 .. 0x8A0108
+	// RW 0x8A00C9 asks the porter's AI (Object + 0x260, AI vslot 0x23C) about the command it is running and lets the
+	// ability end (RW 0x8A00F2 -> RW 0x8513E4, finishAbility(0, 1)) when the answer is not a special power. The port cannot
+	// name that query with evidence, and the one candidate it has (`AIUpdateInterface::lastCommandSource() == CMD_FROM_AI`)
+	// cancels deliveries the game makes: a porter ordered by a player (LOCAL-18) or by a mission script answers
+	// CMD_FROM_PLAYER / CMD_FROM_SCRIPT there, and the delivery this lane is about would never happen. INFERENCE (S-6011):
+	// until RW 0x8A00C9's slot 0x23C is read, a started ability is not cancelled here; an idle one (no target, not
+	// searching, not fading) ends instead, which is what RW 0x8A013A does for a target it can no longer use.
 	if (m_fading)
 	{
 		m_opacity -= m_giveData->m_fadeSpeed; // RW 0x8A0159 .. 0x8A016F: module + 0x8C less module data + 0xE4
@@ -287,29 +284,31 @@ UpdateSleepTime GiveUpgradeUpdate::update()
 			m_fading = false;                                // RW 0x8A0185
 			m_opacity = 0.0f;                                // RW 0x8A0188
 		}
-		else if (ObjectClientHooks *client = getObject()->clientHooks()) // RW 0x8A018F -> RW 0x70E013
+		else if (ObjectClientHooks *client = getObject()->logic().clientHooks()) // RW 0x8A018F -> RW 0x70E013
 		{
-			client->setDrawableOpacity(*getObject(), m_opacity);         // RW 0x8A019B: drawable + 0xB0
+			client->setDrawableOpacity(*getObject(), m_opacity);                // RW 0x8A019B: drawable + 0xB0
 		}
+		// RW 0x8A01A1: a searching porter wakes every frame; the fading one wakes too. INFERENCE (S-6011): RW's base keeps
+		// the ability active while the porter fades (its idle answer is RW 0x854EA4's 0x3FFFFFFF, sleep forever), the port's
+		// SpecialAbilityUpdate ends it the frame after the delivery and would leave the porter half faded.
+		return UPDATE_SLEEP(1);
 	}
-	else
+	if (m_searching)
 	{
-		Object *current = target(); // RW 0x8A0112 -> RW 0x449681
-		if (!current || current->isEffectivelyDead() // RW 0x8A0124: Object + 0x458 bit 0
-			|| !canGiveUpgradeTo(*current))          // RW 0x8A0131 -> RW 0x89FE64
-		{
-			// RW 0x8A013A .. 0x8A014A: the search flag clears, the ability ends and the AI idles.
-			m_searching = false;
-			finishAbility(false, true); // RW 0x8513E4
-			aiIdleFromAI();             // RW 0x8A014A -> RW 0x5E821A(2)
-			return result;
-		}
+		findDeliveryTarget(); // RW 0x8A0100 .. 0x8A0108
+		return UPDATE_SLEEP(1); // RW 0x8A01A1: a searching porter wakes every frame
 	}
-	// RW 0x8A01A1: a searching porter wakes every frame; otherwise RW returns the base update's answer. INFERENCE (S-6011): a fading porter
-	// wakes every frame too. RW's base keeps the ability active while the porter fades (its idle answer is RW 0x854EA4's 0x3FFFFFFF, sleep forever),
-	// the port's SpecialAbilityUpdate ends it the frame after the delivery and would leave the porter half faded; until the base's active span
-	// is read (RW 0x851551 / 0x854EAE), the fade keeps the module awake as main did.
-	return (m_searching || m_fading) ? UPDATE_SLEEP(1) : result;
+	Object *current = target(); // RW 0x8A0112 -> RW 0x449681
+	if (!current || current->isEffectivelyDead() // RW 0x8A0124: Object + 0x458 bit 0
+		|| !canGiveUpgradeTo(*current))          // RW 0x8A0131 -> RW 0x89FE64
+	{
+		// RW 0x8A013A .. 0x8A014A: the search flag clears, the ability ends and the AI idles.
+		m_searching = false;
+		finishAbility(false, true); // RW 0x8513E4
+		aiIdleFromAI();             // RW 0x8A014A -> RW 0x5E821A(2)
+		return result;
+	}
+	return result;
 }
 
 void GiveUpgradeUpdate::finishAbility(bool ownerDying, bool aborted)
