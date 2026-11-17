@@ -160,6 +160,7 @@ add_custom_command(
 
 # ---- core ---------------------------------------------------------------------------------
 include(cmake/SimFp.cmake) # openbfme_sim_fp (the simulation floating-point contract) and the simulation manifest helpers
+include(cmake/Port165.cmake) # PORT-165: horde position attacks
 # openbfme_float_chars is its own static library, like openbfme_detlibm: the Lua library below the core needs it
 add_library(openbfme_float_chars STATIC src/Common/System/FloatFromChars.cpp)
 target_include_directories(openbfme_float_chars PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src)
@@ -934,6 +935,7 @@ if(OPENBFME_BUILD_TESTS)
 include(cmake/AudioFixtures.cmake)
 add_executable(openbfme_tests
     ${OPENBFME_PORT228_TESTS}
+    ${OPENBFME_PORT165_TESTS}
     ${OPENBFME_WIN1_TESTS}
     ${OPENBFME_DEP2_TESTS}
     ${OPENBFME_SMOOTH_TESTS}
