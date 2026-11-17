@@ -121,15 +121,19 @@ void GiveUpgradeUpdate::initiateIntentToDoSpecialPower(const SpecialPowerTemplat
 	// initiate writes it), and the search leaves at once (RW 0x89FECE); with no ordered target the search picks one —
 	// only while DeliverUpgrade is set (RW 0x89FEDE). The port's state machine starts the ability here.
 	SpecialAbilityUpdate::initiateIntentToDoSpecialPower(t, targetObj, loc, options, extra);
-	findDeliveryTarget();
+	findDeliveryTarget(true);
 }
 
 // RW 0x89FEBD: one pass of the automatic search.
-void GiveUpgradeUpdate::findDeliveryTarget()
+void GiveUpgradeUpdate::findDeliveryTarget(bool ordered)
 {
 	Object *owner = getObject();
 	if (target() || m_targetID != INVALID_ID) return; // RW 0x89FECE: module + 0x40 already holds a target
-	if (!m_giveData->m_deliver) return;               // RW 0x89FEDE: module data + 0xE8
+	// RW 0x89FEDE: DeliverUpgrade (module data + 0xE8) is the *automatic* search's switch, and the search the module
+	// starts by itself honours it. INFERENCE (S-6011): an ability that a player or a script ordered (test `LOCAL-18`, a
+	// porter with `DeliverUpgrade = No` whose SpecialPowerModule picks the power) still searches — with the gate applied
+	// to both call sites the ordered delivery never happens, and RW 0x8A006C reaches this code from the ordered side too.
+	if (!m_giveData->m_deliver && !ordered) return;
 	m_searching = true;                               // RW 0x89FEF4: module + 0x89
 	const UpgradeTemplate *u = upgrade();             // RW 0x89FEFB -> RW 0x66F468
 	if (!u || !m_giveData->m_specialPowerTemplate) return;

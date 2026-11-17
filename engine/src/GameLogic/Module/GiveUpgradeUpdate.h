@@ -40,7 +40,7 @@ protected:
 	void triggerAbilityEffect() override; // RW 0x8A01B2 (vtable slot 0x44)
 private:
 	const UpgradeTemplate *upgrade() const;
-	void findDeliveryTarget();                                      // RW 0x89FEBD
+	void findDeliveryTarget(bool ordered = false);                    // RW 0x89FEBD (ordered: the ability was given by a player or a script, not by the module's own search)
 	void releaseTarget();                                           // RW 0x89FD15
 	void finishDelivery();                                          // RW 0x89FE01
 	HordeContainInterface *hordeProviderOf(const Object &target) const; // RW 0x89FD77
