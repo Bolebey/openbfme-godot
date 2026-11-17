@@ -76,3 +76,12 @@ function BFME2 0x483C69 and geometry getter 0x483D9B, confirms the shape of
 the interface. A raw search of virtual call instructions is only a lead, not
 a complete proof of indirect call targets. In particular no claim is made that
 the returned GeometryInfo has no external consumer.
+
+## Owner follow-up
+
+The owner checked the pure-virtual base 0xBE1CA8 and the 30 primary-slot
++0x34 calls that test for null. None subsequently calls the returned interface's
+slot 0 without arguments. Object loops RW 0x675034, 0x6750AF and 0x676AD0
+pass two arguments and concern a different interface. None of the 25 calls to
+RW 0x4923F0 follows this getter. The consumer was not found statically; this is
+not an evidence-complete no-reader verdict. S-7409 retains the unresolved work.
