@@ -123,6 +123,38 @@ def save(rows: list[dict[str, str]]) -> None:
             f.write("\t".join(r[c] for c in COLUMNS) + "\n")
 
 
+FACTIONS_OUT = REPO / "docs" / "ennorath" / "MATRIX_FACTIONS.tsv"
+
+
+def write_matrix_factions() -> None:
+    """The matrix per faction for the dashboard's faction table (2026-11-17; MATRIX.tsv is ~1 MB): pressed object/button pairs that work
+    (PASS), that are off by design in the scene (STANCE, DISABLED, INVENTORY), that fail, and the three most common failure kinds."""
+    path = REPO / "docs" / "ennorath" / "MATRIX.tsv"
+    if not path.exists():
+        return
+    lines = [l for l in path.read_text(encoding="utf-8").splitlines() if l and not l.startswith("#")]
+    per: dict[str, dict] = {}
+    for r in csv.DictReader(lines, delimiter="\t"):
+        f = per.setdefault(r["faction"], {"pass": set(), "idle": set(), "red": {}, })
+        key = (r["object"], r["button"])
+        if r["result"] == "PASS":
+            f["pass"].add(key)
+        elif r["result"] in GREEN:
+            f["idle"].add(key)
+        else:
+            f["red"].setdefault(key, r["result"])
+    with FACTIONS_OUT.open("w", encoding="utf-8", newline="\n") as out:
+        out.write("faction\tpass\tidle\tred\tred_top\n")
+        for name, f in sorted(per.items()):
+            idle = f["idle"] - f["pass"]
+            red = {k: v for k, v in f["red"].items() if k not in f["pass"] and k not in idle}
+            kinds: dict[str, int] = {}
+            for v in red.values():
+                kinds[v] = kinds.get(v, 0) + 1
+            top = ", ".join(f"{k} {n}" for k, n in sorted(kinds.items(), key=lambda x: -x[1])[:3])
+            out.write(f"{name}\t{len(f['pass'])}\t{len(idle)}\t{len(red)}\t{top}\n")
+
+
 def matrix_total(rev: str | None) -> str:
     try:
         matrix = read("docs/ennorath/MATRIX.tsv", rev)
@@ -183,6 +215,8 @@ def main() -> int:
         return 0
     rows = sorted([r for r in rows if r["date"] != a.date] + [row], key=lambda r: r["date"])
     save(rows)
+    if not a.rev:
+        write_matrix_factions()
     print(f"{OUT.relative_to(REPO)}: {a.date} written ({len(rows)} rows)")
     return 0
 
