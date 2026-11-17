@@ -35514,15 +35514,15 @@ SiegeEngineContain	13	0x00A3AD30	ported	0x00A3C4E0
 SiegeEngineContain	14	0x0060328B	ported	0x007B327D			
 SiegeEngineContain	14	0x007ED86B	ported	0x00608F49			
 SiegeEngineContain	15	0x007ED77A	none	0x007ED86B		caller 0x007ED86B (ported)	
-SlavedUpdate	0	0x0049D0E9	none				
-SlavedUpdate	0	0x0049D0F3	none				
+SlavedUpdate	0	0x0049D0E9	ported
+SlavedUpdate	0	0x0049D0F3	ported
 SlavedUpdate	0	0x00670216	ported				
 SlavedUpdate	0	0x008A18E0	ported				
-SlavedUpdate	0	0x008A4F1C	none			callee 0x005487EC (ported), callee 0x00A3CEF0 (ported)	
-SlavedUpdate	0	0x008A4F61	none				
-SlavedUpdate	0	0x008A4FC8	none			callee 0x0042F6A0 (ported)	
-SlavedUpdate	0	0x008A4FE4	none				
-SlavedUpdate	0	0x008A4FEB	none				
+SlavedUpdate	0	0x008A4F1C	ported			callee 0x005487EC (ported), callee 0x00A3CEF0 (ported)
+SlavedUpdate	0	0x008A4F61	ported
+SlavedUpdate	0	0x008A4FC8	ported			callee 0x0042F6A0 (ported)
+SlavedUpdate	0	0x008A4FE4	ported
+SlavedUpdate	0	0x008A4FEB	ported
 SlavedUpdate	0	0x008A4FF2	ported				
 SlavedUpdate	0	0x008A51F6	ported				
 SlavedUpdate	0	0x008A529F	ported				
@@ -35617,16 +35617,16 @@ SlavedUpdate	9	0x00645A89	ported	0x00676A8A
 SlavedUpdate	9	0x008C72DF	ported	0x00676A8A			
 SlavedUpdate	9	0x00A3D936	none	0x00A3CF4C			
 SlavedUpdate	10	0x00645716	none	0x00645A89		caller 0x00645A89 (ported), caller 0x0073EDD0 (ported), caller 0x0075D0B9 (ported), caller 0x00871F29 (ported), caller 0x008969AC (ported), caller 0x008CF731 (ported), caller 0x008DDA06 (ported)	
-SlaveWatcherBehavior	0	0x00464A09	none				
-SlaveWatcherBehavior	0	0x004B612F	none				
+SlaveWatcherBehavior	0	0x00464A09	ported
+SlaveWatcherBehavior	0	0x004B612F	ported
 SlaveWatcherBehavior	0	0x0063F3BF	ported	0x004D0EAF			
 SlaveWatcherBehavior	0	0x00851E97	ported				
-SlaveWatcherBehavior	0	0x008878B4	none				
-SlaveWatcherBehavior	0	0x008878BA	none			callee 0x005487EC (ported), callee 0x00A3CEF0 (ported)	
+SlaveWatcherBehavior	0	0x008878B4	ported
+SlaveWatcherBehavior	0	0x008878BA	ported			callee 0x005487EC (ported), callee 0x00A3CEF0 (ported)
 SlaveWatcherBehavior	0	0x008878FF	ported				
-SlaveWatcherBehavior	0	0x0088796A	none			callee 0x0042F6A0 (ported)	
+SlaveWatcherBehavior	0	0x0088796A	ported			callee 0x0042F6A0 (ported)
 SlaveWatcherBehavior	0	0x00887A35	ported				
-SlaveWatcherBehavior	0	0x00887B56	none			callee 0x0042F6A0 (ported), callee 0x008879C5 (ported)	
+SlaveWatcherBehavior	0	0x00887B56	ported			callee 0x0042F6A0 (ported), callee 0x008879C5 (ported)
 SlaveWatcherBehavior	0	0x008B88B0	ported				
 SlaveWatcherBehavior	0	0x008BD372	ported				
 SlaveWatcherBehavior	0	0x009188EB	ported				

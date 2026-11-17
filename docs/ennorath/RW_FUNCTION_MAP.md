@@ -2,7 +2,7 @@
 
 Command: `python tools/mod/rw_function_map.py --game workspace/RotWK/game.dat --ini /tmp/ennorath-ini-1.9.8.3.zip --src engine/src --inventory workspace/rebuild/rw_function_blocks.json --threshold 200 --out docs/ennorath/RW_FUNCTION_MAP`
 
-Rows: 52638; ported 26451, partial 831, none 25356.
+Rows: 52638; ported 26464, partial 831, none 25343.
 Counts are per module/function pair, not unique functions.
 
 ## Stop list
@@ -8323,13 +8323,13 @@ calls; their targets are not followed.
 | W3DTreeDraw | 276 | 1 | 0x00435F30 | 27 | none |  |
 | W3DTreeDraw | 276 | 1 | 0x004CE48F | 25 | none |  |
 | W3DTreeDraw | 276 | 2 | 0x00435D50 | 42 | none |  |
-| SlavedUpdate | 268 | 0 | 0x008A4F1C | 15 | none |  |
-| SlavedUpdate | 268 | 0 | 0x008A4FC8 | 11 | none |  |
-| SlavedUpdate | 268 | 0 | 0x008A4FE4 | 3 | none |  |
-| SlavedUpdate | 268 | 0 | 0x008A4FEB | 3 | none |  |
-| SlavedUpdate | 268 | 0 | 0x0049D0E9 | 2 | none |  |
-| SlavedUpdate | 268 | 0 | 0x0049D0F3 | 2 | none |  |
-| SlavedUpdate | 268 | 0 | 0x008A4F61 | 2 | none |  |
+| SlavedUpdate | 268 | 0 | 0x008A4F1C | 15 | ported |  |
+| SlavedUpdate | 268 | 0 | 0x008A4FC8 | 11 | ported |  |
+| SlavedUpdate | 268 | 0 | 0x008A4FE4 | 3 | ported |  |
+| SlavedUpdate | 268 | 0 | 0x008A4FEB | 3 | ported |  |
+| SlavedUpdate | 268 | 0 | 0x0049D0E9 | 2 | ported |  |
+| SlavedUpdate | 268 | 0 | 0x0049D0F3 | 2 | ported |  |
+| SlavedUpdate | 268 | 0 | 0x008A4F61 | 2 | ported |  |
 | SlavedUpdate | 268 | 1 | 0x00771726 | 18 | partial |  |
 | SlavedUpdate | 268 | 1 | 0x008A4EFC | 5 | none |  |
 | SlavedUpdate | 268 | 1 | 0x004D0EAF | 1 | none |  |
@@ -9918,12 +9918,12 @@ calls; their targets are not followed.
 | SpawnBehavior | 130 | 14 | 0x00A3A190 | 4 | none |  |
 | SpawnBehavior | 130 | 15 | 0x00A3CD70 | 25 | none |  |
 | SpawnBehavior | 130 | 16 | 0x007ED77A | 21 | none |  |
-| SlaveWatcherBehavior | 127 | 0 | 0x008878BA | 15 | none |  |
-| SlaveWatcherBehavior | 127 | 0 | 0x0088796A | 11 | none |  |
-| SlaveWatcherBehavior | 127 | 0 | 0x00887B56 | 11 | none |  |
-| SlaveWatcherBehavior | 127 | 0 | 0x004B612F | 10 | none |  |
-| SlaveWatcherBehavior | 127 | 0 | 0x00464A09 | 2 | none |  |
-| SlaveWatcherBehavior | 127 | 0 | 0x008878B4 | 2 | none |  |
+| SlaveWatcherBehavior | 127 | 0 | 0x008878BA | 15 | ported |  |
+| SlaveWatcherBehavior | 127 | 0 | 0x0088796A | 11 | ported |  |
+| SlaveWatcherBehavior | 127 | 0 | 0x00887B56 | 11 | ported |  |
+| SlaveWatcherBehavior | 127 | 0 | 0x004B612F | 10 | ported |  |
+| SlaveWatcherBehavior | 127 | 0 | 0x00464A09 | 2 | ported |  |
+| SlaveWatcherBehavior | 127 | 0 | 0x008878B4 | 2 | ported |  |
 | SlaveWatcherBehavior | 127 | 1 | 0x00435F30 | 27 | none |  |
 | SlaveWatcherBehavior | 127 | 1 | 0x00887986 | 18 | none |  |
 | SlaveWatcherBehavior | 127 | 1 | 0x004D0EAF | 1 | none |  |
