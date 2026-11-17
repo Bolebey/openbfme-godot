@@ -297,9 +297,10 @@ def skip_reason(p: dict) -> str:
         for ref in refs:
             if sh(["git", "merge-base", "--is-ancestor", head, ref], cwd=REPO).returncode == 0:
                 return f"already in {ref.removeprefix('refs/remotes/origin/')}"
-    commits = p.get("commits") or []
-    last = max((c.get("committedDate") or "" for c in commits), default="")
-    for c in p.get("comments") or []:
+    # comments and commits per PR: asking for them in the list query exceeds GitHub's GraphQL node limit
+    extra = json.loads(gh("pr", "view", str(p["number"]), "--json", "comments,commits"))
+    last = max((c.get("committedDate") or "" for c in extra.get("commits") or []), default="")
+    for c in extra.get("comments") or []:
         if RETURNED.search(c.get("body") or "") and not (c.get("body") or "").startswith("<!-- prcheck") and (c.get("createdAt") or "") > last:
             return "returned to its agent (no commit since)"
     return ""
@@ -369,7 +370,7 @@ def cycle(args) -> int:
     sh(["git", "fetch", "-q", "origin"], cwd=REPO).check_returncode()
     main_sha = sh(["git", "rev-parse", "origin/main"], cwd=REPO).stdout.strip()
     prs = json.loads(gh("pr", "list", "--state", "open", "--limit", "100", "--json",
-                        "number,title,headRefOid,headRefName,files,isDraft,updatedAt,comments,commits"))
+                        "number,title,headRefOid,headRefName,files,isDraft,updatedAt"))
     sh(["git", "fetch", "-q", "origin", "+refs/pull/*/head:refs/prcheck/*"], cwd=REPO)  # the heads, for the batch test below
     todo = [p for p in prs if (args.pr is None or p["number"] == args.pr) and not p["isDraft"]
             and state["checked"].get(str(p["number"])) != p["headRefOid"]
