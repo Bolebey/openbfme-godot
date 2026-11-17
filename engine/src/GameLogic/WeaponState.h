@@ -388,6 +388,9 @@ public:
 	// The model condition bits coolDown / speedUp drive: entries of the binary's model condition name table (BitFlags.h's
 	// TheModelConditionNames, RW 0xD9FAD8), which the PORT-225 test checks by name. DONOR BFME2's ModelConditionFlagType numbers them
 	// 115 / 116 / 117, and the table has the same neighbours (SPECIAL_CHEERING before, RAISING_FLAG after).
+	// Re-read 2026-11-17 from game.dat 2.01 (md5 daed3668…): the 0x4C-byte ModelConditionFlags local that coolDown / speedUp fill and
+	// hand to 0x68D607 carries them in byte 14 as 0x08 / 0x10 / 0x20 — bits 115 / 116 / 117 (0x8E3076, 0x8E308B, 0x8E30A8, 0x8E3211,
+	// 0x8E321F, 0x8E3234), i.e. SLOW 115, MEAN 116, FAST 117, with the same neighbours the name table shows.
 	enum { MODELCOND_CONTINUOUS_FIRE_SLOW = 115, MODELCOND_CONTINUOUS_FIRE_MEAN = 116, MODELCOND_CONTINUOUS_FIRE_FAST = 117 };
 
 	// RW 0x8E326D (hard = the bool argument; the fire path passes false)

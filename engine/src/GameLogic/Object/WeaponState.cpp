@@ -878,7 +878,11 @@ void setModelConditionBit(ModelConditionBits &bits, int bit)
 }
 }
 
-// RW 0x8E302A (DONOR BFME2 0x004DEC88, coolDown(forceReset); the RW address is the port's record, not re-read here)
+// RW 0x8E302A FiringTracker::coolDown(forceReset), re-read 2026-11-17 from game.dat 2.01 (md5 daed3668…); DONOR BFME2 0x004DEC88
+// (FiringTrackerXfer.cpp). The non-forced FAST|MEAN arm 0x8E305B sets SLOW ([ebp-0x24]+0xE |= 0x08 at 0x8E3076) and clears MEAN and
+// FAST ([ebp+0x28]+0xE |= 0x30 at 0x8E308B); the else arm 0x8E3091 clears all three (|= 0x38 at 0x8E30A8), zeroes the cool-down frame
+// [this+0x3C] at 0x8E30AC and the last shot position [this+0x48..0x50] at 0x8E30AF..0x8E30B9. Both arms end in one call 0x68D607 at
+// 0x8E30BE (Object::clearAndSetModelConditionFlags, cleared mask pushed first) and then zero the count / victim at 0x8E30CE / 0x8E30D1.
 void FiringTracker::reset(FiringTrackerHost &host, bool hard)
 {
 	const std::uint32_t bits = (1u << CONDITION_CONTINUOUS_FIRE_MEAN) | (1u << CONDITION_CONTINUOUS_FIRE_FAST);
@@ -908,7 +912,9 @@ void FiringTracker::reset(FiringTrackerHost &host, bool hard)
 	m_victimID = 0;
 }
 
-// RW 0x8E3174 (the port's record) / RW 0x8E31A4 (where the function begins: the MEAN -> FAST transition cited inside is 0x8E31C8 ..)
+// RW 0x8E3174 FiringTracker::speedUp (SEH prologue; the body starts at 0x8E31A4), re-read 2026-11-17 from game.dat 2.01 (md5 daed3668…).
+// The entry reads the shadow word [owner+0x39C]: bit 3 (0x8) set -> already FAST, nothing changes (0x8E31AD..0x8E31B8); bit 2 (0x4) clear
+// -> the MEAN arm at 0x8E3234; otherwise the MEAN -> FAST transition at 0x8E31C8.
 void FiringTracker::speedUp(FiringTrackerHost &host)
 {
 	const std::uint32_t mean = 1u << CONDITION_CONTINUOUS_FIRE_MEAN;
@@ -922,9 +928,9 @@ void FiringTracker::speedUp(FiringTrackerHost &host)
 	ModelConditionBits clr{}, set{};
 	if (mask & mean)
 	{
-		// RW 0x8E31C8 .. 0x8E3205 (inside the function RW 0x8E31A4; the port's earlier record 0x8E3174): transition MEAN -> FAST posts
-		// 0x7DC (VoiceRapidFire) for { self->getDrawable() }, and DONOR
-		// 0x004DEDD2 sets CONTINUOUS_FIRE_FAST while clearing MEAN and SLOW.
+		// RW 0x8E31C8 .. 0x8E322D: MEAN -> FAST posts 0x7DC (push 0x7DC at 0x8E31FF, call 0x8DEDBB at 0x8E3205), sets FAST
+		// ([ebp-0xB4]+0xE |= 0x20 at 0x8E3211) and clears MEAN and SLOW ([ebp-0x68]+0xE |= 0x18 at 0x8E321F); the shadow word gains FAST
+		// at 0x8E320A and loses MEAN at 0x8E3218. DONOR 0x004DEDD2 (VoiceRapidFire for the owner's drawable).
 		if (const std::uint32_t ownerId = host.ownerObjectID())
 		{
 			AudioApi::postUnitVoice(0x7DC, ownerId);
@@ -936,13 +942,14 @@ void FiringTracker::speedUp(FiringTrackerHost &host)
 	}
 	else
 	{
-		// DONOR 0x004DEDD2: none -> MEAN (FAST and SLOW cleared).
+		// RW 0x8E3234: neither bit set -> MEAN ([ebp-0xB4]+0xE |= 0x10), FAST and SLOW cleared ([ebp-0x68]+0xE |= 0x28); the shadow
+		// word gains MEAN and loses FAST. DONOR 0x004DEDD2.
 		host.setWeaponBonusConditionMask(mask | mean);
 		setModelConditionBit(set, MODELCOND_CONTINUOUS_FIRE_MEAN);
 		setModelConditionBit(clr, MODELCOND_CONTINUOUS_FIRE_FAST);
 		setModelConditionBit(clr, MODELCOND_CONTINUOUS_FIRE_SLOW);
 	}
-	host.clearAndSetModelConditions(clr, set); // DONOR 0x004DEDD2: one clearAndSet at the end of speedUp
+	host.clearAndSetModelConditions(clr, set); // RW 0x8E325B (call 0x68D607): one clearAndSet at the end of speedUp
 }
 
 // RW 0x8E2E12
@@ -1041,7 +1048,7 @@ void FiringTracker::shotFired(FiringTrackerHost &host, const Weapon &weapon, uns
 }
 
 // DONOR BFME2 0x004DED3B (Code/GameEngine/Source/GameLogic/Object/FiringTrackerXfer.cpp, the unit's retail-matched body; RW 0x8E30DD
-// is this function in game.dat 2.01). Retail runs four steps in this order: (1) the owner left the last shot position -> a hard
+// is this function in game.dat 2.01; its step 1 is `push 1; call 0x8E302A` at 0x8E30FC..0x8E3101). Retail runs four steps in this order: (1) the owner left the last shot position -> a hard
 // coolDown; (2) the forced auto-reload (frame + 0x40), which clears its own frame; (3) the looped fire sound (+ 0x54; the port keeps
 // that state on its audio side, S-712); (4) ONLY while a cooldown frame is pending (+ 0x3C != 0) and the frame is past it -> push the
 // frame LogicFramesPerSecond ahead, coolDown(false), and sleep exactly that many frames. The earlier body ran step 4 without the gate
