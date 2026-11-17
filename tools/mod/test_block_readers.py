@@ -91,3 +91,9 @@ def test_virtual_singleton_getter_requires_same_receiver_and_slot():
     assert (0x1000, 0x2000, ('v13C',), 0x3c, 0x100e) in reads
     assert not any(path == ('v13C',) for _, _, path, _, _ in br.global_reads(
         code, 0x1000, blocks, {0x2000}, virtual_getters={(0x2000, (), 0x140)}))
+
+
+def test_an_instance_two_tables_claim_proves_neither():
+    shared, own = ("ptr", 0x1000, (0,)), ("ptr", 0x2000, ())
+    kept = br.assign_instances({"audiosettings": (shared, 8, 0.85, {}), "locomotor": (shared, 49, 1.0, {}), "weather": (own, 19, 0.87, {})})
+    assert set(kept) == {"weather"}

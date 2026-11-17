@@ -10,7 +10,11 @@ trivial, not getModuleNameKey / xfer / a deleting destructor). They are candidat
 a function ported without a citation, or a function of another class that reads the module's data. A row with `how` = manual or a
 `stop` may already carry a verdict ("RotWK does not read it", TOP20 / docs/STOPS.md): read it first. The task still proves the reader
 (parser -> offset -> every reader, PROCESS 5 step 4). Only block, class and field names, counts and RW addresses are written: no values.
-With --game and --inventory, GameData, AIData, AudioSettings, MiscAudio and Mouse get intra-function global-pointer read candidates. Other blocks remain unimplemented.
+With --game and --inventory, GameData, AIData, AudioSettings, MiscAudio and Mouse get intra-function global-pointer read candidates
+(route `global`, parse addresses proven). Other top-level blocks get route `inferred` (Port 241): the block's field table found in the
+image by its names, the global pointer or static whose reads best explain the table's used fields, dropped when another table claims
+the same instance (or a static below precision 0.9); route `table` means the table was found but no instance qualified. Sub-blocks and
+per-template blocks without a named getter stay unrouted (the template-pointer route is the next step).
 With --xmap, named template getters add direct-caller candidates (entry-block reads only).
 These are heuristic leads, not no-reader verdicts; register state is propagated over direct CFG edges only, not stack spills or unknown indirect calls.
 """
@@ -101,24 +105,84 @@ TEMPLATES = {
 }
 
 
-def top_level_candidates(game, inventory, xmap=None):
+def inferred_candidates(pe, data, base, blocks, audit_rows, citations, known):
+    """Top-level INI blocks without a proven parse address (not SINGLETONS / TEMPLATES, no owner, no sub-block): the block's field table
+    found in the image by its names (br.find_field_tables / match_block_tables), the global pointer or static object whose reads best
+    explain the table's USED fields' offsets (br.match_instance), kept only when no other table claims the same instance
+    (br.assign_instances). Leads, not proofs: the route says "inferred" and the task proves the parse address first."""
+    fields, used, unused = {}, {}, {}
+    for r in audit_rows:
+        block, field = (r.get("block") or "").lower(), (r.get("field") or "").lower()
+        if r.get("owner") or not block or "/" in block or block in known:
+            continue
+        fields.setdefault(block, set()).add(field)
+        (unused if r.get("status") in STATUSES else used).setdefault(block, set()).add(field)
+    sections = br.image_sections(pe)
+    tables = br.find_field_tables(data, base, sections)
+    by_table = br.match_block_tables({b: f for b, f in fields.items() if unused.get(b)}, tables)
+    reads = br.all_pointer_reads(data, base, blocks, (sections[".data"][0], sections[".data"][1] + 0x200000))
+    instances = br.instance_offsets(reads)
+    absolute = {}
+    for function, kind, root, path, offset, instruction in reads:
+        if kind == "abs":
+            absolute.setdefault(root, set()).add((function, instruction))
+    statics = {root for (kind, root, path) in instances if kind == "static"}
+    pointers = {i: o for i, o in instances.items() if i[0] == "ptr"}
+    matches = {}
+    for block, table in by_table.items():
+        m = br.match_instance(tables[table], used.get(block, set()), pointers, statics, absolute)
+        # a static object gathers every absolute read near it: below 0.9 it is other globals next to it (RW 0x4A8AAD reads 0xDCBBB4,
+        # not a SpecialPower template; hand check 2026-11-17)
+        if m and not (m[0][0] == "static" and m[2] < 0.9):
+            matches[block] = (m, table)
+    kept = br.assign_instances({b: m for b, (m, _) in matches.items()})
+    output = {}
+    for block, table in by_table.items():
+        offsets = {row[0].lower(): row[3] for row in tables[table]}
+        for field in unused.get(block, ()):
+            if block not in kept:
+                why = "no instance explains the used fields" if block not in matches else "its best instance also explains another table"
+                output[(block, field)] = (f"table 0x{table:X}", why + "; not a no-reader verdict")
+                continue
+            (kind, root, path), hit, precision, reads_at = kept[block]
+            name = f"{kind} 0x{root:X}" + "".join(f" ->+0x{step:X}" for step in path)
+            off = offsets.get(field)
+            route = f"inferred {name} +0x{off:X} (table 0x{table:X}, used fields hit {hit}, precision {precision:.2f})" if off is not None                 else f"inferred {name} (table 0x{table:X}: field not in the table)"
+            hits = sorted(reads_at.get(off, ())) if off is not None else []
+            note = ", ".join(f"0x{function:08X} ({citations.get(function, 'none')}; read 0x{instruction:08X})" for function, instruction in hits)
+            output[(block, field)] = (route, note or "no read of this offset through the instance; not a no-reader verdict")
+    return output
+
+
+def top_level_candidates(game, inventory, xmap=None, audit_rows=None):
     import json
     import pefile
     import hashlib
     record = json.loads(inventory.read_text(encoding="utf-8"))
-    if record.get("sha256") != hashlib.sha256(game.read_bytes()).hexdigest() or record.get("missing_seeds"):
-        raise ValueError("inventory does not match game or has missing seeds")
+    if record.get("sha256") != hashlib.sha256(game.read_bytes()).hexdigest():
+        raise ValueError("inventory does not match game")
+    if record.get("missing_seeds"):
+        # the whole-image inventory leaves a few seeds unrecovered: their functions give no candidates (said in the output)
+        print(f"warning: inventory misses {len(record['missing_seeds'])} seeds: "
+              + ", ".join(f"0x{a:08X}" for a in record["missing_seeds"][:8]))
     blocks = {f["address"]: tuple(tuple(span) for span in f["blocks"]) for f in record["functions"]}
     pe = pefile.PE(str(game), fast_load=True)
     data, base = pe.get_memory_mapped_image(), pe.OPTIONAL_HEADER.ImageBase
     citations = rm.scan_citations(Path("engine/src"))
+    skipped = [] if record.get("missing_seeds") else None
     matches = br.global_reads(data, base, blocks, {v[1] for v in SINGLETONS.values()},
                               {(v[1], v[2]) for v in SINGLETONS.values() if v[2] and isinstance(v[2][-1], int)},
-                              {(0xDE42FC, (), 0x13C)})
+                              {(0xDE42FC, (), 0x13C)}, skipped)
+    if skipped:
+        print(f"warning: {len(skipped)} functions with a mis-split block left out (reads and getter callers): "
+              + ", ".join(f"0x{a:08X}" for a in skipped[:8]))
+        blocks = {f: spans for f, spans in blocks.items() if f not in set(skipped)}
     by_field = {}
     for function, pointer, path, offset, instruction in matches:
         by_field.setdefault((pointer, path, offset), set()).add((function, instruction))
     output = {}
+    if audit_rows is not None:
+        output.update(inferred_candidates(pe, data, base, blocks, audit_rows, citations, set(SINGLETONS) | set(TEMPLATES)))
     for block, (name, pointer, path, table, end) in SINGLETONS.items():
         for field, offset in br.field_table(data, base, table, end).items():
             route = f"global {name} +0x{offset:X}"
@@ -170,7 +234,7 @@ def main(argv=None):
     sizes, skip = mg.load_filters(a.inventory, a.game)
     if a.xmap and not a.game:
         ap.error("--xmap requires --game")
-    candidates = top_level_candidates(a.game, a.inventory, a.xmap) if a.game else {}
+    candidates = top_level_candidates(a.game, a.inventory, a.xmap, audit_rows) if a.game else {}
     rows = join(audit_rows, gaps, classes, reach, sizes, skip, candidates)
     write(rows, a.out)
     in_map = sum(1 for r in rows if r[7] == "yes")

@@ -25,7 +25,7 @@ FAMILIES = {
 VOLATILE = {'eax', 'ecx', 'edx'}
 
 
-def global_reads(data, base, blocks, globals_by_address, pointer_paths=(), virtual_getters=()):
+def global_reads(data, base, blocks, globals_by_address, pointer_paths=(), virtual_getters=(), skipped=None):
     """Return (function, global address, pointer path, offset, instruction).
 
     Propagate possible pointer values along direct CFG edges. Union at joins is
@@ -41,15 +41,22 @@ def global_reads(data, base, blocks, globals_by_address, pointer_paths=(), virtu
     virtual_getters = set(virtual_getters)
     for function, spans in sorted(blocks.items()):
         decoded = {}
-        for start, size in sorted(spans):
-            if size <= 0 or start < base or start + size > base + len(data):
-                raise ValueError(f'invalid block at {start:#x}')
-            instructions = list(decoder.disasm(data[start-base:start-base+size], start))
-            if not instructions or instructions[-1].address + instructions[-1].size != start + size:
-                raise ValueError(f'truncated block at {start:#x}')
-            decoded[start] = instructions
-        if function not in decoded:
-            raise ValueError(f'function has no entry block at {function:#x}')
+        try:
+            for start, size in sorted(spans):
+                if size <= 0 or start < base or start + size > base + len(data):
+                    raise ValueError(f'invalid block at {start:#x}')
+                instructions = list(decoder.disasm(data[start-base:start-base+size], start))
+                if not instructions or instructions[-1].address + instructions[-1].size != start + size:
+                    raise ValueError(f'truncated block at {start:#x}')
+                decoded[start] = instructions
+            if function not in decoded:
+                raise ValueError(f'function has no entry block at {function:#x}')
+        except ValueError:
+            # strict by default; with a `skipped` list (the whole-image inventory, a few mis-split blocks) the function is left out and listed
+            if skipped is None:
+                raise
+            skipped.append(function)
+            continue
         states = {function: {}}
         pending = deque([function])
         while pending:
@@ -382,3 +389,12 @@ def match_instance(table_rows, used_names, offsets_by_instance, statics, abs_rea
     if best is None or best[0][1] < 0.5:
         return None
     return best[1], best[0][0], best[0][1], best[2]
+
+
+def assign_instances(matches):
+    """{block: (instance, hit, precision, offsets)} -> only the blocks whose instance no other block's table also claims: a generic
+    pointer or static that explains several tables' offsets (the arena's TheAudio-like roots, a shared nugget pool) proves none of them."""
+    claims = defaultdict(int)
+    for m in matches.values():
+        claims[m[0]] += 1
+    return {block: m for block, m in matches.items() if claims[m[0]] == 1}
