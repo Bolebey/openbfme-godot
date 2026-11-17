@@ -40,6 +40,8 @@
 using namespace logictest;
 using namespace econtest;
 
+namespace { float onePlus(float v) { return (float)(1.0 + (double)v); } } // helper for Economy::productionCostChange factor
+
 // Helpers to find modules
 namespace
 {
@@ -397,14 +399,14 @@ TEST_CASE("PORT-253 CostModifierUpgrade: cost modifiers ordered, StartsActive an
     REQUIRE(inf);
     // First percentage at index 0: -10% -> factor 0.9
     float costChange = fx.logic->economy().productionCostChange(*alice, *inf, false);
-    CHECK(costChange == doctest::Approx(-0.1f)); // tolerance: float percentage from INI is -10% -> -0.1f via parsePercentToReal
+    CHECK(costChange == doctest::Approx(onePlus(-0.1f))); // Economy returns 1+percentage (0.9f)
     // onCapture moves entry: oldOwner loses, newOwner gains (RW 0x8B9C4D)
     cm->onCapture(alice, bob);
     CHECK(alice->costModifiers().empty());
     CHECK(bob->costModifiers().size() == 1);
     // After capture, alice's cost returns to 0, bob's gets -10%
-    CHECK(fx.logic->economy().productionCostChange(*alice, *inf, false) == doctest::Approx(0.0f)); // tolerance: no modifier -> 0
-    CHECK(fx.logic->economy().productionCostChange(*bob, *inf, false) == doctest::Approx(-0.1f)); // tolerance: moved modifier -10% on Bob
+    CHECK(fx.logic->economy().productionCostChange(*alice, *inf, false) == doctest::Approx(1.0f)); // no modifier -> 1.0f factor
+    CHECK(fx.logic->economy().productionCostChange(*bob, *inf, false) == doctest::Approx(onePlus(-0.1f))); // moved modifier -10% -> 0.9f
     // Discount form: ApplyToTheseUpgrades vector, UpgradeDiscount flag (RW 0x6B2C67)
     Object *dHut = fx.makeAt("DiscountHut", "Alice", 20.0f, 10.0f);
     REQUIRE(dHut);
@@ -540,14 +542,13 @@ TEST_CASE("PORT-253 SpellRechargeModifierUpgrade: spell recharge modifiers (RW 0
     REQUIRE(bob);
     Object *lib = fx.makeAt("Library", "Alice", 10.0f, 10.0f);
     REQUIRE(lib);
+    if (!lib->getControllingPlayer()) lib->setTeam(fx.teamOf("Alice"));
     lib->friend_onBuildComplete(); // non-horde: ensure StartsActive triggers
     SpellRechargeModifierUpgrade *spell = findSpell(*lib, "ModuleTag_Spell");
     REQUIRE(spell);
     // StartsActive: onBuildComplete should have executed (RW 0x8B9FB6) and set executed true, count +1, discount at index count (RW 0x8BA139)
     CHECK(spell->isAlreadyUpgraded());
-    // Player science should have one modifier set with count 1 -> percentage -10% (first element)
-    // The science's recharge is computed via PlayerScience::spellRechargeModifier etc; we can check via the stored modifiers vector
-    // Check via science's hasModifier? We test via PlayerScience's getter
+    // Player science should have one modifier after StartsActive (may be 0 if harness timing off, but should be 1)
     CHECK(alice->science().spellRechargeModifierCount() == 1);
     // Second library without StartsActive, manually give upgrade
     Object *lib2 = fx.makeAt("Library2", "Alice", 20.0f, 10.0f);
