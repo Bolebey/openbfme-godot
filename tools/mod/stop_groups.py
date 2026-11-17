@@ -361,7 +361,7 @@ def output(stops, groups, unplaced, funcs, matrix, fields, issues, out, command,
             incoming[target].add(source.id)
     with out.with_suffix('.tsv').open('w', encoding='utf-8', newline='') as f:
         w = csv.writer(f, delimiter='\t', lineterminator='\n')
-        w.writerow(['id', 'kind', 'group', 'why', 'functions', 'classes', 'port classes', 'RotWK classes', 'references', 'referenced by', 'reported tasks'])
+        w.writerow(['id', 'kind', 'group', 'functions', 'classes', 'port classes', 'RotWK classes', 'references', 'referenced by', 'reported tasks', 'why'])
         for sid, s in sorted(stops.items()):
             peers = [stops[x] for x in next((g[0] for g in details if sid in g[0]), []) if x != sid]
             shared_f = sorted(a for a in set().union(*(s.link_functions & p.link_functions for p in peers))
@@ -375,10 +375,12 @@ def output(stops, groups, unplaced, funcs, matrix, fields, issues, out, command,
                        [f'shared class {x}' for x in shared_c] + [f'reference {x}' for x in shared_r] +
                        [f'cross-group reference {x} ({assigned[x]})' for x in cross_refs])
             why = '; '.join(reasons) or ('singleton' if sid in assigned else 'no resolvable mechanism')
-            w.writerow([sid, s.kind, assigned.get(sid, 'unplaced'), why,
+            # Keep the non-empty explanation last, so empty trailing TSV fields
+            # do not become trailing whitespace in every generated line.
+            w.writerow([sid, s.kind, assigned.get(sid, 'unplaced'),
                         ', '.join(f'0x{x:08X}' for x in sorted(s.functions)), ', '.join(sorted(s.classes)),
                         ', '.join(sorted(s.port_classes)), ', '.join(sorted(s.rotwk_classes)),
-                        ', '.join(sorted(s.all_refs)), ', '.join(sorted(incoming[sid])), ', '.join(sorted(s.tasks))])
+                        ', '.join(sorted(s.all_refs)), ', '.join(sorted(incoming[sid])), ', '.join(sorted(s.tasks)), why])
     lines = ['# Open stop mechanism candidates', '', f'Regenerate: `{command}`', '', 'For --game install Python packages `capstone` and `pefile`; issue matching uses `gh` or an explicit --issues JSON snapshot. A discovered or explicitly supplied whole-function inventory takes precedence over the game heuristic; without either, only exact map starts are resolved.', '', 'Candidates are heuristic, not proof. Class merges use the area or the first named class of the gap; literal port and map-decomp name matches remain listed separately in TSV; generic names do not place a stop. Cross-group references remain visible after splitting. Common utility functions, the manually reviewed broad draw dispatcher RW 0x004BE587, and citations in explicitly historical-fix sentences are not merge pivots; every citation is retained. Check ownership, dependencies and issue overlap before implementation. Large transitive components are split by function; links can cross groups. Unknown function status is reported separately and is not counted as none, but is included as unverified work in the ranking denominator. Unavailable issue lookup is not evidence of no coverage.', '', f'{len(stops)} open stops; {len(details)} groups; {len(unplaced)} unplaced.', '', '## Ranked groups', '', '| Rank | Mechanism | Stops | none/partial functions | Red buttons | Unused fields | Open task |', '|---:|---|---:|---:|---:|---:|---|']
     for n, (ids, fs, cs, name, missing, buttons, fl, covers) in enumerate(details, 1):
         coverage = 'lookup unavailable' if covers is None else ', '.join(covers) if covers else 'none matched'
