@@ -103,13 +103,21 @@ if [ "${1:-}" = "--now" ]; then
   run
   exit $?
 fi
-# after every landing (owner 2026-11-17): main moved since the last run and has not moved for 15 minutes (a landing pushes several commits)
+# after every landing (owner 2026-11-17): a "Landing:" commit (tools/land.py) or an upstream merge since the last run, and main still for
+# 15 minutes; otherwise once a day at 01:00 UTC when main moved at all (tool and doc commits alone do not take the sandbox for an hour)
 while true; do
   git -C "$REPO" fetch -q origin 2>/dev/null
   head=$(git -C "$REPO" rev-parse --short=8 origin/main 2>/dev/null)
   last=$(cat "$RUNS/last_rev" 2>/dev/null)
   age=$(( $(date +%s) - $(git -C "$REPO" log -1 --format=%ct origin/main 2>/dev/null || echo 0) ))
-  if [ -n "$head" ] && [ "$head" != "$last" ] && [ "$age" -ge 900 ]; then
+  landed=0
+  if [ -n "$last" ] && git -C "$REPO" cat-file -e "$last^{commit}" 2>/dev/null; then
+    git -C "$REPO" log --format=%s "$last..origin/main" | grep -qE '^(Landing|Merge upstream)' && landed=1
+  else
+    landed=1   # no previous run known: run once
+  fi
+  night=0; [ "$(date -u +%H)" = "01" ] && night=1
+  if [ -n "$head" ] && [ "$head" != "$last" ] && [ "$age" -ge 900 ] && [ $((landed + night)) -gt 0 ]; then
     run || echo "$head" > "$RUNS/last_rev"   # a failed run is not retried on the same main (its log says why)
   fi
   sleep 900
