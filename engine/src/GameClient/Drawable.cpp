@@ -738,7 +738,9 @@ void Drawable::updateFloorFades()
 {
 	for (DrawEntry &e : m_entries)
 	{
-		if (e.kind != W3D_DRAWKIND_FLOOR || e.staticModel.empty() || !e.data)
+		// RW 0x4CEBCA needs the module data only: the record is found by the data's ModelName (RW 0x4CEC04 passes data +8), not by the model the
+		// archives resolved, so a floor whose model is missing still gets its record
+		if (e.kind != W3D_DRAWKIND_FLOOR || !e.data)
 		{
 			continue;
 		}

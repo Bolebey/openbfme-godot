@@ -23,6 +23,7 @@
 #include "GameClient/Drawable.h"
 #include "GameClient/FloorFade.h"
 #include "GameClient/LogicSnapshot.h"
+#include "GameEngineDevice/W3DDevice/GameClient/Drawable/Draw/W3DDrawModules.h"
 #include "GameEngineDevice/W3DDevice/GameClient/Drawable/Draw/W3DTreeDraw.h"
 
 #include <memory>
@@ -67,7 +68,7 @@ struct Site
 	DrawServices services;
 	std::vector<std::string> problems;
 
-	Site() : assets(fs), services(assets, w.modules, hostOpt) {}
+	Site() : assets(fs), services(assets, w.modules, hostOpt) { W3DDrawModules::registerTypedDrawModuleData(w.modules); }
 
 	bool load() { return w.load(kIni).empty(); }
 
@@ -97,7 +98,8 @@ DrawEntry &onlyEntry(Drawable &d)
 // where the drawable learns the object's status; RW 0x4CEBF6 reads Object + 0x458 bit 0 at each draw module update
 void markDead(Drawable &d, bool dead)
 {
-	ObjectSnapshot rec;
+	static ObjectSnapshot rec; // setSyncedRecord keeps the pointer (the render side asks the same record again), so it outlives this call
+	rec = ObjectSnapshot();
 	rec.effectivelyDead = dead;
 	d.setSyncedRecord(nullptr, &rec);
 }
@@ -111,7 +113,6 @@ TEST_CASE("PORT-267 a dead floor fades at FloorFadeRateOnObjectDeath (RW 0x4CEBC
 	REQUIRE(d != nullptr);
 	DrawEntry &e = onlyEntry(*d);
 	REQUIRE(e.kind == W3D_DRAWKIND_FLOOR);
-	CHECK(e.staticModel == "PT267_Bib");
 	CHECK(e.floorFade.opacity() == 1.0f); // INFERENCE: a record starts at 1.0
 	CHECK(e.floorFade.rate() == 0.0f);
 

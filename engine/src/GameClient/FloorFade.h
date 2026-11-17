@@ -27,7 +27,6 @@
 
 #pragma once
 
-#include "Common/Xfer.h"
 
 #include <cstdint>
 
@@ -98,7 +97,8 @@ public:
 	}
 
 	// RW 0x4E504B: the record's opacity (+0x84, RW 0x4E50C3), its rate (+0x88, RW 0x4E50D1) and its state (+0x94 / +0x98, four raw bytes).
-	void xfer(Xfer &x)
+	// The transfer is a template so that this header does not pull Common/Xfer.h (which declares class Snapshot) into every user of Drawable.h.
+	template <typename XferType> void xfer(XferType &x)
 	{
 		x.xferReal(&m_opacity);
 		x.xferReal(&m_rate);
