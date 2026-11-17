@@ -1984,6 +1984,12 @@ bool GameWorld::view_is_local(size_t id, const W3DInstancer &dyn, const LogicSna
 			if ((ev.model != ev.staticKey && ev.instance >= 0) || !ev.posed)
 			{
 				return false; // the instance is removed or made
+		
+			// PORT-267: a floor's record opacity (RW record +0x84, GameClient/FloorFade.h) steps every client frame while it fades, so the view
+			// needs a refresh then
+			if (e.kind == W3D_DRAWKIND_FLOOR && ev.opacity != d->stealthOpacity() * e.floorFade.opacity())
+			{
+				return false;
 			}
 		}
 	}
@@ -2569,7 +2575,8 @@ void GameWorld::refresh_view(size_t id, W3DInstancer *dyn, const LogicSnapshot *
 			}
 			if (ev.instance >= 0) // lane STEALTH-1: a friend's invisible object pulses, a revealed one returns to full opacity (GameClient/StealthLook)
 			{
-				const float opacity = d->stealthOpacity(); // lane STEALTHLOOK-1: the drawable's stepped stealth opacity (+0xB4)
+				// PORT-267: a floor's own record opacity (RW record +0x84, GameClient/FloorFade.h) multiplies the drawable's look
+				const float opacity = d->stealthOpacity() * (e.kind == W3D_DRAWKIND_FLOOR ? e.floorFade.opacity() : 1.0f); // lane STEALTHLOOK-1: the drawable's stepped stealth opacity (+0xB4)
 				if (opacity != ev.opacity)
 				{
 					dyn->set_instance_opacity(ev.instance, opacity);
