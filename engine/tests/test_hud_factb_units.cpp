@@ -708,14 +708,21 @@ void unitsSweep(const std::string &faction, Results &res, bool sweep)
 							}
 							else if (a.kind == greyfix::Kind::Model)
 							{
-								// the button that sets the condition, pressed through the HUD: the satisfied-by column names it;
-								// the fallback is the weapon toggle, then the mount toggle (as the player does)
+								// the button that sets the condition, pressed through the HUD: the satisfied-by column names it (its note
+								// after " (" cut off); without a named button, the weapon toggle only for a WEAPONSET_TOGGLE_* condition and
+								// the mount toggle only for MOUNTED (2026-11-17: both were pressed for any condition, and Gorkil's mount
+								// toggle replaced the unit); nothing is pressed when the condition is already set
+								const int bit = ModelCondition::indexOf(a.value);
+								if (bit >= 0 && u->testModelCondition(bit))
+								{
+									continue;
+								}
+								const std::string by = greyfix::setterButton(a.satisfiedBy);
 								ControlBarButton setter;
-								const bool named = !a.satisfiedBy.empty() && a.satisfiedBy != "-" && g.select(u)
-									&& g.reveal(u, [&](const CommandButton &x) { return x.m_name == a.satisfiedBy; }, setter);
-								const bool weapon = !named && ((u->getWeaponSetFlags()[0] >> 24) & 1u) == 0 && g.select(u)
+								const bool named = !by.empty() && g.select(u) && g.reveal(u, [&](const CommandButton &x) { return x.m_name == by; }, setter);
+								const bool weapon = !named && a.value.rfind("WEAPONSET_TOGGLE", 0) == 0 && g.select(u)
 									&& g.reveal(u, [](const CommandButton &x) { return x.m_command == GUI_COMMAND_TOGGLE_WEAPONSET; }, setter);
-								const bool mount = !named && !weapon && !u->testModelCondition(ModelCondition::indexOf("MOUNTED")) && g.select(u)
+								const bool mount = !named && !weapon && a.value == "MOUNTED" && g.select(u)
 									&& g.reveal(u, [](const CommandButton &x) { return x.m_specialPowerName == "SpecialAbilityToggleMounted"; }, setter);
 								if (named || weapon || mount)
 								{
@@ -730,7 +737,15 @@ void unitsSweep(const std::string &faction, Results &res, bool sweep)
 							u = g.logic().findObjectByID(uid);
 							if (!u)
 							{
-								res.fail(item, "the unit left the world after the fixture");
+								// a model setter that replaces the unit (a mount toggle swaps the object): the replacement is swept as its own
+								// object, so this one's button cannot be pressed with the condition met here (2026-11-17, Gorkil)
+								const greyfix::Condition *model = nullptr;
+								for (const greyfix::Condition &c : greyRow->conditions)
+								{
+									model = model ? model : (greyfix::kindOf(c.condition) == greyfix::Kind::Model ? &c : nullptr);
+								}
+								res.fail(item, model ? greyfix::unmetDetail(*model, "its setter replaces the unit with another object, swept on its own")
+								                     : std::string("the unit left the world after the fixture"));
 								continue;
 							}
 							g.select(u);
@@ -750,6 +765,47 @@ void unitsSweep(const std::string &faction, Results &res, bool sweep)
 								modelGated = modelGated || (u->getModelConditionBits()[w] & cb->m_disableOnModelCondition[w]) != 0;
 							}
 							modelGated = modelGated && !upgrade && b.state == ButtonState::Restricted;
+							// GREY-BUG only when every condition really holds now (2026-11-17): a condition the fixture did not give is the
+							// grey verdict with its reason, not a port bug
+							for (const greyfix::Condition &c : greyRow->conditions)
+							{
+								if (!fixtureDetail.empty())
+								{
+									break;
+								}
+								const greyfix::Kind k = greyfix::kindOf(c.condition);
+								if (k == greyfix::Kind::Model)
+								{
+									const int bit = ModelCondition::indexOf(c.value);
+									if (bit < 0 || !u->testModelCondition(bit))
+									{
+										fixtureDetail = greyfix::unmetDetail(c, bit < 0 ? "unknown model condition" : "the sweep could not set it: no known setter");
+									}
+								}
+								else if (k == greyfix::Kind::Upgrade)
+								{
+									if (!g.rig.local->hasUpgradeComplete(c.value) && !u->hasUpgrade(c.value))
+									{
+										fixtureDetail = greyfix::unmetDetail(c, "the upgrade did not take");
+									}
+								}
+								else if (k == greyfix::Kind::Science)
+								{
+									const ScienceType st = TheScienceStore ? TheScienceStore->getScienceFromInternalName(c.value) : SCIENCE_INVALID;
+									if (st == SCIENCE_INVALID || !g.rig.local->science().hasScience(st))
+									{
+										fixtureDetail = greyfix::unmetDetail(c, "the science did not take");
+									}
+								}
+								else if (k == greyfix::Kind::Level)
+								{
+									const ExperienceTracker *xp = u->getExperienceTracker();
+									if (!xp || xp->getRank() < std::atoi(c.value.c_str()))
+									{
+										fixtureDetail = greyfix::unmetDetail(c, "the unit did not reach it");
+									}
+								}
+							}
 						}
 					}
 				}
