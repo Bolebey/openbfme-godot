@@ -36,3 +36,14 @@ def test_split_large_component_by_function(tmp_path):
 
 def test_only_rw_citations():
     assert rw_addresses('BFME2 0x401000 RW 0x402000 / 0x402010 and RVA 0x403000') == {0x402000, 0x402010}
+
+
+def test_known_map_start_beats_false_interior_seed():
+    from stop_groups import BinaryResolver
+    resolver = BinaryResolver.__new__(BinaryResolver)
+    resolver.lo, resolver.hi = 0x401000, 0x403000
+    resolver.map_starts = [0x401000]
+    resolver.seeds = [0x401000, 0x401100]
+    resolver.cache = {}
+    resolver.reaches = lambda start, address: start in (0x401000, 0x401100)
+    assert resolver.owner(0x401108) == 0x401000
