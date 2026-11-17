@@ -122,6 +122,7 @@ class BinaryResolver:
                 if self.lo <= a < self.hi:
                     seeds.add(a)
         self.seeds = sorted(seeds)
+        self.map_starts = sorted(a for a in map_starts if self.lo <= a < self.hi)
         self.md = capstone.Cs(capstone.CS_ARCH_X86, capstone.CS_MODE_32)
         self.cache = {}
 
@@ -160,6 +161,15 @@ class BinaryResolver:
             return self.cache[a]
         if not self.lo <= a < self.hi:
             return None
+        # Prefer known map starts over speculative call-target / data pointers.
+        # A misread immediate or switch-table entry can point into a function.
+        i = bisect.bisect_right(self.map_starts, a)
+        for candidate in reversed(self.map_starts[max(0, i - 4):i]):
+            if a - candidate > 0x4000:
+                break
+            if self.reaches(candidate, a):
+                self.cache[a] = candidate
+                return candidate
         i = bisect.bisect_right(self.seeds, a)
         # Bound the search: do not claim an owner merely by address proximity.
         for candidate in reversed(self.seeds[max(0, i - 24):i]):
