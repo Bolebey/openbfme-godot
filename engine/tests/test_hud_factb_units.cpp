@@ -982,6 +982,14 @@ void unitsSweep(const std::string &faction, Results &res, bool sweep)
 						}
 						return out;
 					};
+					// 2026-11-17 (matrix review): a horde member made alone has no horde contain: its formation button acts on the horde,
+					// which is swept as its own object (24 members read "( -> )" as a fault)
+					const Object *self = g.logic().findObjectByID(uid);
+					if (cmd == GUI_COMMAND_HORDE_TOGGLE_FORMATION && self && !self->getContain())
+					{
+						res.fail(item, "MEMBER: a horde member made alone has no horde: the formation toggle acts on its horde, swept on its own");
+						continue;
+					}
 					const std::string stateBefore = stateOf();
 					const bool sent = g.press(b);
 					g.step(5);

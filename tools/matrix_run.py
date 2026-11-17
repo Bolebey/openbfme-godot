@@ -55,6 +55,9 @@ CATEGORIES = [
     ("NO-EFFECT", re.compile(r"fired but|fired with \d+ unported")),
     ("STUCK", re.compile(r"^STUCK")),
     ("NOT-ON-BAR", re.compile(r"not on the bar")),
+    # 2026-11-17 (matrix review): by design, not faults: a temporary object leaves at once; a horde member made alone has no horde to form
+    ("TEMPORARY", re.compile(r"^TEMPORARY")),
+    ("MEMBER", re.compile(r"^MEMBER")),
     ("NO-SELECT", re.compile(r"could not be selected")),
     ("LEFT-WORLD", re.compile(r"left the world")),
     ("INVENTORY", re.compile(r"does not exist")),
@@ -210,7 +213,7 @@ def cmd_collect(a) -> None:
         total, ok = sum(cats.values()) - cats.get("STANCE", 0), cats.get("PASS", 0)
         # a greyed button is mostly a requirement the test does not meet (a forge the faction's objects do not have here): counted apart.
         # GREY-BUG (PORT-530) is a port bug, not an unmet requirement: it counts as red, and the per-faction line names it.
-        grey = cats.get("DISABLED", 0)
+        grey = cats.get("DISABLED", 0) + cats.get("TEMPORARY", 0) + cats.get("MEMBER", 0)  # by design: not red either
         red = total - ok - grey
         cells[fac] = (f"[{total} кнопок: ✓{ok} ✗{red} серых {grey}](MATRIX.tsv) ({stamp})", str(ok))
         print(f"{fac}: {total} buttons, {ok} pass, {red} red, {grey} grey: " + ", ".join(f"{k} {v}" for k, v in cats.most_common() if k != "PASS"))
