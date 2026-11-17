@@ -17,7 +17,7 @@
 //   * onCollide (collide interface slot 0, RW 0x8C9A3C): active, `other` given and its template's KindOf DEFLECT_BY_SPECIAL_POWER (bit 102, template byte + 0x114 bit 6):
 //     every behavior module of `other` that answers the projectile update interface (behavior slot 18, +0x48) gets projectileNowJammed (slot 5, RW 0x85E54D: kill with
 //     damage type 8, death type 0) with the owner as the (unused) argument;
-//   * xfer (RW 0x008C99FB): SpecialPowerUpdateBase::xfer (RW 0x009912DB), then early return on XFER_CRC (RW 0x008C9A0D .. 0x008C9A12, Xfer::isLightCRC);
+//   * xfer (RW 0x008C99FB): SpecialPowerUpdateBase::xfer (RW 0x009912DB), then early return on XFER_CRC (0x008C9A0D .. 0x008C9A12, Xfer::isLightCRC);
 //     otherwise version 1 with m_active and m_pending.
 //   * lifecycle/identity: ctor RW 0x008C98EB, dtor RW 0x008C99BF -> RW 0x008C994C -> SpecialPowerUpdateBase dtor RW 0x0099113F,
 //     loadPostProcess RW 0x008E38D8 (no-op RW 0x0063F3BF), getCollide RW 0x008C993F, getModuleName RW 0x008C9939, getModuleNameKey RW 0x008C997A.

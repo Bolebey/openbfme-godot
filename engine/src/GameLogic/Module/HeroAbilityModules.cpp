@@ -1588,13 +1588,13 @@ void DominateEnemySpecialPower::dominate(Object *victim, bool direct)
 	{
 		return;
 	}
-	if (hasStatus(*victim, "UNDER_CONSTRUCTION")) // RW 0x008D0FB1: status 2
+	if (hasStatus(*victim, "UNDER_CONSTRUCTION")) // 0x008D0FB1: status 2
 	{
 		return;
 	}
-	if (Object *producer = logic.findObjectByID(victim->getProducerID())) // RW 0x008D0FBE: Object + 0x78
+	if (Object *producer = logic.findObjectByID(victim->getProducerID())) // 0x008D0FBE: Object + 0x78
 	{
-		if (isKind(*producer, "HORDE")) // RW 0x008D0FD3: template + 0x115 bit 5
+		if (isKind(*producer, "HORDE")) // 0x008D0FD3: template + 0x115 bit 5
 		{
 			if (!direct)
 			{
@@ -1603,13 +1603,13 @@ void DominateEnemySpecialPower::dominate(Object *victim, bool direct)
 			victim = producer;
 		}
 	}
-	if (hasStatus(*victim, "AIRBORNE_TARGET")) // RW 0x008D0FE5: + 0x94 bit 6
+	if (hasStatus(*victim, "AIRBORNE_TARGET")) // 0x008D0FE5: + 0x94 bit 6
 	{
 		return;
 	}
 	victim->defect(owner, m_de->m_permanentlyConvert); // RW 0x00699368
 	++m_dominated;
-	objectFX(logic, "DominateEnemySpecialPower", m_de->m_dominatedFX, *victim); // RW 0x008D100B: horde contain vslot 0x1EC / RW 0x004B1B5A
+	objectFX(logic, "DominateEnemySpecialPower", m_de->m_dominatedFX, *victim); // 0x008D100B: horde contain vslot 0x1EC / RW 0x004B1B5A
 }
 
 // RW 0x008D103D
@@ -1618,12 +1618,12 @@ void DominateEnemySpecialPower::triggerAbilityEffect()
 	SpecialAbilityUpdate::triggerAbilityEffect();
 	Object *owner = getObject();
 	GameLogic &logic = owner->logic();
-	if (Object *t = logic.findObjectByID(m_targetID)) // RW 0x008D1057: + 0x40
+	if (Object *t = logic.findObjectByID(m_targetID)) // + 0x40 (0x008D1057)
 	{
 		dominate(t, true);
 		return;
 	}
-	// RW 0x008D10B4 .. 0x008D10CE: PartitionFilterRelationship (0x00C11DC0 -> 0x00660B85 ENEMIES), PartitionFilterAlive (0x00C10E20 -> 0x00660E71),
+	// 0x008D10B4 .. 0x008D10CE: PartitionFilterRelationship (0x00C11DC0 -> 0x00660B85 ENEMIES), PartitionFilterAlive (0x00C10E20 -> 0x00660E71),
 	// PartitionFilterSameMapStatus (0x00C0F374 -> 0x00660E93: XOR of Object+0x458 bit 3 == 0), and PartitionFilterRejectStatus (0x00C1D6A0 -> 0x00661484: HORDE_MEMBER 0x26)
 	PartitionFilterFn chain([&](Object &o) {
 		return owner->getRelationship(o) == ENEMIES && !o.isEffectivelyDead() && o.isOffMap() == owner->isOffMap() && !hasStatus(o, "HORDE_MEMBER");
@@ -1640,7 +1640,7 @@ void DominateEnemySpecialPower::triggerAbilityEffect()
 			dominate(v, false);
 		}
 	}
-	positionFX(logic, "DominateEnemySpecialPower", m_de->m_triggerFX, *owner, m_targetPos); // RW 0x008D116A: RW 0x00494615(TriggerFX, location)
+	positionFX(logic, "DominateEnemySpecialPower", m_de->m_triggerFX, *owner, m_targetPos); // 0x008D116A: RW 0x00494615(TriggerFX, location)
 }
 
 void DominateEnemySpecialPower::crc(StateHasher &h) const
@@ -1922,11 +1922,11 @@ CurseSpecialPower::CurseSpecialPower(Thing *thing, const CurseSpecialPowerModule
 void CurseSpecialPower::curse(Object &victim)
 {
 	Object *owner = getObject();
-	if (&victim == owner || !isKind(victim, "HERO") || owner->getRelationship(victim) != ENEMIES) // RW 0x008D12F8 template + 0x113 bit 2; RW 0x0068D7AB
+	if (&victim == owner || !isKind(victim, "HERO") || owner->getRelationship(victim) != ENEMIES) // 0x008D12F8 template + 0x113 bit 2; RW 0x0068D7AB
 	{
 		return;
 	}
-	// RW 0x008D130B: testStatus(3) UNSELECTABLE (RW 0x00D8AFF0[3]); RW 0x008D1318: testStatus(2) UNDER_CONSTRUCTION (RW 0x00D8AFF0[2])
+	// 0x008D130B: testStatus(3) UNSELECTABLE (RW 0x00D8AFF0[3]); 0x008D1318: testStatus(2) UNDER_CONSTRUCTION (RW 0x00D8AFF0[2])
 	if (hasStatus(victim, "UNSELECTABLE") || hasStatus(victim, "UNDER_CONSTRUCTION"))
 	{
 		return;
@@ -1950,7 +1950,7 @@ void CurseSpecialPower::triggerAbilityEffect()
 	SpecialAbilityUpdate::triggerAbilityEffect();
 	Object *owner = getObject();
 	GameLogic &logic = owner->logic();
-	if (m_targetID != INVALID_ID) // RW 0x008D136F: + 0x40
+	if (m_targetID != INVALID_ID) // + 0x40 (0x008D136F)
 	{
 		if (Object *t = logic.findObjectByID(m_targetID))
 		{
@@ -1964,7 +1964,7 @@ void CurseSpecialPower::triggerAbilityEffect()
 	{
 		return;
 	}
-	const float radius = t->getFinalOverride()->getRadiusCursorRadius(); // RW 0x008D138D -> RW 0x00688D3C, [eax + 0x54]
+	const float radius = t->getFinalOverride()->getRadiusCursorRadius(); // 0x008D138D -> RW 0x00688D3C, [eax + 0x54]
 	PartitionFilterFn chain([&](Object &o) { return owner->getRelationship(o) == ENEMIES && isKind(o, "HERO") && !o.isEffectivelyDead(); }); // RW 0x00C11DC0, 0x00445139, 0x00C10E20
 	std::vector<ObjectID> hits;
 	for (const PartitionHit &h : logic.partition().iterateObjectsInRange(m_targetPos, radius, FROM_CENTER_2D, { &chain }, ITER_FASTEST))
@@ -2009,9 +2009,10 @@ UpdateSleepTime FellBeastSwoopPower::update()
 		return (UpdateSleepTime)1;
 	}
 	AIUpdateInterface *ai = obj->getAIUpdateInterface();
-	if (ai && ai->isIdle()) // AI vslot 0x1B8 (vslot 0x1D0 not identified: S-1223)
+	// RW 0x8CB304 .. 0x8CB331: finish once the AI idles (vslot 0x1B8, RW 0x6643FC / 0x769E8F) or enters follow-through (vslot 0x1D0, RW 0x662B28 -> State::vslot 0x34 RW 0x8BD372)
+	if (ai && (ai->isIdle() || ai->isInFollowThruState()))
 	{
-		finishAbility(false, false); // vslot 0x34
+		finishAbility(false, false); // vslot 0x34 (RW 0x8CB194)
 		return UPDATE_SLEEP_FOREVER;
 	}
 	// RW 0x8CB336 .. 0x8CB3A9: SPECIAL_WEAPON_ONE (+ 0x128 bit 20) while the height above the terrain is below the bounding sphere radius (GeometryInfo + 0x14)
@@ -2025,7 +2026,7 @@ UpdateSleepTime FellBeastSwoopPower::update()
 	return (UpdateSleepTime)1;
 }
 
-// RW 0x8CB28B: the AI command 0x3F (the target object) or 0x40 (the location), source 2
+// RW 0x8CB28B: dispatches AI command 0x3F (RW 0x8CB1BA, target object) or 0x40 (RW 0x8CB21F, location), source CMD_FROM_AI (2)
 void FellBeastSwoopPower::triggerAbilityEffect()
 {
 	Object *obj = getObject();
@@ -2374,14 +2375,14 @@ void HeroAbilityModules::registerAll(ModuleFactory &modules)
 	bindRuntime<WeaponModeSpecialPowerUpdate, WeaponModeSpecialPowerUpdateModuleData>(modules, "WeaponModeSpecialPowerUpdate");
 	bindRuntime<DualWeaponBehavior, DualWeaponBehaviorModuleData>(modules, "DualWeaponBehavior");
 	bindRuntime<TemporarilyDefectUpdate, TemporarilyDefectUpdateModuleData>(modules, "TemporarilyDefectUpdate");
-	bindRuntime<DominateEnemySpecialPower, DominateEnemySpecialPowerModuleData>(modules, "DominateEnemySpecialPower"); // RW 0x00652C4B, 0x008D0E17, 0x008D0E3D
+	bindRuntime<DominateEnemySpecialPower, DominateEnemySpecialPowerModuleData>(modules, "DominateEnemySpecialPower"); // RW 0x00652C4B, RW 0x008D0E17, RW 0x008D0E3D
 	bindRuntime<ActivateModuleSpecialPower, ActivateModuleSpecialPowerModuleData>(modules, "ActivateModuleSpecialPower");
 	bindRuntime<ArrowStormUpdate, ArrowStormUpdateModuleData>(modules, "ArrowStormUpdate");
-	bindRuntime<CurseSpecialPower, CurseSpecialPowerModuleData>(modules, "CurseSpecialPower"); // RW 0x00652CDA, 0x008D120E, 0x008D1249
+	bindRuntime<CurseSpecialPower, CurseSpecialPowerModuleData>(modules, "CurseSpecialPower"); // RW 0x00652CDA, RW 0x008D120E, RW 0x008D1249
 	bindRuntime<FellBeastSwoopPower, SpecialAbilityUpdateModuleData>(modules, "FellBeastSwoopPower");
 	bindRuntime<RousingSpeechUpdate, RousingSpeechUpdateModuleData>(modules, "RousingSpeechUpdate");
 	bindRuntime<TeleportSpecialAbilityUpdate, TeleportSpecialAbilityUpdateModuleData>(modules, "TeleportSpecialAbilityUpdate");
-	bindRuntime<SpecialPowerTimerRefreshSpecialPower, SpecialPowerModuleData>(modules, "SpecialPowerTimerRefreshSpecialPower"); // RW 0x00654884, 0x00651A13, 0x006519CE
+	bindRuntime<SpecialPowerTimerRefreshSpecialPower, SpecialPowerModuleData>(modules, "SpecialPowerTimerRefreshSpecialPower"); // RW 0x00654884, RW 0x00651A13, RW 0x006519CE
 }
 
 void HeroAbilityModules::registerHandlers(GameLogicDispatch &d)
@@ -2492,9 +2493,9 @@ std::vector<std::string> HeroAbilityModules::stopLines()
 		"than HordeContain (a defecting transport's / garrison's passengers keep their side; reported when met); (6) the selected drawable's deselection (RW "
 		"0x6993B5 .. 0x6993D0) and restoreOriginalTeam's selection refresh are the client's; (7) ActivateModuleSpecialPower's tags are resolved when used "
 		"(retail makes the keys while parsing); (8) setTeam's redirect keeps a team without a controlling player (retail reads its player without a test)",
-		"[S-1223] FellBeastSwoopPower (lane HERO-2): the module runs (RW 0x8CB2CE / 0x8CB28B / 0x8CB194); the level attack itself is GiantBirdAIUpdate's swoop "
-		"(AI commands 0x3F / 0x40, AI vslots 0x90 / 0x94: GiantBirdAIUpdate runs as the base AI, S-222): the command is counted by the AI (aiUnported) and the "
-		"ability ends when the AI idles; AI vslot 0x1D0 is not identified",
+		"[S-1223] FellBeastSwoopPower (lane HERO-2, Port 257): the module runs (RW 0x8CB2CE / 0x8CB28B / 0x8CB194); AI command 0x3F (RW 0x8CB1BA) runs "
+		"GiantBirdAIUpdate's level swoop (state 0x3F3, RW 0x76A139) and command 0x40 (RW 0x8CB21F) does nothing there (RW 0x76DA5C); other AI classes count "
+		"both (aiUnported); the ability ends when the AI idles (vslot 0x1B8) or enters AIGiantBirdFollowThruState (vslot 0x1D0, RW 0x662B28 -> State::vslot 0x34 RW 0x8BD372)",
 		"[S-1227] AutoAbilityBehavior (lane HERO-2, PORT-191): the auto cast runs (RW 0x85D9D1 with RW 0x85D5EA / 0x85D4B5, RW 0x855830 DISABLED_HELD, "
 		"RW 0x68E43B vision range, RW 0x701443 flags 0x4A without Query, AI + 0x34 / + 0x48 := 2, RW 0x68E5A3 / 0x68E67A disabled exception with 0x20000000, "
 		"MSG_DO_AUTO_ABILITY RW 0x77B9BA, StartsActive); not ported: the command types other than SPECIAL_POWER / SPELL_BOOK (a FIRE_WEAPON auto button is "
@@ -2607,6 +2608,7 @@ void CurseSpecialPower::xfer(Xfer &x)
 	x.xferUnsignedInt(&m_cursed);
 }
 
+// RW 0x008CB167
 void FellBeastSwoopPower::xfer(Xfer &x)
 {
 	SnapshotXfer::version(x, 1, 1);
