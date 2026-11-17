@@ -48,7 +48,11 @@ def read_stops(paths):
     for path in paths:
         if not path.exists():
             continue
-        for line in path.read_text(encoding='utf-8').splitlines():
+        lines = path.read_text(encoding='utf-8').splitlines()
+        # Only line one of a fragment is its stop row; later markdown is notes.
+        if path.parent.name == 'stops.d':
+            lines = lines[:1]
+        for line in lines:
             if not re.match(r'^\|\s*S-\d+\s*\|', line):
                 continue
             cells = [x.strip() for x in line.strip().strip('|').split('|')]

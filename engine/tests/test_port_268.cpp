@@ -24,3 +24,7 @@ TEST_CASE("PORT-268: citations within a function and stop dependencies cluster")
 TEST_CASE("PORT-268: unplaced and closed rows remain separate") {
     CHECK(run_port268_test("test_unplaced_and_closed") == 0);
 }
+
+TEST_CASE("PORT-268: oversized groups split by function without losing stops") {
+    CHECK(run_port268_test("test_large_component_splits_by_function") == 0);
+}

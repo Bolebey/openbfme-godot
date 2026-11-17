@@ -88,3 +88,11 @@ def test_output_has_every_stop_and_all_references(tmp_path):
     assert rows[0]['references'] == 'S-001, S-999'
     assert rows[1]['group'] == 'unplaced'
     assert 'lookup unavailable' in out.with_suffix('.md').read_text()
+
+
+def test_fragment_parses_only_its_first_row(tmp_path):
+    fragments = tmp_path/'stops.d'
+    fragments.mkdir()
+    p = fragments/'S-10.md'
+    p.write_text(row(10) + '\n## Notes\n' + row(11))
+    assert set(read_stops([p])) == {'S-10'}
