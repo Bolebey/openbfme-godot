@@ -292,17 +292,17 @@ TAKEN_REFS = ("refs/remotes/origin/batch/", "refs/remotes/origin/land/", "refs/r
 def skip_reason(p: dict) -> str:
     """Why the checker leaves this PR alone now ('' = check it)."""
     head = p["headRefOid"]
-    if sh(["git", "cat-file", "-e", f"{head}^{{commit}}"], cwd=REPO).returncode == 0:
-        refs = sh(["git", "for-each-ref", "--format=%(refname)", *TAKEN_REFS], cwd=REPO).stdout.split()
-        for ref in refs:
-            if sh(["git", "merge-base", "--is-ancestor", head, ref], cwd=REPO).returncode == 0:
-                return f"already in {ref.removeprefix('refs/remotes/origin/')}"
     # comments and commits per PR: asking for them in the list query exceeds GitHub's GraphQL node limit
     extra = json.loads(gh("pr", "view", str(p["number"]), "--json", "comments,commits"))
     last = max((c.get("committedDate") or "" for c in extra.get("commits") or []), default="")
     for c in extra.get("comments") or []:
         if RETURNED.search(c.get("body") or "") and not (c.get("body") or "").startswith("<!-- prcheck") and (c.get("createdAt") or "") > last:
             return "returned to its agent (no commit since)"
+    if sh(["git", "cat-file", "-e", f"{head}^{{commit}}"], cwd=REPO).returncode == 0:
+        refs = sh(["git", "for-each-ref", "--format=%(refname)", *TAKEN_REFS], cwd=REPO).stdout.split()
+        for ref in refs:
+            if sh(["git", "merge-base", "--is-ancestor", head, ref], cwd=REPO).returncode == 0:
+                return f"already in {ref.removeprefix('refs/remotes/origin/')}"
     return ""
 
 
@@ -383,7 +383,11 @@ def cycle(args) -> int:
             if skipped.get(str(p["number"])) != [p["headRefOid"], why]:
                 print(f"#{p['number']}: skipped, {why}", flush=True)
                 skipped[str(p["number"])] = [p["headRefOid"], why]
-                save_state(state)
+                what = ("возвращён агенту; проверю, когда в PR появится новый коммит" if why.startswith("returned")
+                        else f"уже в `{why.removeprefix('already in ')}`: его тесты гоняются там, при новом коммите проверю заново")
+                finish(p["number"], p["headRefOid"], [f"<!-- prcheck {p['headRefOid']} -->",
+                       f"⏸️ **PR #{p['number']} не проверялся заново** (песочница {SANDBOX}, голова {p['headRefOid'][:8]}): {what}."],
+                       not args.no_comment, state)
             continue
         keep.append(p)
     todo = keep
