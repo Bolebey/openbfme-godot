@@ -105,6 +105,9 @@ run() {
   local rev; rev=$(git rev-parse --short=8 HEAD)
   bash tools/colab/build_tests.sh > "$RUNS/nightly_build.log" 2>&1 || { echo "build failed at $rev" >> "$LOG"; return 1; }
   python3 tools/matrix_run.py all --jobs 5 > "$RUNS/nightly_matrix.log" 2>&1 || { echo "matrix failed at $rev" >> "$LOG"; return 1; }
+  # the matrix review (owner 2026-11-17): layer 1 ran inside `all` (recheck: every red object swept again alone, ORDER when fine alone);
+  # layers 2 and 3 here: the lint against the mod's INI, and every button whose verdict moved since the main the previous run measured
+  python3 tools/mod/matrix_review.py --ini "$INI" --before "$(cat "$RUNS/last_rev" 2>/dev/null)" > "$RUNS/nightly_review.log" 2>&1       || echo "matrix review failed at $rev (the run goes on)" >> "$LOG"
   # the field audit on this main (2026-11-17): the engine's module coverage table, then field_audit.py with the newest hand verdicts
   mkdir -p "$AUDIT"
   OPENBFME_MODULE_COVERAGE_OUT="$AUDIT/module-coverage.tsv" engine/build/openbfme_tests "-tc=module coverage: every registry class*" \
@@ -135,7 +138,7 @@ run() {
   local stops; stops=$(tail -1 docs/ennorath/PROGRESS.tsv | awk -F'\t' '{print "open " $8 ", new " $12 ", closed " $13}')
   git checkout -q -B auto/maps
   git add docs/ennorath/MATRIX.tsv docs/ennorath/README.md docs/ennorath/RW_FUNCTION_MAP.tsv docs/ennorath/RW_FUNCTION_MAP.md \
-      docs/ennorath/MATRIX_GAPS.tsv docs/ennorath/MATRIX_GAPS.md docs/ennorath/FIELD_GAPS.tsv docs/ennorath/PROGRESS.tsv docs/ennorath/MATRIX_FACTIONS.tsv
+      docs/ennorath/MATRIX_GAPS.tsv docs/ennorath/MATRIX_GAPS.md docs/ennorath/FIELD_GAPS.tsv docs/ennorath/PROGRESS.tsv docs/ennorath/MATRIX_FACTIONS.tsv docs/ennorath/MATRIX_REVIEW.md
   local red; red=$(python3 -c "import sys; sys.path.insert(0,'tools/mod'); import progress_snapshot as p; print(*p.matrix_counts(None))")
   if git diff --cached --quiet; then
     echo "$day: nothing changed at $rev" >> "$LOG"
@@ -147,7 +150,7 @@ run() {
     git push -q -f origin auto/maps 2>/dev/null && rm -f "$RUNS/$day.patch" || echo "push failed at $rev: the commit is $RUNS/$day.patch" >> "$LOG"
     # owner 2026-11-17: the agents read the maps from main, so the commit (only the generated tables and the progress row, checked by the
     # gate) fast-forwards main when main has not moved during the run; otherwise it waits in auto/maps for the next landing
-    if [ -z "$(git diff --name-only HEAD~1 HEAD | grep -vxE 'docs/ennorath/(MATRIX\.tsv|README\.md|RW_FUNCTION_MAP\.(tsv|md)|MATRIX_GAPS\.(tsv|md)|FIELD_GAPS\.tsv|PROGRESS\.tsv|MATRIX_FACTIONS\.tsv)')" ]; then
+    if [ -z "$(git diff --name-only HEAD~1 HEAD | grep -vxE 'docs/ennorath/(MATRIX\.tsv|README\.md|RW_FUNCTION_MAP\.(tsv|md)|MATRIX_GAPS\.(tsv|md)|FIELD_GAPS\.tsv|PROGRESS\.tsv|MATRIX_FACTIONS\.tsv|MATRIX_REVIEW\.md)')" ]; then
       git push -q origin HEAD:main 2>/dev/null && echo "$day: maps fast-forwarded main" >> "$LOG" || echo "$day: main moved during the run, maps wait in auto/maps" >> "$LOG"
     fi
   fi
@@ -155,7 +158,8 @@ run() {
     echo "stops since the previous progress row: $stops"; echo
     echo '## Function map'; tail -3 "$RUNS/nightly_map.log"; echo; echo '## MATRIX_GAPS'; tail -2 "$RUNS/nightly_gaps.log"
     echo; echo '## FIELD_GAPS'; tail -2 "$RUNS/nightly_fgaps.log"; echo; echo '## Matrix'; tail -5 "$RUNS/nightly_matrix.log"
-    echo; echo '## Field audit (changes against the previous run)'; head -40 "$AUDIT/field-audit-diff.md" 2>/dev/null; } > "$RUNS/$day.md"
+    echo; echo '## Field audit (changes against the previous run)'; head -40 "$AUDIT/field-audit-diff.md" 2>/dev/null
+    echo; sed -n '/^## Lint/,$p' docs/ennorath/MATRIX_REVIEW.md 2>/dev/null | head -60; } > "$RUNS/$day.md"
   cp -f "$RUNS/$day.md" "$RUNS/latest.md"
   echo "$rev" > "$RUNS/last_rev"
   echo "== $day $(date -u +%T) done ($red)" >> "$LOG"

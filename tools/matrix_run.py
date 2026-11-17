@@ -72,6 +72,11 @@ CATEGORIES = [
 ]
 
 
+# Not red: the grey verdicts and the ones found to be the scene's or the mod's own (matrix review 2026-11-17). ORDER: red in the full run,
+# fine when the object is swept alone (tools/matrix_run.py recheck): leftovers of the earlier objects, not the port.
+NOT_RED = {"PASS", "STANCE", "DISABLED", "INVENTORY", "TEMPORARY", "MEMBER", "MOD-DATA", "NO-TARGET", "BY-DESIGN", "ORDER"}
+
+
 def category(verdict: str, detail: str) -> str:
     if verdict == "PASS":
         return "PASS"
@@ -166,7 +171,69 @@ def run_one(a, faction: str) -> tuple[str, int, float]:
     return faction, rc, time.time() - t0
 
 
+def cmd_recheck(a) -> None:
+    """Layer 1 of the matrix review (owner 2026-11-17): every object with a red button in this run is swept again alone (FACTB_ONLY), one
+    process per faction; a button red in the full run and not red alone is ORDER (the earlier objects' leftovers broke the scene: ArnorArveduiNew
+    and HarbringerOfDark left the world in the full run and live alone). Writes <out>/recheck/order.tsv for collect."""
+    rec = a.out / "recheck"
+    rec.mkdir(parents=True, exist_ok=True)
+    red: dict[str, dict[tuple[str, str], str]] = collections.defaultdict(dict)
+    for f in a.factions:
+        p = a.out / f"{f}.tsv"
+        if not p.exists():
+            continue
+        for line in p.read_text(encoding="utf-8", errors="replace").splitlines():
+            parts = line.split("\t")
+            if len(parts) == 5 and parts[2] and category(parts[3], parts[4]) not in NOT_RED and not parts[4].startswith("CRASH"):
+                red[f][(parts[1], parts[2])] = category(parts[3], parts[4])
+    passed = collections.defaultdict(set)
+    for f in a.factions:
+        for line in (a.out / f"{f}.tsv").read_text(encoding="utf-8", errors="replace").splitlines() if (a.out / f"{f}.tsv").exists() else []:
+            parts = line.split("\t")
+            if len(parts) == 5 and parts[3] == "PASS":
+                passed[f].add((parts[1], parts[2]))
+    for f in list(red):
+        red[f] = {k: v for k, v in red[f].items() if k not in passed[f]}
+
+    def alone(f: str) -> tuple[str, int]:
+        objs = sorted({o for o, _ in red[f]})
+        if not objs:
+            return f, 0
+        tsv = rec / f"{f}.tsv"
+        tsv.unlink(missing_ok=True)
+        env = dict(os.environ)
+        env.update(OPENBFME_SWEEP_OVERLAY=str(env_path("OPENBFME_ENNORATH_INSTALL", a.overlay)), OPENBFME_SWEEP_FACTION=f,
+                   OPENBFME_SWEEP_SEEDS=str(a.out / f"{f}.seeds"), OPENBFME_SWEEP_REPORT=str(tsv), OPENBFME_SWEEP_MAP=a.map,
+                   OPENBFME_SWEEP_SKIP=str(rec / "none.skip"), OPENBFME_SWEEP_GREY=str(REPO / "docs" / "ennorath" / "MATRIX_GREY.tsv"),
+                   FACTB_ONLY=",".join(objs))
+        (rec / "none.skip").write_text("", encoding="utf-8")
+        with open(rec / f"{f}.log", "wb") as log:
+            subprocess.call([str(a.tests), f"-tc={TEST_CASE}"], cwd=REPO, env=env, stdout=log, stderr=subprocess.STDOUT)
+        return f, len(objs)
+
+    with ThreadPoolExecutor(max_workers=a.jobs) as pool:
+        for f, n in pool.map(alone, [f for f in a.factions if red.get(f)]):
+            print(f"recheck {f}: {n} objects swept alone", flush=True)
+    rows = []
+    for f, buttons in red.items():
+        tsv = rec / f"{f}.tsv"
+        if not tsv.exists():
+            continue
+        again: dict[tuple[str, str], list[str]] = collections.defaultdict(list)
+        for line in tsv.read_text(encoding="utf-8", errors="replace").splitlines():
+            parts = line.split("\t")
+            if len(parts) == 5:
+                again[(parts[1], parts[2])].append(category(parts[3], parts[4]))
+        for key, was in buttons.items():
+            cats = again.get(key)
+            if cats and ("PASS" in cats or all(c in NOT_RED for c in cats)):
+                rows.append(f"{f}\t{key[0]}\t{key[1]}\t{'PASS' if 'PASS' in cats else cats[0]}")
+    (rec / "order.tsv").write_text("".join(r + "\n" for r in rows), encoding="utf-8")
+    print(f"recheck: {sum(len(b) for b in red.values())} red buttons, {len(rows)} fine alone (ORDER)", flush=True)
+
+
 def cmd_run(a) -> None:
+    (a.out / "recheck" / "order.tsv").unlink(missing_ok=True)  # a new run: the old recheck does not apply
     if not a.tests.exists():
         raise SystemExit(f"{a.tests} is missing: build with tools/colab/build_tests.sh")
     with ThreadPoolExecutor(max_workers=a.jobs) as pool:
@@ -180,12 +247,18 @@ BY_DESIGN_FILE = REPO / "docs" / "ennorath" / "matrix_bydesign.tsv"
 BY_DESIGN = {}
 if BY_DESIGN_FILE.exists():
     for _line in BY_DESIGN_FILE.read_text(encoding="utf-8").splitlines():
-        _f = _line.split("	")
+        _f = _line.split("\t")
         if len(_f) >= 3 and not _line.startswith(("#", "object	")):
             BY_DESIGN[(_f[0], _f[1])] = _f[2]
 
 
 def cmd_collect(a) -> None:
+    order = {}
+    if (a.out / "recheck" / "order.tsv").exists():
+        for line in (a.out / "recheck" / "order.tsv").read_text(encoding="utf-8").splitlines():
+            f = line.split("\t")
+            if len(f) == 4:
+                order[(f[0], f[1], f[2])] = f[3]
     rows = []
     for f in FACTIONS:
         p = a.out / f"{f}.tsv"
@@ -196,6 +269,9 @@ def cmd_collect(a) -> None:
             if len(parts) == 5:
                 fac, obj, button, verdict, detail = parts
                 cat = category(verdict, detail)
+                alone = order.get((fac, obj, button))
+                if cat not in NOT_RED and alone:
+                    cat, detail = "ORDER", f"ORDER: red in the full run, swept alone {alone} (was: {detail})"
                 why = BY_DESIGN.get((obj, button))
                 if cat != "PASS" and why:  # the owner's word on the mod's own design (docs/ennorath/matrix_bydesign.tsv)
                     cat, detail = "BY-DESIGN", f"BY-DESIGN: {why} (was: {detail})"
@@ -229,7 +305,7 @@ def cmd_collect(a) -> None:
         total, ok = sum(cats.values()) - cats.get("STANCE", 0), cats.get("PASS", 0)
         # a greyed button is mostly a requirement the test does not meet (a forge the faction's objects do not have here): counted apart.
         # GREY-BUG (PORT-530) is a port bug, not an unmet requirement: it counts as red, and the per-faction line names it.
-        grey = cats.get("DISABLED", 0) + cats.get("TEMPORARY", 0) + cats.get("MEMBER", 0) + cats.get("MOD-DATA", 0) + cats.get("NO-TARGET", 0) + cats.get("BY-DESIGN", 0)  # by design: not red either
+        grey = sum(v for k, v in cats.items() if k in NOT_RED and k not in ("PASS", "STANCE"))  # by design / not tested: not red either
         red = total - ok - grey
         cells[fac] = (f"[{total} кнопок: ✓{ok} ✗{red} серых {grey}](MATRIX.tsv) ({stamp})", str(ok))
         print(f"{fac}: {total} buttons, {ok} pass, {red} red, {grey} grey: " + ", ".join(f"{k} {v}" for k, v in cats.most_common() if k != "PASS"))
@@ -304,7 +380,7 @@ def update_readme(cells: dict[str, tuple[str, str]]) -> None:
 
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("step", choices=["seeds", "run", "collect", "all", "diff"])
+    ap.add_argument("step", choices=["seeds", "run", "recheck", "collect", "all", "diff"])
     ap.add_argument("--against", dest="base_ref", default="origin/main", help="diff: the git ref whose MATRIX.tsv is the baseline")
     ap.add_argument("--limit", type=int, default=60, help="diff: unexplained rows printed")
     ap.add_argument("--factions", nargs="*", default=FACTIONS)
@@ -323,9 +399,9 @@ def main() -> None:
     unknown = [f for f in a.factions if f not in FACTIONS]
     if unknown:
         raise SystemExit(f"unknown factions: {unknown}")
-    steps = ["seeds", "run", "collect"] if a.step == "all" else [a.step]
+    steps = ["seeds", "run", "recheck", "collect"] if a.step == "all" else [a.step]
     for s in steps:
-        {"seeds": cmd_seeds, "run": cmd_run, "collect": cmd_collect}[s](a)
+        {"seeds": cmd_seeds, "run": cmd_run, "recheck": cmd_recheck, "collect": cmd_collect}[s](a)
 
 
 if __name__ == "__main__":
