@@ -78,6 +78,10 @@ public:
 class EmotionTrackerUpdate : public UpdateModule
 {
 public:
+	// lane SAVE-4b: the class's own table RW 0xC6D26C (13 slots) is, in order: ~EmotionTrackerUpdate (RW 0x8B56CF), RW 0x8B50BE (the loading fixup:
+	// + 0xC4 index -> + 0x9C pointer, null when the index is negative or past the + 0x90 vector's end — the port does it inside xfer), RW 0x8B5492
+	// (the class name RW 0xC0B038, which the port's ModuleFactory knows from the registration name), RW 0x8B5FD0 (xfer), RW 0x8B5498 (the typed data
+	// factory RW 0x5487EC by the same name — ModuleFactory::bindTypedData), then the interface thunks. None of the four needs a method of its own here.
 	OBFME_MODULE_XFER(EmotionTrackerUpdate) // lane SAVE-4b
 	EmotionTrackerUpdate(Thing *thing, const EmotionTrackerUpdateModuleData *data); ///< RW 0x8B62BE
 	// RW 0x8B56CF: the deleting destructor (both of the class's tables hold it: RW 0xC6D26C + 0x0 and RW 0xC6D1B0 + 0xBC): RW 0x8B5427 then the
@@ -108,8 +112,6 @@ public:
 	// lane MODULES-3 r2: RW 0x8B4FA1 (from the AI machine's clearTemporaryState RW 0x751DA9): a current nugget with an AIState stops (EmotionNugget::stop RW 0x8E168A)
 	void stopCurrentWithAIState();
 	const std::vector<std::unique_ptr<EmotionNugget>> &nuggets() const { return m_nuggets; }
-	// RW 0x8B50BE: the size of the object's nugget vector (+ 0x90, the list the choice walks) — the choice reads the count here
-	int nuggetSlot() const { return (int)(m_nuggets.size()); }
 	static std::vector<std::string> stopLines();
 
 private:
