@@ -952,7 +952,10 @@ TEST_CASE("skirmish ai vs ai: Evendim, 30 game-minutes: every pairing ends - Mor
 	// pin: the landing of 2026-11-17 (batch 16c: Ports 227, 228, 250, Local 78; the merge of upstream 16474d71), measured once on the merged tree (Linux GCC on
 	// Colab): main dbea96b5 already gave these values without the batch and the merge (an earlier landing moved them, not identified; both keep them): seed 7
 	// ends with Mordor's defeat (start position 1) at 3367 (was open at 9000), seeds 2 and 1234 stay open at 9000, seed 2 with a new table from the first window on
-	for (const Game &g : { Game{ "FactionMordor", "FactionMen", 2u, -1, -1 }, Game{ "FactionMen", "FactionMordor", 7u, 1, 3367 }, Game{ "FactionMordor", "FactionMen", 1234u, -1, -1 } })
+	// pin: batch 2026-11-17a, Port 237 (#596: death / create modules, ObjectCreationList, OCLUpdate), measured once on the batch tree (Linux GCC on
+	// Colab); merge-point bisect: 6e3b8a16 (before #596) keeps the old values, 2ce6a623 (with it) moves them: seed 7 stays open at 9000 (was Mordor's
+	// defeat at 3367), seed 2 a new table from the first window on, seed 1234 open at 9000 as before
+	for (const Game &g : { Game{ "FactionMordor", "FactionMen", 2u, -1, -1 }, Game{ "FactionMen", "FactionMordor", 7u, -1, -1 }, Game{ "FactionMordor", "FactionMen", 1234u, -1, -1 } })
 	{
 		INFO(g.a << " vs " << g.b << " seed " << g.seed);
 		VersusRun run;
@@ -1006,16 +1009,17 @@ TEST_CASE("skirmish ai vs ai: Evendim, 30 game-minutes: every pairing ends - Mor
 			// pin: Port 39 (#201, retail SideInfo AI gatherers from data/ini/default/aidata.ini, P-73): a new table from frame 1000 on; open at 9000
 			// pin: the fork's merge of upstream 1d505ac3 (2026-11-13, measured once on the merged tree, Windows MSVC): a new table from the first window on; the three games stay open at 9000
 			// pin: the landing of 2026-11-17 (see above; main dbea96b5 already gave this table): a new table from the first window on; open at 9000
+			// pin: batch 2026-11-17a, Port 237 (#596; see above): a new table from the first window on; open at 9000
 			CHECK(run.progress ==
-			"frame 1000: [0 attacks 1 built 90u/8s destroyed 22u/1s] [1 attacks 1 built 75u/8s destroyed 23u/1s]\n"
-			"frame 2000: [0 attacks 3 built 210u/10s destroyed 188u/2s] [1 attacks 5 built 243u/10s destroyed 117u/3s]\n"
-			"frame 3000: [0 attacks 5 built 356u/12s destroyed 291u/3s] [1 attacks 8 built 413u/12s destroyed 296u/3s]\n"
-			"frame 4000: [0 attacks 8 built 590u/14s destroyed 380u/3s] [1 attacks 9 built 474u/16s destroyed 483u/5s]\n"
-			"frame 5000: [0 attacks 12 built 819u/15s destroyed 473u/4s] [1 attacks 11 built 626u/18s destroyed 659u/6s]\n"
-			"frame 6000: [0 attacks 13 built 957u/19s destroyed 605u/4s] [1 attacks 11 built 675u/20s destroyed 837u/7s]\n"
-			"frame 7000: [0 attacks 14 built 1130u/23s destroyed 776u/4s] [1 attacks 16 built 893u/21s destroyed 1000u/7s]\n"
-			"frame 8000: [0 attacks 22 built 1339u/25s destroyed 942u/4s] [1 attacks 16 built 1052u/24s destroyed 1288u/7s]\n"
-			"frame 9000: [0 attacks 27 built 1620u/25s destroyed 1110u/4s] [1 attacks 16 built 1216u/24s destroyed 1546u/9s]\n");
+			"frame 1000: [0 attacks 1 built 70u/8s destroyed 24u/1s] [1 attacks 3 built 81u/7s destroyed 8u/1s]\n"
+			"frame 2000: [0 attacks 3 built 226u/10s destroyed 177u/1s] [1 attacks 4 built 242u/10s destroyed 123u/2s]\n"
+			"frame 3000: [0 attacks 5 built 388u/12s destroyed 335u/2s] [1 attacks 7 built 430u/11s destroyed 311u/2s]\n"
+			"frame 4000: [0 attacks 9 built 590u/14s destroyed 458u/2s] [1 attacks 10 built 571u/15s destroyed 457u/4s]\n"
+			"frame 5000: [0 attacks 11 built 813u/16s destroyed 591u/3s] [1 attacks 11 built 684u/17s destroyed 744u/5s]\n"
+			"frame 6000: [0 attacks 13 built 1028u/19s destroyed 742u/6s] [1 attacks 14 built 812u/19s destroyed 962u/6s]\n"
+			"frame 7000: [0 attacks 17 built 1227u/22s destroyed 815u/7s] [1 attacks 15 built 908u/22s destroyed 1218u/7s]\n"
+			"frame 8000: [0 attacks 19 built 1454u/24s destroyed 976u/7s] [1 attacks 16 built 1062u/23s destroyed 1398u/9s]\n"
+			"frame 9000: [0 attacks 21 built 1622u/24s destroyed 1134u/7s] [1 attacks 17 built 1221u/25s destroyed 1578u/9s]\n");
 		}
 	}
 }
