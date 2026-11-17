@@ -276,14 +276,14 @@ void SpellRechargeModifierUpgrade::upgradeImplementation()
 void SpellRechargeModifierUpgrade::processUpgradeRemoval()
 {
 	// RW 0x8B9FE0: only an executed upgrade (mux slot 0), then the count - 1 and the discount again; the flag stays (the mux's removeUpgrade
-	// RW 0x8D2688 clears it after the removal)
-	if (!isAlreadyUpgraded())
-	{
-		return;
-	}
+	// RW 0x8D2688 clears it after the removal). Object::removeUpgrade clears executed via mux->resetUpgrade before calling removeUpgrade,
+	// so executed is already false there; check count instead to keep single reaction (no second path) and match retail discount update (RW 0x6AAAEE).
 	if (Player *owner = getObject()->getControllingPlayer())
 	{
-		owner->science().removeSpellRechargeModifier(m_data->m_percentage); // RW 0x6AAAE7, RW 0x6AAAEE
+		if (owner->science().spellRechargeModifierCount() > 0)
+		{
+			owner->science().removeSpellRechargeModifier(m_data->m_percentage); // RW 0x6AAAE7, RW 0x6AAAEE
+		}
 	}
 }
 
