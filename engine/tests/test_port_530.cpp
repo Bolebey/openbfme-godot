@@ -128,3 +128,19 @@ TEST_CASE("PORT-530: the fixture plan gives the object, the upgrades, the scienc
 	CHECK(one[0].kind == Kind::Science);
 	CHECK(one[0].value == "Science_Test");
 }
+
+// 2026-11-17 (matrix GREY-BUG review): the satisfied-by column carries a note after the button name, and "-" / "Object:ModuleTag" name no
+// pressable button; a condition the fixture did not give reads as the grey verdict with its reason, never as GREY-BUG.
+TEST_CASE("PORT-530: the model setter is the satisfied-by name without its note; '-' and a module tag name no button")
+{
+	CHECK(greyfix::setterButton("Command_GorkilToggleWeapon (weapon-set toggle)") == "Command_GorkilToggleWeapon");
+	CHECK(greyfix::setterButton("Command_ToggleMounted") == "Command_ToggleMounted");
+	CHECK(greyfix::setterButton("-").empty());
+	CHECK(greyfix::setterButton("").empty());
+	CHECK(greyfix::setterButton("RohanErkenbrand:ModuleTag_HorseToggle (mount replacement)").empty());
+	greyfix::Condition c;
+	c.condition = "model";
+	c.value = "USER_1";
+	CHECK(greyfix::unmetDetail(c, "the sweep could not set it: no known setter") ==
+	      "DISABLED: needs model USER_1 (the sweep could not set it: no known setter)");
+}

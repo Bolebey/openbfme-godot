@@ -21,6 +21,11 @@ checked yet (state in /content/prcheck/state.json):
     warnings only: the verdict stays the tests'.
 The GitHub token is the sandbox's git credential (~/.git-credentials), never printed.
 
+A PR from another account's fork (a trusted person's agent, owner 2026-11-17) is never built or run on the owner's machines: GitHub's
+runner checks it (.github/workflows/fork-pr.yml), the checker only notes that once per head (<!-- prcheck-foreign <head> -->, not a verdict),
+and its retail tests run in the owner's batch after the code was read (batch_bot.py). foreign() fails closed: only a PR whose branch GitHub
+says lives in this repository is the owner's.
+
 Order and skips (owner 2026-11-17: the checker ran hours behind, re-checking what Claude had already taken):
  - the most recently updated PRs first;
  - a PR whose head is already in a batch Claude is testing or landing (origin batch/*, land/*, agent/claude/station-0) is skipped;
@@ -50,8 +55,13 @@ HOME = Path(os.environ.get("PRCHECK_HOME", "/content/prcheck"))
 WT = HOME / "wt"
 STATE = Path(os.environ.get("PRCHECK_STATE", str(HOME / "state.json")))  # autostart keeps it in /content/sandbox (saved to Drive)
 REPORTS = HOME / "reports"
-BASE = ["ENNORATH scenario*", "module coverage*", "modgap2*", "mapobj*", "logic retail: the PlayerTemplate*",
-        "save4a retail*", "save4b retail*", "move retail*", "perf1*", "uber1*"]
+# The batch's whole set (batch_bot.py SUITE, owner 2026-11-17: batch 18b spent three hours bisecting skirmish ai vs ai, aiexpand1 and script2
+# angmar, which this checker did not run, down to PRs it had passed) plus the PlayerTemplate check; test_batch_bot.py keeps them equal.
+# The tests run one per core in parallel: the longest one sets the time.
+BASE = ["perf1*", "uber1*", "skirmish?ai?vs?ai*", "aiexpand1*", "save4a*", "save4b*", "save4c*", "script3*", "script2?angmar*",
+        "module?coverage*", "modgap1*", "modgap2*", "mod1*", "facta?stops*", "factb?spell?book*", "FACT-A?spell?book*", "factb?units*",
+        "factc?units*", "ENNORATH?scenario*", "mapobj*", "move?retail*", "LOCAL-*", "PORT-1*", "PORT-2*", "PORT-3*", "PORT-4*", "PORT-5*",
+        "PORT-6*", "PORT-7*", "PORT-8*", "PORT-9*", "logic retail: the PlayerTemplate*"]
 PINS = {"perf1*", "uber1*"}
 SHARED = ("docs/STOPS.md", "docs/ennorath/NIGHT_WATCH.md", "README.md")
 DOC_UNION = {"docs/STOPS.md", "docs/ennorath/NIGHT_WATCH.md", "docs/ennorath/PROBLEMS.md", "docs/ennorath/TOP20.md",
@@ -143,6 +153,8 @@ def run_set(patterns: list[str]) -> dict[str, tuple[str, str]]:
 
 def main_baseline(state: dict, main_sha: str) -> dict:
     """BASE on main itself, once per main commit."""
+    if not set(BASE) <= set(state["main"].get("results") or {}):  # BASE grew (2026-11-17: the batch's whole set): measure main again
+        state["main"] = {}
     if state["main"].get("sha") == main_sha and "audit" in state["main"]:
         return state["main"]["results"]
     old = state["main"].get("sha")
@@ -262,15 +274,23 @@ def check_pr(pr: dict, state: dict, main_sha: str, open_prs: list[dict], comment
                      "Новые строки — файлами `docs/stops.d/`, `docs/ennorath/night_watch.d/` (PROCESS 5.7).")
     changed = sh(["git", "diff", "--name-only", f"{main_sha}..HEAD"]).stdout.split()
     diff = sh(["git", "diff", f"{main_sha}..HEAD"]).stdout
-    frag = sh([sys.executable, "tools/fragments.py", "check"]) if (WT / "tools/fragments.py").exists() else None
+    # the PR's issue: its stop ids must not be another issue's reservation (Port 212 took #578's S-7423, 2026-11-17)
+    issue_m = re.search(r"(?:closes|fixes|resolves|issue)\s+#(\d+)", pr.get("body") or "", re.I)
+    frag = sh([sys.executable, "tools/fragments.py", "check"] + (["--issue", issue_m.group(1)] if issue_m else [])) \
+        if (WT / "tools/fragments.py").exists() else None
     if frag and frag.returncode:
         # a stop id another branch took first (PR 523's S-7387, taken by Port 228) is renumbered by the owner when landing, as every batch
-        # does: a warning; any other broken fragment stays red
+        # does: a warning; an id reserved for another issue and any other broken fragment stay red
         problems = [l for l in frag.stdout.splitlines() if l.strip().startswith("- ") or ": " in l]
         taken = [l for l in problems if "is already a row of docs/STOPS.md" in l]
+        foreign = [l for l in problems if "is reserved for issue" in l]
         if problems and len(taken) == len(problems):
             lines.append("⚠️ Номер стопа уже занят (владелец перенумерует при вливании; в следующий раз бери номер из своего диапазона "
                          f"`docs/stops.d/RESERVED.tsv`): {'; '.join(t.strip(' -') for t in taken)[:400]}")
+        elif foreign and len(foreign) + len(taken) == len(problems):
+            lines.append("❌ **Номер стопа зарезервирован за другой задачей**: переименуй фрагмент на номер из диапазона своей issue "
+                         "(`python tools/fragments.py check --issue <номер>` покажет его; нет диапазона — `python tools/fragments.py next`): "
+                         + "; ".join(t.strip(' -') for t in foreign + taken)[:600])
         else:
             lines.append(f"❌ Фрагменты: {frag.stdout.strip()[:600]}")
     shared = [f for f in changed if f in SHARED]
@@ -392,6 +412,17 @@ RETURNED = re.compile(r"<!-- returned -->|не принят")
 TAKEN_REFS = ("refs/remotes/origin/batch/", "refs/remotes/origin/land/", "refs/remotes/origin/agent/claude/station-0")
 
 
+def foreign(p: dict) -> bool:
+    """True unless GitHub says the PR's branch lives in this repository (only the owner and the agents working through the owner's account
+    push here). GitHub sets these fields, not the PR; a missing field or a deleted fork counts as foreign."""
+    return p.get("isCrossRepository") is not False or (p.get("headRepositoryOwner") or {}).get("login") != GH.split("/")[0]
+
+
+FOREIGN_NOTE = ("🔒 **PR из чужого форка**: на песочницах владельца его код не собирается и не запускается. Сборку и свои тесты "
+                "проверяет GitHub Actions — проверка «Fork PR: build and own tests» у этого PR (тесты, которым нужны файлы игры, там "
+                "пропускаются). Тесты на данных игры пройдут в батче владельца после того, как владелец прочитает код.")
+
+
 def skip_reason(p: dict) -> str:
     """Why the checker leaves this PR alone now ('' = check it)."""
     head = p["headRefOid"]
@@ -473,7 +504,7 @@ def cycle(args) -> int:
     sh(["git", "fetch", "-q", "origin"], cwd=REPO).check_returncode()
     main_sha = sh(["git", "rev-parse", "origin/main"], cwd=REPO).stdout.strip()
     prs = json.loads(gh("pr", "list", "--state", "open", "--limit", "100", "--json",
-                        "number,title,body,headRefOid,headRefName,files,isDraft,updatedAt"))
+                        "number,title,body,headRefOid,headRefName,files,isDraft,updatedAt,isCrossRepository,headRepositoryOwner"))
     sh(["git", "fetch", "-q", "origin", "+refs/pull/*/head:refs/prcheck/*"], cwd=REPO)  # the heads, for the batch test below
     # A red PR whose description changed is checked again without a new commit: an agent that only names a pin's cause in the PR body
     # (the named-pin rule reads the body) gets its new verdict (PR 583, 2026-11-17).
@@ -497,6 +528,15 @@ def cycle(args) -> int:
     skipped = state.setdefault("skipped", {})
     keep = []
     for p in todo:
+        if foreign(p):  # GitHub's runner checks it; one note per head, never a build here
+            n, head = str(p["number"]), p["headRefOid"]
+            if state.setdefault("foreign", {}).get(n) != head:
+                print(f"#{n}: from another account's fork, left to GitHub Actions", flush=True)
+                if not args.no_comment:
+                    gh("pr", "comment", n, "--body", f"<!-- prcheck-foreign {head} -->\n{FOREIGN_NOTE}")
+                state["foreign"][n] = head
+                save_state(state)
+            continue
         why = skip_reason(p) if args.pr is None else ""
         if why:
             if skipped.get(str(p["number"])) != [p["headRefOid"], why]:
@@ -528,14 +568,40 @@ def cycle(args) -> int:
     return len(todo)
 
 
+def self_update() -> None:
+    """Between cycles (owner 2026-11-17): the installed copy compares itself with origin/main's tools/colab/pr_checker.py and, when that
+    one compiles, replaces itself and restarts on it, so a landed change to the checker needs no hand swap. A copy inside a git tree (a run
+    from a checkout) is that tree's version and stays."""
+    me = Path(__file__).resolve()
+    if sh(["git", "-C", str(me.parent), "rev-parse", "--git-dir"]).returncode == 0:
+        return
+    sh(["git", "fetch", "-q", "origin"], cwd=REPO)
+    new = subprocess.run(["git", "show", "origin/main:tools/colab/pr_checker.py"], cwd=REPO, capture_output=True).stdout
+    if not new or new == me.read_bytes():
+        return
+    try:
+        compile(new, str(me), "exec")
+    except SyntaxError as e:
+        print(f"self-update: origin/main's pr_checker.py does not compile ({e}); keeping the running copy", flush=True)
+        return
+    tmp = me.with_name(me.name + ".new")
+    tmp.write_bytes(new)
+    os.replace(tmp, me)
+    print(f"== {time.strftime('%F %T', time.gmtime())} UTC self-update: restarting on origin/main's pr_checker.py", flush=True)
+    os.execv(sys.executable, [sys.executable, str(me)] + sys.argv[1:])
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--once", action="store_true")
     ap.add_argument("--pr", type=int)
     ap.add_argument("--no-comment", action="store_true")
+    ap.add_argument("--no-self-update", action="store_true", help="keep the running copy (a branch version under test)")
     args = ap.parse_args()
     ensure_tree()
     while True:
+        if not (args.once or args.pr or args.no_self_update):
+            self_update()
         n = cycle(args)
         if args.once or args.pr:
             return 0

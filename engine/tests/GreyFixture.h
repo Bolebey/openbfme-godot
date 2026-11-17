@@ -178,6 +178,25 @@ inline std::string needsDetail(const Row &row)
 	return "DISABLED: needs " + c.condition + (c.value.empty() ? std::string() : " " + c.value);
 }
 
+/// The HUD button that sets a model condition, from the satisfied-by column (2026-11-17): the column carries a note after the name
+/// ("Command_GorkilToggleWeapon (weapon-set toggle)"), and "-" or an "Object:ModuleTag" names no button the sweep can press: "" then.
+inline std::string setterButton(const std::string &satisfiedBy)
+{
+	const std::string name = satisfiedBy.substr(0, satisfiedBy.find(" ("));
+	if (name.empty() || name == "-" || name.find(':') != std::string::npos)
+	{
+		return std::string();
+	}
+	return name;
+}
+
+/// The verdict of a button whose fixture ran but did not give one of its conditions (2026-11-17: the sweep checks each condition after
+/// the fixture; before, a weapon or mount toggle pressed for a USER_n condition was reported as "met" and the button as GREY-BUG).
+inline std::string unmetDetail(const Condition &c, const std::string &why)
+{
+	return "DISABLED: needs " + c.condition + (c.value.empty() ? std::string() : " " + c.value) + " (" + why + ")";
+}
+
 /// The verdict of a button still grey with every condition met: the port's availability rule differs from RotWK's.
 inline std::string bugDetail(const Row &row)
 {
