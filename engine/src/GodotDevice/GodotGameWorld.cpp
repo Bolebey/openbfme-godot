@@ -1984,7 +1984,8 @@ bool GameWorld::view_is_local(size_t id, const W3DInstancer &dyn, const LogicSna
 			if ((ev.model != ev.staticKey && ev.instance >= 0) || !ev.posed)
 			{
 				return false; // the instance is removed or made
-		
+			}
+
 			// PORT-267: a floor's record opacity (RW record +0x84, GameClient/FloorFade.h) steps every client frame while it fades, so the view
 			// needs a refresh then
 			if (e.kind == W3D_DRAWKIND_FLOOR && ev.opacity != d->stealthOpacity() * e.floorFade.opacity())
