@@ -203,3 +203,182 @@ def getter_offsets(data, base, blocks, getters):
             if copied:
                 tracked.add(FAMILIES[ins.reg_name(ins.operands[0].reg)])
     return dict(result)
+
+
+# ---- whole-image route (2026-11-17): every field table of the image, every global's read offsets, the instance of each block by its offsets ----
+NAME_RE = None
+
+
+def image_sections(pe):
+    base = pe.OPTIONAL_HEADER.ImageBase
+    return {s.Name.rstrip(b'\0').decode(errors='replace'): (base + s.VirtualAddress, base + s.VirtualAddress + s.Misc_VirtualSize)
+            for s in pe.sections}
+
+
+def find_field_tables(data, base, sections):
+    """Every INI field table of the image: runs of 16-byte rows (name -> an ASCII identifier in .rdata / .data, parser -> .text, user data,
+    offset < 0x10000) of two rows or more, ended by a null name. Returns {table address: [(name, parser, user data, offset), ...]}."""
+    import re
+    name_re = re.compile(rb'[A-Za-z][A-Za-z0-9_]{1,63}\0')
+    text, named = sections['.text'], (sections['.rdata'], sections['.data'])
+
+    def row(a):
+        n, fn, ud, off = struct.unpack_from('<IIII', data, a - base)
+        if not (text[0] <= fn < text[1] and off < 0x10000 and any(lo <= n < hi for lo, hi in named)):
+            return None
+        m = name_re.match(data, n - base)
+        return (m.group()[:-1].decode(), fn, ud, off) if m else None
+
+    tables = {}
+    for lo, hi in named:
+        a = lo
+        while a + 32 <= hi:
+            r = row(a)
+            if r and (a - 16 < lo or not row(a - 16)):
+                rows, b = [], a
+                while b + 16 <= hi and (r := row(b)):
+                    rows.append(r)
+                    b += 16
+                if len(rows) >= 2 and b + 4 <= hi and struct.unpack_from('<I', data, b - base)[0] == 0:
+                    tables[a] = rows
+                a = b
+            a += 4
+    return tables
+
+
+def match_block_tables(fields_by_block, tables, minimum=2):
+    """{(block, owner): table address} where the table names at least half (and `minimum`) of the block's audit fields, the best one."""
+    out = {}
+    names = {t: {r[0].lower() for r in rows} for t, rows in tables.items()}
+    for key, fields in fields_by_block.items():
+        best = max(tables, key=lambda t: (len(fields & names[t]), -len(names[t])))
+        hit = len(fields & names[best])
+        if hit >= minimum and 2 * hit >= len(fields):
+            out[key] = best
+    return out
+
+
+def all_pointer_reads(data, base, blocks, data_range):
+    """Every [reg + off] read whose base register holds a pointer loaded from a global of `data_range` (mov r32, [abs]), one nesting level
+    deep (mov r32, [that + k]), or a static object's address (mov r32, imm in `data_range`); plus direct [abs] reads of `data_range`.
+    Propagated along direct CFG edges as global_reads does (calls kill eax / ecx / edx, any write kills the register).
+    Returns a list of (function, kind, root, path, offset, instruction): kind 'ptr' (root = the global), 'static' (root = the object), 'abs'
+    (root = the absolute address, offset 0)."""
+    decoder = Cs(CS_ARCH_X86, CS_MODE_32)
+    decoder.detail = True
+    lo, hi = data_range
+    out = []
+    for function, spans in blocks.items():
+        decoded = {}
+        for start, size in spans:
+            if size <= 0 or start < base or start + size > base + len(data):
+                continue
+            decoded[start] = list(decoder.disasm(data[start-base:start-base+size], start))
+        if function not in decoded:
+            continue
+        states = {function: {}}
+        pending = deque([function])
+        visits = defaultdict(int)
+        while pending:
+            start = pending.popleft()
+            visits[start] += 1
+            if visits[start] > 8:
+                continue
+            tracked = {reg: set(values) for reg, values in states[start].items()}
+            for ins in decoded[start]:
+                for op in ins.operands:
+                    if ins.mnemonic == 'lea' or op.type != X86_OP_MEM or not (op.access & CS_AC_READ) or op.mem.index != X86_REG_INVALID:
+                        continue
+                    if op.mem.base == X86_REG_INVALID:
+                        a = op.mem.disp & 0xffffffff
+                        if lo <= a < hi:
+                            out.append((function, 'abs', a, (), 0, ins.address))
+                        continue
+                    for kind, root, path in tracked.get(FAMILIES.get(ins.reg_name(op.mem.base)), ()):
+                        out.append((function, kind, root, path, op.mem.disp, ins.address))
+                copied = set()
+                if ins.mnemonic == 'mov' and len(ins.operands) == 2:
+                    dst, src = ins.operands
+                    if dst.type == X86_OP_REG and dst.size == 4:
+                        if src.type == X86_OP_MEM and src.size == 4 and src.mem.index == X86_REG_INVALID:
+                            if src.mem.base == X86_REG_INVALID:
+                                a = src.mem.disp & 0xffffffff
+                                if lo <= a < hi:
+                                    copied.add(('ptr', a, ()))
+                            else:
+                                for kind, root, path in tracked.get(FAMILIES.get(ins.reg_name(src.mem.base)), ()):
+                                    if not path:
+                                        copied.add((kind, root, (src.mem.disp,)))
+                        elif src.type == X86_OP_REG and src.size == 4:
+                            copied.update(tracked.get(FAMILIES.get(ins.reg_name(src.reg)), ()))
+                        elif src.type == X86_OP_IMM and lo <= (src.imm & 0xffffffff) < hi:
+                            copied.add(('static', src.imm & 0xffffffff, ()))
+                _, writes = ins.regs_access()
+                for reg in writes:
+                    tracked.pop(FAMILIES.get(ins.reg_name(reg)), None)
+                if ins.mnemonic == 'call':
+                    for reg in VOLATILE:
+                        tracked.pop(reg, None)
+                if copied:
+                    tracked[FAMILIES[ins.reg_name(ins.operands[0].reg)]] = copied
+            last = decoded[start][-1] if decoded[start] else None
+            if last is None:
+                continue
+            successors = set()
+            if last.mnemonic.startswith('j'):
+                if last.operands and last.operands[0].type == X86_OP_IMM:
+                    successors.add(last.operands[0].imm)
+                if last.mnemonic != 'jmp':
+                    successors.add(last.address + last.size)
+            elif not (last.mnemonic.startswith('ret') or last.mnemonic in {'int3', 'ud2', 'hlt'}):
+                successors.add(last.address + last.size)
+            for target in successors & decoded.keys():
+                previous = states.get(target)
+                merged = {reg: set(values) for reg, values in (previous or {}).items()}
+                for reg, values in tracked.items():
+                    merged.setdefault(reg, set()).update(values)
+                if previous is None or merged != previous:
+                    states[target] = merged
+                    pending.append(target)
+    return out
+
+
+def instance_offsets(reads):
+    """{(kind, root, path): {offset: {(function, instruction)}}}; 'abs' reads become offsets of every 'static' root below them later."""
+    out = defaultdict(lambda: defaultdict(set))
+    for function, kind, root, path, offset, ins in reads:
+        out[(kind, root, path)][offset].add((function, ins))
+    return out
+
+
+def match_instance(table_rows, used_names, offsets_by_instance, statics, abs_reads, minimum=3):
+    """The instance whose reads best explain the table's USED fields' offsets: score = used offsets it reads, ties by precision (its read
+    offsets inside the table's span that are field offsets). A static object also takes the direct [abs] reads inside its span.
+    Returns (instance, used offsets hit, precision) or None."""
+    field_offsets = {r[3] for r in table_rows}
+    used = {r[3] for r in table_rows if r[0].lower() in used_names}
+    if not used:
+        return None
+    span = (min(field_offsets), max(field_offsets) + 8)
+    best = None
+    candidates = dict(offsets_by_instance)
+    for s in statics:
+        merged = defaultdict(set)
+        for k, v in offsets_by_instance.get(('static', s, ()), {}).items():
+            merged[k] |= v
+        for a, hits in abs_reads.items():
+            if s + span[0] <= a < s + span[1]:
+                merged[a - s] |= hits
+        candidates[('static', s, ())] = merged
+    for inst, offs in candidates.items():
+        inside = {o for o in offs if span[0] <= o < span[1]}
+        hit = len(used & inside)
+        if hit < minimum:
+            continue
+        precision = len(inside & field_offsets) / max(1, len(inside))
+        key = (hit, precision)
+        if best is None or key > best[0]:
+            best = (key, inst, offs)
+    if best is None or best[0][1] < 0.5:
+        return None
+    return best[1], best[0][0], best[0][1], best[2]
