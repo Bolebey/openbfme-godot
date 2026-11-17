@@ -78,3 +78,30 @@ The remaining uncited functions were scanned linearly (length, calls, displaceme
 output is the basis of the PR table; the tiny ones are object-field getters (0x872A69, 0x872A8D,
 0x872A9A, 0x872AAE, 0x872ACB, 0x872AD2, 0x872AE7, 0x872AEE, 0x872AF5, 0x872B02, 0x86C9E7,
 0x86C9F3, 0x872B76, 0x8736EF, 0x87737A, 0x872B24).
+
+## RW 0x0086DF44, branch by branch (the contain interface `this + 0x11C`, vtable RW 0x00C5B1F8)
+
+Interface layout used here: `[this+4]` = module data, `[this+8]` = the Object; the contain list is
+RW 0x865598; `0x44DDEC(obj, bit)` is `Object::testStatus(bit)` (mask at Object + 0x94, bit index
+shifted by 5); `0x5DD9EE(ecx = TheEva RW 0xDE3670)` is `reportEvent(event, position, null)`;
+`0x62BBAB(ecx = TheGameLogic RW 0xDE412C, obj)` is `destroyObject`; `0x73D5C2` is
+`ThingTemplate::isEquivalentTo`.
+
+Two slots of the same vtable, resolved from RW 0x00C5B1F8:
+
+| slot | address | what the port calls it |
+|---|---|---|
+| +0x1F8 | 0x008791C5 | `HordeContain::splitHorde` (ported, `RW 0x8791C5`) |
+| +0x1FC | 0x0086C9CD | `HordeContain::canSplit` (ported, `RW 0x86C9CD`) |
+
+1. `0x86DF51..0x86DF89` — the death branch. `testStatus(obj, 2)` false, the contain list empty and
+   `[this + 0x174] == 0` (the port's `m_flag174`): `TheEva->reportEvent([data+0x250] =
+   EvaEventLastMemberDeath, obj + 0x38, null)` at 0x86DF99, then `TheGameLogic->destroyObject(obj)`
+   at 0x86DFAB. Returns false.
+2. `0x86DFB5` — otherwise the split branch: `canSplit()` (+0x1FC), then
+   `[[obj + 0x26C] + 0x24] <= 1`, then the size of the contain list. With
+   `[data+0x258] = SplitHordeNumber > 0` the split runs only while the horde holds **no more** than
+   that number of members (`0x86E013`, `0x86E01C`: `ja` -> only the BANNER line, split and stop);
+   with 0, every member must be the same template (0x86E044..0x86E06D, the BANNER bit of the
+   template at +0x11C & 0x10 is skipped) and the list must not be empty. Then
+   `splitHorde(&id)` (+0x1F8) and `0x430170(id)` when an id came back.
