@@ -20,10 +20,10 @@
   contain, интерфейса, бойца или его оружия возвращает true, а не урон.
 - `RW 0x911A58`: доставка в объект. Нет источника / contain / horde interface
   — возврат без действия. Иначе при LockWeaponSlot != 5 вызывается
-  `0x69121A(slot, LOCKED_TEMPORARILY)`, затем horde interface slot 4
+  `0x69121A(slot, LOCKED_TEMPORARILY)`, затем horde interface vtable +0x04
   `(victim, ClosestMemberOnly)`.
 - `RW 0x911AC9`: доставка в позицию. Те же проверки, блокировка и флаг;
-  вызывается horde interface slot 0 `(position, ClosestMemberOnly)`.
+  вызывается horde interface vtable +0x00 `(position, ClosestMemberOnly)`.
 - `RW 0x69121A`: сначала contain slot 0x168 распространяет блокировку,
   затем источник обновляет SWITCHED_WEAPONS и собственную блокировку.
 - `RW 0x875221`: attackTargetNow. Melee-horde gate; возвращение бойцов,
@@ -58,3 +58,46 @@ DONOR BFME2 0x00471FFA
 доказывает ошибку nugget. Если существующий путь проходит проверку,
 следуем прямому указанию issue: остановиться и сообщить владельцу,
 не менять чужой WeaponFireSpecialAbilityUpdate и не добавлять второй путь атаки.
+
+## Результат полного прогона
+
+Собрана цель `openbfme_tests` (Release, Godot OFF, `-j1`). Запущен именно
+полный бинарник, не вспомогательный runner:
+
+```text
+engine/build/openbfme_tests -tc="PORT-277*"
+[doctest] test cases:  2 |  2 passed | 0 failed | 6864 skipped
+[doctest] assertions: 84 | 84 passed | 0 failed |
+[doctest] Status: SUCCESS!
+```
+
+`skipped` здесь — остальные тесты, исключённые фильтром. Тестам PORT-277
+не нужны файлы игры или мода; переменные установки не задавались.
+Предупреждение конфигурации о недостающих MP3 fixture tools не относится
+к этому фильтру; аудиотесты и широкий набор не запускались.
+
+| Проверенное поведение существующего main | RW | Тест |
+|---|---|---|
+| Выстрел extra range-finder выдаёт шесть приказов, блокирует SECONDARY у всех бойцов, сам не наносит урона; затем цель получает урон бойцов | 0x911A58, 0x69121A, 0x875221 | PORT-277: existing rangefinder orders members to fire SECONDARY and damage the target |
+| Оружие бойца может иметь только ProjectileNugget: урон приходит из warhead, отсутствие собственного DamageNugget не препятствует атаке | тот же маршрут передачи приказа; существующий путь снаряда | тот же тест, subcase member weapon has only a ProjectileNugget; damage is in its warhead |
+| Источник без HordeContain не блокирует свой слот и не наносит урона range-finder | 0x911A58 | PORT-277: single firer with no HordeContain does not turn the rangefinder into a damaging weapon |
+
+### Решение по границе задачи
+
+Выполнено прямое первое условие issue: **существующий main заставляет бойцов
+атаковать**. Поэтому дальнейший перенос nugget остановлен, `engine/src`
+не менялся. Нет исправления, для которого можно показать red-before/green-after;
+выдумывать такую правку вместо работающего механизма нельзя.
+
+Это **не** заключение, что все восемь кнопок работают: отправка кнопки,
+полный цикл подготовки способности и каждый конкретный объект мода этим
+изолированным тестом не проверены. Причина NO-SEND у герольда и оставшиеся
+NO-EFFECT не установлены; приписывать их Local 76 или данным без проверки
+было бы INFERENCE. Нужен выбор владельцем дальнейшей границы диагностики.
+
+PR и upstream-ветка не создаются: исправления движка нет, issue прямо
+предписывает остановиться при этом результате. Синтетический reproducer
+и разбор сохранены в текущей arena-ветке. Новых полей-читателей и функций
+`ported` нет; карты и статусы восьми красных кнопок не меняются.
+Новый технический стоп S-7472..S-7474 не заводился: неперенесённая функция
+или блокирующий общий механизм этой проверкой не доказаны.

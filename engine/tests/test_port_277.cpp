@@ -1,6 +1,6 @@
 // PORT-277: first check the existing main path before changing the engine.
 // Synthetic INI only. RW 0x911A58: a horde locks LockWeaponSlot temporarily,
-// then orders members through HordeContainInterface slot 4 (RW 0x875221).
+// then orders members through HordeContainInterface vtable +0x04 (RW 0x875221).
 // A single firer without a contain returns without an attack (RW 0x911A58, contain check at +0x1E).
 #include "doctest.h"
 #include "CombatTestUtil.h"
