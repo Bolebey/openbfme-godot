@@ -168,7 +168,8 @@ TEST_CASE("PORT-262 flammable: BurnContained gives every passenger max(AflameDam
 	const float riderBefore = healthOf(rider);
 	const float carrierBefore = healthOf(carrier);
 
-	carrier->attemptDamage(flameHit(100.0f));
+	DamageInfo ignition = flameHit(100.0f);
+	carrier->attemptDamage(ignition);
 
 	// the ignition itself: RW 0x8901AB turned the status and the AFLAME model condition on
 	REQUIRE(f->status() == FlammableUpdate::FS_AFLAME);
@@ -194,7 +195,8 @@ TEST_CASE("PORT-262 flammable: without BurnContained the passengers are left alo
 	REQUIRE(f);
 	const float riderBefore = healthOf(rider);
 
-	carrier->attemptDamage(flameHit(100.0f));
+	DamageInfo ignition = flameHit(100.0f);
+	carrier->attemptDamage(ignition);
 	REQUIRE(f->status() == FlammableUpdate::FS_AFLAME);
 	CHECK(riderBefore == 100.0f);
 	CHECK(healthOf(rider) == 100.0f); // BurnContained off: no passenger damage
