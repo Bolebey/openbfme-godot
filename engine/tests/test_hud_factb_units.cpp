@@ -42,6 +42,9 @@
 #include "GameLogic/ObjectCreationList.h"
 #include "GameLogic/Combat/CombatState.h"
 #include "GameLogic/Module/EmotionModules.h"
+#include "GameLogic/Module/ExtraUpdateModules.h" // DeletionUpdate: a temporary object (the matrix's first-frames verdict)
+#include "GameLogic/Module/SlavedUpdate.h"
+#include "GameLogic/Module/StructureModules.h" // LifetimeUpdate
 #include "GameLogic/System/EmotionSystem.h"
 #include "GameLogic/Weapon.h"
 #include "GameLogic/WeaponNugget.h"
@@ -447,9 +450,26 @@ void unitsSweep(const std::string &faction, Results &res, bool sweep)
 			g.step(5);
 			return true;
 		};
-		if (!spawn())
+		// 2026-11-17 (matrix review): a temporary object (DeletionUpdate / LifetimeUpdate, or a slave made without its master) leaves by
+		// design; any other object that left at once is made again at the next site before the verdict (in the full run ArnorArveduiNew and
+		// HarbringerOfDark left in their first frames, alone they live: the earlier objects' leftovers killed them)
+		bool temporary = false;
+		if (const ThingTemplate *tt = s.world->things().findTemplate(e->name))
 		{
-			res.fail(e->name, "left the world in its first 20 frames");
+			Object *probe = g.rig.make(e->name, g.home().x, g.home().y + 2000.0f);
+			for (const std::unique_ptr<BehaviorModule> &m : probe->modules())
+			{
+				temporary = temporary || dynamic_cast<const DeletionUpdate *>(m.get()) || dynamic_cast<const LifetimeUpdate *>(m.get())
+					|| dynamic_cast<const SlavedUpdate *>(m.get());
+			}
+			(void)tt;
+			g.logic().destroyObject(probe);
+			g.step(1);
+		}
+		if (!spawn() && !spawn())
+		{
+			res.fail(e->name, temporary ? "TEMPORARY: a temporary object (a deletion / lifetime timer, or a slave without its master): it leaves by design"
+			                            : "left the world in its first 20 frames (twice, at two sites)");
 			continue;
 		}
 		std::set<const CommandButton *> seen;
