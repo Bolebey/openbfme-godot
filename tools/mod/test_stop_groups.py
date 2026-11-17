@@ -96,3 +96,25 @@ def test_fragment_parses_only_its_first_row(tmp_path):
     p = fragments/'S-10.md'
     p.write_text(row(10) + '\n## Notes\n' + row(11))
     assert set(read_stops([p])) == {'S-10'}
+
+
+def test_reviewed_broad_dispatcher_is_not_a_merge_pivot(tmp_path):
+    from stop_groups import BROAD_DISPATCHERS
+    p = tmp_path/'stops.md'
+    p.write_text(row(1, 'RW 0x4BE600') + row(2, 'RW 0x4BEE00'))
+    stops = read_stops([p])
+    inv = Inventory([{'address': 0x4BE587, 'blocks': [[0x4BE587, 0x1000]]}])
+    enrich(stops, {}, set(), inv)
+    groups, unplaced = cluster(stops, {}, stoplist=BROAD_DISPATCHERS)
+    assert groups == [['S-1'], ['S-2']]
+    assert not unplaced
+    assert all(s.functions == {0x4BE587} for s in stops.values())
+
+
+def test_seh_entry_after_ret_and_ret_imm():
+    from stop_groups import seh_after_return
+    prologue = b'\xb8\x22\x05\xb9\x00\xe8\x00\x00\x00\x00'
+    assert seh_after_return(b'\x90\x90\xc3' + prologue, 3)
+    assert seh_after_return(b'\xc2\x04\x00' + prologue, 3)
+    assert not seh_after_return(b'\x90\x90\x90' + prologue, 3)
+    assert not seh_after_return(b'\xc3', 0)

@@ -58,3 +58,25 @@ common utility functions and explicitly historical fixes do not form function
 edges. All references and citations remain visible. Unknown function status is
 included as unverified work in the ranking denominator, never claimed as
 `none`. These safeguards reduce but do not eliminate false positives.
+
+## Final ranking after splitting the reviewed dispatcher
+
+The top four are the AdjustDamage group, the S-017/S-123 numeric dependency,
+the S-041/S-120 Lua dependency, and the S-081/S-233 numeric dependency;
+the instructions and qualifications for each are recorded above. The fifth
+is S-1122/S-723: `rw.py dis 0x6AF598 18` shows the SEH prologue of the
+asset-transfer function and its player-state access at `0x6AF5AD`. S-723
+explicitly names S-1122 as an open disconnect point: the reference link is
+real, not a claim that both descriptions cite this function. The first four
+likewise remain candidates, not proven one-task closures.
+
+The formerly second-ranked S-091/S-1580/S-5920 group is split: the reviewed
+`0x4BE587` is a large dispatcher, not by itself evidence of a single task.
+Another incorrect edge joined S-076 to S-091 through `RW 0x42D400`; the first
+stop concerns unterminated INI bodies, whereas the second quotes already
+stored script text as background for its host/API gap. The historical-citation
+filter now removes that edge while retaining the citation. Separately, the
+resolver missed S-126's `RW 0x734EF4`: `rw.py dis 0x734E94 18` shows an SEH
+entry immediately after `ret` at `0x734E93`. Post-return SEH prologues are now
+candidate starts, and the reachable-code check maps the instruction to
+`RW 0x734E94`. This is a heuristic, not a replacement for a block inventory.

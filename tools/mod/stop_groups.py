@@ -25,6 +25,10 @@ HEX = re.compile(r'0x[0-9a-fA-F]{5,8}\b')
 TASK = re.compile(r'\b(?:PORT[- ]\d+|Local[- ]\d+|issue\s*#\d+)\b', re.I)
 # These are diagnostic/provenance links, not mechanism dependencies.
 IGNORE_REFS = {'S-001'}
+# W3D draw state selection is one large dispatcher: cited spans cover Lua,
+# animation timing and missing-asset recovery, which are separate mechanisms
+# (manual review in PORT268_GROUP_CHECK.md). Preserve its citations, not edges.
+BROAD_DISPATCHERS = {0x004BE587}
 MAX_GROUP = 40
 
 
@@ -95,6 +99,13 @@ def rw_addresses(text):
     return result
 
 
+def seh_after_return(data, offset):
+    """Recognize a candidate MSVC SEH entry immediately after ret/ret imm16."""
+    return (offset >= 3 and offset + 5 < len(data) and data[offset] == 0xb8
+            and data[offset + 5] == 0xe8
+            and (data[offset - 1] == 0xc3 or data[offset - 3] == 0xc2))
+
+
 class BinaryResolver:
     """Bounded reachable basic-block search from independently found entry seeds.
 
@@ -121,6 +132,10 @@ class BinaryResolver:
                     seeds.add(dest)
             if t[i] == 0xcc and t[i + 1] in (0x55, 0x56, 0x57, 0x53, 0x8b, 0x83, 0xb8):
                 seeds.add(self.lo + i + 1)
+            # MSVC SEH prologues may immediately follow the previous ret,
+            # without padding or a direct call to this particular entry.
+            if seh_after_return(t, i):
+                seeds.add(self.lo + i)
         rdata = next((s for s in pe.sections if s.Name.rstrip(b'\0') == b'.rdata'), None)
         if rdata:
             r = data[rdata.VirtualAddress:rdata.VirtualAddress + rdata.Misc_VirtualSize]
@@ -206,7 +221,7 @@ def enrich(stops, funcs, classes, resolver, port_classes=frozenset()):
         # fixes as mechanism edges. Such citations often connect unrelated gaps.
         live = []
         for sentence in re.split(r'(?<=[.;])\s+', evidence):
-            historical = re.search(r'\b(?:since|earlier|already ported|is ported|are ported|now ported|no longer|passes now|land(?:s|ed) its hit)\b', sentence, re.I)
+            historical = re.search(r'\b(?:since|earlier|already ported|is ported|are ported|now ported|no longer|passes now|stored verbatim|land(?:s|ed) its hit)\b', sentence, re.I)
             unresolved = re.search(r'\b(?:not ported|unported|not traced|remains? unported)\b', sentence, re.I)
             if not historical or unresolved:
                 live.append(sentence)
@@ -334,7 +349,7 @@ def output(stops, groups, unplaced, funcs, matrix, fields, issues, out, command)
             shared_r = sorted(p.id for p in peers if p.id in s.refs or sid in p.refs)
             why = '; '.join(([f'shared RW 0x{x:08X}' for x in shared_f] + [f'shared class {x}' for x in shared_c] + [f'reference {x}' for x in shared_r])) or ('singleton' if sid in assigned else 'no resolvable mechanism')
             w.writerow([sid, s.kind, assigned.get(sid, 'unplaced'), why, ', '.join(f'0x{x:08X}' for x in sorted(s.functions)), ', '.join(sorted(s.classes)), ', '.join(sorted(s.all_refs)), ', '.join(sorted(s.tasks))])
-    lines = ['# Open stop mechanism candidates', '', f'Regenerate: `{command}`', '', 'Candidates are heuristic, not proof. Class merges use the area or the first named class of the gap; all mentions remain listed. Common utility functions and citations in explicitly historical-fix sentences are not merge pivots; every citation is retained. Check ownership, dependencies and issue overlap before implementation. Large transitive components are split by function; links can cross groups. Unknown function status is reported separately and is not counted as none, but is included as unverified work in the ranking denominator. Unavailable issue lookup is not evidence of no coverage.', '', f'{len(stops)} open stops; {len(details)} groups; {len(unplaced)} unplaced.', '', '## Ranked groups', '', '| Rank | Mechanism | Stops | none/partial functions | Red buttons | Unused fields | Open task |', '|---:|---|---:|---:|---:|---:|---|']
+    lines = ['# Open stop mechanism candidates', '', f'Regenerate: `{command}`', '', 'Candidates are heuristic, not proof. Class merges use the area or the first named class of the gap; all mentions remain listed. Common utility functions, the manually reviewed broad draw dispatcher RW 0x004BE587, and citations in explicitly historical-fix sentences are not merge pivots; every citation is retained. Check ownership, dependencies and issue overlap before implementation. Large transitive components are split by function; links can cross groups. Unknown function status is reported separately and is not counted as none, but is included as unverified work in the ranking denominator. Unavailable issue lookup is not evidence of no coverage.', '', f'{len(stops)} open stops; {len(details)} groups; {len(unplaced)} unplaced.', '', '## Ranked groups', '', '| Rank | Mechanism | Stops | none/partial functions | Red buttons | Unused fields | Open task |', '|---:|---|---:|---:|---:|---:|---|']
     for n, (ids, fs, cs, name, missing, buttons, fl, covers) in enumerate(details, 1):
         coverage = 'lookup unavailable' if covers is None else ', '.join(covers) if covers else 'none matched'
         lines.append(f'| {n} | {name} | {len(ids)} | {missing} | {len(buttons)} | {len(fl)} | {coverage.replace("|", "/")} |')
@@ -391,7 +406,7 @@ def main():
     map_report = (ROOT/'docs/ennorath/RW_FUNCTION_MAP.md').read_text(encoding='utf-8')
     stop_section = map_report.split('## Stop list', 1)[1].split('## ', 1)[0]
     stoplist = {int(a, 16) for a in re.findall(r'(?m)^- (0x[0-9A-Fa-f]+):', stop_section)}
-    groups, unplaced = cluster(stops, funcs, stoplist=stoplist)
+    groups, unplaced = cluster(stops, funcs, stoplist=stoplist | BROAD_DISPATCHERS)
     issues = open_issues(args.issues)
     command = 'python tools/mod/stop_groups.py --game workspace/RotWK/game.dat --out docs/ennorath/STOP_GROUPS'
     output(stops, groups, unplaced, funcs, table(ROOT/'docs/ennorath/MATRIX_GAPS.tsv'), table(ROOT/'docs/ennorath/FIELD_GAPS.tsv'), issues, args.out, command)
