@@ -14,6 +14,7 @@ Columns:
   buttons_red      distinct failing buttons of the button matrix (docs/ennorath/MATRIX.tsv: any result but PASS, STANCE, DISABLED, INVENTORY)
   stops_new        stop ids open now that were not open at the previous row's rev (2026-11-17: the stop curve, per landing)
   stops_closed     stop ids open at the previous row's rev that are closed or gone now
+  buttons_total    distinct (object, button) pairs the matrix pressed: the scale of buttons_red (the home page's share)
   gaps_specific    distinct RotWK functions the failing buttons' main classes lack (docs/ennorath/MATRIX_GAPS.tsv, `main class` rows,
                    `specific none`): the work the matrix still points at. Both empty in rows before 2026-11-16 and when a file is missing
 
@@ -40,7 +41,7 @@ import stops_count  # noqa: E402
 
 OUT = REPO / "docs" / "ennorath" / "PROGRESS.tsv"
 COLUMNS = ["date", "rev", "fields_total", "fields_open", "modules_missing", "problems_total", "problems_done", "stops_open", "audit",
-           "buttons_red", "gaps_specific", "stops_new", "stops_closed"]
+           "buttons_red", "gaps_specific", "stops_new", "stops_closed", "buttons_total"]
 GREEN = {"PASS", "STANCE", "DISABLED", "INVENTORY"}
 OPEN_STATUSES = {"parsed-unused", "not-read", "stub-block", "missing-module", "parsed-only-module", "no-table-row"}
 
@@ -122,6 +123,15 @@ def save(rows: list[dict[str, str]]) -> None:
             f.write("\t".join(r[c] for c in COLUMNS) + "\n")
 
 
+def matrix_total(rev: str | None) -> str:
+    try:
+        matrix = read("docs/ennorath/MATRIX.tsv", rev)
+    except (OSError, subprocess.CalledProcessError):
+        return ""
+    lines = [l for l in matrix.splitlines() if l and not l.startswith("#")]
+    return str(len({(r["object"], r["button"]) for r in csv.DictReader(lines, delimiter="\t")}))
+
+
 def load() -> list[dict[str, str]]:
     if not OUT.exists():
         return []
@@ -143,6 +153,8 @@ def main() -> int:
     if a.backfill_stops:
         for prev, r in zip([None] + rows[:-1], rows):
             r["stops_new"], r["stops_closed"] = stop_delta(prev["rev"] if prev else None, r["rev"])
+            if r["buttons_red"]:
+                r["buttons_total"] = matrix_total(r["rev"])
         save(rows)
         return 0
     rev = a.rev or subprocess.run(["git", "-C", str(REPO), "rev-parse", "--short=8", "HEAD"], capture_output=True, text=True).stdout.strip()
@@ -163,6 +175,7 @@ def main() -> int:
     row = {"date": a.date, "rev": rev[:8], "fields_total": str(ftotal), "fields_open": str(fopen), "modules_missing": str(missing),
            "problems_total": str(total), "problems_done": str(done), "stops_open": str(stops), "audit": audit}
     row["buttons_red"], row["gaps_specific"] = matrix_counts(a.rev)
+    row["buttons_total"] = matrix_total(a.rev)
     earlier = [r for r in rows if r["date"] < a.date]
     row["stops_new"], row["stops_closed"] = stop_delta(earlier[-1]["rev"] if earlier else None, a.rev)
     if not a.write:
