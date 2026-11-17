@@ -62,3 +62,18 @@ def test_in_game_line_and_return_comment():
     assert bb.in_game(pr(body=body)) == "- видно в игре: да — Гэндальф, Cheat Mode, нажать кнопку он светится"
     c = bb.return_comment("18b", pr(), [("PORT-191*", "x.cpp:3: ERROR: CHECK( a ) is NOT correct!"), ("perf1*", "")])
     assert c.startswith("<!-- returned -->") and "`PORT-191*`" in c and "сдвигает пин" in c
+
+
+def test_checker_pins_credit_the_prs_whose_report_named_the_pin():
+    named = "✅ Собирается\n⚠️ `perf1*` сдвигает пин, причина в PR названа: владелец перемерит при вливании."
+    a, b, c = pr(number=1, _report=named), pr(number=2, _report=named.replace("perf1*", "uber1*")), pr(number=3, _report="✅ ok")
+    got = bb.checker_pins([a, b, c])
+    assert {t: [p["number"] for p in ps] for t, ps in got.items()} == {"perf1*": [1], "uber1*": [2]}
+    assert bb.checker_pins([pr(_report="⚠️ `save4b*` сдвигает пин, причина в PR названа")]) == {}  # not a pin of the bot
+
+
+def test_the_checker_runs_the_batchs_whole_set():
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    import pr_checker as pc
+    assert {t for t, _ in bb.SUITE} <= set(pc.BASE)
+    assert set(bb.PINS) == pc.PINS

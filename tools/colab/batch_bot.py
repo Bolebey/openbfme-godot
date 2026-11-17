@@ -142,6 +142,7 @@ def verdict(p: dict) -> str:
         return "not checked on its current head yet"
     if "❌" in real[-1]["body"]:
         return "red in the checker's report"
+    p["_report"] = real[-1]["body"]  # its named pins attribute a moved pin without a bisect (checker_pins)
     return "green"
 
 
@@ -394,6 +395,20 @@ def bisect(failing: list[str], out_dir: Path, branch: str) -> dict[str, int | No
     return culprit
 
 
+NAMED_PIN = re.compile(r"⚠️ `([^`]+)` сдвигает пин, причина в PR названа")
+
+
+def checker_pins(merged: list[dict]) -> dict[str, list[dict]]:
+    """pin test -> the batch's PRs whose checker report says they move it with a named cause (pr_checker.py ran each PR alone on main with the
+    batch's own set): such a pin needs no bisect, it is re-measured on the tip and credited to them (owner 2026-11-17, batch 18b)."""
+    out: dict[str, list[dict]] = {}
+    for p in merged:
+        for t in NAMED_PIN.findall(p.get("_report") or ""):
+            if t in PINS:
+                out.setdefault(t, []).append(p)
+    return out
+
+
 def names_cause(p: dict, test: str) -> bool:
     """The checker's rule: the PR text or diff names the pin's test and a pin / cause word."""
     text = ((p.get("body") or "") + "\n" + git("diff", f"origin/main...refs/batch/{p['number']}")).lower()
@@ -409,7 +424,9 @@ def cause_line(p: dict, test: str) -> str:
     return ""
 
 
-def repin(test: str, p: dict, name: str) -> str:
+def repin(test: str, ps: dict | list[dict], name: str) -> str:
+    ps = ps if isinstance(ps, list) else [ps]
+    p = ps[0]
     env = dict(agent_env(), **{PINS[test]: "1"})
     st, err = run_test(test, env)
     after, err2 = run_test(test)
@@ -417,11 +434,12 @@ def repin(test: str, p: dict, name: str) -> str:
     if after != "pass" or not changed:
         return f"`{test}`: re-measure failed (regen {st}, after {after}: {err2[:200] or 'no data changed'})"
     git("add", "--", *changed)
-    cause = cause_line(p, test)
+    by = ", ".join(f"#{q['number']}" for q in ps)
+    cause = "; ".join(c for c in (cause_line(q, test) for q in ps) if c)
     git(*AUTHOR, "commit", "-q", "--no-verify", "-m",
-        f"Batch {name}: {test.rstrip('*')} re-measured, moved by #{p['number']}" + (f": {cause}" if cause else "") +
+        f"Batch {name}: {test.rstrip('*')} re-measured, moved by {by}" + (f": {cause}" if cause else "") +
         "\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>")
-    return f"`{test}` re-measured ({len(changed)} files), moved by #{p['number']}" + (f": {cause}" if cause else "")
+    return f"`{test}` re-measured ({len(changed)} files), moved by {by}" + (f": {cause}" if cause else "")
 
 
 # ---------------------------------------------------------------- 6-7. returns, report
@@ -552,9 +570,14 @@ def cmd_run(a) -> int:
         if not new and not excluded_now:
             rows["verdict"] = "красный: инструменты (pytest / матрица) — смотреть руками"
             break
+        # a pin the checker already saw moved by named PRs (each alone on main): re-measured on the tip, no bisect for it
+        known = {t: ps for t, ps in checker_pins(merged).items() if t in new and not broken_build}
+        if known:
+            log("pins from the checker's reports: " + ", ".join(f"{t} <- {' '.join('#%d' % q['number'] for q in ps)}" for t, ps in known.items()))
+        new = [t for t in new if t not in known]
         culprit = bisect(new, out_dir, f"batch/{name}") if new else {}
         log(f"bisect: {culprit}")
-        repins = []
+        repins: list[tuple[str, dict | list[dict]]] = list(known.items())
         for t, n in culprit.items():
             if n is None or n not in by_num:
                 rows["verdict"] = f"красный: `{t}` не сводится к одному PR — смотреть руками"

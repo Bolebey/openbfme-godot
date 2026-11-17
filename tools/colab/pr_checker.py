@@ -55,8 +55,13 @@ HOME = Path(os.environ.get("PRCHECK_HOME", "/content/prcheck"))
 WT = HOME / "wt"
 STATE = Path(os.environ.get("PRCHECK_STATE", str(HOME / "state.json")))  # autostart keeps it in /content/sandbox (saved to Drive)
 REPORTS = HOME / "reports"
-BASE = ["ENNORATH scenario*", "module coverage*", "modgap2*", "mapobj*", "logic retail: the PlayerTemplate*",
-        "save4a retail*", "save4b retail*", "move retail*", "perf1*", "uber1*"]
+# The batch's whole set (batch_bot.py SUITE, owner 2026-11-17: batch 18b spent three hours bisecting skirmish ai vs ai, aiexpand1 and script2
+# angmar, which this checker did not run, down to PRs it had passed) plus the PlayerTemplate check; test_batch_bot.py keeps them equal.
+# The tests run one per core in parallel: the longest one sets the time.
+BASE = ["perf1*", "uber1*", "skirmish?ai?vs?ai*", "aiexpand1*", "save4a*", "save4b*", "save4c*", "script3*", "script2?angmar*",
+        "module?coverage*", "modgap1*", "modgap2*", "mod1*", "facta?stops*", "factb?spell?book*", "FACT-A?spell?book*", "factb?units*",
+        "factc?units*", "ENNORATH?scenario*", "mapobj*", "move?retail*", "LOCAL-*", "PORT-1*", "PORT-2*", "PORT-3*", "PORT-4*", "PORT-5*",
+        "PORT-6*", "PORT-7*", "PORT-8*", "PORT-9*", "logic retail: the PlayerTemplate*"]
 PINS = {"perf1*", "uber1*"}
 SHARED = ("docs/STOPS.md", "docs/ennorath/NIGHT_WATCH.md", "README.md")
 DOC_UNION = {"docs/STOPS.md", "docs/ennorath/NIGHT_WATCH.md", "docs/ennorath/PROBLEMS.md", "docs/ennorath/TOP20.md",
@@ -148,6 +153,8 @@ def run_set(patterns: list[str]) -> dict[str, tuple[str, str]]:
 
 def main_baseline(state: dict, main_sha: str) -> dict:
     """BASE on main itself, once per main commit."""
+    if not set(BASE) <= set(state["main"].get("results") or {}):  # BASE grew (2026-11-17: the batch's whole set): measure main again
+        state["main"] = {}
     if state["main"].get("sha") == main_sha and "audit" in state["main"]:
         return state["main"]["results"]
     old = state["main"].get("sha")
