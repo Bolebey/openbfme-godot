@@ -145,6 +145,8 @@ run() {
   python3 tools/mod/field_gaps.py --audit "$AUDIT/field-audit.tsv" --inventory "$finv" --game "$RW_GAME_DAT" "${xm[@]}" \
       > "$RUNS/nightly_fgaps.log" 2>&1 || { echo "field_gaps failed at $rev" >> "$LOG"; return 1; }
   rm -f workspace/rebuild_inventory.json
+  # task drafts from the red buttons, grouped by module class, after MATRIX_GAPS (owner 2026-11-17): Drive openbfme-runs/maps/drafts, never the repository
+  python3 tools/mod/matrix_drafts.py --ini "$INI" --out "$RUNS/drafts" > "$RUNS/nightly_drafts.log" 2>&1           || echo "matrix drafts failed at $rev (the run goes on)" >> "$LOG"
   # the day's progress row from this run (owner 2026-11-17: the dashboard's /stats and the home page bar read it without Claude):
   # this run's audit, matrix and gaps, and the stop curve against the previous row
   python3 tools/mod/progress_snapshot.py --audit "$AUDIT/field-audit.tsv" --audit-name auto --write >> "$LOG" 2>&1 || echo "progress row failed at $rev" >> "$LOG"
@@ -172,6 +174,7 @@ run() {
     echo '## Function map'; tail -3 "$RUNS/nightly_map.log"; echo; echo '## MATRIX_GAPS'; tail -2 "$RUNS/nightly_gaps.log"
     echo; echo '## FIELD_GAPS'; tail -2 "$RUNS/nightly_fgaps.log"; echo; echo '## Matrix'; tail -5 "$RUNS/nightly_matrix.log"
     echo; echo '## Field audit (changes against the previous run)'; head -40 "$AUDIT/field-audit-diff.md" 2>/dev/null
+    echo; echo '## Task drafts (Drive openbfme-runs/maps/drafts/index.md)'; tail -1 "$RUNS/nightly_drafts.log"
     echo; sed -n '/^## Lint/,$p' docs/ennorath/MATRIX_REVIEW.md 2>/dev/null | head -60; } > "$RUNS/$day.md"
   cp -f "$RUNS/$day.md" "$RUNS/latest.md"
   echo "$rev" > "$RUNS/last_rev"
