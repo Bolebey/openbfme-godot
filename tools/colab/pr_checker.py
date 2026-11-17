@@ -21,6 +21,11 @@ checked yet (state in /content/prcheck/state.json):
     warnings only: the verdict stays the tests'.
 The GitHub token is the sandbox's git credential (~/.git-credentials), never printed.
 
+A PR from another account's fork (a trusted person's agent, owner 2026-11-17) is never built or run on the owner's machines: GitHub's
+runner checks it (.github/workflows/fork-pr.yml), the checker only notes that once per head (<!-- prcheck-foreign <head> -->, not a verdict),
+and its retail tests run in the owner's batch after the code was read (batch_bot.py). foreign() fails closed: only a PR whose branch GitHub
+says lives in this repository is the owner's.
+
 Order and skips (owner 2026-11-17: the checker ran hours behind, re-checking what Claude had already taken):
  - the most recently updated PRs first;
  - a PR whose head is already in a batch Claude is testing or landing (origin batch/*, land/*, agent/claude/station-0) is skipped;
@@ -400,6 +405,17 @@ RETURNED = re.compile(r"<!-- returned -->|не принят")
 TAKEN_REFS = ("refs/remotes/origin/batch/", "refs/remotes/origin/land/", "refs/remotes/origin/agent/claude/station-0")
 
 
+def foreign(p: dict) -> bool:
+    """True unless GitHub says the PR's branch lives in this repository (only the owner and the agents working through the owner's account
+    push here). GitHub sets these fields, not the PR; a missing field or a deleted fork counts as foreign."""
+    return p.get("isCrossRepository") is not False or (p.get("headRepositoryOwner") or {}).get("login") != GH.split("/")[0]
+
+
+FOREIGN_NOTE = ("🔒 **PR из чужого форка**: на песочницах владельца его код не собирается и не запускается. Сборку и свои тесты "
+                "проверяет GitHub Actions — проверка «Fork PR: build and own tests» у этого PR (тесты, которым нужны файлы игры, там "
+                "пропускаются). Тесты на данных игры пройдут в батче владельца после того, как владелец прочитает код.")
+
+
 def skip_reason(p: dict) -> str:
     """Why the checker leaves this PR alone now ('' = check it)."""
     head = p["headRefOid"]
@@ -481,7 +497,7 @@ def cycle(args) -> int:
     sh(["git", "fetch", "-q", "origin"], cwd=REPO).check_returncode()
     main_sha = sh(["git", "rev-parse", "origin/main"], cwd=REPO).stdout.strip()
     prs = json.loads(gh("pr", "list", "--state", "open", "--limit", "100", "--json",
-                        "number,title,body,headRefOid,headRefName,files,isDraft,updatedAt"))
+                        "number,title,body,headRefOid,headRefName,files,isDraft,updatedAt,isCrossRepository,headRepositoryOwner"))
     sh(["git", "fetch", "-q", "origin", "+refs/pull/*/head:refs/prcheck/*"], cwd=REPO)  # the heads, for the batch test below
     # A red PR whose description changed is checked again without a new commit: an agent that only names a pin's cause in the PR body
     # (the named-pin rule reads the body) gets its new verdict (PR 583, 2026-11-17).
@@ -505,6 +521,15 @@ def cycle(args) -> int:
     skipped = state.setdefault("skipped", {})
     keep = []
     for p in todo:
+        if foreign(p):  # GitHub's runner checks it; one note per head, never a build here
+            n, head = str(p["number"]), p["headRefOid"]
+            if state.setdefault("foreign", {}).get(n) != head:
+                print(f"#{n}: from another account's fork, left to GitHub Actions", flush=True)
+                if not args.no_comment:
+                    gh("pr", "comment", n, "--body", f"<!-- prcheck-foreign {head} -->\n{FOREIGN_NOTE}")
+                state["foreign"][n] = head
+                save_state(state)
+            continue
         why = skip_reason(p) if args.pr is None else ""
         if why:
             if skipped.get(str(p["number"])) != [p["headRefOid"], why]:

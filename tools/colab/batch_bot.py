@@ -124,6 +124,20 @@ def verdict(p: dict) -> str:
     if any(RETURNED.search(c.get("body") or "") and not c["body"].startswith("<!-- prcheck") and (c.get("createdAt") or "") > last_commit
            for c in extra.get("comments") or []):
         return "returned to its agent (no commit since)"
+    # A PR from another account's fork (a trusted person's agent, owner 2026-11-17) never runs on the owner's sandboxes before review: GitHub's
+    # runner checks it (.github/workflows/fork-pr.yml, the job FORK_CHECK), the PR checker leaves it alone. A batch builds and runs its code
+    # as root and landing makes it the owner's code, so it waits for that check's success on this head and for the owner's comment
+    # "<!-- reviewed <head> -->" (the owner or Claude for them read the whole diff). foreign() fails closed.
+    if foreign(p):
+        owner = GH_REPO.split("/")[0]
+        if p.get("files") is not None and any(f["path"].startswith((".github/", "tools/ci/")) for f in p["files"]):
+            return "from another account's fork and it changes .github/ or tools/ci/ (its own check would not count)"
+        if fork_check(head) != "success":
+            return f"from another account's fork: GitHub's check '{FORK_CHECK}' is not green on this head ({fork_check(head) or 'not run'})"
+        if not any((c.get("author") or {}).get("login") == owner and (c.get("body") or "").startswith(f"<!-- reviewed {head}")
+                   for c in extra.get("comments") or []):
+            return f"from another account's fork: its code is not reviewed yet (the owner's comment <!-- reviewed {head[:8]}… --> after reading the diff)"
+        return "green"
     if not real:
         return "not checked on its current head yet"
     if "❌" in real[-1]["body"]:
@@ -131,9 +145,29 @@ def verdict(p: dict) -> str:
     return "green"
 
 
+FORK_CHECK = "Fork PR: build and own tests"
+
+
+def foreign(p: dict) -> bool:
+    """True unless GitHub says the PR's branch lives in this repository (as pr_checker.foreign: a missing field counts as foreign)."""
+    return p.get("isCrossRepository") is not False or (p.get("headRepositoryOwner") or {}).get("login") != GH_REPO.split("/")[0]
+
+
+def fork_check(head: str) -> str:
+    """The conclusion of GitHub's fork check on this commit ('success', 'failure', ...), 'running', or '' when it has not run."""
+    name = FORK_CHECK.replace(" ", "%20").replace(":", "%3A")
+    runs = json.loads(sh(["gh", "api", f"repos/{GH_REPO}/commits/{head}/check-runs?check_name={name}"], cwd=REPO, check=True,
+                         env=dict(agent_env(), GH_TOKEN=token())).stdout)
+    runs = runs.get("check_runs") or []
+    if not runs:
+        return ""
+    last = max(runs, key=lambda r: r.get("started_at") or "")
+    return last.get("conclusion") or "running"
+
+
 def candidates(only: list[int] | None) -> tuple[list[dict], list[tuple[dict, str]]]:
     prs = json.loads(gh("pr", "list", "--state", "open", "--limit", "100", "--json",
-                        "number,title,body,headRefOid,headRefName,isDraft,author"))
+                        "number,title,body,headRefOid,headRefName,isDraft,author,isCrossRepository,headRepositoryOwner,files"))
     prs = sorted((p for p in prs if not only or p["number"] in only), key=lambda p: p["number"])
     take, wait = [], []
     for p in prs:

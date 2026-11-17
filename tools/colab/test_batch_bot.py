@@ -9,7 +9,8 @@ import batch_bot as bb  # noqa: E402
 
 
 def pr(**kw):
-    p = {"number": 7, "title": "Port 7: x", "body": "", "headRefOid": "abc123", "headRefName": "arena/1-x", "isDraft": False}
+    p = {"number": 7, "title": "Port 7: x", "body": "", "headRefOid": "abc123", "headRefName": "arena/1-x", "isDraft": False,
+         "isCrossRepository": False, "headRepositoryOwner": {"login": bb.GH_REPO.split("/")[0]}}
     p.update(kw)
     return p
 
@@ -30,6 +31,29 @@ def test_verdict_takes_only_a_clean_report_on_the_current_head(monkeypatch):
                             {"body": "<!-- returned --> Не принят", "createdAt": "2026-11-17T12:00:00Z"}])
     assert bb.verdict(pr()).startswith("returned")
     assert bb.verdict(pr(isDraft=True)) == "draft"
+
+
+def test_a_fork_pr_needs_githubs_check_and_the_owners_review_of_its_head(monkeypatch):
+    owner = bb.GH_REPO.split("/")[0]
+    fork = dict(isCrossRepository=True, headRepositoryOwner={"login": "someone"}, files=[{"path": "engine/src/a.cpp"}])
+    monkeypatch.setattr(bb, "fork_check", lambda head: "success")
+    fake_view(monkeypatch, [])  # no sb1 report: a fork's PR never gets one
+    assert "not reviewed" in bb.verdict(pr(**fork))
+    fake_view(monkeypatch, [{"body": "<!-- reviewed old999 -->", "author": {"login": owner}}])
+    assert "not reviewed" in bb.verdict(pr(**fork))  # an older head's review
+    fake_view(monkeypatch, [{"body": "<!-- reviewed abc123 -->", "author": {"login": "someone"}}])
+    assert "not reviewed" in bb.verdict(pr(**fork))  # not the owner's comment
+    reviewed = [{"body": "<!-- reviewed abc123 --> read the whole diff", "author": {"login": owner}}]
+    fake_view(monkeypatch, reviewed)
+    assert bb.verdict(pr(**fork)) == "green"
+    assert ".github/" in bb.verdict(pr(**dict(fork, files=[{"path": ".github/workflows/fork-pr.yml"}])))
+    monkeypatch.setattr(bb, "fork_check", lambda head: "failure")
+    assert "not green" in bb.verdict(pr(**fork))
+    monkeypatch.setattr(bb, "fork_check", lambda head: "success")
+    fake_view(monkeypatch, [{"body": "<!-- prcheck abc123 -->\n✅ ok", "createdAt": "2026-11-17T11:00:00Z"}])
+    assert bb.verdict(pr(isCrossRepository=None)).startswith("from another account's fork")  # unknown: fail closed, an sb1 ✅ is no pass
+    fake_view(monkeypatch, [{"body": "<!-- prcheck abc123 -->\n✅ ok", "createdAt": "2026-11-17T11:00:00Z"}])
+    assert bb.verdict(pr()) == "green"  # the owner's own agents' PRs: the sb1 report, no review mark
 
 
 def test_in_game_line_and_return_comment():
