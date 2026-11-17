@@ -2,6 +2,8 @@
 
 Regenerate: `python tools/mod/stop_groups.py --game workspace/RotWK/game.dat --out docs/ennorath/STOP_GROUPS`
 
+For --game install Python packages `capstone` and `pefile`; issue matching uses `gh` or an explicit --issues JSON snapshot. A discovered or explicitly supplied whole-function inventory takes precedence over the game heuristic; without either, only exact map starts are resolved.
+
 Candidates are heuristic, not proof. Class merges use the area or the first named class of the gap; all mentions remain listed. Common utility functions, the manually reviewed broad draw dispatcher RW 0x004BE587, and citations in explicitly historical-fix sentences are not merge pivots; every citation is retained. Check ownership, dependencies and issue overlap before implementation. Large transitive components are split by function; links can cross groups. Unknown function status is reported separately and is not counted as none, but is included as unverified work in the ranking denominator. Unavailable issue lookup is not evidence of no coverage.
 
 949 open stops; 537 groups; 61 unplaced.
