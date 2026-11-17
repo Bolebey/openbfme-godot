@@ -60,7 +60,8 @@ FRAGMENT = re.compile(r"^docs/stops\.d/S-(\d+)\.md$")
 
 
 def sh(cmd: list[str], cwd: Path = WT, check: bool = False, env: dict | None = None, timeout: int | None = None) -> subprocess.CompletedProcess:
-    done = subprocess.run(cmd, cwd=cwd, capture_output=True, text=True, encoding="utf-8", errors="replace", env=env, timeout=timeout)
+    done = subprocess.run(cmd, cwd=cwd, capture_output=True, text=True, encoding="utf-8", errors="replace", env=env or agent_env(),
+                          timeout=timeout)
     if check and done.returncode:
         raise RuntimeError(f"{' '.join(cmd)}: {(done.stdout + done.stderr)[-1500:]}")
     return done
@@ -70,8 +71,25 @@ def git(*args: str, check: bool = True) -> str:
     return sh(["git", *args], check=check).stdout
 
 
+def token() -> str:
+    """The sandbox's GitHub token, wherever this sandbox keeps it (never printed): $GH_TOKEN, /root/.gh_token (the git credential helper's
+    file), ~/.git-credentials (the PR checker's sandbox)."""
+    if os.environ.get("GH_TOKEN"):
+        return os.environ["GH_TOKEN"]
+    f = Path("/root/.gh_token")
+    if f.exists():
+        return f.read_text().strip()
+    cred = Path.home() / ".git-credentials"
+    if cred.exists():
+        for line in cred.read_text().splitlines():
+            m = re.match(r"https://[^:]+:([^@]+)@github\.com", line)
+            if m:
+                return m.group(1)
+    raise SystemExit("batch bot: no GitHub token on this sandbox (GH_TOKEN, /root/.gh_token, ~/.git-credentials)")
+
+
 def gh(*args: str) -> str:
-    return sh(["gh", *args, "-R", GH_REPO], cwd=REPO, check=True).stdout
+    return sh(["gh", *args, "-R", GH_REPO], cwd=REPO, check=True, env=dict(agent_env(), GH_TOKEN=token())).stdout
 
 
 _ENV: dict | None = None
@@ -80,7 +98,8 @@ _ENV: dict | None = None
 def agent_env() -> dict:
     global _ENV
     if _ENV is None:
-        out = sh(["bash", "-c", "source /root/.agent_env 2>/dev/null; env -0"], cwd=REPO).stdout
+        # the game paths of the tests live in /root/.agent_env; every command of the bot runs with it
+        out = subprocess.run(["bash", "-c", "source /root/.agent_env 2>/dev/null; env -0"], capture_output=True, text=True).stdout
         _ENV = dict(kv.split("=", 1) for kv in out.split("\0") if "=" in kv) or dict(os.environ)
     return _ENV
 
