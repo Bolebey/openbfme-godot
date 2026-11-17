@@ -229,7 +229,7 @@ def check_pr(pr: dict, state: dict, main_sha: str, open_prs: list[dict], comment
         lines.append("ℹ️ Базовый набор не гонялся: PR не меняет движок (код, cmake, тестовые данные, godot/) и файлы базовых тестов — результат как на main.")
     for tc in own:
         st, e = res[tc]
-        mark = {"pass": "✅", "fail": "❌", "none": "⚠️ не найдено ни одного теста по шаблону"}[st]
+        mark = {"pass": "✅", "fail": "❌", "none": "❌ ни одного теста по шаблону (тестовый файл не подключён к openbfme_tests в engine/CMakeLists.txt?)"}[st]
         lines.append(f"{mark} свои тесты `{tc}`" + (f"\n```\n{e}\n```" if st == "fail" and e else ""))
     if not own:
         lines.append("⚠️ PR не добавляет TEST_CASE: своего теста нет.")
