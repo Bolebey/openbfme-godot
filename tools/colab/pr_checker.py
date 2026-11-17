@@ -200,7 +200,15 @@ def check_pr(pr: dict, state: dict, main_sha: str, open_prs: list[dict], comment
     diff = sh(["git", "diff", f"{main_sha}..HEAD"]).stdout
     frag = sh([sys.executable, "tools/fragments.py", "check"]) if (WT / "tools/fragments.py").exists() else None
     if frag and frag.returncode:
-        lines.append(f"❌ Фрагменты: {frag.stdout.strip()[:600]}")
+        # a stop id another branch took first (PR 523's S-7387, taken by Port 228) is renumbered by the owner when landing, as every batch
+        # does: a warning; any other broken fragment stays red
+        problems = [l for l in frag.stdout.splitlines() if l.strip().startswith("- ") or ": " in l]
+        taken = [l for l in problems if "is already a row of docs/STOPS.md" in l]
+        if problems and len(taken) == len(problems):
+            lines.append("⚠️ Номер стопа уже занят (владелец перенумерует при вливании; в следующий раз бери номер из своего диапазона "
+                         f"`docs/stops.d/RESERVED.tsv`): {'; '.join(t.strip(' -') for t in taken)[:400]}")
+        else:
+            lines.append(f"❌ Фрагменты: {frag.stdout.strip()[:600]}")
     shared = [f for f in changed if f in SHARED]
     if shared:
         lines.append(f"⚠️ Правит общие таблицы {', '.join(f'`{f}`' for f in shared)}: новые строки — файлами `docs/stops.d/S-<id>.md` и `docs/ennorath/night_watch.d/…`, README не трогать (PROCESS 5.7). Допустимо только закрыть или сузить существующий стоп.")
@@ -387,6 +395,7 @@ def cycle(args) -> int:
     sh(["git", "fetch", "-q", "origin", "+refs/pull/*/head:refs/prcheck/*"], cwd=REPO)  # the heads, for the batch test below
     todo = [p for p in prs if (args.pr is None or p["number"] == args.pr) and not p["isDraft"]
             and state["checked"].get(str(p["number"])) != p["headRefOid"]
+            and state.get("errors", {}).get(str(p["number"])) != p["headRefOid"]
             and not p["headRefName"].startswith(("claude/", "agent/claude/"))]
     skipped = state.setdefault("skipped", {})
     keep = []
@@ -404,13 +413,20 @@ def cycle(args) -> int:
             continue
         keep.append(p)
     todo = keep
-    for p in sorted(todo, key=lambda p: p.get("updatedAt") or "", reverse=True):  # the freshest first
+    # a reworked PR (checked before, new head) first: its agent waits for the answer (PR 523 waited four hours behind new PRs); then the
+    # freshest first
+    todo = sorted(todo, key=lambda p: p.get("updatedAt") or "", reverse=True)
+    todo = sorted(todo, key=lambda p: str(p["number"]) not in state["checked"])
+    # one PR per cycle, then the list again: a PR reworked while another is being checked waits for that one check only, not the whole queue
+    for p in todo[:1]:
         t0 = time.time()
         try:
             body = check_pr(p, state, main_sha, prs, not args.no_comment)
             print(f"#{p['number']}: {body.count('❌')} red, {time.time() - t0:.0f}s", flush=True)
-        except Exception as e:  # one PR's failure does not stop the others
+        except Exception as e:  # one PR's failure does not stop the others: that head is left until a new commit
             print(f"#{p['number']}: checker error: {e}", flush=True)
+            state.setdefault("errors", {})[str(p["number"])] = p["headRefOid"]
+            save_state(state)
     return len(todo)
 
 
@@ -426,7 +442,7 @@ def main() -> int:
         if args.once or args.pr:
             return 0
         if not n:
-            time.sleep(600)
+            time.sleep(300)
 
 
 if __name__ == "__main__":
