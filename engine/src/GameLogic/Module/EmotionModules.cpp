@@ -262,10 +262,10 @@ EmotionTrackerUpdate::EmotionTrackerUpdate(Thing *thing, const EmotionTrackerUpd
 }
 
 // RW 0x8B56CF: the class's deleting destructor (both of its tables hold it, RW 0xC6D26C + 0x0 and RW 0xC6D1B0 + 0xBC). It runs RW 0x8B5427 —
-// the four tables back, the + 0xA4 set destroyed, the + 0x90 storage freed — then UpdateModule's (RW 0x64A492). Neither RW 0x8B56EB (the + 0x20
-// interface's slot: the running nugget's stop RW 0x8E168A, then every nugget's end RW 0x8E116B and release, then the vector's range erase RW 0x5FF9D3)
-// is in any of the class's tables (RW 0xC6D26C, 0xC6D1B0, 0xC6D1A0, 0xC6D19C, RW 0xC6D120) nor called from the class's own code: only the + 0x20
-// interface's head (RW 0xC6D19C + 0x0) holds it, and a caller would reach it through whatever keeps that subobject — absent from the map's rows.
+// the four tables back, the + 0xA4 set destroyed, the + 0x90 storage freed — then UpdateModule's (RW 0x64A492). The class's other entry point,
+// RW 0x8B56EB (the + 0x20 interface's slot: the running nugget's stop RW 0x8E168A, then every nugget's end RW 0x8E116B and release, then the vector's
+// range erase RW 0x5FF9D3), is the only entry of table RW 0xC6D19C and is called from nowhere in the class's own code: a caller would reach it
+// through whatever keeps the + 0x20 subobject, and no row of the map names one.
 // What the slot would do at the end (the stop, the ends, the releases) the destructor's members already do; on a live object its effect would be the
 // nuggets' loss (they are the module's own, made by its constructor from the data, so the next update would choose from an empty list and a request
 // would never run). Left with no caller to hang it on (S-7444); the end's work is the default one, declared in the header.

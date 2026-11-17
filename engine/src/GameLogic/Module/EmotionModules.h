@@ -85,7 +85,8 @@ public:
 	OBFME_MODULE_XFER(EmotionTrackerUpdate) // lane SAVE-4b
 	EmotionTrackerUpdate(Thing *thing, const EmotionTrackerUpdateModuleData *data); ///< RW 0x8B62BE
 	// RW 0x8B56CF: the deleting destructor (both of the class's tables hold it: RW 0xC6D26C + 0x0 and RW 0xC6D1B0 + 0xBC): RW 0x8B5427 then the
-	// UpdateModule's (RW 0x64A492). RW 0x8B56EB (the + 0x20 interface's slot, RW 0xC6D19C + 0x0) is not in a table and has no caller (S-7444)
+	// UpdateModule's (RW 0x64A492). The class's other entry point, RW 0x8B56EB, is the only entry of table RW 0xC6D19C (the + 0x20 interface) and is
+	// called from nowhere in the class's own code: a caller would reach it through whatever keeps that subobject, and no row of the map names one (S-7444)
 	~EmotionTrackerUpdate() override = default;
 	UpdateSleepTime update() override;                                               ///< RW 0x8B5738
 	SleepyUpdatePhase getUpdatePhase() const override { return PHASE_INITIAL; }     ///< lane IDLE-1 r2: vslot 0x30 = RW 0x851E97 (updates[0])
