@@ -80,6 +80,9 @@ class EmotionTrackerUpdate : public UpdateModule
 public:
 	OBFME_MODULE_XFER(EmotionTrackerUpdate) // lane SAVE-4b
 	EmotionTrackerUpdate(Thing *thing, const EmotionTrackerUpdateModuleData *data); ///< RW 0x8B62BE
+	// RW 0x8B56CF: the deleting destructor (both of the class's tables hold it: RW 0xC6D26C + 0x0 and RW 0xC6D1B0 + 0xBC): RW 0x8B5427 then the
+	// UpdateModule's (RW 0x64A492). RW 0x8B56EB (the + 0x20 interface's slot, RW 0xC6D19C + 0x0) is not in a table and has no caller (S-7444)
+	~EmotionTrackerUpdate() override = default;
 	UpdateSleepTime update() override;                                               ///< RW 0x8B5738
 	SleepyUpdatePhase getUpdatePhase() const override { return PHASE_INITIAL; }     ///< lane IDLE-1 r2: vslot 0x30 = RW 0x851E97 (updates[0])
 	void crc(StateHasher &h) const override;
@@ -105,6 +108,8 @@ public:
 	// lane MODULES-3 r2: RW 0x8B4FA1 (from the AI machine's clearTemporaryState RW 0x751DA9): a current nugget with an AIState stops (EmotionNugget::stop RW 0x8E168A)
 	void stopCurrentWithAIState();
 	const std::vector<std::unique_ptr<EmotionNugget>> &nuggets() const { return m_nuggets; }
+	// RW 0x8B50BE: the size of the object's nugget vector (+ 0x90, the list the choice walks) — the choice reads the count here
+	int nuggetSlot() const { return (int)(m_nuggets.size()); }
 	static std::vector<std::string> stopLines();
 
 private:

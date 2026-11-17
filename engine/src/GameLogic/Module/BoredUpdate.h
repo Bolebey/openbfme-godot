@@ -43,6 +43,7 @@ class StateHasher;
 class BoredUpdateModuleData : public ModuleData
 {
 public:
+	BoredUpdateModuleData(); ///< RW 0x899E8C
 	unsigned m_scanDelayTime = LOGICFRAMES_PER_SECOND;           ///< + 0x08 (frames)
 	float m_scanDistance = 300.0f;                               ///< + 0x0C
 	ObjectFilter m_boredFilter = ObjectFilter::none({}, {});     ///< + 0x10 (RW 0x763D11: not valid)
