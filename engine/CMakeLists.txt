@@ -507,6 +507,7 @@ include(cmake/Port428.cmake)    # PORT-428: the aerial path's 3D would-collide f
 include(cmake/Port439.cmake)    # PORT-439: the script action FOCAL_LENGTH_CAMERA (the view's focal length, issue #439; OPENBFME_PORT439_TESTS)
 include(cmake/Port194.cmake)    # PORT-194: the crowd response of the unit voice, RotWK's CrowdResponse parser and threshold rule (issue #461; OPENBFME_PORT194_TESTS)
 include(cmake/Port209.cmake)    # PORT-209: the horde's banner carrier at build complete and the combine's banner tie-break (issue #491; OPENBFME_PORT209_TESTS)
+include(cmake/Port462.cmake)    # PORT-462 unit voice gates
 include(cmake/Port202.cmake)    # PORT-202: the locomotor's wading updater and the disguised climber's reveal (issue #469; OPENBFME_PORT202_TESTS)
 include(cmake/Port204.cmake)    # PORT-204: crush warning path gate and horde +0x170 member list (issue #471; OPENBFME_PORT204_TESTS)
 include(cmake/Port250.cmake) # PORT-250: the SPECIAL_POWER availability arm and its UnitCost gate (fork issue 578; OPENBFME_PORT250_TESTS)
@@ -956,6 +957,7 @@ add_executable(openbfme_tests
     ${OPENBFME_PORT436_TESTS}
     ${OPENBFME_PORT194_TESTS}
     ${OPENBFME_PORT209_TESTS}
+    ${OPENBFME_PORT462_TESTS}
     ${OPENBFME_PORT133_TESTS}
     ${OPENBFME_PORT166_TESTS}
     ${OPENBFME_PORT137_TESTS}
