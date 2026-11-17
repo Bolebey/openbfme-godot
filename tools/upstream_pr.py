@@ -3,8 +3,9 @@
 Runs on the owner's PC, in the persistent tree workspace/wt/upstream-pr (detached upstream/main, built once with its own build.bat, then
 incremental): the Colab token cannot open PRs in Open-BFME (403), the PC's gh can.
 
-    python -I tools/upstream_pr.py check [branch ...]   # every up/* branch without an upstream PR, or the named ones; writes the report
-    python -I tools/upstream_pr.py check --no-build     # the text and merge checks only (seconds)
+    python -I tools/upstream_pr.py check [branch ...]   # every up/* branch without an upstream PR, or the named ones: text and merge checks
+                                                        # (owner 2026-11-16: no build, upstream's CI builds the PR); writes the report
+    python -I tools/upstream_pr.py check --build        # also builds each branch on upstream/main and runs its tests with and without it
     python -I tools/upstream_pr.py rebase [branch ...]  # squashes branches onto upstream/main, resolving list-file conflicts and "#N"
     python -I tools/upstream_pr.py open up/port-217 ... # opens the PRs of branches that passed the last check (never all at once)
 
@@ -209,16 +210,68 @@ def publish_prs() -> None:
         (DRIVE_UP / "openbfme-upstream-prs.json").write_text(r.stdout, encoding="utf-8")
 
 
+def watch_upstream(results: dict) -> None:
+    """The owner's open upstream PRs (owner 2026-11-16): when a maintainer wrote (a comment or a review by someone else) or upstream's CI
+    turned red since the last look, the branch gets the full check with a build here (build_checks: the tests with and without the change on
+    upstream/main), and the report keeps what they wrote and what the build showed (verdict "answered"; the dashboard shows it at the PR)."""
+    r = gh(["pr", "list", "-R", UPSTREAM, "--author", FORK_OWNER, "--state", "open", "--limit", "100", "--json",
+            "number,url,headRefName,comments,reviews,statusCheckRollup"], check=False)
+    if r.returncode:
+        print(f"upstream PRs: {r.stderr.strip()[:200]}", flush=True)
+        return
+    seen_path = OUT / "upstream_seen.json"
+    first = not seen_path.exists()  # the first look only records the answers already there (no build for them)
+    seen = json.loads(seen_path.read_text(encoding="utf-8")) if seen_path.exists() else {}
+    for pr in json.loads(r.stdout):
+        key = str(pr["number"])
+        notes = [(c.get("createdAt", ""), (c.get("author") or {}).get("login", "?"), "comment", c.get("body", ""))
+                 for c in pr.get("comments") or []]
+        notes += [(v.get("submittedAt", ""), (v.get("author") or {}).get("login", "?"), (v.get("state") or "review").lower(), v.get("body", ""))
+                  for v in pr.get("reviews") or []]
+        notes = sorted(n for n in notes if n[1] != FORK_OWNER and not n[1].endswith("[bot]"))
+        red = sorted({c.get("name") or c.get("context") or "?" for c in pr.get("statusCheckRollup") or []
+                      if (c.get("conclusion") or c.get("state") or "").upper() in ("FAILURE", "ERROR", "TIMED_OUT", "CANCELLED")})
+        last = notes[-1][0] if notes else ""
+        was = seen.get(key, {})
+        if last <= was.get("last", "") and red == was.get("red", []):
+            continue
+        seen[key] = {"last": last, "red": red}
+        b = pr["headRefName"]
+        reply = [f"{who} ({kind}, {when[:16]}): {' '.join(body.split())[:300]}" for when, who, kind, body in notes if when > was.get("last", "")]
+        if red and red != was.get("red", []):
+            reply.append("upstream CI red: " + ", ".join(red))
+        print(f"== {b}: upstream answered on PR {pr['number']}", flush=True)
+        if first:
+            results[b] = {"verdict": "answered", "problems": [], "files": [], "logic": [], "tests": [], "subjects": [], "visual": False,
+                          "behind": 0, "sha": "", "up": "", "built": False, "pr": pr["number"], "pr_url": pr["url"], "reply": reply,
+                          "build_ok": None}
+            continue
+        try:
+            git("fetch", "-q", "origin", cwd=REPO)
+            problems, facts = text_checks(b)
+            problems = problems + build_checks(b, facts) if not facts["visual"] else problems
+        except Exception as e:
+            git("checkout", "-q", "-f", "--detach", UP, check=False)
+            problems, facts = [f"error: {e}"[:300]], {"files": [], "logic": [], "tests": [], "subjects": [], "visual": False, "behind": 0}
+        results[b] = {"verdict": "answered", "problems": problems, **facts, "sha": git("rev-parse", f"origin/{b}", check=False),
+                      "up": git("rev-parse", UP), "built": True, "pr": pr["number"], "pr_url": pr["url"], "reply": reply,
+                      "build_ok": not problems}
+        print(f"   build check: " + ("; ".join(problems) or "ok"), flush=True)
+    seen_path.write_text(json.dumps(seen, indent=1), encoding="utf-8")
+
+
 def check(names: list[str], do_build: bool) -> None:
     OUT.mkdir(parents=True, exist_ok=True)
     publish_prs()
     branches = names or ready_branches()
     results = {}
+    if not names:
+        watch_upstream(results)
     seen = json.loads((OUT / "report.json").read_text(encoding="utf-8")) if (OUT / "report.json").exists() else {}
     up = git("rev-parse", UP)
     for b in branches:
         sha = git("rev-parse", f"origin/{b}")
-        if not names and seen.get(b, {}).get("sha") == sha and seen[b].get("up") == up and seen[b]["verdict"] != "text-ok":
+        if not names and seen.get(b, {}).get("sha") == sha and seen[b].get("up") == up and seen[b].get("built") == do_build:
             continue  # the loop (sandbox 4): neither the branch nor upstream moved since its last full check
         print(f"== {b}", flush=True)
         try:
@@ -230,12 +283,12 @@ def check(names: list[str], do_build: bool) -> None:
             elif do_build:
                 problems = build_checks(b, facts)
                 verdict = "fail" if problems else "ready"
-            else:
-                verdict = "text-ok"
+            else:  # owner 2026-11-16: no build here, upstream's CI builds and runs the PR
+                verdict = "ready"
         except Exception as e:  # one branch's failure does not stop the others
             git("checkout", "-q", "-f", "--detach", UP, check=False)
             problems, facts, verdict = [f"error: {e}"[:300]], {"files": [], "logic": [], "tests": [], "subjects": [], "visual": False, "behind": 0}, "fail"
-        results[b] = {"verdict": verdict, "problems": problems, **facts, "sha": sha, "up": up}
+        results[b] = {"verdict": verdict, "problems": problems, **facts, "sha": sha, "up": up, "built": do_build}
         print(f"   {verdict}: " + ("; ".join(problems) or "ok"), flush=True)
     old = json.loads((OUT / "report.json").read_text(encoding="utf-8")) if (OUT / "report.json").exists() else {}
     old.update(results)
@@ -360,9 +413,12 @@ def rebase(names: list[str]) -> None:
 def pr_body(b: str, r: dict) -> str:
     log = git("log", "--reverse", "--format=%s%n%n%b", f"{UP}..origin/{b}")
     log = re.sub(r"\n*Co-Authored-By:.*", "", log).strip()
-    tests = "\n".join(f"- `{t}`: fails without the change, passes with it" for t in r["tests"])
-    return (f"## What this changes\n\n{log}\n\n## How it was checked\n\n{tests}\n\n"
-            "Built and run on upstream/main (Windows MSVC). Pins: not re-measured here (the merge queue re-measures them).\n\n"
+    tests = "\n".join(f"- `{t}`" for t in r["tests"])
+    how = ("Built and run on upstream/main: each test fails without the change and passes with it." if r.get("built") else
+           "The author ran each test without the change (fails) and with it (passes); the branch is rebased on the current upstream/main "
+           "and left to CI to build.")
+    return (f"## What this changes\n\n{log}\n\n## How it was checked\n\n{tests}\n\n{how} Pins: not re-measured here (the merge queue "
+            "re-measures them).\n\n"
             "## Checklist\n\n- [x] one change\n- [x] a test that fails without it\n- [x] no fork-only files\n")
 
 
@@ -388,7 +444,7 @@ if __name__ == "__main__":
         sys.exit(2)
     args = [a for a in sys.argv[2:] if not a.startswith("--")]
     if sys.argv[1] == "check":
-        check(args, "--no-build" not in sys.argv)
+        check(args, "--build" in sys.argv)  # owner 2026-11-16: no build by default, upstream's CI builds the PR
     elif sys.argv[1] == "rebase":
         rebase(args)
     else:
