@@ -162,8 +162,10 @@ TEST_CASE("PORT-263 EmotionTrackerUpdate: the edge distance (RW 0x8B5B35 -> RW 0
 	REQUIRE(t->current());
 	CHECK(t->current()->type() == EMOTION_FEAR);
 	CHECK(t->current()->sourceID() == near->getID());
-	// the point branch (RW 0x8B5BF7) reads the same measured distance: the TAUNT nugget of a target in PointAt / AfraidOf is not requested while FEAR runs
-	CHECK_FALSE(t->requested(EMOTION_TAUNT));
+	// the point branch (RW 0x8B5BF7) measures nothing again: RW 0x8B5BFC compares [ebp - 0x24] (the taunt / point distance found so far, RW 0x8B5Axx)
+	// with the same [ebp - 0x2C] the fear branch used. The target is in AfraidOf, so the pending request of that branch is POINT (RW 0x8B5C37,
+	// the point filter + 0x1C is not even asked once AfraidOf passes); this fixture has no POINT nugget, so nothing runs and the object keeps FEAR
+	CHECK(t->current()->type() == EMOTION_FEAR);
 }
 
 TEST_CASE("PORT-263 EmotionTrackerUpdate: a SCARY object past FearScanDistance requests nothing (RW 0x8B5B35 measures it first) and the request ends when the source leaves")
