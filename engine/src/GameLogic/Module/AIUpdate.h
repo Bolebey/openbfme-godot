@@ -392,7 +392,7 @@ public:
 	// PORT-264: AI vslot 0x1C4 (RW 0x00662B50): the machine's slot 0x30 (RW 0x741724) — the temporary state's busy flag first, the current state's
 	// otherwise — so a unit under a temporary busy state answers true here while isBusy (the current state, RW 0x0066281A) answers false. RotWK reads the
 	// machine without a test (the constructor makes it, RW 0x0066ECFE); the port answers false when it has none, as its other machine queries do.
-	bool isBusyState() const { return m_machine ? m_machine->isBusyState() : false; }
+	bool isBusyState() const;
 	// ---- lane EXIT-1: the horde member update (GameLogic/Module/AIUpdateHordeMember.cpp) ----
 	// RW 0x66E654 .. 0x66E6F4: a HORDE_MEMBER whose machine is busy (RW 0x741724) or whose locomotor goal is explicit / an angle / explicit with a path (not a
 	// DOZER with an angle goal) runs RW 0x66C748 instead of the ordinary update RW 0x6695EF
