@@ -807,16 +807,24 @@ TEST_CASE("PORT-213 multi-select of hordes and filtered objects matches RW portr
 	}
 }
 
-TEST_CASE("PORT-213 foreign multi-select hero drives foreignView and portrait (RW 0x94475A -> 0x94397F)")
+TEST_CASE("PORT-213 foreign selection keeps foreignView and avoids falsely pinning non-hero context (RW 0x71EBDA / 0x9448FC -> 0x94397F)")
 {
 	Port213HudRig r;
 	Object *enemyHorde = r.spawn("SynthHordeB", "Player_2", 10.0f, 10.0f);
 	Object *enemyHero = r.spawn("SynthEnemyHero", "Player_2", 30.0f, 10.0f);
 
-	r.selectObjects({ enemyHorde, enemyHero });
+	// Single foreign hero (SelectionTranslator limits normal enemy selection to 1 unit): drives contextObject, foreignView, and portrait.
+	r.selectObjects({ enemyHero });
 	CHECK(r.hud->controlBar().contextObject() == enemyHero->getID());
 	CHECK(r.hud->controlBar().sourceObject() == enemyHero->getID());
 	CHECK(r.hud->controlBar().foreignView());
 	CHECK(r.hud->controlBar().commandSetName() == "SynthHeroBetaCS");
 	CHECK(r.hud->palantir()->portraitShown() == "PortraitEnemyHero");
+
+	// Foreign multi-selection stays outside locally-controlled CB_CONTEXT_MULTI_SELECT (PORT-221): contextObject must
+	// still be INVALID_ID rather than pinning enemyHorde as a single-object Palantir context.
+	r.selectObjects({ enemyHorde, enemyHero });
+	CHECK(r.hud->controlBar().contextObject() == INVALID_ID);
+	CHECK(r.hud->controlBar().foreignView());
+	CHECK(r.hud->palantir()->portraitShown() == "SynthEvilMultiPortrait");
 }

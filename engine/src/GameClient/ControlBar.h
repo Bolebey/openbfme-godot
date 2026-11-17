@@ -264,10 +264,6 @@ private:
 	// preClickIndex or the bar's context/dirty state changes.
 	static bool usesToggleIndex(const CommandButton &b);
 	void applyPredictedToggle(const CommandButton &b, const Object *obj);
-	// PORT-213 (issue #503): ControlBar::populateMultiSelect hero scan (RW 0x94475A..0x944839):
-	// KindOf HERO (+0x113 & 4), !IGNORED_IN_GUI (+0x10D & 0x80 == 0), valid current ExperienceLevel
-	// (RW 0x79D12A -> 0x689024), highest rank (RW 0x9447FA), lowest signed ObjectID tie-break (RW 0x94480D).
-	Object *selectMultiSelectHero() const;
 	struct PendingToggle
 	{
 		int preClickIndex = 0;

@@ -253,6 +253,9 @@ public:
 	// lane SCRIPT-4: AI command 0x1E (RW 0x771790 aiGuardPosition, BFME2 decomp AICommandInterfaceAttackCommands.cpp tier A) -> aiDoCommand's gate, then
 	// privateGuardPosition (RW 0x6649C6, tier A; AI/AIGuardCommands.cpp): guard `pos` in `mode`; false when nothing changed
 	bool aiGuardPosition(const Coord3D &pos, int mode, CommandSourceType source);
+	// PORT-203: AI command 0x37 (RW 0x7C8154 aiGuardTunnelNetwork) -> aiDoCommand's gate, then privateGuardTunnelNetwork RW 0x664ABF (AI vslot 0xF8):
+	// enter state 0x18 (AI_TUNNEL_NETWORK_GUARD, AITunnelNetworkGuardState)
+	bool aiGuardTunnelNetwork(int mode, CommandSourceType source);
 	int guardMode() const { return m_guardMode; }                      // AI vslot 125
 	int guardTargetType() const { return m_guardTargetType; }          // AI vslot 123
 	const Coord3D &guardLocation() const { return m_guardLocation; }   // AI vslot 118
@@ -381,6 +384,8 @@ public:
 	bool isMoving() const;                    // RW 0x664485
 	// lane AI-2: RW vslot 0x1BC (RW 0x662B3C): the current state's slot 0x24 (AIState::isActive), true without a current state
 	bool isStateActive() const { return !m_machine || !m_machine->currentState() ? true : m_machine->currentState()->isActive(); }
+	// Port 257: RW vslot 0x1D0 (RW 0x662B28): the current state's slot 0x34 (AIState::isFollowThru), true without a current state
+	bool isInFollowThruState() const { return !m_machine || !m_machine->currentState() ? true : m_machine->currentState()->isFollowThru(); }
 	bool isBlocked() const { return m_mover->isBlocked(); }
 	bool isBusy() const { return m_machine && m_machine->currentStateId() == AI_BUSY; }
 	// ---- lane EXIT-1: the horde member update (GameLogic/Module/AIUpdateHordeMember.cpp) ----
