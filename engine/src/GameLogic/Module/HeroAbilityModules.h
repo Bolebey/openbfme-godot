@@ -315,7 +315,9 @@ private:
 //     now + reload); do* (RW 0x9911FB / 0x991231 / 0x991269): not paused and not disabled (RW 0x9325B4): the special power update's initiate (slot 0);
 //   * initiate (RW 0x89841E): LockWeaponSlot none: every WeaponSetFlags bit on (RW 0x691059, when the object has a weapon set RW 0x68FDF7); else the slot is
 //     locked (RW 0x69121A(slot, 2): LOCKED_PERMANENTLY); the AttributeModifier for Duration (RW 0x68F1A8); the update wakes in Duration; active; the recharge
-//     starts (slot 0x3C, 1.0); the firing tracker resets (RW 0x8E302A(1): COMBAT-1's, not called, S-1228);
+//     starts (slot 0x3C, 1.0); the object's FiringTracker is reset hard (RW 0x8984AF reads Object + 0x248 and calls RW 0x8984B7 -> 0x8E302A(1)); the mode's
+//     InitiateSound (+ 0x0C) is answered by the special power interface's slot 0x40 (RW 0xC650F0[16] = RW 0x991626: the module data's + 0x0C), which the unit
+//     voice plays for MSG_DO_SPECIAL_POWER (RW 0x8DF846) — the initiate itself posts no sound of its own;
 //   * update (RW 0x8983B5): the PERMANENT weapon lock is released (RW 0x68DF11(2)), every WeaponSetFlags bit off (RW 0x691106), the modifier removed (RW
 //     0x68F259), not active, the countdown unpaused (slot 0x24(0)); sleeps forever.
 class WeaponModeSpecialPowerUpdateModuleData : public ModuleData
@@ -363,6 +365,9 @@ public:
 	void doSpecialPowerAtObject(Object *target, unsigned options) override;            // RW 0x991231
 	void doSpecialPowerAtLocation(const Coord3D &loc, unsigned options) override;      // RW 0x991269
 	void pauseCountdown(bool pause) override;                                          // RW 0x99116C
+	// slot 0x40 of the special power interface (RW 0xC650F0[16] = RW 0x991626, the module data's + 0x0C): the mode's InitiateSound, which the unit voice
+	// plays for MSG_DO_SPECIAL_POWER* (RW 0x8DF846 asks this slot through RW 0x691526). The initiate (RW 0x89841E) posts no sound of its own
+	const std::string &getInitiateSound() const override { return m_data->m_initiateSound; }
 
 private:
 	bool readyImpl(bool insert) const;
@@ -379,11 +384,14 @@ private:
 
 // DualWeaponBehavior (create RW 0x64AD23, constructor RW 0x85DEC9: wakes next frame; vtables RW 0xC57FD4, update RW 0xC57FC8 (+ 0x10); data RW 0x85DE99,
 // field table RW 0xC58088: SwitchWeaponOnCloseRangeDistance + 0x08 (real), UseCloseRangeWhileMounted + 0x0C, MinimumSwitchTime + 0x10 (RW 0x73A429, frames),
-// UseHordeRangeWeapon + 0x14, UseRealVictimRange + 0x15 (bools)). Module fields: + 0x20 a "close range" request (no writer found: 0), + 0x24 the last
-// switch frame. update (RW 0x85DF88): no AI or dead: sleep forever; the weapon set flag RAMPAGE (8): 5 frames; contained by a non-HORDE: 5; UseHordeRange
+// UseHordeRangeWeapon + 0x14, UseRealVictimRange + 0x15 (bools)). Module fields: + 0x20 a "close range" request (written by xfer only: RW 0x85DF69 saves it,
+// RW 0x85DF85 reads it back; no logic writer in RotWK 2.01, S-1228), + 0x24 the last switch frame. update (RW 0x85DF88): no AI (Object + 0x260) or dead
+// (Object + 0x458 bit 0): sleep forever; the weapon set flag RAMPAGE (8): 5 frames; contained by a template whose KindOf mask (+ 0x114) lacks bit 13
+// (0x2000 = HORDE): 5; UseHordeRange
 // Weapon in a HORDE: the current CLOSE_RANGE state is kept (set again when set, cleared when clear); USING_SPECIAL_ABILITY (model condition 207): 5; the
 // request: close; else the victim within SwitchWeaponOnCloseRangeDistance: with UseRealVictimRange the AI's goal object when its squared 3D distance (SSE,
-// z, y, x) is within the distance squared, else RW 0x701443(object, distance, 0x62) (INFERENCE, S-1228: the closest visible alive enemy); a victim whose
+// z, y, x) is within the distance squared, else RW 0x85E0C2 -> RW 0x701443(object, distance, 0x62) — CAN_ATTACK | UNFOGGED | AUTO_ACQUIRE (the AI's target
+// search: the closest unfogged enemy this object can attack, skipping a nearer NOT_AUTOACQUIRABLE one); a victim whose
 // height difference (x87 fabs) is above 0.5 * the distance is none; UseCloseRangeWhileMounted and MOUNTED (214): close; then MinimumSwitchTime -
 // now + the last switch above 0: sleep that; the last switch := now; a live victim: close, else far. Close: CLOSE_RANGE (weapon set flag 7) on and the
 // model condition WEAPONSTATE_CLOSE_RANGE (160) on; far: both off (RW 0x691059 / 0x691106, Object + 0x120 bit 0, RW 0x68B53C); sleep 5.

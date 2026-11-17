@@ -503,6 +503,7 @@ include(cmake/Decompfix1109.cmake) # DECOMPFIX-1109: FLEECHASE-1, ENTERADJUST-1,
 include(cmake/Port5.cmake)      # PORT-5: the bird's deferred ability target (OPENBFME_PORT5_TESTS)
 include(cmake/Port172.cmake)    # PORT-172: the skirmish AI position sampler holds no gone object (issue #425; OPENBFME_PORT172_TESTS)
 include(cmake/Port191.cmake)    # PORT-191: AutoAbilityBehavior without a Query and its unported checks (issue #458; OPENBFME_PORT191_TESTS)
+include(cmake/Port459.cmake)    # PORT-459: WeaponModeSpecialPowerUpdate's tracker reset and InitiateSound, DualWeaponBehavior's RW 0x7006D7 victim (issue #459; OPENBFME_PORT459_TESTS)
 include(cmake/Port430.cmake)    # PORT-430: a model texture named `None` is a name retail never opens (issue 430; OPENBFME_PORT430_TESTS)
 include(cmake/Port433.cmake)    # PORT-433: Ithilien grove (ElvenWood) area bonuses in the painted taint zone (issue #433; OPENBFME_PORT433_TESTS)
 include(cmake/Port428.cmake)    # PORT-428: the aerial path's 3D would-collide filter (OPENBFME_PORT428_TESTS)
@@ -1126,6 +1127,7 @@ add_executable(openbfme_tests
     ${OPENBFME_PORT87_TESTS}
     ${OPENBFME_PORT169_TESTS}
     ${OPENBFME_PORT191_TESTS}
+    ${OPENBFME_PORT459_TESTS}
     ${OPENBFME_PORT188_TESTS}
     ${OPENBFME_PORT189_TESTS}
     ${OPENBFME_PORT221_TESTS}

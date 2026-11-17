@@ -1264,7 +1264,12 @@ void WeaponModeSpecialPowerUpdate::initiate()
 	setWakeFrame(obj, (UpdateSleepTime)m_data->m_duration); // RW 0x850C32(object, Duration)
 	m_active = true;
 	startPowerRecharge(1.0f); // slot 0x3C (1.0)
-	// RW 0x8984B7: the object's FiringTracker reset (RW 0x8E302A(1)) is COMBAT-1's: not called (S-1228)
+	// RW 0x8984AF .. 0x8984B7: the object's own FiringTracker (Object + 0x248) is read and reset hard (RW 0x8E302A, argument 1) when the mode starts, so
+	// its continuous fire count and its shot victim start over; an object without weapons (Object + 0x248 null) has nothing to reset
+	if (ObjectWeapons *weapons = obj->getWeapons())
+	{
+		weapons->resetFiringTracker(true); // RW 0x8E302A(1)
+	}
 }
 
 UpdateSleepTime WeaponModeSpecialPowerUpdate::update()
@@ -1414,18 +1419,12 @@ UpdateSleepTime DualWeaponBehavior::update()
 	}
 	else
 	{
-		// RW 0x701443(object, range, 0x62) -> RW 0x7006D7 (the AI's target search: INFERENCE, S-1228: the closest visible alive enemy)
-		PartitionFilterFn chain([&](Object &o) { return !o.isEffectivelyDead() && obj->getRelationship(o) == ENEMIES && EmotionModules::canSeeObject(*obj, o, range); });
-		// lane UBER-2A, Uber only: the chain accepts only ENEMIES, so the trees of the players this one does not see as enemies are skipped. The hits enter the
-		// sort in the same order (layer by layer); Uber rule change: an object whose owner changed since the frame's partition update is looked for on its old layer
-		PartitionFilterLayers enemyLayers(obj->getTeam() ? obj->getTeam()->enemyLayerMask() : 0u);
-		PartitionFilter *const chainList[] = { &chain, &enemyLayers };
-		const PartitionFilterList filters(chainList, obj->logic().uber() ? 2 : 1);
-		for (const PartitionHit &h : obj->logic().partition().iterateObjectsInRange(*obj->getPosition(), range, FROM_CENTER_2D, filters, ITER_SORTED_NEAR_TO_FAR))
-		{
-			victim = h.object;
-			break;
-		}
+		// RW 0x85E0C2 -> RW 0x701443(object, distance, 0x62, 0, 0, 0): flags CAN_ATTACK | UNFOGGED | AUTO_ACQUIRE (0x62). The search is the ported worker
+		// RW 0x7006D7 (GameLogic/AI/AIClosestEnemy.cpp): the ENEMIES head and the alive filter, CAN_ATTACK refuses a caster that cannot attack (RW 0x691269)
+		// and links the possible-to-attack filter (RW 0x660CA4), UNFOGGED adds the shroud filter (RW 0x661027), AUTO_ACQUIRE refuses the whole search for a
+		// caster with NO_AUTO_ACQUIRE and skips NOT_AUTOACQUIRABLE / ROCK_VENDOR targets (0xC1D6AC), the stealth, off-map and canSee (within the distance)
+		// filters follow; with no attack priority info the partition's closest object at 3D centres is taken and adjusted for a horde (RW 0x68D30E)
+		victim = AI::findClosestEnemy(*obj, range, AI::CAN_ATTACK | AI::UNFOGGED | AI::AUTO_ACQUIRE, nullptr, nullptr, 0);
 	}
 	if (victim)
 	{
@@ -2510,9 +2509,10 @@ std::vector<std::string> HeroAbilityModules::stopLines()
 		"toggled by MSG_DO_AUTO_ABILITY_WEAPON, RW 0x77B8EE, lane AUTOCAST-1, but not fired) and the auto sound (client, RW 0x85D930); the control bar's "
 		"right press toggle and glow are lane AUTOCAST-1's (ControlBar::rightPressButton, S-3460)",
 		"[S-1228] WeaponModeSpecialPowerUpdate and DualWeaponBehavior (lane HERO-2): the mode runs (RW 0x89841E / 0x8983B5 over the base timer RW 0x991660 / "
-		"0x991500 / 0x9913BC) and the close range switch runs (RW 0x85DF88); not ported: the firing tracker reset at the start (RW 0x8E302A, COMBAT-1's), the "
-		"initiate sound (client); INFERENCE: DualWeaponBehavior's victim without "
-		"UseRealVictimRange (RW 0x701443 -> 0x7006D7 flags 0x62, the AI's target search) is the closest visible alive enemy; its + 0x20 request has no writer",
+		"0x991500 / 0x9913BC), its start resets the object's FiringTracker hard (RW 0x8984B7 -> 0x8E302A(1), PORT-459), its InitiateSound is answered by the "
+		"special power interface's slot 0x40 (RW 0x991626) and the close range switch runs (RW 0x85DF88) over RW 0x701443 -> 0x7006D7 with flags 0x62 "
+		"(CAN_ATTACK | UNFOGGED | AUTO_ACQUIRE, PORT-459: the closest unfogged enemy the object can attack, a nearer NOT_AUTOACQUIRABLE one skipped, a horde "
+		"victim adjusted); not ported: the + 0x20 close range request has no logic writer in RotWK 2.01 (RW 0x85DF69 / 0x85DF85 save and load it, xfer only)",
 		"[S-1224] RousingSpeechUpdate (lane HERO-2): the speech runs (RW 0x8B068D / 0x8B0485 / 0x8B0A0D / 0x8B07EA); retail's update never ends the ability "
 		"(no call of finishAbility found: the base startPreparation's USING_ABILITY / SPECIAL_ABILITY_PACKING_UNPACKING_OR_USING stay set, so the hero's "
 		"other powers are not ready, RW 0x896C83, until something finishes it; RW 0x693919 aborts only abilities in use, RW 0x851C92): kept as read, "
