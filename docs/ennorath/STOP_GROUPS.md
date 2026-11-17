@@ -19,12 +19,12 @@ Candidates are heuristic, not proof. Class merges use the area or the first name
 | 5 | linked stops S-1122, S-723 | 2 | 0 | 0 | 0 | none matched |
 | 6 | RW 0x0097C819 | 2 | 0 | 0 | 0 | none matched |
 | 7 | DynamicPortalBehaviour | 2 | 1 | 0 | 0 | none matched |
-| 8 | ObjectCreationUpgrade | 3 | 0 | 0 | 6 | #611 Port 263: Emotions: EmotionTrackerUpdate (terror, fear, cheering, idle emotions) and BoredUpdate, #607 Port 259: Horde-level powers: SplitHordeSpecialPower, HordeDispatchSpecialPower, SiegeDeployHordeSpecialPower, SiegeDeploySpecialPower, #603 Port 255: Slaves and masters: SlavedUpdate and SlaveWatcherBehavior (summons, spawned guards, spawned workers), #601 Port 253: Upgrade modules: SubObjectsUpgrade (logic side), GeometryUpgrade, ReplaceSelfUpgrade, CostModifierUpgrade, InheritUpgradeCreate, SpellRechargeModifierUpgrade, #572 Port 248: Death and lifecycle: RunOffMapBehavior RunOffMapWaypointName, ClearanceTestingSlowDeathBehavior ClearanceGeometryIsSmall, SymbioticStructuresBody Symbiote |
+| 8 | ObjectCreationUpgrade | 3 | 0 | 0 | 6 | #647 Port 280: production speed bonus: Wulfgar's call does nothing and ProductionUpdate's bonus fields are unread, #611 Port 263: Emotions: EmotionTrackerUpdate (terror, fear, cheering, idle emotions) and BoredUpdate, #607 Port 259: Horde-level powers: SplitHordeSpecialPower, HordeDispatchSpecialPower, SiegeDeployHordeSpecialPower, SiegeDeploySpecialPower, #603 Port 255: Slaves and masters: SlavedUpdate and SlaveWatcherBehavior (summons, spawned guards, spawned workers), #601 Port 253: Upgrade modules: SubObjectsUpgrade (logic side), GeometryUpgrade, ReplaceSelfUpgrade, CostModifierUpgrade, InheritUpgradeCreate, SpellRechargeModifierUpgrade, #572 Port 248: Death and lifecycle: RunOffMapBehavior RunOffMapWaypointName, ClearanceTestingSlowDeathBehavior ClearanceGeometryIsSmall, SymbioticStructuresBody Symbiote |
 | 9 | linked stops S-080, S-093 | 3 | 0 | 0 | 0 | none matched |
 | 10 | linked stops S-2006 | 1 | 0 | 88 | 0 | #599 Port 251: The special-power chain every Ennorath ability runs through: SpecialPowerModule and UnpauseSpecialPowerUpgrade's uncited RotWK functions |
 | 11 | RW 0x00853468 | 2 | 0 | 5 | 0 | #600 Port 252: The SpecialAbilityUpdate family: the shared ability state machine (approach, prepare, pack / unpack, trigger) and its subclasses HeroMode, ModelCondition, Teleport, FlingPassenger |
 | 12 | RW 0x0073F684 | 1 | 0 | 5 | 0 | #600 Port 252: The SpecialAbilityUpdate family: the shared ability state machine (approach, prepare, pack / unpack, trigger) and its subclasses HeroMode, ModelCondition, Teleport, FlingPassenger |
-| 13 | ToggleHiddenSpecialAbilityUpdate | 1 | 0 | 2 | 0 | none matched |
+| 13 | ToggleHiddenSpecialAbilityUpdate | 1 | 0 | 2 | 0 | #646 Port 279: ToggleHiddenSpecialAbilityUpdate: the Harad spy's cloak stays stuck, Ghan-buri-Ghan's secret paths do not hide |
 | 14 | HordeContain | 4 | 1 | 0 | 3 | #613 Port 265: HordeContain: the 65 uncited own functions of the horde container (classify, then port the missing ones), #607 Port 259: Horde-level powers: SplitHordeSpecialPower, HordeDispatchSpecialPower, SiegeDeployHordeSpecialPower, SiegeDeploySpecialPower |
 | 15 | linked stops S-564, S-7100 | 2 | 0 | 0 | 3 | #613 Port 265: HordeContain: the 65 uncited own functions of the horde container (classify, then port the missing ones) |
 | 16 | RespawnUpdate | 1 | 0 | 0 | 3 | #567 Port 243: Body damage states: ActiveBody EnteringDamagedTransitionTime and the Damaged / ReallyDamaged attribute modifiers (ActiveBody, RespawnBody) |
@@ -105,7 +105,7 @@ Candidates are heuristic, not proof. Class merges use the area or the first name
 | 91 | RW 0x00674FFE | 2 | 0 | 0 | 0 | #612 Port 264: AIUpdateInterface: the 64 uncited own functions of the AI every Ennorath unit runs (classify, then port the missing ones) |
 | 92 | GiveUpgradeUpdate | 2 | 0 | 0 | 0 | #466 Port 199: GiveUpgradeUpdate (porters): contained targets, producer-linked pairs, deselection, flash and GiveUpgradeEffect (S-6011) |
 | 93 | RW 0x006CC915 | 3 | 0 | 0 | 3 | #613 Port 265: HordeContain: the 65 uncited own functions of the horde container (classify, then port the missing ones) |
-| 94 | linked stops S-482, S-5202 | 3 | 0 | 0 | 0 | none matched |
+| 94 | linked stops S-482, S-5202 | 3 | 0 | 0 | 0 | #649 Port 282: WorkerAIUpdate and DozerAIUpdate: the uncited own functions of the builders and workers (classify, then port the missing ones) |
 | 95 | RW 0x00628882 | 8 | 0 | 5 | 2 | #626 Port 267: The floor buffer's fade on death (W3DFloorDraw FloorFadeRateOnObjectDeath): a floor record with its own opacity and rate, saved, split from Port 246 #570, #612 Port 264: AIUpdateInterface: the 64 uncited own functions of the AI every Ennorath unit runs (classify, then port the missing ones), #601 Port 253: Upgrade modules: SubObjectsUpgrade (logic side), GeometryUpgrade, ReplaceSelfUpgrade, CostModifierUpgrade, InheritUpgradeCreate, SpellRechargeModifierUpgrade, #600 Port 252: The SpecialAbilityUpdate family: the shared ability state machine (approach, prepare, pack / unpack, trigger) and its subclasses HeroMode, ModelCondition, Teleport, FlingPassenger, #570 Port 246: Client fades: W3DTreeDraw FadeDistance / FadeTarget, W3DFloorDraw FloorFadeRateOnObjectDeath, SubObjectsUpgrade WaitBeforeFadeInSeconds |
 | 96 | RW 0x00853EDF | 1 | 0 | 12 | 0 | #600 Port 252: The SpecialAbilityUpdate family: the shared ability state machine (approach, prepare, pack / unpack, trigger) and its subclasses HeroMode, ModelCondition, Teleport, FlingPassenger |
 | 97 | RW 0x00851E9F | 3 | 0 | 9 | 1 | #600 Port 252: The SpecialAbilityUpdate family: the shared ability state machine (approach, prepare, pack / unpack, trigger) and its subclasses HeroMode, ModelCondition, Teleport, FlingPassenger |
@@ -165,12 +165,12 @@ Candidates are heuristic, not proof. Class merges use the area or the first name
 | 151 | RW 0x006FF412 | 1 | 0 | 0 | 0 | none matched |
 | 152 | RW 0x0074A4EE | 1 | 0 | 0 | 0 | none matched |
 | 153 | RW 0x0063256F | 1 | 0 | 0 | 0 | none matched |
-| 154 | RW 0x0088D993 | 5 | 0 | 0 | 0 | none matched |
+| 154 | RW 0x0088D993 | 5 | 0 | 0 | 0 | #649 Port 282: WorkerAIUpdate and DozerAIUpdate: the uncited own functions of the builders and workers (classify, then port the missing ones) |
 | 155 | RW 0x004CF884 | 3 | 0 | 0 | 0 | none matched |
 | 156 | RW 0x0044C84A | 3 | 0 | 0 | 0 | none matched |
 | 157 | RW 0x0083C29E | 3 | 0 | 0 | 0 | none matched |
 | 158 | RW 0x00881FF3 | 3 | 0 | 0 | 0 | none matched |
-| 159 | RW 0x00693919 | 2 | 0 | 11 | 3 | #613 Port 265: HordeContain: the 65 uncited own functions of the horde container (classify, then port the missing ones), #606 Port 258: Powers on enemy units: DominateEnemySpecialPower, CurseSpecialPower, DeflectSpecialPower, SpecialPowerTimerRefreshSpecialPower, #604 Port 256: Weapon-switching powers: WeaponModeSpecialPowerUpdate and WeaponChangeSpecialPowerModule, #600 Port 252: The SpecialAbilityUpdate family: the shared ability state machine (approach, prepare, pack / unpack, trigger) and its subclasses HeroMode, ModelCondition, Teleport, FlingPassenger, #575 Local 77: failing buttons whose class code is all ported — Repair (12 porters), ActivateModuleSpecialPower (15), ToggleMounted (15), LevelGrant (7): trace each to the port's departure or to the matrix scene, #459 Port 192 (parked: after Port 191): WeaponModeSpecialPowerUpdate and DualWeaponBehavior: firing tracker reset, initiate sound, DualWeapon's victim search (S-1228) |
+| 159 | RW 0x00693919 | 2 | 0 | 11 | 3 | #613 Port 265: HordeContain: the 65 uncited own functions of the horde container (classify, then port the missing ones), #606 Port 258: Powers on enemy units: DominateEnemySpecialPower, CurseSpecialPower, DeflectSpecialPower, SpecialPowerTimerRefreshSpecialPower, #604 Port 256: Weapon-switching powers: WeaponModeSpecialPowerUpdate and WeaponChangeSpecialPowerModule, #600 Port 252: The SpecialAbilityUpdate family: the shared ability state machine (approach, prepare, pack / unpack, trigger) and its subclasses HeroMode, ModelCondition, Teleport, FlingPassenger, #575 Local 77: failing buttons whose class code is all ported — Repair (12 porters), ActivateModuleSpecialPower (15), ToggleMounted (15), LevelGrant (7): trace each to the port's departure or to the matrix scene, #459 Port 192: WeaponModeSpecialPowerUpdate and DualWeaponBehavior: firing tracker reset, initiate sound, DualWeapon's victim search (S-1228) |
 | 160 | RW 0x008558C0 | 2 | 0 | 5 | 0 | #602 Port 254: Auras and passive buffs: AttributeModifierAuraUpdate, AutoHealBehavior, LargeGroupBonusUpdate, BloodthirstyUpdate, #601 Port 253: Upgrade modules: SubObjectsUpgrade (logic side), GeometryUpgrade, ReplaceSelfUpgrade, CostModifierUpgrade, InheritUpgradeCreate, SpellRechargeModifierUpgrade, #600 Port 252: The SpecialAbilityUpdate family: the shared ability state machine (approach, prepare, pack / unpack, trigger) and its subclasses HeroMode, ModelCondition, Teleport, FlingPassenger |
 | 161 | RW 0x0054BDE0 | 4 | 0 | 0 | 6 | #601 Port 253: Upgrade modules: SubObjectsUpgrade (logic side), GeometryUpgrade, ReplaceSelfUpgrade, CostModifierUpgrade, InheritUpgradeCreate, SpellRechargeModifierUpgrade, #570 Port 246: Client fades: W3DTreeDraw FadeDistance / FadeTarget, W3DFloorDraw FloorFadeRateOnObjectDeath, SubObjectsUpgrade WaitBeforeFadeInSeconds, #569 Port 245: W3DScriptedModelDraw: MinLODRequired, HighDetailOnly, UseProducerTexture, UseDefaultAnimation, BirthFadeAdditive |
 | 162 | RW 0x0053B5C0 | 2 | 0 | 0 | 0 | none matched |
@@ -181,7 +181,7 @@ Candidates are heuristic, not proof. Class merges use the area or the first name
 | 167 | RW 0x0066C0B9 | 3 | 2 | 0 | 0 | #612 Port 264: AIUpdateInterface: the 64 uncited own functions of the AI every Ennorath unit runs (classify, then port the missing ones), #533 Port 223: the attack machine's Pursue state (a fleeing victim) as RotWK — mounted heroes stop short of a running single target (P-150, S-325), #515 Port 218: Object / WeaponSet getAbleToAttackSpecificObject (RW 0x68D6A6 / 0x6C9147) as RotWK, for every consumer: the attack machine, closest enemy, guard, garrison, turret, orders (S-325) |
 | 168 | RW 0x004B686D | 4 | 1 | 0 | 2 | #626 Port 267: The floor buffer's fade on death (W3DFloorDraw FloorFadeRateOnObjectDeath): a floor record with its own opacity and rate, saved, split from Port 246 #570, #570 Port 246: Client fades: W3DTreeDraw FadeDistance / FadeTarget, W3DFloorDraw FloorFadeRateOnObjectDeath, SubObjectsUpgrade WaitBeforeFadeInSeconds |
 | 169 | RW 0x00814BEC | 4 | 0 | 0 | 0 | none matched |
-| 170 | HordeAIUpdate | 1 | 0 | 0 | 3 | #613 Port 265: HordeContain: the 65 uncited own functions of the horde container (classify, then port the missing ones) |
+| 170 | HordeAIUpdate | 1 | 0 | 0 | 3 | #650 Port 283: HorseHordeContain and HordeAIUpdate: the cavalry horde's uncited own functions (classify, then port the missing ones), #613 Port 265: HordeContain: the 65 uncited own functions of the horde container (classify, then port the missing ones) |
 | 171 | RW 0x0073B723 | 1 | 0 | 0 | 1 | none matched |
 | 172 | RW 0x007B68F9 | 1 | 0 | 0 | 0 | none matched |
 | 173 | RW 0x00AF4DE0 | 1 | 0 | 0 | 0 | none matched |
@@ -204,7 +204,7 @@ Candidates are heuristic, not proof. Class merges use the area or the first name
 | 190 | RW 0x004500B9 | 1 | 0 | 0 | 0 | none matched |
 | 191 | RW 0x006429AD | 1 | 0 | 0 | 0 | none matched |
 | 192 | RW 0x00796E36 | 1 | 0 | 0 | 0 | none matched |
-| 193 | RW 0x006AAA2E | 1 | 0 | 0 | 0 | none matched |
+| 193 | RW 0x006AAA2E | 1 | 0 | 0 | 0 | #649 Port 282: WorkerAIUpdate and DozerAIUpdate: the uncited own functions of the builders and workers (classify, then port the missing ones) |
 | 194 | RW 0x0074697A | 1 | 0 | 0 | 0 | none matched |
 | 195 | RW 0x005E2E2E | 1 | 0 | 0 | 0 | none matched |
 | 196 | RW 0x00615871 | 1 | 0 | 0 | 0 | none matched |
@@ -226,11 +226,11 @@ Candidates are heuristic, not proof. Class merges use the area or the first name
 | 212 | RW 0x00672B5B | 3 | 2 | 0 | 3 | #613 Port 265: HordeContain: the 65 uncited own functions of the horde container (classify, then port the missing ones), #612 Port 264: AIUpdateInterface: the 64 uncited own functions of the AI every Ennorath unit runs (classify, then port the missing ones), #610 Port 262: Burning: FlammableUpdate and FireWeaponWhenDamagedBehavior (catching fire, burning damage, the fire weapon on damage) |
 | 213 | RW 0x0074CED6 | 3 | 0 | 0 | 0 | none matched |
 | 214 | RW 0x0070E911 | 5 | 0 | 0 | 0 | none matched |
-| 215 | RW 0x00851E97 | 2 | 3 | 0 | 9 | #613 Port 265: HordeContain: the 65 uncited own functions of the horde container (classify, then port the missing ones), #567 Port 243: Body damage states: ActiveBody EnteringDamagedTransitionTime and the Damaged / ReallyDamaged attribute modifiers (ActiveBody, RespawnBody) |
+| 215 | RW 0x00851E97 | 2 | 3 | 0 | 9 | #650 Port 283: HorseHordeContain and HordeAIUpdate: the cavalry horde's uncited own functions (classify, then port the missing ones), #613 Port 265: HordeContain: the 65 uncited own functions of the horde container (classify, then port the missing ones), #567 Port 243: Body damage states: ActiveBody EnteringDamagedTransitionTime and the Damaged / ReallyDamaged attribute modifiers (ActiveBody, RespawnBody) |
 | 216 | RW 0x004516DE | 2 | 0 | 0 | 0 | none matched |
 | 217 | RW 0x0091BE64 | 2 | 0 | 0 | 0 | none matched |
 | 218 | RW 0x0082DFB7 | 3 | 0 | 0 | 0 | none matched |
-| 219 | RW 0x0087F7B4 | 4 | 3 | 0 | 10 | #613 Port 265: HordeContain: the 65 uncited own functions of the horde container (classify, then port the missing ones), #607 Port 259: Horde-level powers: SplitHordeSpecialPower, HordeDispatchSpecialPower, SiegeDeployHordeSpecialPower, SiegeDeploySpecialPower, #601 Port 253: Upgrade modules: SubObjectsUpgrade (logic side), GeometryUpgrade, ReplaceSelfUpgrade, CostModifierUpgrade, InheritUpgradeCreate, SpellRechargeModifierUpgrade, #296 [deferred] Local 40: bridge logic as retail: towers, damage stages, pathfinding layer, radar (BridgeBehavior, S-7223) |
+| 219 | RW 0x0087F7B4 | 4 | 3 | 0 | 10 | #647 Port 280: production speed bonus: Wulfgar's call does nothing and ProductionUpdate's bonus fields are unread, #613 Port 265: HordeContain: the 65 uncited own functions of the horde container (classify, then port the missing ones), #607 Port 259: Horde-level powers: SplitHordeSpecialPower, HordeDispatchSpecialPower, SiegeDeployHordeSpecialPower, SiegeDeploySpecialPower, #601 Port 253: Upgrade modules: SubObjectsUpgrade (logic side), GeometryUpgrade, ReplaceSelfUpgrade, CostModifierUpgrade, InheritUpgradeCreate, SpellRechargeModifierUpgrade, #296 [deferred] Local 40: bridge logic as retail: towers, damage stages, pathfinding layer, radar (BridgeBehavior, S-7223) |
 | 220 | OCLSpecialPower | 1 | 2 | 27 | 0 | none matched |
 | 221 | RW 0x004C451D | 5 | 3 | 0 | 5 | #569 Port 245: W3DScriptedModelDraw: MinLODRequired, HighDetailOnly, UseProducerTexture, UseDefaultAnimation, BirthFadeAdditive |
 | 222 | RW 0x006CD0BE | 1 | 0 | 0 | 5 | none matched |
@@ -264,8 +264,8 @@ Candidates are heuristic, not proof. Class merges use the area or the first name
 | 250 | RW 0x00670570 | 1 | 0 | 0 | 0 | none matched |
 | 251 | RW 0x006886E0 | 1 | 1 | 0 | 0 | none matched |
 | 252 | RW 0x0066E233 | 1 | 0 | 0 | 0 | none matched |
-| 253 | RW 0x006A99CB | 1 | 1 | 0 | 0 | none matched |
-| 254 | RW 0x0081E60B | 8 | 3 | 0 | 8 | #613 Port 265: HordeContain: the 65 uncited own functions of the horde container (classify, then port the missing ones), #569 Port 245: W3DScriptedModelDraw: MinLODRequired, HighDetailOnly, UseProducerTexture, UseDefaultAnimation, BirthFadeAdditive, #296 [deferred] Local 40: bridge logic as retail: towers, damage stages, pathfinding layer, radar (BridgeBehavior, S-7223) |
+| 253 | RW 0x006A99CB | 1 | 1 | 0 | 0 | #649 Port 282: WorkerAIUpdate and DozerAIUpdate: the uncited own functions of the builders and workers (classify, then port the missing ones) |
+| 254 | RW 0x0081E60B | 8 | 3 | 0 | 8 | #649 Port 282: WorkerAIUpdate and DozerAIUpdate: the uncited own functions of the builders and workers (classify, then port the missing ones), #613 Port 265: HordeContain: the 65 uncited own functions of the horde container (classify, then port the missing ones), #569 Port 245: W3DScriptedModelDraw: MinLODRequired, HighDetailOnly, UseProducerTexture, UseDefaultAnimation, BirthFadeAdditive, #296 [deferred] Local 40: bridge logic as retail: towers, damage stages, pathfinding layer, radar (BridgeBehavior, S-7223) |
 | 255 | SalvageCrateCollide | 2 | 1 | 0 | 4 | none matched |
 | 256 | RW 0x00989449 | 6 | 0 | 0 | 0 | none matched |
 | 257 | RW 0x00B5470F | 2 | 0 | 0 | 0 | none matched |
@@ -297,7 +297,7 @@ Candidates are heuristic, not proof. Class merges use the area or the first name
 | 283 | PhysicsBehavior | 1 | 0 | 0 | 0 | none matched |
 | 284 | RW 0x008431B8 | 4 | 0 | 0 | 0 | none matched |
 | 285 | RW 0x00940435 | 8 | 0 | 34 | 1 | none matched |
-| 286 | RW 0x00696FD2 | 2 | 0 | 34 | 4 | none matched |
+| 286 | RW 0x00696FD2 | 2 | 0 | 34 | 4 | #647 Port 280: production speed bonus: Wulfgar's call does nothing and ProductionUpdate's bonus fields are unread |
 | 287 | RW 0x00668AF8 | 2 | 0 | 0 | 3 | #613 Port 265: HordeContain: the 65 uncited own functions of the horde container (classify, then port the missing ones) |
 | 288 | RW 0x006A2AE5 | 3 | 0 | 0 | 0 | none matched |
 | 289 | RW 0x006732DC | 3 | 1 | 0 | 0 | none matched |
@@ -321,7 +321,7 @@ Candidates are heuristic, not proof. Class merges use the area or the first name
 | 307 | RW 0x008F069A | 1 | 0 | 0 | 0 | none matched |
 | 308 | RW 0x0062550D | 1 | 0 | 0 | 0 | none matched |
 | 309 | RW 0x00504019 | 1 | 0 | 0 | 0 | none matched |
-| 310 | RW 0x0068B3BD | 1 | 0 | 0 | 0 | none matched |
+| 310 | RW 0x0068B3BD | 1 | 0 | 0 | 0 | #650 Port 283: HorseHordeContain and HordeAIUpdate: the cavalry horde's uncited own functions (classify, then port the missing ones) |
 | 311 | RW 0x0062E4E8 | 9 | 1 | 0 | 3 | #613 Port 265: HordeContain: the 65 uncited own functions of the horde container (classify, then port the missing ones) |
 | 312 | RW 0x0073193D | 3 | 0 | 0 | 0 | none matched |
 | 313 | RW 0x007553AB | 3 | 0 | 0 | 0 | none matched |
@@ -332,7 +332,7 @@ Candidates are heuristic, not proof. Class merges use the area or the first name
 | 318 | RW 0x0083B471 | 2 | 0 | 0 | 0 | none matched |
 | 319 | RW 0x007486FD | 2 | 0 | 0 | 0 | none matched |
 | 320 | RW 0x00A149A2 | 3 | 0 | 0 | 0 | none matched |
-| 321 | RW 0x0068FA3D | 3 | 1 | 10 | 2 | #611 Port 263: Emotions: EmotionTrackerUpdate (terror, fear, cheering, idle emotions) and BoredUpdate |
+| 321 | RW 0x0068FA3D | 3 | 1 | 10 | 2 | #646 Port 279: ToggleHiddenSpecialAbilityUpdate: the Harad spy's cloak stays stuck, Ghan-buri-Ghan's secret paths do not hide, #611 Port 263: Emotions: EmotionTrackerUpdate (terror, fear, cheering, idle emotions) and BoredUpdate |
 | 322 | RW 0x0068C7E9 | 3 | 1 | 0 | 3 | #613 Port 265: HordeContain: the 65 uncited own functions of the horde container (classify, then port the missing ones), #611 Port 263: Emotions: EmotionTrackerUpdate (terror, fear, cheering, idle emotions) and BoredUpdate |
 | 323 | RW 0x006E8707 | 2 | 1 | 0 | 3 | #613 Port 265: HordeContain: the 65 uncited own functions of the horde container (classify, then port the missing ones), #612 Port 264: AIUpdateInterface: the 64 uncited own functions of the AI every Ennorath unit runs (classify, then port the missing ones) |
 | 324 | RW 0x0062F91A | 5 | 0 | 0 | 3 | #602 Port 254: Auras and passive buffs: AttributeModifierAuraUpdate, AutoHealBehavior, LargeGroupBonusUpdate, BloodthirstyUpdate |
@@ -345,16 +345,16 @@ Candidates are heuristic, not proof. Class merges use the area or the first name
 | 331 | RW 0x009EDA17 | 1 | 0 | 0 | 0 | none matched |
 | 332 | RW 0x0068E43B | 1 | 0 | 0 | 0 | none matched |
 | 333 | RW 0x005E31DF | 1 | 1 | 0 | 0 | none matched |
-| 334 | RW 0x00701443 | 8 | 1 | 102 | 1 | #604 Port 256: Weapon-switching powers: WeaponModeSpecialPowerUpdate and WeaponChangeSpecialPowerModule, #599 Port 251: The special-power chain every Ennorath ability runs through: SpecialPowerModule and UnpauseSpecialPowerUpgrade's uncited RotWK functions, #459 Port 192 (parked: after Port 191): WeaponModeSpecialPowerUpdate and DualWeaponBehavior: firing tracker reset, initiate sound, DualWeapon's victim search (S-1228) |
+| 334 | RW 0x00701443 | 8 | 1 | 102 | 1 | #604 Port 256: Weapon-switching powers: WeaponModeSpecialPowerUpdate and WeaponChangeSpecialPowerModule, #599 Port 251: The special-power chain every Ennorath ability runs through: SpecialPowerModule and UnpauseSpecialPowerUpgrade's uncited RotWK functions, #459 Port 192: WeaponModeSpecialPowerUpdate and DualWeaponBehavior: firing tracker reset, initiate sound, DualWeapon's victim search (S-1228) |
 | 335 | RW 0x00779A3D | 4 | 0 | 0 | 0 | #490 Port 208: Force attack: from garrisons and spawners, and the clicked tree as a target (S-2480) |
 | 336 | RW 0x0080ACE3 | 2 | 0 | 0 | 0 | none matched |
 | 337 | RW 0x00669932 | 5 | 1 | 0 | 4 | #613 Port 265: HordeContain: the 65 uncited own functions of the horde container (classify, then port the missing ones), #296 [deferred] Local 40: bridge logic as retail: towers, damage stages, pathfinding layer, radar (BridgeBehavior, S-7223) |
 | 338 | RW 0x006AA91D | 1 | 0 | 118 | 0 | #609 Port 261: Player-side powers: PlayerHealSpecialPower and StoreObjectsSpecialPower (heal or repair the player's objects, store and release units), #600 Port 252: The SpecialAbilityUpdate family: the shared ability state machine (approach, prepare, pack / unpack, trigger) and its subclasses HeroMode, ModelCondition, Teleport, FlingPassenger, #599 Port 251: The special-power chain every Ennorath ability runs through: SpecialPowerModule and UnpauseSpecialPowerUpgrade's uncited RotWK functions |
 | 339 | RW 0x006AF269 | 2 | 2 | 88 | 0 | #599 Port 251: The special-power chain every Ennorath ability runs through: SpecialPowerModule and UnpauseSpecialPowerUpgrade's uncited RotWK functions |
 | 340 | RW 0x006CAB85 | 4 | 0 | 12 | 2 | #600 Port 252: The SpecialAbilityUpdate family: the shared ability state machine (approach, prepare, pack / unpack, trigger) and its subclasses HeroMode, ModelCondition, Teleport, FlingPassenger, #567 Port 243: Body damage states: ActiveBody EnteringDamagedTransitionTime and the Damaged / ReallyDamaged attribute modifiers (ActiveBody, RespawnBody), #467 Port 200 (parked: after Port 218): TurretAI: the mood timer and matrix, isAbleToAttack / the continued-target test, slot 0x1C4 (S-1106) |
-| 341 | RW 0x00868759 | 2 | 1 | 0 | 3 | none matched |
+| 341 | RW 0x00868759 | 2 | 1 | 0 | 3 | #647 Port 280: production speed bonus: Wulfgar's call does nothing and ProductionUpdate's bonus fields are unread |
 | 342 | RW 0x00875221 | 2 | 2 | 0 | 3 | #613 Port 265: HordeContain: the 65 uncited own functions of the horde container (classify, then port the missing ones) |
-| 343 | RW 0x00697F28 | 2 | 0 | 0 | 2 | #612 Port 264: AIUpdateInterface: the 64 uncited own functions of the AI every Ennorath unit runs (classify, then port the missing ones), #567 Port 243: Body damage states: ActiveBody EnteringDamagedTransitionTime and the Damaged / ReallyDamaged attribute modifiers (ActiveBody, RespawnBody) |
+| 343 | RW 0x00697F28 | 2 | 0 | 0 | 2 | #649 Port 282: WorkerAIUpdate and DozerAIUpdate: the uncited own functions of the builders and workers (classify, then port the missing ones), #612 Port 264: AIUpdateInterface: the 64 uncited own functions of the AI every Ennorath unit runs (classify, then port the missing ones), #567 Port 243: Body damage states: ActiveBody EnteringDamagedTransitionTime and the Damaged / ReallyDamaged attribute modifiers (ActiveBody, RespawnBody) |
 | 344 | RW 0x0068B244 | 1 | 0 | 0 | 0 | none matched |
 | 345 | RW 0x00824448 | 1 | 0 | 0 | 0 | none matched |
 | 346 | RW 0x0069990F | 2 | 1 | 0 | 0 | none matched |
@@ -365,7 +365,7 @@ Candidates are heuristic, not proof. Class merges use the area or the first name
 | 351 | RW 0x00885CD5 | 2 | 0 | 0 | 5 | #613 Port 265: HordeContain: the 65 uncited own functions of the horde container (classify, then port the missing ones), #610 Port 262: Burning: FlammableUpdate and FireWeaponWhenDamagedBehavior (catching fire, burning damage, the fire weapon on damage), #567 Port 243: Body damage states: ActiveBody EnteringDamagedTransitionTime and the Damaged / ReallyDamaged attribute modifiers (ActiveBody, RespawnBody) |
 | 352 | RW 0x009288D0 | 2 | 0 | 0 | 0 | none matched |
 | 353 | RW 0x0082FCAB | 2 | 0 | 0 | 0 | none matched |
-| 354 | RW 0x008A1B9F | 8 | 1 | 0 | 14 | #613 Port 265: HordeContain: the 65 uncited own functions of the horde container (classify, then port the missing ones), #567 Port 243: Body damage states: ActiveBody EnteringDamagedTransitionTime and the Damaged / ReallyDamaged attribute modifiers (ActiveBody, RespawnBody) |
+| 354 | RW 0x008A1B9F | 8 | 1 | 0 | 14 | #647 Port 280: production speed bonus: Wulfgar's call does nothing and ProductionUpdate's bonus fields are unread, #613 Port 265: HordeContain: the 65 uncited own functions of the horde container (classify, then port the missing ones), #567 Port 243: Body damage states: ActiveBody EnteringDamagedTransitionTime and the Damaged / ReallyDamaged attribute modifiers (ActiveBody, RespawnBody) |
 | 355 | linked stops S-1922, S-1953 | 2 | 0 | 0 | 0 | none matched |
 | 356 | linked stops S-4751 | 1 | 0 | 0 | 0 | none matched |
 | 357 | RW 0x006634BF | 1 | 0 | 0 | 0 | none matched |
@@ -512,7 +512,7 @@ Candidates are heuristic, not proof. Class merges use the area or the first name
 | 498 | linked stops S-4000 | 1 | 0 | 0 | 0 | none matched |
 | 499 | linked stops S-4001 | 1 | 0 | 0 | 0 | none matched |
 | 500 | linked stops S-4002 | 1 | 0 | 0 | 0 | none matched |
-| 501 | RW 0x00667416 | 1 | 0 | 0 | 0 | #612 Port 264: AIUpdateInterface: the 64 uncited own functions of the AI every Ennorath unit runs (classify, then port the missing ones) |
+| 501 | RW 0x00667416 | 1 | 0 | 0 | 0 | #650 Port 283: HorseHordeContain and HordeAIUpdate: the cavalry horde's uncited own functions (classify, then port the missing ones), #649 Port 282: WorkerAIUpdate and DozerAIUpdate: the uncited own functions of the builders and workers (classify, then port the missing ones), #612 Port 264: AIUpdateInterface: the 64 uncited own functions of the AI every Ennorath unit runs (classify, then port the missing ones) |
 | 502 | linked stops S-4222, S-5013 | 2 | 0 | 0 | 0 | none matched |
 | 503 | linked stops S-4280, S-810 | 2 | 0 | 0 | 0 | none matched |
 | 504 | RW 0x00441C56 | 1 | 0 | 0 | 0 | none matched |
@@ -549,7 +549,7 @@ Candidates are heuristic, not proof. Class merges use the area or the first name
 | 535 | linked stops S-7202 | 1 | 0 | 0 | 0 | none matched |
 | 536 | linked stops S-725 | 1 | 0 | 0 | 0 | none matched |
 | 537 | RW 0x004C72BE | 1 | 0 | 0 | 0 | none matched |
-| 538 | AIUpdateInterface | 1 | 0 | 0 | 0 | #612 Port 264: AIUpdateInterface: the 64 uncited own functions of the AI every Ennorath unit runs (classify, then port the missing ones) |
+| 538 | AIUpdateInterface | 1 | 0 | 0 | 0 | #649 Port 282: WorkerAIUpdate and DozerAIUpdate: the uncited own functions of the builders and workers (classify, then port the missing ones), #612 Port 264: AIUpdateInterface: the 64 uncited own functions of the AI every Ennorath unit runs (classify, then port the missing ones) |
 | 539 | linked stops S-7364 | 1 | 0 | 0 | 0 | none matched |
 | 540 | linked stops S-7385 | 1 | 0 | 0 | 0 | none matched |
 | 541 | linked stops S-815 | 1 | 0 | 0 | 0 | none matched |
@@ -627,7 +627,7 @@ Functions: RW 0x0068B581 (ported), RW 0x00698EC3 (ported), RW 0x00887857 (unknow
 Candidates: 0 none/partial functions; 2 unknown status.
 Red buttons: none linked.
 Unused fields: FlingPassengerSpecialAbilityUpdate.FlingPassengerVelocity, ProductionUpdate.BonusForType, ProductionUpdate.SetBonusModelConditionOnSpeedBonus, ProductionUpdate.SpeedBonusAudioLoop, RunOffMapBehavior.DieOnMap, RunOffMapBehavior.RunOffMapWaypointName.
-Existing task matches: #611 Port 263: Emotions: EmotionTrackerUpdate (terror, fear, cheering, idle emotions) and BoredUpdate; #607 Port 259: Horde-level powers: SplitHordeSpecialPower, HordeDispatchSpecialPower, SiegeDeployHordeSpecialPower, SiegeDeploySpecialPower; #603 Port 255: Slaves and masters: SlavedUpdate and SlaveWatcherBehavior (summons, spawned guards, spawned workers); #601 Port 253: Upgrade modules: SubObjectsUpgrade (logic side), GeometryUpgrade, ReplaceSelfUpgrade, CostModifierUpgrade, InheritUpgradeCreate, SpellRechargeModifierUpgrade; #572 Port 248: Death and lifecycle: RunOffMapBehavior RunOffMapWaypointName, ClearanceTestingSlowDeathBehavior ClearanceGeometryIsSmall, SymbioticStructuresBody Symbiote.
+Existing task matches: #647 Port 280: production speed bonus: Wulfgar's call does nothing and ProductionUpdate's bonus fields are unread; #611 Port 263: Emotions: EmotionTrackerUpdate (terror, fear, cheering, idle emotions) and BoredUpdate; #607 Port 259: Horde-level powers: SplitHordeSpecialPower, HordeDispatchSpecialPower, SiegeDeployHordeSpecialPower, SiegeDeploySpecialPower; #603 Port 255: Slaves and masters: SlavedUpdate and SlaveWatcherBehavior (summons, spawned guards, spawned workers); #601 Port 253: Upgrade modules: SubObjectsUpgrade (logic side), GeometryUpgrade, ReplaceSelfUpgrade, CostModifierUpgrade, InheritUpgradeCreate, SpellRechargeModifierUpgrade; #572 Port 248: Death and lifecycle: RunOffMapBehavior RunOffMapWaypointName, ClearanceTestingSlowDeathBehavior ClearanceGeometryIsSmall, SymbioticStructuresBody Symbiote.
 
 ### G009: linked stops S-080, S-093
 
@@ -672,7 +672,7 @@ Functions: RW 0x007760B7 (ported), RW 0x007A1C0D (unknown), RW 0x0081B376 (porte
 Candidates: 0 none/partial functions; 1 unknown status.
 Red buttons: Command_SpecialAbilityGeheimeWege, Command_SpecialAbilityHaradScoutCloak.
 Unused fields: none linked.
-Existing task matches: none.
+Existing task matches: #646 Port 279: ToggleHiddenSpecialAbilityUpdate: the Harad spy's cloak stays stuck, Ghan-buri-Ghan's secret paths do not hide.
 
 ### G014: HordeContain
 
@@ -1401,7 +1401,7 @@ Functions: RW 0x0068D7AB (ported), RW 0x006ABABD (ported), RW 0x006ABBB7 (unknow
 Candidates: 0 none/partial functions; 5 unknown status.
 Red buttons: none linked.
 Unused fields: none linked.
-Existing task matches: none.
+Existing task matches: #649 Port 282: WorkerAIUpdate and DozerAIUpdate: the uncited own functions of the builders and workers (classify, then port the missing ones).
 
 ### G095: RW 0x00628882
 
@@ -1941,7 +1941,7 @@ Functions: RW 0x00684BCA (ported), RW 0x00684CBA (unknown), RW 0x00690584 (unkno
 Candidates: 0 none/partial functions; 11 unknown status.
 Red buttons: none linked.
 Unused fields: none linked.
-Existing task matches: none.
+Existing task matches: #649 Port 282: WorkerAIUpdate and DozerAIUpdate: the uncited own functions of the builders and workers (classify, then port the missing ones).
 
 ### G155: RW 0x004CF884
 
@@ -1986,7 +1986,7 @@ Functions: RW 0x006630A9 (ported), RW 0x006630D7 (ported), RW 0x00663128 (ported
 Candidates: 0 none/partial functions; 5 unknown status.
 Red buttons: Command_AngmarTrollChargeAttack, Command_HalftrollChargeAttack, Command_SpecialAbilityDurinMeisterGestein, Command_SpecialAbilityLoneRangerSummonFinal, Command_SpecialAbilityMeisterderHornburg, Command_SpecialAbilityNaturmagierErntesegen, Command_SpecialAbilityUrukHauptmannCrossbow, Command_SpecialAbilityUrukHauptmannLanzentrger, Command_SpecialAbilityUrukHauptmannSchwertkmpfer, Command_SpecialAbilityWortedesElends, Command_ThranduilKnigDsterwalds.
 Unused fields: HordeContain.LivingWorldOverloadTemplate, HordeContain.RanksToJustFreeWhenAttacking, HordeContain.SplitHordeNumber.
-Existing task matches: #613 Port 265: HordeContain: the 65 uncited own functions of the horde container (classify, then port the missing ones); #606 Port 258: Powers on enemy units: DominateEnemySpecialPower, CurseSpecialPower, DeflectSpecialPower, SpecialPowerTimerRefreshSpecialPower; #604 Port 256: Weapon-switching powers: WeaponModeSpecialPowerUpdate and WeaponChangeSpecialPowerModule; #600 Port 252: The SpecialAbilityUpdate family: the shared ability state machine (approach, prepare, pack / unpack, trigger) and its subclasses HeroMode, ModelCondition, Teleport, FlingPassenger; #575 Local 77: failing buttons whose class code is all ported — Repair (12 porters), ActivateModuleSpecialPower (15), ToggleMounted (15), LevelGrant (7): trace each to the port's departure or to the matrix scene; #459 Port 192 (parked: after Port 191): WeaponModeSpecialPowerUpdate and DualWeaponBehavior: firing tracker reset, initiate sound, DualWeapon's victim search (S-1228).
+Existing task matches: #613 Port 265: HordeContain: the 65 uncited own functions of the horde container (classify, then port the missing ones); #606 Port 258: Powers on enemy units: DominateEnemySpecialPower, CurseSpecialPower, DeflectSpecialPower, SpecialPowerTimerRefreshSpecialPower; #604 Port 256: Weapon-switching powers: WeaponModeSpecialPowerUpdate and WeaponChangeSpecialPowerModule; #600 Port 252: The SpecialAbilityUpdate family: the shared ability state machine (approach, prepare, pack / unpack, trigger) and its subclasses HeroMode, ModelCondition, Teleport, FlingPassenger; #575 Local 77: failing buttons whose class code is all ported — Repair (12 porters), ActivateModuleSpecialPower (15), ToggleMounted (15), LevelGrant (7): trace each to the port's departure or to the matrix scene; #459 Port 192: WeaponModeSpecialPowerUpdate and DualWeaponBehavior: firing tracker reset, initiate sound, DualWeapon's victim search (S-1228).
 
 ### G160: RW 0x008558C0
 
@@ -2085,7 +2085,7 @@ Functions: RW 0x0070C0AD (unknown), RW 0x0086BDD3 (ported), RW 0x0087594C (porte
 Candidates: 0 none/partial functions; 3 unknown status.
 Red buttons: none linked.
 Unused fields: HordeContain.LivingWorldOverloadTemplate, HordeContain.RanksToJustFreeWhenAttacking, HordeContain.SplitHordeNumber.
-Existing task matches: #613 Port 265: HordeContain: the 65 uncited own functions of the horde container (classify, then port the missing ones).
+Existing task matches: #650 Port 283: HorseHordeContain and HordeAIUpdate: the cavalry horde's uncited own functions (classify, then port the missing ones); #613 Port 265: HordeContain: the 65 uncited own functions of the horde container (classify, then port the missing ones).
 
 ### G171: RW 0x0073B723
 
@@ -2292,7 +2292,7 @@ Functions: RW 0x006AAA2E (unknown), RW 0x0077A91B (unknown), RW 0x0077B011 (unkn
 Candidates: 0 none/partial functions; 3 unknown status.
 Red buttons: none linked.
 Unused fields: none linked.
-Existing task matches: none.
+Existing task matches: #649 Port 282: WorkerAIUpdate and DozerAIUpdate: the uncited own functions of the builders and workers (classify, then port the missing ones).
 
 ### G194: RW 0x0074697A
 
@@ -2490,7 +2490,7 @@ Functions: RW 0x0042EB2A (unknown), RW 0x0046C6BE (ported), RW 0x00660D71 (unkno
 Candidates: 3 none/partial functions; 4 unknown status.
 Red buttons: none linked.
 Unused fields: ActiveBody.EnteringDamagedTransitionTime, ActiveBody.ReallyDamagedAttributeModifier, HordeContain.LivingWorldOverloadTemplate, HordeContain.RanksToJustFreeWhenAttacking, HordeContain.SplitHordeNumber, HorseHordeContain.LivingWorldOverloadTemplate, PorcupineFormationBodyModule.CrushDamageWeaponTemplate, PorcupineFormationBodyModule.CrusherLevelResisted, PorcupineFormationBodyModule.DamageWeaponTemplate.
-Existing task matches: #613 Port 265: HordeContain: the 65 uncited own functions of the horde container (classify, then port the missing ones); #567 Port 243: Body damage states: ActiveBody EnteringDamagedTransitionTime and the Damaged / ReallyDamaged attribute modifiers (ActiveBody, RespawnBody).
+Existing task matches: #650 Port 283: HorseHordeContain and HordeAIUpdate: the cavalry horde's uncited own functions (classify, then port the missing ones); #613 Port 265: HordeContain: the 65 uncited own functions of the horde container (classify, then port the missing ones); #567 Port 243: Body damage states: ActiveBody EnteringDamagedTransitionTime and the Damaged / ReallyDamaged attribute modifiers (ActiveBody, RespawnBody).
 
 ### G216: RW 0x004516DE
 
@@ -2526,7 +2526,7 @@ Functions: RW 0x005E821A (ported), RW 0x006316EF (unknown), RW 0x0066246B (porte
 Candidates: 3 none/partial functions; 12 unknown status.
 Red buttons: none linked.
 Unused fields: CastleBehavior.CrewPrepareFX, CastleBehavior.CrewPrepareInterval, CastleBehavior.CrewReleaseFX, HordeContain.LivingWorldOverloadTemplate, HordeContain.RanksToJustFreeWhenAttacking, HordeContain.SplitHordeNumber, ProductionUpdate.BonusForType, ProductionUpdate.SetBonusModelConditionOnSpeedBonus, ProductionUpdate.SpeedBonusAudioLoop, SiegeDeploySpecialPower.InitiateSound.
-Existing task matches: #613 Port 265: HordeContain: the 65 uncited own functions of the horde container (classify, then port the missing ones); #607 Port 259: Horde-level powers: SplitHordeSpecialPower, HordeDispatchSpecialPower, SiegeDeployHordeSpecialPower, SiegeDeploySpecialPower; #601 Port 253: Upgrade modules: SubObjectsUpgrade (logic side), GeometryUpgrade, ReplaceSelfUpgrade, CostModifierUpgrade, InheritUpgradeCreate, SpellRechargeModifierUpgrade; #296 [deferred] Local 40: bridge logic as retail: towers, damage stages, pathfinding layer, radar (BridgeBehavior, S-7223).
+Existing task matches: #647 Port 280: production speed bonus: Wulfgar's call does nothing and ProductionUpdate's bonus fields are unread; #613 Port 265: HordeContain: the 65 uncited own functions of the horde container (classify, then port the missing ones); #607 Port 259: Horde-level powers: SplitHordeSpecialPower, HordeDispatchSpecialPower, SiegeDeployHordeSpecialPower, SiegeDeploySpecialPower; #601 Port 253: Upgrade modules: SubObjectsUpgrade (logic side), GeometryUpgrade, ReplaceSelfUpgrade, CostModifierUpgrade, InheritUpgradeCreate, SpellRechargeModifierUpgrade; #296 [deferred] Local 40: bridge logic as retail: towers, damage stages, pathfinding layer, radar (BridgeBehavior, S-7223).
 
 ### G220: OCLSpecialPower
 
@@ -2832,7 +2832,7 @@ Functions: RW 0x0066362D (ported), RW 0x0068AE08 (partial), RW 0x006A99CB (porte
 Candidates: 1 none/partial functions; 3 unknown status.
 Red buttons: none linked.
 Unused fields: none linked.
-Existing task matches: none.
+Existing task matches: #649 Port 282: WorkerAIUpdate and DozerAIUpdate: the uncited own functions of the builders and workers (classify, then port the missing ones).
 
 ### G254: RW 0x0081E60B
 
@@ -2841,7 +2841,7 @@ Functions: RW 0x0041B730 (unknown), RW 0x0044DDEC (ported), RW 0x004B7BA0 (unkno
 Candidates: 3 none/partial functions; 32 unknown status.
 Red buttons: none linked.
 Unused fields: HordeContain.LivingWorldOverloadTemplate, HordeContain.RanksToJustFreeWhenAttacking, HordeContain.SplitHordeNumber, W3DScriptedModelDraw.BirthFadeAdditive, W3DScriptedModelDraw.HighDetailOnly, W3DScriptedModelDraw.MinLODRequired, W3DScriptedModelDraw.UseDefaultAnimation, W3DScriptedModelDraw.UseProducerTexture.
-Existing task matches: #613 Port 265: HordeContain: the 65 uncited own functions of the horde container (classify, then port the missing ones); #569 Port 245: W3DScriptedModelDraw: MinLODRequired, HighDetailOnly, UseProducerTexture, UseDefaultAnimation, BirthFadeAdditive; #296 [deferred] Local 40: bridge logic as retail: towers, damage stages, pathfinding layer, radar (BridgeBehavior, S-7223).
+Existing task matches: #649 Port 282: WorkerAIUpdate and DozerAIUpdate: the uncited own functions of the builders and workers (classify, then port the missing ones); #613 Port 265: HordeContain: the 65 uncited own functions of the horde container (classify, then port the missing ones); #569 Port 245: W3DScriptedModelDraw: MinLODRequired, HighDetailOnly, UseProducerTexture, UseDefaultAnimation, BirthFadeAdditive; #296 [deferred] Local 40: bridge logic as retail: towers, damage stages, pathfinding layer, radar (BridgeBehavior, S-7223).
 
 ### G255: SalvageCrateCollide
 
@@ -3129,7 +3129,7 @@ Functions: RW 0x0068C91B (ported), RW 0x0068CB85 (ported), RW 0x0068E5A3 (ported
 Candidates: 0 none/partial functions; 11 unknown status.
 Red buttons: Command_AngmarRangersIceArrowAbility, Command_AxtschwingerAxeThrow, Command_BalinBaukunstMorias, Command_BalinBaukunstderZwerge, Command_FireWeaponAngmarFortressSanctumFrostball, Command_FireWeaponMightyCatapult, Command_GoblinKingGiftangriff, Command_GondorGandalfLightningSwordGeprfte, Command_IsenfurtWchterSmite, Command_Repair, Command_RepairAI, Command_SalemeBlendfalleDetonate, Command_SalemeExplosionsfalleDetonate, Command_SalemeGiftfalleDetonate, Command_SarumanPower, Command_SpecialAbilityAdvisorMarketTrade, Command_SpecialAbilityBoromirHorn, Command_SpecialAbilityBoromirHornRing, Command_SpecialAbilityBoromirTapfererWiderstand, Command_SpecialAbilityDenethorErnennung, Command_SpecialAbilityErinnerunganTelperion, Command_SpecialAbilityFortressHaradSpyTech, Command_SpecialAbilityFortressHaradSpyTechAI, Command_SpecialAbilityGulmatRunes, Command_SpecialAbilityGulmatRunesPoison, Command_SpecialAbilityGwahirScreechManve, Command_SpecialAbilityGwahirScreechNew, Command_SpecialAbilityMalbethOnFarm, Command_SpecialAbilityMeisterderHornburg, Command_SpecialAbilityNaturmagierErntesegen, Command_SpecialAbilityTameTheBeastNew, Command_SpecialAbilityUrukHauptmannCrossbow, Command_SpecialAbilityWizardBlastGeprfte, Command_TheodredReparaturarbeiten.
 Unused fields: AutoAbilityBehavior.WorkingRadius, ProductionUpdate.BonusForType, ProductionUpdate.SetBonusModelConditionOnSpeedBonus, ProductionUpdate.SpeedBonusAudioLoop.
-Existing task matches: none.
+Existing task matches: #647 Port 280: production speed bonus: Wulfgar's call does nothing and ProductionUpdate's bonus fields are unread.
 
 ### G287: RW 0x00668AF8
 
@@ -3345,7 +3345,7 @@ Functions: RW 0x006668CA (ported), RW 0x0068B3BD (ported), RW 0x00693A1A (ported
 Candidates: 0 none/partial functions; 6 unknown status.
 Red buttons: none linked.
 Unused fields: none linked.
-Existing task matches: none.
+Existing task matches: #650 Port 283: HorseHordeContain and HordeAIUpdate: the cavalry horde's uncited own functions (classify, then port the missing ones).
 
 ### G311: RW 0x0062E4E8
 
@@ -3444,7 +3444,7 @@ Functions: RW 0x0042EE5E (unknown), RW 0x0049D446 (unknown), RW 0x005FC922 (unkn
 Candidates: 1 none/partial functions; 20 unknown status.
 Red buttons: Command_SpecialAbilityBoromirHorn, Command_SpecialAbilityBoromirHornRing, Command_SpecialAbilityDenethorSehenderStein2, Command_SpecialAbilityDenethorSehenderStein3, Command_SpecialAbilityDenethorSehenderStein4, Command_SpecialAbilityElendilSummoned, Command_SpecialAbilityGeheimeWege, Command_SpecialAbilityHamerheldHorn, Command_SpecialAbilityHaradScoutCloak, Command_SpecialAbilityScreechDunklerMarschall.
 Unused fields: RadiateFearUpdate.WhichSpecialPower, StealthUpdate.HintDetectableConditions.
-Existing task matches: #611 Port 263: Emotions: EmotionTrackerUpdate (terror, fear, cheering, idle emotions) and BoredUpdate.
+Existing task matches: #646 Port 279: ToggleHiddenSpecialAbilityUpdate: the Harad spy's cloak stays stuck, Ghan-buri-Ghan's secret paths do not hide; #611 Port 263: Emotions: EmotionTrackerUpdate (terror, fear, cheering, idle emotions) and BoredUpdate.
 
 ### G322: RW 0x0068C7E9
 
@@ -3561,7 +3561,7 @@ Functions: RW 0x004035AC (unknown), RW 0x00405553 (ported), RW 0x004627C1 (unkno
 Candidates: 1 none/partial functions; 56 unknown status.
 Red buttons: Command_AngmarRangersIceArrowAbility, Command_AngmarRogashLeap, Command_AngmarTrollChargeAttack, Command_AxtschwingerAxeThrow, Command_BalinBaukunstMorias, Command_BalinBaukunstderZwerge, Command_BeregondMountNew, Command_DuhrburLeap, Command_FireDrakeBroodInferno, Command_FireWeaponAngmarFortressSanctumFrostball, Command_FireWeaponMenFortressBoilingOil, Command_FireWeaponMightyCatapult, Command_FireWeaponMordorFortressMagmaCauldrons, Command_FireWeaponMordorFortressSpireFireball, Command_GoblinKingGiftangriff, Command_GondorGandalfLightningSwordGeprfte, Command_GorkilBombThrow, Command_GwaihirBlastNew, Command_HalftrollChargeAttack, Command_HwaldarVerbrannteErde, Command_IndustriellerWahn, Command_IsenfurtWchterSmite, Command_MenLongShotAbility, Command_MordorBloodThirstySacrificeUruk, Command_NecromancerFrostArmorStructure, Command_PippinSongs, Command_RavenPostSecondBonus, Command_Repair, Command_RepairAI, Command_RohanGimliLeap, Command_SalemeBlendfalleDetonate, Command_SalemeExplosionsfalleDetonate, Command_SalemeGiftfalleDetonate, Command_SarumanPower, Command_SpecialAbilityAdvisorMarketTrade, Command_SpecialAbilityAgandaurLighting, Command_SpecialAbilityAlatarTeleportAlly, Command_SpecialAbilityAlatarTeleportRing, Command_SpecialAbilityAngmarGiftFortress, Command_SpecialAbilityArnorPalantirEye, Command_SpecialAbilityArrowStorm, Command_SpecialAbilityBalinExpidition, Command_SpecialAbilityBetrayer, Command_SpecialAbilityBeutekarrendesGroorks, Command_SpecialAbilityBoromirHorn, Command_SpecialAbilityBoromirHornRing, Command_SpecialAbilityBoromirTapfererWiderstand, Command_SpecialAbilityBoromirVerteidigungderweienStadt, Command_SpecialAbilityDenethorErnennung, Command_SpecialAbilityDrarSpeerfeuer, Command_SpecialAbilityDunklesWortderMacht, Command_SpecialAbilityDurinMeisterGestein, Command_SpecialAbilityDwalinErdenhammer, Command_SpecialAbilityElendilSummoned, Command_SpecialAbilityErinnerunganTelperion, Command_SpecialAbilityFortressHaradSpyTech, Command_SpecialAbilityFortressHaradSpyTechAI, Command_SpecialAbilityGaladrielVilya, Command_SpecialAbilityGloinSmash, Command_SpecialAbilityGolfimbulRaid, Command_SpecialAbilityGorbagUngolEmpowered, Command_SpecialAbilityGothmogMorgulEmpowered, Command_SpecialAbilityGrishnakGiftwolke, Command_SpecialAbilityGuldurEmpowered, Command_SpecialAbilityGulmatRunes, Command_SpecialAbilityGulmatRunesPoison, Command_SpecialAbilityGulzarMOrgulSeucheAcolyte, Command_SpecialAbilityGwahirScreechManve, Command_SpecialAbilityGwahirScreechNew, Command_SpecialAbilityHamerheldHorn, Command_SpecialAbilityKhamulGuldurEmpowered, Command_SpecialAbilityKokonausDunkelheit, Command_SpecialAbilityLoneRangerSummonFinal, Command_SpecialAbilityMalbethOnFarm, Command_SpecialAbilityMeisterderHornburg, Command_SpecialAbilityMorgulEmpowered, Command_SpecialAbilityNarinExp, Command_SpecialAbilityNaturmagierErntesegen, Command_SpecialAbilityNaturmagierHeilung, Command_SpecialAbilityNetzausDunkelheit, Command_SpecialAbilityScreechDunklerMarschall, Command_SpecialAbilitySharkuManEater, Command_SpecialAbilitySoulLink, Command_SpecialAbilitySpawnKochtopf, Command_SpecialAbilitySuladanSummonGuard, Command_SpecialAbilityTameTheBeastNew, Command_SpecialAbilityTrainArchers, Command_SpecialAbilityTrainSoldersLorgan, Command_SpecialAbilityTributeGainTwo, Command_SpecialAbilityUngolEmpowered, Command_SpecialAbilityUrukHauptmannCrossbow, Command_SpecialAbilityUrukHauptmannLanzentrger, Command_SpecialAbilityUrukHauptmannSchwertkmpfer, Command_SpecialAbilityVerkrperungderDunkelheit, Command_SpecialAbilityWargHowlNew, Command_SpecialAbilityWizardBlastGeprfte, Command_SpecialAbilityWordOfPowerEdainGeprfte, Command_SpecialAbilityWortedesElends, Command_SpecialAbilityWulfgarRufderPlnderer, Command_TheodredReparaturarbeiten, Command_ThranduilKnigDsterwalds, Command_ramridercaptain.
 Unused fields: AutoAbilityBehavior.WorkingRadius.
-Existing task matches: #604 Port 256: Weapon-switching powers: WeaponModeSpecialPowerUpdate and WeaponChangeSpecialPowerModule; #599 Port 251: The special-power chain every Ennorath ability runs through: SpecialPowerModule and UnpauseSpecialPowerUpgrade's uncited RotWK functions; #459 Port 192 (parked: after Port 191): WeaponModeSpecialPowerUpdate and DualWeaponBehavior: firing tracker reset, initiate sound, DualWeapon's victim search (S-1228).
+Existing task matches: #604 Port 256: Weapon-switching powers: WeaponModeSpecialPowerUpdate and WeaponChangeSpecialPowerModule; #599 Port 251: The special-power chain every Ennorath ability runs through: SpecialPowerModule and UnpauseSpecialPowerUpgrade's uncited RotWK functions; #459 Port 192: WeaponModeSpecialPowerUpdate and DualWeaponBehavior: firing tracker reset, initiate sound, DualWeapon's victim search (S-1228).
 
 ### G335: RW 0x00779A3D
 
@@ -3624,7 +3624,7 @@ Functions: RW 0x00664ABF (ported), RW 0x0068BB14 (ported), RW 0x0068DF11 (ported
 Candidates: 1 none/partial functions; 15 unknown status.
 Red buttons: none linked.
 Unused fields: ProductionUpdate.BonusForType, ProductionUpdate.SetBonusModelConditionOnSpeedBonus, ProductionUpdate.SpeedBonusAudioLoop.
-Existing task matches: none.
+Existing task matches: #647 Port 280: production speed bonus: Wulfgar's call does nothing and ProductionUpdate's bonus fields are unread.
 
 ### G342: RW 0x00875221
 
@@ -3642,7 +3642,7 @@ Functions: RW 0x005E68A4 (unknown), RW 0x005E7F12 (unknown), RW 0x00667416 (port
 Candidates: 0 none/partial functions; 16 unknown status.
 Red buttons: none linked.
 Unused fields: ActiveBody.EnteringDamagedTransitionTime, ActiveBody.ReallyDamagedAttributeModifier.
-Existing task matches: #612 Port 264: AIUpdateInterface: the 64 uncited own functions of the AI every Ennorath unit runs (classify, then port the missing ones); #567 Port 243: Body damage states: ActiveBody EnteringDamagedTransitionTime and the Damaged / ReallyDamaged attribute modifiers (ActiveBody, RespawnBody).
+Existing task matches: #649 Port 282: WorkerAIUpdate and DozerAIUpdate: the uncited own functions of the builders and workers (classify, then port the missing ones); #612 Port 264: AIUpdateInterface: the 64 uncited own functions of the AI every Ennorath unit runs (classify, then port the missing ones); #567 Port 243: Body damage states: ActiveBody EnteringDamagedTransitionTime and the Damaged / ReallyDamaged attribute modifiers (ActiveBody, RespawnBody).
 
 ### G344: RW 0x0068B244
 
@@ -3741,7 +3741,7 @@ Functions: RW 0x0044DE58 (unknown), RW 0x0048B7B1 (unknown), RW 0x005DD1F3 (unkn
 Candidates: 1 none/partial functions; 68 unknown status.
 Red buttons: none linked.
 Unused fields: ActiveBody.EnteringDamagedTransitionTime, ActiveBody.ReallyDamagedAttributeModifier, CastleBehavior.CrewPrepareFX, CastleBehavior.CrewPrepareInterval, CastleBehavior.CrewReleaseFX, HordeContain.LivingWorldOverloadTemplate, HordeContain.RanksToJustFreeWhenAttacking, HordeContain.SplitHordeNumber, ProductionUpdate.BonusForType, ProductionUpdate.SetBonusModelConditionOnSpeedBonus, ProductionUpdate.SpeedBonusAudioLoop, RespawnBody.DamagedAttributeModifier, RespawnBody.ReallyDamagedAttributeModifier, RespawnUpdate.DeathAnimationTime.
-Existing task matches: #613 Port 265: HordeContain: the 65 uncited own functions of the horde container (classify, then port the missing ones); #567 Port 243: Body damage states: ActiveBody EnteringDamagedTransitionTime and the Damaged / ReallyDamaged attribute modifiers (ActiveBody, RespawnBody).
+Existing task matches: #647 Port 280: production speed bonus: Wulfgar's call does nothing and ProductionUpdate's bonus fields are unread; #613 Port 265: HordeContain: the 65 uncited own functions of the horde container (classify, then port the missing ones); #567 Port 243: Body damage states: ActiveBody EnteringDamagedTransitionTime and the Damaged / ReallyDamaged attribute modifiers (ActiveBody, RespawnBody).
 
 ### G355: linked stops S-1922, S-1953
 
@@ -5064,7 +5064,7 @@ Functions: RW 0x00667416 (ported). Classes: AIUpdateInterface, AIWorld, DozerAIU
 Candidates: 0 none/partial functions; 0 unknown status.
 Red buttons: none linked.
 Unused fields: none linked.
-Existing task matches: #612 Port 264: AIUpdateInterface: the 64 uncited own functions of the AI every Ennorath unit runs (classify, then port the missing ones).
+Existing task matches: #650 Port 283: HorseHordeContain and HordeAIUpdate: the cavalry horde's uncited own functions (classify, then port the missing ones); #649 Port 282: WorkerAIUpdate and DozerAIUpdate: the uncited own functions of the builders and workers (classify, then port the missing ones); #612 Port 264: AIUpdateInterface: the 64 uncited own functions of the AI every Ennorath unit runs (classify, then port the missing ones).
 
 ### G502: linked stops S-4222, S-5013
 
@@ -5397,7 +5397,7 @@ Functions: none resolved. Classes: AIUpdateInterface, DozerAIUpdate, GiantBirdAI
 Candidates: 0 none/partial functions; 0 unknown status.
 Red buttons: none linked.
 Unused fields: none linked.
-Existing task matches: #612 Port 264: AIUpdateInterface: the 64 uncited own functions of the AI every Ennorath unit runs (classify, then port the missing ones).
+Existing task matches: #649 Port 282: WorkerAIUpdate and DozerAIUpdate: the uncited own functions of the builders and workers (classify, then port the missing ones); #612 Port 264: AIUpdateInterface: the 64 uncited own functions of the AI every Ennorath unit runs (classify, then port the missing ones).
 
 ### G539: linked stops S-7364
 
@@ -5667,7 +5667,7 @@ Functions: RW 0x0068B581 (ported), RW 0x00698EC3 (ported), RW 0x00887857 (unknow
 Addresses: S-1985: RW 0x0068B581, RW 0x00698EC3, RW 0x00887AF5, RW 0x008B8281, RW 0x008B8464, RW 0x008B87C5; S-1995: RW 0x00887857, RW 0x00887A35, RW 0x00887AF5; S-2007: RW 0x00887AF5, RW 0x008A270E, RW 0x008B8281, RW 0x008B87C5, RW 0x00C6E2F8.
 Red buttons: none linked.
 Unused fields: FlingPassengerSpecialAbilityUpdate.FlingPassengerVelocity, ProductionUpdate.BonusForType, ProductionUpdate.SetBonusModelConditionOnSpeedBonus, ProductionUpdate.SpeedBonusAudioLoop, RunOffMapBehavior.DieOnMap, RunOffMapBehavior.RunOffMapWaypointName.
-Existing task matches: #611 Port 263: Emotions: EmotionTrackerUpdate (terror, fear, cheering, idle emotions) and BoredUpdate; #607 Port 259: Horde-level powers: SplitHordeSpecialPower, HordeDispatchSpecialPower, SiegeDeployHordeSpecialPower, SiegeDeploySpecialPower; #603 Port 255: Slaves and masters: SlavedUpdate and SlaveWatcherBehavior (summons, spawned guards, spawned workers); #601 Port 253: Upgrade modules: SubObjectsUpgrade (logic side), GeometryUpgrade, ReplaceSelfUpgrade, CostModifierUpgrade, InheritUpgradeCreate, SpellRechargeModifierUpgrade; #572 Port 248: Death and lifecycle: RunOffMapBehavior RunOffMapWaypointName, ClearanceTestingSlowDeathBehavior ClearanceGeometryIsSmall, SymbioticStructuresBody Symbiote.
+Existing task matches: #647 Port 280: production speed bonus: Wulfgar's call does nothing and ProductionUpdate's bonus fields are unread; #611 Port 263: Emotions: EmotionTrackerUpdate (terror, fear, cheering, idle emotions) and BoredUpdate; #607 Port 259: Horde-level powers: SplitHordeSpecialPower, HordeDispatchSpecialPower, SiegeDeployHordeSpecialPower, SiegeDeploySpecialPower; #603 Port 255: Slaves and masters: SlavedUpdate and SlaveWatcherBehavior (summons, spawned guards, spawned workers); #601 Port 253: Upgrade modules: SubObjectsUpgrade (logic side), GeometryUpgrade, ReplaceSelfUpgrade, CostModifierUpgrade, InheritUpgradeCreate, SpellRechargeModifierUpgrade; #572 Port 248: Death and lifecycle: RunOffMapBehavior RunOffMapWaypointName, ClearanceTestingSlowDeathBehavior ClearanceGeometryIsSmall, SymbioticStructuresBody Symbiote.
 
 #### Task
 Trace the RotWK mechanism and callers, implement only verified missing behavior, and close or narrow the relevant stops.
@@ -5815,7 +5815,7 @@ Functions: RW 0x007760B7 (ported), RW 0x007A1C0D (unknown), RW 0x0081B376 (porte
 Addresses: S-1043: RW 0x007760B7, RW 0x007A1C0D, RW 0x0081B3D3, RW 0x00851BA2, RW 0x008B1909, RW 0x008B1962, RW 0x008B19AC, RW 0x008B1A70, RW 0x008C65D2, RW 0x008C66EB.
 Red buttons: Command_SpecialAbilityGeheimeWege, Command_SpecialAbilityHaradScoutCloak.
 Unused fields: none linked.
-Existing task matches: none.
+Existing task matches: #646 Port 279: ToggleHiddenSpecialAbilityUpdate: the Harad spy's cloak stays stuck, Ghan-buri-Ghan's secret paths do not hide.
 
 #### Task
 Trace the RotWK mechanism and callers, implement only verified missing behavior, and close or narrow the relevant stops.
