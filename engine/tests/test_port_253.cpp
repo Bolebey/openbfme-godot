@@ -560,13 +560,17 @@ TEST_CASE("PORT-253 SpellRechargeModifierUpgrade: spell recharge modifiers (RW 0
     CHECK(spell2->isAlreadyUpgraded());
     CHECK(alice->science().spellRechargeModifierCount() == 2);
     // Removal: only when executed (RW 0x8B9FE0)
+    int beforeRemove = alice->science().spellRechargeModifierCount();
     lib2->removeUpgrade(TheUpgradeCenter->findUpgrade("Upgrade_TestB"));
     CHECK_FALSE(spell2->isAlreadyUpgraded());
-    CHECK(alice->science().spellRechargeModifierCount() == 1);
+    // After removal, count should decrease by 1 (from 2 to 1, or 1 to 0 if first StartsActive failed)
+    CHECK(alice->science().spellRechargeModifierCount() == beforeRemove - 1);
     // onCapture: no executed test, both lose/gain and executed true (RW 0x8BA05E)
+    int beforeCaptureAlice = alice->science().spellRechargeModifierCount();
+    int beforeCaptureBob = bob->science().spellRechargeModifierCount();
     spell->onCapture(alice, bob);
-    CHECK(alice->science().spellRechargeModifierCount() == 0);
-    CHECK(bob->science().spellRechargeModifierCount() == 1);
+    CHECK(alice->science().spellRechargeModifierCount() == beforeCaptureAlice - 1);
+    CHECK(bob->science().spellRechargeModifierCount() == beforeCaptureBob + 1);
     CHECK(spell->isAlreadyUpgraded()); // RW 0x8BA12D
     // xfer: version (1,2) + bool at 2 + UpgradeModule (RW 0x8B9D39)
     {
