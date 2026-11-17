@@ -489,7 +489,7 @@ TEST_CASE("AIPOW-1: TOGGLE_SIEGE (RW 0x9EA2E1 / 0x9EA201 / 0x9EA280) and DOMINAT
 	CHECK(dominate->decision()->kind == AISpecialPowerDecision::KIND_OBJECT);
 }
 
-TEST_CASE("AIPOW-1: the ActionManager's stops [S-1872] .. [S-1874] and the computer's sciences [S-1875] are reported, S-1421 names what stays unported")
+TEST_CASE("PORT-232 AIPOW-1 stops: the ActionManager's stops [S-1872] .. [S-1874] and the computer's sciences [S-1875] are reported, S-1421 names what stays unported")
 {
 	const std::vector<std::string> am = ActionManager::stopLines();
 	REQUIRE(am.size() == 4);
