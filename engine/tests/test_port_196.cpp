@@ -40,6 +40,7 @@
 #include "Common/INI.h"
 #include "Common/Player.h"
 #include "Common/SpecialPower.h"
+#include "Common/StateHash.h"
 #include "GameClient/ControlBarCommands.h"
 #include "GameLogic/AI/AIWorld.h"
 #include "GameLogic/GameLogic.h"
@@ -391,6 +392,33 @@ TEST_CASE("PORT-196 ARMY_BREAKER: a human's caster and a caster of a player with
 	// the computer's own caster answers yes on the same record: the skirmish AI's presence is the difference (one reaction, one place)
 	CHECK(u->decideNow());
 	CHECK(f.logic->skirmishAI().armyBreakerTimers().size() == 1);
+}
+
+// The list is state: it is in the save (version 10) and in the world hash. It is hashed only while it holds an entry, so a game whose AI never took
+// ARMY_BREAKER keeps the hash this manager had before the lane — that is what leaves the perf1 / uber1 reference vectors where they were (a pin is
+// re-measured only when the simulation is MEANT to change, so this list must not shift every game's frames)
+TEST_CASE("PORT-196 ARMY_BREAKER: the taken-player list enters the world hash only once it holds an entry (empty list, the manager's hash is the same)")
+{
+	Fixture f;
+	SkirmishAIManager &ai = f.logic->skirmishAI();
+	REQUIRE(ai.armyBreakerTimers().empty());
+	StateHasher before;
+	ai.crc(before);
+	// an empty vector hashed unconditionally would add a size word here: the two runs must agree word for word
+	StateHasher again;
+	ai.crc(again);
+	CHECK(before.value() == again.value());
+	// RW 0x9E9222's entry { the caster's player, the frame it is free again } is a change the hash must see
+	ai.armyBreakerTimers().push_back({ 1, 900u });
+	StateHasher filled;
+	ai.crc(filled);
+	CHECK(filled.value() != before.value());
+	// and a different frame is a different state
+	ai.armyBreakerTimers().front().second = 901u;
+	StateHasher next;
+	ai.crc(next);
+	CHECK(next.value() != filled.value());
+	ai.armyBreakerTimers().clear();
 }
 
 TEST_CASE("PORT-196 ARMY_BREAKER: neighbouring behaviour — HEAL stays unported (52 of 53), the timer list is this decision's alone, and RW 0x9E91EA does not touch the assist timers")
