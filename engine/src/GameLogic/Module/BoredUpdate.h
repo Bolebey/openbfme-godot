@@ -50,13 +50,15 @@ class StateHasher;
 class BoredUpdateModuleData : public ModuleData
 {
 public:
-	BoredUpdateModuleData(); ///< RW 0x899E8C
-	unsigned m_scanDelayTime = LOGICFRAMES_PER_SECOND;           ///< + 0x08 (frames)
-	float m_scanDistance = 300.0f;                               ///< + 0x0C
-	ObjectFilter m_boredFilter = ObjectFilter::none({}, {});     ///< + 0x10 (RW 0x763D11: not valid)
-	bool m_canScanWhileAttackingOrMoving = false;                ///< + 0x14
-	const SpecialPowerTemplate *m_specialPowerTemplate = nullptr; ///< + 0x18
-	std::string m_specialPowerTemplateName;                      ///< (the name RW 0x73B22F looked up)
+	// RW 0x899E8C sets every default below, so the members carry no initializer of their own (one path, not two): a value repeated here and
+	// there could drift apart
+	BoredUpdateModuleData();                            ///< RW 0x899E8C
+	unsigned m_scanDelayTime;                           ///< + 0x08 (frames), RW 0x899ED3: [0xD9F608]
+	float m_scanDistance;                               ///< + 0x0C, RW 0x899ED6: [0xBD9E90]
+	ObjectFilter m_boredFilter;                         ///< + 0x10, RW 0x899EF0 -> RW 0x763D11 (not valid)
+	bool m_canScanWhileAttackingOrMoving;               ///< + 0x14, RW 0x899EFD: 0
+	const SpecialPowerTemplate *m_specialPowerTemplate; ///< + 0x18, RW 0x899EFA: 0
+	std::string m_specialPowerTemplateName;             ///< (the name RW 0x73B22F looked up)
 	static void buildFieldParse(MultiIniFieldParse &p);
 };
 

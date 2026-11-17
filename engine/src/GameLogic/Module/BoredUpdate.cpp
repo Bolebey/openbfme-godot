@@ -112,6 +112,7 @@ BoredUpdateModuleData::BoredUpdateModuleData()
 	m_scanDistance = 300.0f;                            // RW 0x899ED6: movss dword ptr [esi + 0xC], [0xBD9E90]
 	m_boredFilter = ObjectFilter::none({}, {});         // RW 0x899EF0 -> RW 0x763D11
 	m_canScanWhileAttackingOrMoving = false;            // RW 0x899EFD: mov byte ptr [esi + 0x14], 0
+	m_specialPowerTemplate = nullptr;                   // RW 0x899EFA: and dword ptr [esi + 0x18], 0
 }
 
 void BoredUpdate::registerModule(ModuleFactory &modules)
