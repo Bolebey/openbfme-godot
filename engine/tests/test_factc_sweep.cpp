@@ -1467,7 +1467,7 @@ TEST_CASE("factc combat: every Goblin and Angmar unit and hero attacks an enemy 
 	}
 }
 
-TEST_CASE("factc stops: S-2000 / S-2002 are reported (S-2001 was ported: the kept target id pick, lane PORT-232)")
+TEST_CASE("PORT-232 factc stops: S-2000 / S-2002 are reported (S-2001 was ported: the kept target id pick, lane PORT-232)")
 {
 	bool s2000 = false, s2002 = false;
 	if (haveWorld("factc stops"))

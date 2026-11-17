@@ -146,7 +146,7 @@ bool waterTestPasses(GameLogic &logic, const Coord3D &loc, const SpecialPowerTem
 }
 
 // the default ObjectFilter of a SpecialPowerTemplate (RW 0x7B1F5B -> RW 0x763D11 with the empty KindOf mask RW 0xDE49E4: rule NONE, empty masks, as
-// CostModifierUpgrade's constructor builds it, RW 0x8B9E08); the shared helper lives in ObjectFilter.h (specialPowerFilterOrDefault)
+// RW 0x8B9D79's CostModifierUpgrade constructor builds it, RW 0x8B9E08); the shared helper lives in ObjectFilter.h (specialPowerFilterOrDefault)
 const ObjectFilter &filterOrDefault(const std::shared_ptr<const ObjectFilter> &f)
 {
 	return specialPowerFilterOrDefault(f.get());
