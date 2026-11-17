@@ -19,6 +19,8 @@
 
 #include "MoveTestUtil.h"
 
+#include "Common/RandomValue.h"
+#include "Common/SpecialPower.h"
 #include "Common/StateHash.h"
 #include "GameLogic/Module/BoredUpdate.h"
 #include "GameLogic/Module/EmotionModules.h"
@@ -37,6 +39,10 @@ namespace
 {
 // EmotionNugget blocks: TAUNT (the point branch) and FEAR (what a SCARY object the tracker is afraid of requests)
 const char kNuggets[] =
+	"SpecialPower Port263BoredPower\n"
+	"  Enum = SPECIAL_SCREECH\n"
+	"  ReloadTime = 30000\n"
+	"End\n"
 	"EmotionNugget Port263Taunt\n"
 	"  Type = TAUNT\n"
 	"  Duration = 1000\n" // 5 frames
@@ -97,17 +103,26 @@ struct EmotionsFixture : movetest::MoveWorld
 {
 	EmotionSystem emotions;
 	EmotionSystem *savedEmotions = TheEmotionSystem;
+	// BoredUpdate's SpecialPowerTemplate (RW 0x73B22F) is looked up in TheSpecialPowerStore, which refuses the field without a store
+	SpecialPowerStore powers;
+	SpecialPowerStore *savedPowers = TheSpecialPowerStore;
 
 	// objects: false keeps the world empty when the case reads a data class's own constructor and no object
 	explicit EmotionsFixture(bool objects = true)
 	{
 		TheEmotionSystem = &emotions;
+		TheSpecialPowerStore = &powers;
 		emotions.registerBlock(w.fx.env.blocks);
+		w.fx.env.blocks.registerBlock("SpecialPower", [](INI *ini) { SpecialPowerStore::parseSpecialPowerDefinitionGlobal(ini); });
 		loadEmotions(objects);
 		buildMap();
 		logic->partition().setRegion(0.0f, 0.0f, 2000.0f, 2000.0f);
 	}
-	~EmotionsFixture() { TheEmotionSystem = savedEmotions; }
+	~EmotionsFixture()
+	{
+		TheEmotionSystem = savedEmotions;
+		TheSpecialPowerStore = savedPowers;
+	}
 
 	void loadEmotions(bool objects)
 	{
@@ -255,21 +270,50 @@ TEST_CASE("PORT-263 BoredUpdate: the data's constructor sets ScanDelayTime 5, Sc
 	CHECK_FALSE(ObjectFilterMatch::isValid(&data.m_boredFilter));
 }
 
-TEST_CASE("PORT-263 BoredUpdate (neighbour): the countdown RW 0x8B66B4 lets a scan through every ScanDelayTime frames, and a power with no module runs nothing (RW 0x899F9D)")
+TEST_CASE("PORT-263 BoredUpdate (neighbour): the constructor draws GameLogicRandomValue(0, ScanDelayTime) (RW 0x899F1F -> RW 0x6D328E) and every countdown that reaches 0 reloads it and runs the scan (RW 0x899F9D -> RW 0x8B66B4)")
 {
 	EmotionsFixture f;
+	f.logic->random().enableCallLog(true);
+	f.logic->random().clearCallLog();
 	Object *troll = f.at("Port263Troll", "Alice", 300.0f, 300.0f);
 	REQUIRE(troll);
 	BoredUpdate *b = dynamic_cast<BoredUpdate *>(troll->findModule("BoredUpdate"));
 	REQUIRE(b);
-	// RW 0x899EF5: the template name is not in this fixture's store, so the update returns before it counts anything
-	CHECK(b->data()->m_specialPowerTemplate == nullptr);
-	const unsigned countdown = b->countdown();
-	f.frames(3);
-	CHECK(b->countdown() == countdown); // no template: the update never reaches RW 0x8B66B4
-	CHECK(b->scans() == 0);
+	REQUIRE(b->data()->m_specialPowerTemplate); // the SpecialPower block of this INI (RW 0x73B22F)
+	// RW 0x899F33 -> RW 0x6D328E, line 0x46: one draw, bounds 0 and the data's ScanDelayTime (1 in this INI), and + 0x20 starts at 0
+	int draw = -1;
+	for (const GameLogicRandom::Call &c : f.logic->random().callLog())
+	{
+		if (!c.real && c.file == "BoredUpdate.cpp" && c.line == 0x46)
+		{
+			CHECK(c.lo == 0);
+			CHECK(c.hi == 1);
+			draw = c.result;
+		}
+	}
+	REQUIRE(draw != -1); // the draw of RW 0x6D328E was logged (its result is 0 or 1)
+	CHECK(b->countdown() == (unsigned)draw);
+	// RW 0x8B66B4 is a countdown, not a period: a countdown of 0 reloads ScanDelayTime and lets the scan through, anything else only decrements
+	if (draw == 0)
+	{
+		f.frames(1);
+		CHECK(b->scans() == 1);
+	}
+	else
+	{
+		f.frames(1);
+		CHECK(b->scans() == 0);
+		CHECK(b->countdown() == 0u);
+		f.frames(1);
+		CHECK(b->scans() == 1);
+	}
+	CHECK(b->countdown() == 1u); // reloaded with ScanDelayTime (RW 0x8B66B4's 0 -> reload branch)
+	// from there the pattern is fixed whatever the draw was: the reload frame scans, the next one only decrements, so one scan per two frames
+	const unsigned long long scans = b->scans();
+	f.frames(10);
+	CHECK(b->scans() == scans + 5);
+	CHECK(b->countdown() == 1u);
+	// the troll has no SpecialPowerModule for its power, so the scan finds no ally to use it on (RW 0x82D925 refuses)
 	CHECK(b->uses() == 0);
-	// BoredUpdate's own six uncited functions are the shared module plumbing (BoredUpdate.h): the class has no method left to add, and the data's
-	// defaults the case above reads are the constructor RW 0x899E8C whose field table RW 0xC65CC0 parses
 	CHECK(BoredUpdate::stopLines().size() == 1);
 }
