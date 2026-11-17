@@ -17,6 +17,16 @@ checked yet (state in /content/prcheck/state.json):
  5. open PRs that change the same files;
  6. a comment on the PR (marker <!-- prcheck -->) and /content/prcheck/reports/<pr>-<sha>.md.
 The GitHub token is the sandbox's git credential (~/.git-credentials), never printed.
+
+Order and skips (owner 2026-11-17: the checker ran hours behind, re-checking what Claude had already taken):
+ - the most recently updated PRs first;
+ - a PR whose head is already in a batch Claude is testing or landing (origin batch/*, land/*, agent/claude/station-0) is skipped;
+ - a PR returned to its agent (a comment with <!-- returned --> or "не принят", newer than the PR's last commit) is skipped until a new
+   commit arrives;
+ - the base set (BASE) runs only when the PR changes the engine (engine/src, thirdparty, cmake, test data, godot/) or a base test's file:
+   otherwise its results are main's by construction, and only the PR's own tests run.
+The compiler cache works (direct-mode hits for every unchanged translation unit): a PR that edits a core header (Object.h, Player.h,
+GameLogic.h) recompiles ~700 units because their content is new, which no cache avoids. Each report gives the build and test times.
 """
 from __future__ import annotations
 
@@ -194,16 +204,32 @@ def check_pr(pr: dict, state: dict, main_sha: str, open_prs: list[dict], comment
     shared = [f for f in changed if f in SHARED]
     if shared:
         lines.append(f"⚠️ Правит общие таблицы {', '.join(f'`{f}`' for f in shared)}: новые строки — файлами `docs/stops.d/S-<id>.md` и `docs/ennorath/night_watch.d/…`, README не трогать (PROCESS 5.7). Допустимо только закрыть или сузить существующий стоп.")
+    # a new matrix may not hide buttons that passed on main (tools/matrix_run.py diff, owner 2026-11-16 after PR 587)
+    if "docs/ennorath/MATRIX.tsv" in changed and (WT / "tools/matrix_run.py").exists():
+        md = sh([sys.executable, "tools/matrix_run.py", "diff", "--against", main_sha])
+        out = (md.stdout + md.stderr).strip()
+        head = "✅ Матрица: ни одна кнопка, проходившая на main, не ухудшилась без объяснения" if md.returncode == 0 else \
+            "❌ **Матрица ухудшает кнопки, проходившие на main**, без объяснения в `docs/ennorath/matrix_explain.d/<задача>.md` " \
+            "(строка `` `<объект> <кнопка>`: почему ``; ошибка теста — чинить тест, а не объяснять)"
+        lines += [head, "```", out[:3500], "```"]
+    t_build = time.time()
     ok, err = build()
+    t_build = time.time() - t_build
     if not ok:
         lines += ["❌ **Не собирается**:", "```", err[:3000], "```"]
         return finish(n, sha, lines, comment, state)
     lines.append("✅ Собирается (openbfme_tests и GDExtension, GCC).")
     own = own_tests(diff, pr["title"])
-    res = run_set(own + BASE)
+    base_needed = touches_engine(changed)
+    t_tests = time.time()
+    res = run_set(own + (BASE if base_needed else []))
+    t_tests = time.time() - t_tests
+    if not base_needed:
+        res.update({tc: (base.get(tc, "none"), "") for tc in BASE})
+        lines.append("ℹ️ Базовый набор не гонялся: PR не меняет движок (код, cmake, тестовые данные, godot/) и файлы базовых тестов — результат как на main.")
     for tc in own:
         st, e = res[tc]
-        mark = {"pass": "✅", "fail": "❌", "none": "⚠️ не найдено ни одного теста по шаблону"}[st]
+        mark = {"pass": "✅", "fail": "❌", "none": "❌ ни одного теста по шаблону (тестовый файл не подключён к openbfme_tests в engine/CMakeLists.txt?)"}[st]
         lines.append(f"{mark} свои тесты `{tc}`" + (f"\n```\n{e}\n```" if st == "fail" and e else ""))
     if not own:
         lines.append("⚠️ PR не добавляет TEST_CASE: своего теста нет.")
@@ -239,7 +265,45 @@ def check_pr(pr: dict, state: dict, main_sha: str, open_prs: list[dict], comment
         lines += map_section(diff, main_sha)
     except (OSError, ValueError, KeyError) as exc:
         lines.append(f"ℹ️ Карта функций не посчитана: {exc}")
+    lines.append(f"⏱️ Сборка {t_build / 60:.0f} мин, тесты {t_tests / 60:.0f} мин.")
     return finish(n, sha, lines, comment, state)
+
+
+ENGINE_PREFIXES = ("engine/src/", "engine/thirdparty/", "engine/cmake/", "engine/tests/data/", "godot/")
+
+
+def touches_engine(changed: list[str]) -> bool:
+    """True when the PR can change a base test's result: engine code / build / data, or the source file of a base test."""
+    if any(f.startswith(ENGINE_PREFIXES) or f == "engine/CMakeLists.txt" for f in changed):
+        return True
+    prefixes = [b.rstrip("*").split("?")[0].split(":")[0].strip() for b in BASE]
+    for f in changed:
+        if f.startswith("engine/tests/") and f.endswith(".cpp") and (WT / f).exists():
+            text = (WT / f).read_text(encoding="utf-8", errors="replace")
+            if any(f'TEST_CASE("{p}' in text for p in prefixes):
+                return True
+    return False
+
+
+RETURNED = re.compile(r"<!-- returned -->|не принят")
+TAKEN_REFS = ("refs/remotes/origin/batch/", "refs/remotes/origin/land/", "refs/remotes/origin/agent/claude/station-0")
+
+
+def skip_reason(p: dict) -> str:
+    """Why the checker leaves this PR alone now ('' = check it)."""
+    head = p["headRefOid"]
+    # comments and commits per PR: asking for them in the list query exceeds GitHub's GraphQL node limit
+    extra = json.loads(gh("pr", "view", str(p["number"]), "--json", "comments,commits"))
+    last = max((c.get("committedDate") or "" for c in extra.get("commits") or []), default="")
+    for c in extra.get("comments") or []:
+        if RETURNED.search(c.get("body") or "") and not (c.get("body") or "").startswith("<!-- prcheck") and (c.get("createdAt") or "") > last:
+            return "returned to its agent (no commit since)"
+    if sh(["git", "cat-file", "-e", f"{head}^{{commit}}"], cwd=REPO).returncode == 0:
+        refs = sh(["git", "for-each-ref", "--format=%(refname)", *TAKEN_REFS], cwd=REPO).stdout.split()
+        for ref in refs:
+            if sh(["git", "merge-base", "--is-ancestor", head, ref], cwd=REPO).returncode == 0:
+                return f"already in {ref.removeprefix('refs/remotes/origin/')}"
+    return ""
 
 
 def map_section(diff: str, main_sha: str) -> list[str]:
@@ -305,11 +369,29 @@ def cycle(args) -> int:
     state = load_state()
     sh(["git", "fetch", "-q", "origin"], cwd=REPO).check_returncode()
     main_sha = sh(["git", "rev-parse", "origin/main"], cwd=REPO).stdout.strip()
-    prs = json.loads(gh("pr", "list", "--state", "open", "--limit", "100", "--json", "number,title,headRefOid,headRefName,files,isDraft"))
+    prs = json.loads(gh("pr", "list", "--state", "open", "--limit", "100", "--json",
+                        "number,title,headRefOid,headRefName,files,isDraft,updatedAt"))
+    sh(["git", "fetch", "-q", "origin", "+refs/pull/*/head:refs/prcheck/*"], cwd=REPO)  # the heads, for the batch test below
     todo = [p for p in prs if (args.pr is None or p["number"] == args.pr) and not p["isDraft"]
             and state["checked"].get(str(p["number"])) != p["headRefOid"]
             and not p["headRefName"].startswith(("claude/", "agent/claude/"))]
-    for p in sorted(todo, key=lambda p: p["number"]):
+    skipped = state.setdefault("skipped", {})
+    keep = []
+    for p in todo:
+        why = skip_reason(p) if args.pr is None else ""
+        if why:
+            if skipped.get(str(p["number"])) != [p["headRefOid"], why]:
+                print(f"#{p['number']}: skipped, {why}", flush=True)
+                skipped[str(p["number"])] = [p["headRefOid"], why]
+                what = ("возвращён агенту; проверю, когда в PR появится новый коммит" if why.startswith("returned")
+                        else f"уже в `{why.removeprefix('already in ')}`: его тесты гоняются там, при новом коммите проверю заново")
+                finish(p["number"], p["headRefOid"], [f"<!-- prcheck {p['headRefOid']} -->",
+                       f"⏸️ **PR #{p['number']} не проверялся заново** (песочница {SANDBOX}, голова {p['headRefOid'][:8]}): {what}."],
+                       not args.no_comment, state)
+            continue
+        keep.append(p)
+    todo = keep
+    for p in sorted(todo, key=lambda p: p.get("updatedAt") or "", reverse=True):  # the freshest first
         t0 = time.time()
         try:
             body = check_pr(p, state, main_sha, prs, not args.no_comment)
