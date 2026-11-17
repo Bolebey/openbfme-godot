@@ -622,7 +622,7 @@ void SpecialAbilityUpdate::initiateIntentToDoSpecialPower(const SpecialPowerTemp
 }
 
 // RW 0x851B6E (the special power update interface's slot 0x20)
-bool SpecialAbilityUpdate::allowsSpecialPowerUse() const
+bool SpecialAbilityUpdate::allowsSpecialPowerUse(const Coord3D *) const
 {
 	if (!m_data->m_specialPowerTemplate || !conditionsAllow())
 	{
