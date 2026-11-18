@@ -28,3 +28,24 @@ def test_a_restored_state_learns_checked_and_reworked_prs_from_github(monkeypatc
     calls = len(saved)
     pc.sync_from_comments({"number": 3, "headRefOid": B, "isDraft": False}, state)   # once per head
     assert len(saved) == calls
+
+
+def test_a_hash_test_red_on_main_that_the_pr_moves_is_seen_by_its_values():
+    main_out = "/x/test_ai.cpp:120: ERROR: CHECK( hash == 0x1234 ) is NOT correct!\n  values: CHECK( 0x9999 == 0x1234 )\n"
+    same_out = "/y/other/test_ai.cpp:121: ERROR: CHECK( hash == 0x1234 ) is NOT correct!\n  values: CHECK( 0x9999 == 0x1234 )\n"
+    moved_out = "/x/test_ai.cpp:120: ERROR: CHECK( hash == 0x1234 ) is NOT correct!\n  values: CHECK( 0x7777 == 0x1234 )\n"
+    assert pc.signature("pass", "") == "pass"
+    assert pc.signature("fail", main_out) == pc.signature("fail", same_out)   # paths and line numbers do not count
+    assert pc.signature("fail", main_out) != pc.signature("fail", moved_out)
+    tc = pc.BASE[0]
+    pc.SIGS.clear()
+    pc.SIGS[tc] = pc.signature("fail", moved_out)
+    res = {t: ("fail" if t == tc else "pass", "") for t in pc.BASE}
+    base = {t: res[t][0] for t in pc.BASE}
+    main_sigs = {t: base[t] for t in pc.BASE} | {tc: pc.signature("fail", main_out)}
+    assert pc.moved_tests(res, base, main_sigs) == [tc]
+    pc.SIGS[tc] = pc.signature("fail", same_out)
+    assert pc.moved_tests(res, base, main_sigs) == []
+    assert pc.MOVES.search(pc.moves_mark([])).group(1) == ""
+    assert pc.MOVES.search(pc.moves_mark(["perf1*", "uber1*"])).group(1) == "perf1*,uber1*"
+    assert "❌" not in pc.moves_mark(["perf1*"])   # the dashboard and the batch read ❌ as a red verdict

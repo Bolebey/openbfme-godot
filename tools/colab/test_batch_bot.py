@@ -139,3 +139,19 @@ def test_main_results_are_shared_between_batches_on_one_main(tmp_path):
     assert bb.load_main_results(f) == {"perf1*": "fail", "uber1*": "pass"}
     f.write_text("not json")
     assert bb.load_main_results(f) == {}
+
+
+def test_a_pr_that_moves_hash_tests_goes_alone_and_the_oldest_decides_the_kind():
+    quiet1, mover, quiet2 = pr(number=1, _moves=[]), pr(number=2, _moves=["perf1*"]), pr(number=3, _moves=None)
+    take, wait = bb.split_movers([quiet1, mover, quiet2])
+    assert [p["number"] for p in take] == [1, 3] and [p["number"] for p, _ in wait] == [2]
+    take, wait = bb.split_movers([mover, quiet1, quiet2])
+    assert [p["number"] for p in take] == [2] and bb.solo_mover(take) and len(wait) == 2
+    assert not bb.solo_mover([quiet1])
+
+
+def test_the_batch_reads_the_checkers_moves_mark(monkeypatch):
+    p = pr()
+    fake_view(monkeypatch, [{"body": f"<!-- prcheck {p['headRefOid']} -->\n✅ ok\n<!-- prcheck-moves uber1*,aiexpand1* -->",
+                             "createdAt": "2026-11-18T10:00:00Z"}])
+    assert bb.verdict(p) == "green" and p["_moves"] == ["uber1*", "aiexpand1*"]

@@ -67,6 +67,8 @@ PINS = {"perf1*": "OPENBFME_PERF1_REGEN", "uber1*": "OPENBFME_UBER1_REGEN"}
 UNION = {"docs/STOPS.md", "engine/CMakeLists.txt", "docs/stops.d/RESERVED.tsv", "docs/ennorath/NIGHT_WATCH.md", "docs/ennorath/PROBLEMS.md",
          "docs/ennorath/TOP20.md", "docs/ennorath/PR_CANDIDATES.md", "docs/ennorath/MODULE_GAPS.md", "docs/ennorath/TEST_BASELINE.md"}
 RETURNED = re.compile(r"<!-- returned -->|не принят", re.I)
+# pr_checker.py's mark (2026-11-18): the base tests the PR moves (their values differ from main's); empty = a quiet PR
+MOVES = re.compile(r"<!-- prcheck-moves ([^ ]*) ?-->")
 FRAGMENT = re.compile(r"^docs/stops\.d/S-(\d+)\.md$")
 
 
@@ -172,6 +174,8 @@ def verdict(p: dict) -> str:
     if "❌" in real[-1]["body"]:
         return "red in the checker's report"
     p["_report"] = real[-1]["body"]  # its named pins attribute a moved pin without a bisect (checker_pins)
+    m = MOVES.search(real[-1]["body"])
+    p["_moves"] = [t for t in m.group(1).split(",") if t] if m else None   # None: checked before the mark, treated as quiet
     return "green"
 
 
@@ -233,10 +237,28 @@ def candidates(only: list[int] | None, cap: int = MAX_PRS, own: str = "") -> tup
     for p in prs:
         why = f"уже в партии {held[p['number']]}" if p["number"] in held else verdict(p)
         (take.append(p) if why == "green" else wait.append((p, why)))
+    take, held_back = split_movers(take)
+    wait = held_back + wait
     if cap > 0 and len(take) > cap:   # the oldest green PRs go first; the rest wait for the next batch, with no comment on them
         wait = [(p, f"следующая партия (в партии не больше {cap} PR)") for p in take[cap:]] + wait
         take = take[:cap]
     return take, wait
+
+
+def split_movers(green: list[dict]) -> tuple[list[dict], list[tuple[dict, str]]]:
+    """Owner 2026-11-18: the bisects of moved hash tests made the batches slow (18b: 6.5 hours for 15 PRs). A PR the checker saw move a base
+    test (pr_checker.py's prcheck-moves mark) goes alone: no bisect, its pins are re-measured on it; the quiet ones go together. The oldest
+    green PR decides which kind of batch comes next, so neither kind waits for ever."""
+    if not green:
+        return [], []
+    if green[0].get("_moves"):
+        return [green[0]], [(p, f"следующая партия: #{green[0]['number']} сдвигает хеш-тесты и идёт один") for p in green[1:]]
+    quiet = [p for p in green if not p.get("_moves")]
+    return quiet, [(p, f"сдвигает хеш-тесты ({', '.join(p['_moves'])}): пойдёт отдельной партией") for p in green if p.get("_moves")]
+
+
+def solo_mover(take: list[dict]) -> bool:
+    return len(take) == 1 and bool(take[0].get("_moves"))
 
 
 # ---------------------------------------------------------------- 2-3. merging, stops
@@ -649,7 +671,7 @@ def loop_round(a, st: dict) -> str:
     if st.get("red") and since < a.idle_hours * 3600:
         return f"the last batch ({st.get('name')}) did not come out green: next try in {int((a.idle_hours * 3600 - since) / 60)} min"
     take, _ = candidates(None, a.max)
-    if not should_start(len(take), since, a.min, a.idle_hours):
+    if not solo_mover(take) and not should_start(len(take), since, a.min, a.idle_hours):   # a PR that moves pins goes at once
         return f"{len(take)} green PR(s): a batch starts at {a.min}, or at 1 after {a.idle_hours:g} h since the last batch"
     used = {q.name.split(".")[0] for q in RUNS.glob("2*")} if RUNS.exists() else set()
     # the batch branches on origin too: a run folder can be gone from Drive while its branch lives (2026-11-18: the loop named its batch

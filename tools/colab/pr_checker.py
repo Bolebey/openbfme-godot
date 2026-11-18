@@ -132,19 +132,57 @@ def build() -> tuple[bool, str]:
     return True, ""
 
 
+# What a test measured, not only its colour (owner 2026-11-18): a hash test red on main (aiexpand1, skirmish AI vs AI, save4b ...) that a PR
+# moves stays red, so pass / fail alone cannot see the move. The signature is the failures' own lines (the assertion and its values, file
+# paths and line numbers dropped): equal on main and on the PR = the PR does not move the test.
+SIG_LINE = re.compile(r"ERROR:|values:|TEST CASE:|logged:|FATAL|SIGSEGV|CRASH")
+SIG_PATH = re.compile(r"^\S*?\.(?:cpp|h|hpp)(?::\d+|\(\d+\))?:?\s*")
+
+
+def signature(status: str, out: str) -> str:
+    """'pass' / 'none', or a short hash of the failure lines of `out` (doctest's own output)."""
+    if status != "fail":
+        return status
+    keep = [SIG_PATH.sub("", l.strip()) for l in out.splitlines() if SIG_LINE.search(l)]
+    return "fail:" + hashlib.sha1("\n".join(keep).encode("utf-8", "replace")).hexdigest()[:12]
+
+
+SIGS: dict[str, str] = {}   # pattern -> signature of its last run (run_test fills it; each pattern runs in one thread)
+
+
+def moved_tests(res: dict[str, tuple[str, str]], base: dict[str, str], main_sigs: dict[str, str]) -> list[str]:
+    """The base tests whose result on the PR differs from main's: by signature where both have one, else by status."""
+    return [tc for tc in BASE if SIGS.get(tc, res[tc][0]) != main_sigs.get(tc, base.get(tc))]
+
+
+MOVES = re.compile(r"<!-- prcheck-moves ([^ ]*) ?-->")
+
+
+def moves_mark(moved: list[str]) -> str:
+    """The comment's lines for batch_bot.py (the hidden mark) and the reader."""
+    mark = f"<!-- prcheck-moves {','.join(moved)} -->"
+    if moved:
+        return mark + f"\n🧷 Сдвигает хеш-тесты {', '.join(f'`{t}`' for t in moved)} (их значения не как на main): в партию пойдёт один."
+    return mark + "\n🔕 Базовый набор не сдвинут (значения как на main): пойдёт в общую партию."
+
+
 def run_test(tc: str) -> tuple[str, str, str]:
-    """(pattern, 'pass'|'fail'|'none', first error lines)."""
+    """(pattern, 'pass'|'fail'|'none', first error lines); its signature goes to SIGS[pattern]."""
     exe = WT / "engine/build/openbfme_tests"
     try:
         done = sh([str(exe), f"-tc={tc}"], timeout=2400, env=agent_env())
         out = done.stdout + done.stderr
     except subprocess.TimeoutExpired:
+        SIGS[tc] = "fail:timeout"
         return tc, "fail", "timeout 40 min"
     m = re.search(r"test cases:\s*(\d+)\s*\|\s*(\d+) passed\s*\|\s*(\d+) failed", out)
     if not m or m.group(1) == "0":
+        SIGS[tc] = "none"
         return tc, "none", ""
     errs = "\n".join([l[:220] for l in out.splitlines() if re.search(r"ERROR|FATAL|SIGSEGV|CRASH", l)][:4])
-    return tc, ("fail" if (done.returncode or m.group(3) != "0") else "pass"), errs
+    st = "fail" if (done.returncode or m.group(3) != "0") else "pass"
+    SIGS[tc] = signature(st, out)
+    return tc, st, errs
 
 
 _ENV: dict | None = None
@@ -168,6 +206,8 @@ def main_baseline(state: dict, main_sha: str) -> dict:
     """BASE on main itself, once per main commit."""
     if not set(BASE) <= set(state["main"].get("results") or {}):  # BASE grew (2026-11-17: the batch's whole set): measure main again
         state["main"] = {}
+    if not set(BASE) <= set(state["main"].get("sigs") or {}):   # measured before the signatures (2026-11-18): measure main again
+        state["main"] = {}
     if state["main"].get("sha") == main_sha and "audit" in state["main"]:
         return state["main"]["results"]
     old = state["main"].get("sha")
@@ -183,7 +223,7 @@ def main_baseline(state: dict, main_sha: str) -> dict:
     if not ok:
         raise RuntimeError(f"main {main_sha[:8]} does not build:\n{err}")
     res = run_set(BASE)
-    state["main"] = {"sha": main_sha, "results": {k: v[0] for k, v in res.items()}}
+    state["main"] = {"sha": main_sha, "results": {k: v[0] for k, v in res.items()}, "sigs": {k: SIGS.get(k, v[0]) for k, v in res.items()}}
     state["main"]["audit"] = str(run_audit(HOME / "audit-main") or "")  # the field audit of this main: the PRs' audits compare with it
     save_state(state)
     return state["main"]["results"]
@@ -375,6 +415,9 @@ def check_pr(pr: dict, state: dict, main_sha: str, open_prs: list[dict], comment
     for tc, e in worse:
         if named(tc):
             lines.append(f"⚠️ `{tc}` сдвигает пин, причина в PR названа: владелец перемерит при вливании." + (f"\n```\n{e}\n```" if e else ""))
+    # the batch's split (owner 2026-11-18): a PR that moves any base test (its signature differs from main's, red on main or not) goes into
+    # a batch alone, the others together; batch_bot.py reads this mark. Without the base set run (no engine change) nothing moves.
+    lines.append(moves_mark(moved_tests(res, base, state["main"].get("sigs") or {}) if base_needed else []))
     if not worse:
         reds = [tc for tc in BASE if base.get(tc) == "fail"]
         lines.append("✅ Базовый набор как на main" + (f" (на main и так красные: {', '.join(f'`{t}`' for t in reds)})" if reds else "") + ".")
