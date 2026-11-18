@@ -210,7 +210,8 @@ public:
 	virtual bool isActive() const = 0;
 	// slot 0x20 (lane AIPOW-1, asked by the module's location requirements RW 0x897E01 with the place: RW 0x897E82 pushes it): may the power be
 	// used now at that place. SpecialAbilityUpdate's RW 0x851B6E does not read it (it hands it to RW 0x851551, which ignores it);
-	// TeleportSpecialAbilityUpdate's RW 0x896608 cuts its MaxDistance with it. A null place is what the object form RW 0x82DAAB hands over and
+	// TeleportSpecialAbilityUpdate's RW 0x896608 cuts its MaxDistance with it, ArrowStormUpdate's RW 0x893D61 its
+	// MinimumAttackRange (PORT-260). A null place is what the object form RW 0x82DAAB hands over and
 	// the branch RW 0x89660C falls back to the base with.
 	virtual bool allowsSpecialPowerUse(const Coord3D *loc = nullptr) const = 0;
 };
@@ -232,7 +233,8 @@ public:
 	// 0x1A and 0x1D, else the within-range flag (+ 0x80). The command button branches (RW 0x851C9E .. 0x851CE1) are not these callers'
 	bool isPowerCurrentlyInUse() const;
 	// RW 0x851B6E: the RequiredConditions / RejectedConditions (RW 0x851551); a power of the garrison types 0x27 / 0x28 also needs room in the object's
-	// contain (contain slots 0x114 / 0x70). The place argument is passed on to RW 0x851551, which does not read it: only subclasses cut with it.
+	// contain (contain slots 0x114 / 0x70). The place argument is passed on to RW 0x851551, which does not read it: only subclasses cut with it
+	// (Teleport's RW 0x896608, ArrowStorm's RW 0x893D61).
 	bool allowsSpecialPowerUse(const Coord3D *loc = nullptr) const override;
 	void crc(StateHasher &h) const override;
 
