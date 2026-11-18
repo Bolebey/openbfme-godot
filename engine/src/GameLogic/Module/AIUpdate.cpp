@@ -1967,6 +1967,14 @@ float AIUpdateInterface::curLocomotorSpeed() const
 	return m_curLocomotor ? m_curLocomotor->getMaxSpeedForCondition(*m_locoHost) : 0.0f;
 }
 
+// RW 0x00662B50 (AI vslot 0x1C4): the machine (AI + 0x30) and its vslot 0x30 (RW 0x741724) — the temporary state's busy flag first (RW 0x8BD372 is true
+// for AIBusyState), the current state's otherwise (RW 0x8DB6BD). RotWK dereferences the machine here (the constructor RW 0x0066ECFE makes it); the port
+// answers false without one, as its other machine queries do.
+bool AIUpdateInterface::isBusyState() const
+{
+	return m_machine ? m_machine->isBusyState() : false;
+}
+
 // B1 AIUpdate.cpp:3925-3975
 void AIUpdateInterface::setLocomotorGoalNone()
 {
