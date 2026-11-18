@@ -24,6 +24,16 @@ result and runs tools/land.py --batch <name> on the PC.
     openbfme-runs/batch/<name>/report.md: the PRs in and out and why, renumbered stops, re-measured pins, the suite, and every PR's
     "check in game" lines for TOP20.
 Claude reads the report, adds what needs judgement (the pin's `// pin:` line, the TOP20 entries) and lands. Nothing here touches main.
+
+`loop` (owner 2026-11-18: "сделать бота постоянным циклом на sb2"; autostart.d/batch.sh starts it, watchdog.py keeps it running, the
+dashboard's Colab 2 card shows it): every 15 minutes, from its installed copy /content/sandbox/batch_bot.py, it
+  - waits while a `run` is going (a hand one too) and while its last green batch is not in origin/main yet: the batch's PRs stay open
+    until Claude lands it, so a next batch would take them again;
+  - otherwise runs a batch (`run --name <date><next letter>`, log on the Drive next to the reports) when the checker has --min (3) green
+    PRs, or at least one and --idle-hours (2) passed since the last batch;
+  - after a batch that did not come out green waits --idle-hours before the next (a red main must not rebuild every 15 minutes);
+  - writes one line per round to /content/batch_loop.log (the watchdog's activity and the dashboard's log tail) and restarts on
+    origin/main's newer copy of itself between rounds.
 """
 from __future__ import annotations
 
@@ -504,6 +514,119 @@ def report(name: str, out_dir: Path, rows: dict) -> Path:
     return path
 
 
+# ---------------------------------------------------------------- loop
+
+LOOP_STATE = Path(os.environ.get("BATCH_LOOP_STATE", "/content/sandbox/batch-loop.json"))
+
+
+def say(msg: str) -> None:
+    print(f"{time.strftime('%F %T', time.gmtime())} UTC {msg}", flush=True)
+
+
+def is_run(argv: list[str]) -> bool:
+    """`python3 <any>/batch_bot.py run ...` (a hand run too); the loop itself is `... loop` and never matches."""
+    return len(argv) >= 3 and argv[0].endswith(("python3", "python")) and argv[1].endswith("batch_bot.py") and argv[2] == "run"
+
+
+def run_going() -> bool:
+    for d in Path("/proc").iterdir():
+        if d.name.isdigit() and int(d.name) != os.getpid():
+            try:
+                argv = [a.decode("utf-8", "replace") for a in (d / "cmdline").read_bytes().split(b"\0") if a]
+            except OSError:
+                continue
+            if is_run(argv):
+                return True
+    return False
+
+
+def unlanded(name: str) -> bool:
+    """The batch's green branch is on origin and not in origin/main yet (deleted by Claude = given up: no longer waited for)."""
+    ref = f"refs/remotes/origin/batch/{name}"
+    if sh(["git", "rev-parse", "-q", "--verify", ref], cwd=REPO).returncode:
+        return False
+    return sh(["git", "merge-base", "--is-ancestor", ref, "refs/remotes/origin/main"], cwd=REPO).returncode != 0
+
+
+def next_name(day: str, used: set[str]) -> str:
+    for c in "abcdefghijklmnopqrstuvwxyz":
+        if day + c not in used:
+            return day + c
+    return day + "-" + time.strftime("%H%M", time.gmtime())
+
+
+def should_start(green: int, since_s: float, minimum: int, idle_hours: float) -> bool:
+    return green > 0 and (green >= minimum or since_s >= idle_hours * 3600)
+
+
+def loop_round(a, st: dict) -> str:
+    """One round; returns the line for the log."""
+    sh(["git", "fetch", "-q", "--prune", "origin"], cwd=REPO)
+    if run_going():
+        return "a batch run is going: waiting"
+    last = st.get("green")
+    if last and unlanded(last):
+        return f"batch/{last} is green and waits for Claude's landing (tools/land.py --batch {last})"
+    since = time.time() - st.get("finished", 0)
+    if st.get("red") and since < a.idle_hours * 3600:
+        return f"the last batch ({st.get('name')}) did not come out green: next try in {int((a.idle_hours * 3600 - since) / 60)} min"
+    take, _ = candidates(None, a.max)
+    if not should_start(len(take), since, a.min, a.idle_hours):
+        return f"{len(take)} green PR(s): a batch starts at {a.min}, or at 1 after {a.idle_hours:g} h since the last batch"
+    used = {q.name.split(".")[0] for q in RUNS.glob("2*")} if RUNS.exists() else set()
+    name = next_name(time.strftime("%Y-%m-%d", time.gmtime()), used)
+    RUNS.mkdir(parents=True, exist_ok=True)
+    say(f"batch {name}: {' '.join('#%d' % p['number'] for p in take)}")
+    me = Path(__file__).resolve()
+    with open(RUNS / f"{name}.log", "w") as out:
+        rc = subprocess.run([sys.executable, str(me), "run", "--name", name, "--max", str(a.max)], cwd=str(REPO),
+                            stdout=out, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL).returncode
+    st.update(name=name, finished=time.time(), red=rc != 0)
+    if rc == 0:
+        st["green"] = name
+        return f"batch {name} green: batch/{name} pushed, waits for Claude's landing"
+    return f"batch {name} not green: {RUNS / name / 'report.md'}"
+
+
+def self_update() -> None:
+    """As pr_checker.py: the installed copy restarts on origin/main's newer one between rounds; a copy inside a git tree stays."""
+    me = Path(__file__).resolve()
+    if subprocess.run(["git", "-C", str(me.parent), "rev-parse", "--git-dir"], capture_output=True).returncode == 0:
+        return
+    new = subprocess.run(["git", "show", "origin/main:tools/colab/batch_bot.py"], cwd=REPO, capture_output=True).stdout
+    if not new or new == me.read_bytes():
+        return
+    try:
+        compile(new, str(me), "exec")
+    except SyntaxError as e:
+        say(f"self-update: origin/main's batch_bot.py does not compile ({e}); keeping the running copy")
+        return
+    tmp = me.with_name(me.name + ".new")
+    tmp.write_bytes(new)
+    os.replace(tmp, me)
+    say("self-update: restarting on origin/main's batch_bot.py")
+    os.execv(sys.executable, [sys.executable, str(me)] + sys.argv[1:])
+
+
+def cmd_loop(a) -> int:
+    while True:
+        try:
+            st = json.loads(LOOP_STATE.read_text()) if LOOP_STATE.exists() else {}
+        except ValueError:
+            st = {}
+        try:
+            line = loop_round(a, st)
+        except Exception as e:  # a GitHub or Drive hiccup: the next round tries again
+            line = f"round failed: {e}"[:300]
+        LOOP_STATE.write_text(json.dumps(st))
+        say(line)
+        if a.once:
+            return 0
+        time.sleep(a.every)
+        sh(["git", "fetch", "-q", "origin"], cwd=REPO)
+        self_update()
+
+
 # ---------------------------------------------------------------- main
 
 def cmd_plan(a) -> int:
@@ -624,6 +747,12 @@ def cmd_run(a) -> int:
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = ap.add_subparsers(dest="cmd", required=True)
+    lp = sub.add_parser("loop")
+    lp.add_argument("--max", type=int, default=MAX_PRS)
+    lp.add_argument("--min", type=int, default=3, help="green PRs that start a batch at once")
+    lp.add_argument("--idle-hours", type=float, default=2.0, help="after this long since the last batch, one green PR is enough")
+    lp.add_argument("--every", type=int, default=900)
+    lp.add_argument("--once", action="store_true")
     for c in ("plan", "run"):
         s = sub.add_parser(c)
         s.add_argument("--prs", type=lambda v: [int(x) for x in v.split(",") if x], default=None)
@@ -633,7 +762,7 @@ def main() -> int:
             s.add_argument("--rounds", type=int, default=3)
             s.add_argument("--no-comment", action="store_true", help="do not comment on the excluded PRs (a dry run)")
     a = ap.parse_args()
-    return cmd_plan(a) if a.cmd == "plan" else cmd_run(a)
+    return cmd_plan(a) if a.cmd == "plan" else cmd_run(a) if a.cmd == "run" else cmd_loop(a)
 
 
 if __name__ == "__main__":

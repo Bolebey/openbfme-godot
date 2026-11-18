@@ -89,3 +89,17 @@ def test_a_batch_takes_at_most_five_green_prs_oldest_first(monkeypatch):
     assert "следующая партия" in wait[0][1]
     take, wait = bb.candidates(None, 0)
     assert len(take) == 6
+
+
+def test_the_loop_starts_a_batch_at_three_green_prs_or_one_after_the_idle_time():
+    assert not bb.should_start(0, 10 * 3600, 3, 2)
+    assert not bb.should_start(2, 3600, 3, 2)
+    assert bb.should_start(3, 0, 3, 2)
+    assert bb.should_start(1, 2 * 3600, 3, 2)
+
+
+def test_the_loop_names_the_next_free_letter_and_sees_hand_runs_only():
+    assert bb.next_name("2026-11-18", {"2026-11-18a", "2026-11-18b", "2026-11-18c"}) == "2026-11-18d"
+    assert bb.is_run(["python3", "/content/sandbox/batch_bot.py", "run", "--name", "x"])
+    assert bb.is_run(["python3", "tools/colab/batch_bot.py", "run"])
+    assert not bb.is_run(["python3", "/content/sandbox/batch_bot.py", "loop"])

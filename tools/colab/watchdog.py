@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """The sandbox watchdog (owner 2026-11-17: "сторож песочниц"): every 5 minutes on each Colab sandbox it
-  - checks that the sandbox's own loops run (ROLES: sb1 the PR checker, sb3 the maps run, sb4 the upstream loop) and starts a missing one
+  - checks that the sandbox's own loops run (ROLES: sb1 the PR checker, sb2 the batch bot's loop, sb3 the maps run, sb4 the upstream loop) and starts a missing one
     again from origin/main's copy, as autostart.d does after a restart (a loop missing at two checks in a row, at most 3 starts an hour;
     /content/sandbox/watchdog.off or a file /content/sandbox/watchdog.off.<loop> holds it off while Claude swaps a loop by hand);
   - writes a heartbeat to the Drive, openbfme-runs/upstream/openbfme-health-sb<N>.json (the folder the dashboard's Drive key reads; the
@@ -34,10 +34,12 @@ LOOPS = {
                 {"PRCHECK_STATE": "/content/sandbox/prcheck-state.json"}),
     "maps": ("nightly_maps.sh", ["bash", "/content/sandbox/nightly_maps.sh"], "/content/nightly_maps.log",
              [str(DRIVE / "maps/nightly_maps.log"), str(DRIVE / "maps/last_rev")], {}),
+    "batch": ("batch_bot.py", ["python3", "/content/sandbox/batch_bot.py", "loop"], "/content/batch_loop.log",
+              ["/content/batch_loop.log"], {}),
     "upstream": ("upstream_loop.sh", ["bash", "/content/sandbox/upstream_loop.sh"], "/content/upstream.log",
                  [str(DRIVE / "upstream/loop.log")], {}),
 }
-ROLES = {"1": ["prcheck"], "2": [], "3": ["maps"], "4": ["upstream"]}
+ROLES = {"1": ["prcheck"], "2": ["batch"], "3": ["maps"], "4": ["upstream"]}
 
 
 def procs() -> list[list[str]]:
@@ -54,7 +56,8 @@ def procs() -> list[list[str]]:
 
 def running(loop: str, ps: list[list[str]]) -> bool:
     path = LOOPS[loop][1][1]
-    return any(len(a) >= 2 and a[1] == path and a[0].endswith(("python3", "bash", "python")) for a in ps)
+    extra = LOOPS[loop][1][2:]   # the batch loop is `batch_bot.py loop`: a hand `batch_bot.py run` of the same copy is not the loop
+    return any(len(a) >= 2 and a[1] == path and a[2:2 + len(extra)] == extra and a[0].endswith(("python3", "bash", "python")) for a in ps)
 
 
 def start(loop: str) -> str:
@@ -90,7 +93,8 @@ def busy(ps: list[list[str]]) -> dict:
     names = [os.path.basename(a[0]) for a in ps if a]
     joined = [" ".join(a) for a in ps]
     return {"tests": sum(1 for n in names if n == "openbfme_tests"), "compilers": sum(1 for n in names if n in ("cc1plus", "cc1")),
-            "batch_bot": any("batch_bot.py" in j and j.startswith("python") for j in joined),
+            "batch_bot": any(len(a) >= 3 and a[0].endswith(("python3", "python")) and a[1].endswith("batch_bot.py") and a[2] == "run"
+                             for a in ps),   # a batch being built, not the loop that waits
             "matrix": any("matrix_run.py" in j and j.startswith("python") for j in joined)}
 
 
