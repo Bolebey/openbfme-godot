@@ -252,6 +252,7 @@ include(cmake/Port211.cmake) # PORT-211: the economy group S-250 .. S-260 swept 
 include(cmake/Port242.cmake) # PORT-242: SpecialPowerModule RequirementsFilterStrategic (fork issue 566; OPENBFME_PORT242_TESTS)
 include(cmake/Port207.cmake) # OPENBFME_PORT207_TESTS (lane PORT-207)
 include(cmake/Port196.cmake) # PORT-196: the AI spell book's ARMY_BREAKER decision (issue 463; OPENBFME_PORT196_TESTS)
+include(cmake/Port256.cmake) # PORT-256: the weapon-switching powers (fork issue 604; OPENBFME_PORT256_TESTS)
 include(cmake/Port427.cmake) # PORT-427: the porcupine formation's members face outward, each its radial bearing (issue #427; OPENBFME_PORT427_TESTS)
 include(cmake/Port437.cmake) # PORT-437: the generic attack machine's object conditions (issue #437; OPENBFME_PORT437_TESTS)
 include(cmake/Port436.cmake) # PORT-436: the weapon aim at the victim's contact point (issue #436; OPENBFME_PORT436_TESTS)
@@ -529,6 +530,7 @@ include(cmake/Port257.cmake)    # PORT-257: GiantBirdAIUpdate onCollide/collisio
 include(cmake/Port224.cmake)    # PORT-224: destroying a creep lair or worker-rebuilt structure mid-rebuild fades the hole without money or treasure (issue #534; OPENBFME_PORT224_TESTS)
 include(cmake/Port222.cmake)    # PORT-222: a LevelGrantSpecialPower fills a horde's experience pool (fork issue 532; OPENBFME_PORT222_TESTS)
 include(cmake/Port206.cmake)    # PORT-206: the weapon bonus conditions of Object + 0x39C, WeaponBonusUpgrade sets PLAYER_UPGRADE (issue #488; OPENBFME_PORT206_TESTS)
+include(cmake/Port258.cmake)    # PORT-258: powers on enemy units — DominateEnemy, Curse, Deflect, TimerRefresh (issue #606; OPENBFME_PORT258_TESTS)
 add_library(openbfme_core STATIC
     ${OPENBFME_PLAY2_SOURCES}
     ${OPENBFME_APT_SOURCES}
@@ -962,6 +964,7 @@ add_executable(openbfme_tests
     ${OPENBFME_PORT211_TESTS}
     ${OPENBFME_PORT242_TESTS}
     ${OPENBFME_PORT196_TESTS}
+    ${OPENBFME_PORT256_TESTS}
     ${OPENBFME_PORT427_TESTS}
     ${OPENBFME_PORT437_TESTS}
     ${OPENBFME_PORT436_TESTS}
@@ -1286,6 +1289,7 @@ add_executable(openbfme_tests
     ${OPENBFME_PORT224_TESTS}
     ${OPENBFME_PORT222_TESTS}
     ${OPENBFME_PORT206_TESTS}
+    ${OPENBFME_PORT258_TESTS}
     tests/test_main.cpp
     tests/test_big_archive.cpp
     tests/test_parser_fuzz_regressions.cpp
