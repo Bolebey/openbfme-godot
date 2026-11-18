@@ -65,6 +65,8 @@ jobs:
         with:
           fetch-depth: 2
           persist-credentials: false
+          # the fork keeps *.png in Git LFS (.gitattributes): without it tools/platformicon's tests read pointer files ("not a PNG")
+          lfs: true
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: "3.13"
@@ -161,7 +163,7 @@ jobs:
       - name: Unit tests (the tests that need the game skip)
         run: |
           # the fork's scope (tools/fork_scope.txt, docs/ennorath/PROCESS.md 16): other games' and mods' tests are not run here either
-          mapfile -t scope < <(grep -v '^#' tools/fork_scope.txt | tr -d '\r' | grep .)
+          scope=(); while IFS= read -r line; do scope+=("$line"); done < <(grep -v '^#' tools/fork_scope.txt | tr -d '\r' | grep .)  # macOS bash 3.2: no mapfile
           engine/build/openbfme_tests "${scope[@]}"
 
   windows:
@@ -256,7 +258,7 @@ jobs:
         shell: bash
         run: |
           # the fork's scope (tools/fork_scope.txt, docs/ennorath/PROCESS.md 16): other games' and mods' tests are not run here either
-          mapfile -t scope < <(grep -v '^#' tools/fork_scope.txt | tr -d '\r' | grep .)
+          scope=(); while IFS= read -r line; do scope+=("$line"); done < <(grep -v '^#' tools/fork_scope.txt | tr -d '\r' | grep .)  # macOS bash 3.2: no mapfile
           build/windows/build/openbfme_tests.exe "${scope[@]}"
       - name: Download Godot 4.7.2 (its SHA512-SUMS.txt hash)
         run: |
@@ -332,7 +334,7 @@ jobs:
         shell: bash
         run: |
           # the fork's scope (tools/fork_scope.txt, docs/ennorath/PROCESS.md 16): other games' and mods' tests are not run here either
-          mapfile -t scope < <(grep -v '^#' tools/fork_scope.txt | tr -d '\r' | grep .)
+          scope=(); while IFS= read -r line; do scope+=("$line"); done < <(grep -v '^#' tools/fork_scope.txt | tr -d '\r' | grep .)  # macOS bash 3.2: no mapfile
           engine/build/openbfme_tests.exe "${scope[@]}"
 
   macos:
@@ -386,7 +388,7 @@ jobs:
         # without three files of network timing tests that fail in about a quarter of the runs on this runner; Linux and Windows still run them
         run: |
           # the fork's scope (tools/fork_scope.txt, docs/ennorath/PROCESS.md 16): other games' and mods' tests are not run here either
-          mapfile -t scope < <(grep -v '^#' tools/fork_scope.txt | tr -d '\r' | grep .)
+          scope=(); while IFS= read -r line; do scope+=("$line"); done < <(grep -v '^#' tools/fork_scope.txt | tr -d '\r' | grep .)  # macOS bash 3.2: no mapfile
           engine/build-macos/openbfme_tests -sfe="*test_netlag2.cpp,*test_mpdrop3_farewell.cpp,*test_onlinemenu1.cpp" "${scope[@]}"
 
   ci:
