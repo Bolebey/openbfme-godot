@@ -536,6 +536,7 @@ include(cmake/Port222.cmake)    # PORT-222: a LevelGrantSpecialPower fills a hor
 include(cmake/Port206.cmake)    # PORT-206: the weapon bonus conditions of Object + 0x39C, WeaponBonusUpgrade sets PLAYER_UPGRADE (issue #488; OPENBFME_PORT206_TESTS)
 include(cmake/Port258.cmake)    # PORT-258: powers on enemy units — DominateEnemy, Curse, Deflect, TimerRefresh (issue #606; OPENBFME_PORT258_TESTS)
 include(cmake/Port254.cmake)    # PORT-254: auras and passive buffs — AttributeModifierAuraUpdate, AutoHealBehavior, LargeGroupBonusUpdate, BloodthirstyUpdate (issue #602; OPENBFME_PORT254_TESTS)
+include(cmake/Port267.cmake)    # PORT-267: the floor record's fade on death, W3DFloorDraw FloorFadeRateOnObjectDeath (fork issue 626; OPENBFME_PORT267_TESTS)
 add_library(openbfme_core STATIC
     ${OPENBFME_PLAY2_SOURCES}
     ${OPENBFME_APT_SOURCES}
@@ -1300,6 +1301,7 @@ add_executable(openbfme_tests
     ${OPENBFME_PORT206_TESTS}
     ${OPENBFME_PORT258_TESTS}
     ${OPENBFME_PORT254_TESTS}
+    ${OPENBFME_PORT267_TESTS}
     tests/test_main.cpp
     tests/test_big_archive.cpp
     tests/test_parser_fuzz_regressions.cpp
