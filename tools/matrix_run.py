@@ -52,7 +52,9 @@ CATEGORIES = [
     ("STANCE", re.compile(r"^S-289")),                              # the stance button opens the radial: a known stop, not a fault
     ("NO-STANCE", re.compile(r"^STANCE: ")),                          # MATRIX_TODO 3: the stance radial pressed, a stance not taken (red)
     ("NO-AURA", re.compile(r"^NO-AURA: ")),                            # MATRIX_TODO 5: an active aura that put its modifier on no target in range (red)
+    ("UNPORTED", re.compile(r"^UNPORTED: ")),                          # MATRIX_TODO 4: the click refused by an unported per-type object test (red: a port gap)
     ("NO-END", re.compile(r"never expires, though its Duration")),        # MATRIX_TODO 2: a modifier applied for good though its list has a Duration (RW 0x805A8E)
+    ("NO-VALUE", re.compile(r"NO-VALUE: ")),                           # MATRIX_TODO 1b: a list landed, but the value the engine reads did not move by it (red)
     ("UPGRADE-IDLE", re.compile(r"bought, but .* did not execute")),      # MATRIX_TODO 1: an upgrade bought whose triggered module did not run (UpgradeMux)
     ("NO-FIRE", re.compile(r"did not fire")),
     ("NO-RULE", re.compile(r"no effect of .* is asserted")),         # the test cannot judge it yet
@@ -79,6 +81,9 @@ CATEGORIES = [
 # Not red: the grey verdicts and the ones found to be the scene's or the mod's own (matrix review 2026-11-17). ORDER: red in the full run,
 # fine when the object is swept alone (tools/matrix_run.py recheck): leftovers of the earlier objects, not the port.
 NOT_RED = {"PASS", "STANCE", "DISABLED", "INVENTORY", "TEMPORARY", "MEMBER", "MOD-DATA", "NO-TARGET", "BY-DESIGN", "ORDER"}
+# not red, but not shown green either (owner 2026-11-18: "не прячешь ли ты реальные проблемы"): the sweep could not judge them, and the owner's checks
+# in the original found real port gaps among them (MOD-DATA: 2 of 5 work in the original; NO-TARGET hid a working repair; ORDER may be a state leak)
+UNVERIFIED = {"MOD-DATA", "NO-TARGET", "ORDER"}
 
 
 def category(verdict: str, detail: str) -> str:
@@ -309,10 +314,12 @@ def cmd_collect(a) -> None:
         total, ok = sum(cats.values()) - cats.get("STANCE", 0), cats.get("PASS", 0)
         # a greyed button is mostly a requirement the test does not meet (a forge the faction's objects do not have here): counted apart.
         # GREY-BUG (PORT-530) is a port bug, not an unmet requirement: it counts as red, and the per-faction line names it.
-        grey = sum(v for k, v in cats.items() if k in NOT_RED and k not in ("PASS", "STANCE"))  # by design / not tested: not red either
-        red = total - ok - grey
-        cells[fac] = (f"[{total} кнопок: ✓{ok} ✗{red} серых {grey}](MATRIX.tsv) ({stamp})", str(ok))
-        print(f"{fac}: {total} buttons, {ok} pass, {red} red, {grey} grey: " + ", ".join(f"{k} {v}" for k, v in cats.most_common() if k != "PASS"))
+        unverified = sum(v for k, v in cats.items() if k in UNVERIFIED)
+        grey = sum(v for k, v in cats.items() if k in NOT_RED and k not in ("PASS", "STANCE") and k not in UNVERIFIED)  # by design: not red either
+        red = total - ok - grey - unverified
+        cells[fac] = (f"[{total} кнопок: ✓{ok} ✗{red} не проверено {unverified} серых {grey}](MATRIX.tsv) ({stamp})", str(ok))
+        print(f"{fac}: {total} buttons, {ok} pass, {red} red, {unverified} unverified, {grey} grey: "
+              + ", ".join(f"{k} {v}" for k, v in cats.most_common() if k != "PASS"))
     update_readme(cells)
     print(f"wrote {MATRIX.relative_to(REPO)} ({len(rows)} lines) and the table of {README.relative_to(REPO)}")
 

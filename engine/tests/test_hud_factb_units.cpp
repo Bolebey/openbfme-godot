@@ -46,6 +46,7 @@
 #include "GameLogic/WallSpan.h"
 #include "GameLogic/ObjectCreationList.h"
 #include "GameLogic/Combat/CombatState.h"
+#include "GameLogic/Combat/CombatQueries.h"
 #include "GameLogic/Module/EmotionModules.h"
 #include "GameLogic/Module/ExtraUpdateModules.h" // DeletionUpdate: a temporary object (the matrix's first-frames verdict)
 #include "GameLogic/Module/SlavedUpdate.h"
@@ -1452,6 +1453,15 @@ void unitsSweep(const std::string &faction, Results &res, bool sweep)
 						}
 					}
 				}
+				else if (cb->hasOption(COMMAND_OPTION_NEED_TARGET_ALLY_OBJECT) && t && t->getSpecialPowerType() == 0x8A)
+				{
+					// item 4 (MATRIX_TODO, 2026-11-18): SPECIAL_REPAIR_STRUCTURE (0x8A) takes an own STRUCTURE (ActionManager RW 0x82DAE9 case 0x8A,
+					// RepairSpecialPower RW 0x8CCB85), not the unit's own copy (the scene's ally): one is made, at half health so a repair has work
+					Object *own = g.rig.make("GondorBarracks", c.x - 140.0f, c.y - 80.0f);
+					own->getBodyModule()->setInitialHealthPercent(50.0f);
+					tempTarget.id = own->getID();
+					g.step(3);
+				}
 				else if (cb->hasOption(COMMAND_OPTION_NEED_TARGET_ENEMY_OBJECT) && t && t->m_objectFilter)
 				{
 					Object *eu = g.logic().findObjectByID(enemyUnitId);
@@ -1686,6 +1696,7 @@ void unitsSweep(const std::string &faction, Results &res, bool sweep)
 					continue;
 				}
 				std::string target = "none";
+				unsigned long long unportedTestsBefore = 0; // ActionManager's unported per-type object test (RW 0x82DAE9) before the click
 				if (cb->hasOption(COMMAND_OPTION_NEED_TARGET_ENEMY_OBJECT | COMMAND_OPTION_NEED_TARGET_NEUTRAL_OBJECT | COMMAND_OPTION_NEED_TARGET_ALLY_OBJECT | COMMAND_OPTION_NEED_TARGET_POS))
 				{
 					Object *on = plannedOnId != INVALID_ID ? g.logic().findObjectByID(plannedOnId) : nullptr;
@@ -1715,9 +1726,24 @@ void unitsSweep(const std::string &faction, Results &res, bool sweep)
 						}
 					}
 					const size_t sentBefore = g.hud->input().messageLog().size();
+					unportedTestsBefore = t ? ActionManager::stats().unportedObjectTypeTests[(size_t)t->getSpecialPowerType() & 0x9F] : 0;
 					bool reached = false;
 					Coord3D at = on ? *on->getPosition() : ground;
 					int tries = 0;
+					// item 4 (MATRIX_TODO, 2026-11-18): a structure is also clicked half its radius off its centre on four sides: a building's middle
+					// may be open (HaradBarracks: collision 0x104, the drawn-model ray at its centre a Miss), a player clicks its walls
+					std::vector<Coord3D> offsets{ Coord3D{ 0.0f, 0.0f, 0.0f } };
+					if (on && factb::hasKindOf(*on->getTemplate(), "STRUCTURE"))
+					{
+						for (float r : { 25.0f, 50.0f }) // test click spots on the building's body, not an engine rule
+						{
+							for (const Coord3D d : { Coord3D{ r, 0.0f, 0.0f }, Coord3D{ -r, 0.0f, 0.0f }, Coord3D{ 0.0f, r, 0.0f }, Coord3D{ 0.0f, -r, 0.0f } })
+							{
+								offsets.push_back(d);
+							}
+						}
+					}
+					for (const Coord3D &off : offsets)
 					for (float back : { 420.0f, -420.0f })
 					{
 						for (float dz : { 5.0f, 25.0f, 45.0f, 70.0f })
@@ -1740,6 +1766,8 @@ void unitsSweep(const std::string &faction, Results &res, bool sweep)
 								}
 							}
 							at = on ? *on->getPosition() : ground;
+							at.x += off.x;
+							at.y += off.y;
 							g.cameraBack = back;
 							g.clickAt({ at.x, at.y, at.z + dz });
 							const std::vector<std::string> &log = g.hud->input().messageLog();
@@ -1756,6 +1784,16 @@ void unitsSweep(const std::string &faction, Results &res, bool sweep)
 						const ICoord2D px = g.pointAt({ at.x, at.y, at.z + 5.0f });
 						target += str(" at %.0f,%.0f,%.0f%s, owner %s", at.x, at.y, at.z, on->isUnderConstruction() ? ", under construction" : "",
 									  on->getControllingPlayer() ? on->getControllingPlayer()->getPlayerName().c_str() : "-");
+						{
+							// item 4 (MATRIX_TODO): why the pick missed: the target's collision type (RW 0x4B583C) and the drawn-model ray test there
+							const HudContext &hc = g.hud->input().context();
+							Coord3D ro{}, rd{};
+							float tt = 0.0f;
+							const bool ray = hc.view.screenToRay(px, ro, rd);
+							const int drawn = ray && hc.pickRay ? (int)hc.pickRay(*on, ro, rd, &tt) : -1;
+							target += str(" [pixel %d,%d, collision 0x%X, model pick %d, %d clicks of %zu spots]", px.x, px.y, HudObjects::collisionTypeOf(hc, *on), drawn,
+										  tries, offsets.size());
+						}
 						target += " (nothing sent; the pick there hits";
 						for (const HudObjects::PickHit &h : HudObjects::pickHits(g.hud->input().context(), px, HudObjects::pickTypesForContext(g.hud->input().context()) | 0x100))
 						{
@@ -1785,12 +1823,74 @@ void unitsSweep(const std::string &faction, Results &res, bool sweep)
 						res.fail(item, "NO-TARGET: the scene has no fitting target for " + cb->m_specialPowerName + " (the sweep clicked " + target + ")");
 						continue;
 					}
+					// item 4 (MATRIX_TODO): the click was refused by a per-type object test the port has not ported (a repair's canRepairObject,
+					// RW 0x82D7F2, S-1282): a port gap, named as such
+					if (t && ActionManager::stats().unportedObjectTypeTests[(size_t)t->getSpecialPowerType() & 0x9F] > unportedTestsBefore)
+					{
+						res.fail(item, str("UNPORTED: the click on %s was refused by ActionManager's unported object test for power type 0x%X (RW 0x82DAE9; a repair: "
+										   "canRepairObject RW 0x82D7F2, S-1282)", target.c_str(), t->getSpecialPowerType()));
+						continue;
+					}
 					res.fail(item, cb->m_specialPowerName + ": the click on its target sent nothing (target " + target + ")" + (firstTry.empty() ? "" : " (first try, " + firstTry + ")"));
 					continue;
 				}
 				// the modules belong to the unit (and its members): a power that replaces the unit (a fell beast's rider dismounting,
 				// ToggleMountedSpecialAbilityUpdate's MountedTemplate) destroys them, so the unit's presence is checked first, by id
+				// item 4 (MATRIX_TODO, 2026-11-18): a repair (SPECIAL_REPAIR_STRUCTURE 0x8A) does not run SpecialPowerModule's do* (no recharge to
+				// watch, RepairSpecialPower RW 0x8CCB85): it gives the dozer's AI a repair order (RW 0x7714C1 -> DozerAIUpdate RW 0x88BD8D); its effect is
+				// the structure's health going up
+				if (t && t->getSpecialPowerType() == 0x8A && tempTarget.id != INVALID_ID)
+				{
+					// a control: the same structure at the same health far from the porter; a structure's own healing raises both, the repair only the target
+					Object *st = g.logic().findObjectByID(tempTarget.id);
+					Object *ctl = st ? g.rig.make(st->getTemplate()->getName(), c.x + 500.0f, c.y + 500.0f) : nullptr;
+					if (ctl)
+					{
+						ctl->getBodyModule()->setInitialHealthPercent(50.0f);
+						fixtureObjects.push_back(ctl->getID());
+					}
+					const ObjectID ctlId = ctl ? ctl->getID() : INVALID_ID;
+					const float h0 = st ? st->getBodyModule()->getHealth() : 0.0f;
+					const float c0 = ctl ? ctl->getBodyModule()->getHealth() : 0.0f;
+					float h1 = h0, c1 = c0;
+					int f = 0;
+					for (; f < 300 && st; ++f)
+					{
+						g.step(1);
+						st = g.logic().findObjectByID(tempTarget.id);
+						h1 = st ? st->getBodyModule()->getHealth() : h1;
+						Object *cc = g.logic().findObjectByID(ctlId);
+						c1 = cc ? cc->getBodyModule()->getHealth() : c1;
+					}
+					if (h1 - h0 > c1 - c0 + 1.0f)
+					{
+						res.pass(item, str("REPAIR: %s health %.0f -> %.0f in %d frames, an unrepaired twin %.0f -> %.0f (RepairSpecialPower RW 0x8CCB85 -> the "
+										   "dozer's repair, RW 0x88BD8D)", target.c_str(), h0, h1, f, c0, c1));
+					}
+					else
+					{
+						res.fail(item, str("NO-EFFECT: the repair order on %s was sent, but its health went %.0f -> %.0f in %d frames as an unrepaired twin's "
+										   "%.0f -> %.0f (RepairSpecialPower RW 0x8CCB85 -> aiRepair RW 0x7714C1 -> DozerAIUpdate RW 0x88BD8D)", target.c_str(), h0, h1, f, c0, c1));
+					}
+					g.hud->input().ui().setGUICommand(nullptr);
+					continue;
+				}
 				bool fired = false, replaced = false;
+				// the templates the unit's replacement modules name (SummonReplacement's / ToggleMounted's MountedTemplate): such an object replaces
+				// the unit even when it is not SELECTABLE (2026-11-18, #527: the Loremaster's Manwe choice turns him into LoremasterThingObjectManveReal,
+				// KindOf SUMMONED UNATTACKABLE, which the check below did not count)
+				std::set<std::string> mountedNames;
+				for (const std::unique_ptr<BehaviorModule> &bm : u->modules())
+				{
+					if (const auto *sr = dynamic_cast<const SummonReplacementSpecialAbilityUpdateModuleData *>(bm->getModuleData()))
+					{
+						mountedNames.insert(sr->m_mountedTemplate);
+					}
+					else if (const auto *tm = dynamic_cast<const ToggleMountedSpecialAbilityUpdateModuleData *>(bm->getModuleData()))
+					{
+						mountedNames.insert(tm->m_mountedTemplate);
+					}
+				}
 				std::vector<ObjectID> holders;
 				holders.push_back(uid);
 				if (u->getContain())
@@ -1831,7 +1931,8 @@ void unitsSweep(const std::string &faction, Results &res, bool sweep)
 					for (Object *o = g.logic().getFirstObject(); o; o = o->getNextObject())
 					{
 						if (o->getID() > uid && o->getControllingPlayer() == g.rig.local && o->getTemplate() && o->getTemplate()->getName() != e->name
-							&& dist2d(*o->getPosition(), c) < 600.0f && factb::hasKindOf(*o->getTemplate(), "SELECTABLE"))
+							&& dist2d(*o->getPosition(), c) < 600.0f
+							&& (factb::hasKindOf(*o->getTemplate(), "SELECTABLE") || mountedNames.count(o->getTemplate()->getName())))
 						{
 							after = o;
 						}
