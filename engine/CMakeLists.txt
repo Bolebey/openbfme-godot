@@ -208,6 +208,7 @@ include(cmake/Port91.cmake)     # PORT-91: W3DModelDraw ShowShadowWhileContained
 include(cmake/Port87.cmake)     # PORT-87: unit voice VoiceStartCharging / VoiceNoBuild (issue #235; OPENBFME_PORT87_TESTS)
 include(cmake/Port152.cmake)   # PORT-152: CommandButton WeaponSlotToggle1/2, ToggleButtonName, RequiresValidContainer (fork issue #370)
 include(cmake/Port106.cmake)    # PORT-106: W3DScriptedModelDraw MultiPlayerOnly gate (issue #266; OPENBFME_PORT106_TESTS)
+include(cmake/Port262.cmake)    # PORT-262: FlammableUpdate's BurnContained and the two burning classes' neighbours (fork issue 610; OPENBFME_PORT262_TESTS)
 include(cmake/Port105.cmake)    # PORT-105: TransportContain/ReleaseSnappyness, the rider's release blend (issue #265; OPENBFME_PORT105_TESTS)
 include(cmake/Port146.cmake)    # PORT-146: the archers on a moving siege carrier (issue #363; OPENBFME_PORT146_TESTS)
 include(cmake/Port50.cmake)     # PORT-50: W3DModelDraw/ParticlesAttachedToAnimatedBones, particles on the animated bones (issue #154; OPENBFME_PORT50_TESTS)
@@ -1115,6 +1116,7 @@ add_executable(openbfme_tests
     ${OPENBFME_PORT51_TESTS}
     ${OPENBFME_PORT152_TESTS}
     ${OPENBFME_PORT106_TESTS}
+    ${OPENBFME_PORT262_TESTS}
     ${OPENBFME_PORT81_TESTS}
     ${OPENBFME_PORT84_TESTS}
     ${OPENBFME_PORT93_TESTS}
