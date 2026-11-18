@@ -179,7 +179,9 @@ size_t HudInput::update()
 			continue;
 		}
 		// An occupied plot hidden by Construction::constructOnPlot leaves the client selection, closing its command menu.
+		static const int unselectable = ObjectTemplateInfoBuilder::objectStatusIndex("UNSELECTABLE");
 		if (!o || o->isDestroyed() || (sold >= 0 && o->testStatus((unsigned)sold)) ||
+			o->isMasked() || !o->isScriptSelectable() || (unselectable >= 0 && o->testStatus((unsigned)unselectable)) ||
 			(o->isDrawableHidden() &&
 				(o->isKindOfName("BASE_FOUNDATION") || o->isKindOfName("BASE_DEFENSE_FOUNDATION") || o->isKindOfName("EXPANSION_PAD"))))
 		{
@@ -322,26 +324,8 @@ void HudInput::hintSpy(const ClientMessage &m)
 			return;
 		}
 	}
-	// RW 0x69E8D0: a point the local player does not see now (RW 0xB4FB20 over the local player's shroud index, Player + 0x54: a looker count of 0 or the
-	// never-seen -1, or outside the grid) is always hinted; a seen point when some selected object can move and is ARMY_OF_DEAD (template + 0x11A & 0x80,
-	// KINDOF bit 151) or has an AI (Object + 0x260) whose pathfinder accepts the spot (RW 0x66403D -> RW 0x6F5BB0; stop S-1920: taken as accepted)
-	bool hinted = true;
-	const Player *local = m_ctx.localPlayer();
-	const ShroudManager *shroud = m_logic.shroud();
-	int cx = 0, cy = 0;
-	if (local && shroud && shroud->worldToCell(pos.x, pos.y, cx, cy) && shroud->lookerCount(local->getPlayerIndex(), cx, cy) > 0)
-	{
-		hinted = false;
-		for (ObjectID id : m_ui.selected())
-		{
-			const Object *o = m_logic.findObjectByID(id);
-			if (o && canMove(*o) && (o->isKindOfName("ARMY_OF_DEAD") || o->getAIUpdateInterface() != nullptr))
-			{
-				hinted = true;
-				break;
-			}
-		}
-	}
+	// RW 0x69E8D0 (lane LOCAL-43: HudObjects::canSelectionReachHint, the pathfinder query included)
+	const bool hinted = HudObjects::canSelectionReachHint(m_ctx, pos);
 	if (hinted)
 	{
 		m_ui.createMoveHint(pos);
@@ -388,7 +372,8 @@ std::vector<std::string> HudInput::acceptanceStops()
 	}
 	// lane PLAY-1: the move hint (InGameUI::createMoveHint)
 	out.push_back("[S-1920] move hint (RotWK HintSpy RW 0x838225, createMoveHint RW 0x69F54F, drawMoveHints RW 0x48EDED: one marker at a time, 25 slots, 40 client frames): "
-				  "not ported: RW 0x690E97's held / disabled tests (only IMMOBILE), the pathfinder's acceptance of the spot (RW 0x66403D -> 0x6F5BB0: taken as accepted), "
+				  "not ported: RW 0x690E97's held / disabled tests (only IMMOBILE), RW 0x66403D's SHIP + GARRISON transport set (taken as reached; the plain quick path test RW 0x6F5BB0 runs since lane LOCAL-43), "
+				  "the context move hint's transport unload hint 0xBB (RW 0x81F6C1 .. 0x81F72A), "
 				  "the lift to the water surface (TerrainLogic vslot 0x4C)");
 	out.push_back("[S-1954] RotWK's pick (HUD-5): the cast's collision types (RW 0x4B583C), the hit order (RW 0x48AB28 / 0x489BE6) and each caller's pick types are ported: "
 				  "RW 0x71083F (SELECTABLE | SCRIPT_TARGETABLE, FORCEATTACKABLE when forcing, SHRUBBERY / ROCK from the GUI command or the selection, RW 0x71077B), the point selection | OWN "
@@ -414,9 +399,9 @@ std::vector<std::string> HudInput::stops() const
 	std::vector<std::string> out = acceptanceStops();
 	// lane FACT-C (S-286 keeps the other context commands)
 	out.push_back("[S-2000] special power targets: a SPECIAL_POWER button waiting for its target sends RotWK's messages on the click (evaluateContextCommand RW 0x81E60B -> "
-				  "issueSpecialPowerCommand RW 0x81E147: AT_OBJECT for an object of a relationship the options allow, AT_LOCATION with the chained CommandTrigger buttons, "
-				  "source NONE); location targets use ActionManager's ported rules; object action checks (KindOf / module filters), unported per-type location rules "
-				  "and the kind-of / option 0x10 / 0x200000 target drops are not ported");
+				  "issueSpecialPowerCommand RW 0x81E147: AT_OBJECT after ActionManager::canDoSpecialPowerAtObject RW 0x82D925, AT_LOCATION with the chained CommandTrigger buttons, "
+				  "source NONE); location and object targets use ActionManager's ported rules (including ObjectFilter RW 0x7640C1); unported per-type rules "
+				  "and the kind-of / option 0x10 / 0x200000 target drops before ActionManager are not ported");
 	out.push_back("[S-2002] capture context command: a click on a building the selection can capture issues the first selected object's capture button (power type 0x1A / 0x1D) "
 				  "at it (RW 0x81E60B, canCaptureBuilding RW 0x82D0A1); not ported: a capture power's ObjectFilter (none in retail data; counted), the status pair + 0x438 / "
 				  "+ 0x110, the + 0x80 word, the shroud test, CAPTURE_FORBIDDEN, the per-player refusal RW 0x6943B2, stealth riders and the vision test");

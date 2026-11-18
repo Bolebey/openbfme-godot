@@ -115,17 +115,19 @@ const char *FogOmissionText()
 
 BatchOrder OrderForBatch(size_t rank, size_t count)
 {
-	const size_t levels = 120; // material priorities -128 .. -9
+	// P-100 / P-101: material priorities kParticleRenderPriorityMin (1) .. kParticleRenderPriorityMax (114); terrain decals (-128..-122) and W3D
+	// blended/floor surfaces (-121..-23) draw before all particles, and >0 prevents default-0 materials from painting over particles
+	const size_t levels = (size_t)(kParticleRenderPriorityMax - kParticleRenderPriorityMin + 1);
 	BatchOrder o;
 	if (count <= levels)
 	{
-		o.priority = (int)rank - 128;
+		o.priority = (int)rank + kParticleRenderPriorityMin;
 		o.sortOffset = 0.0f;
 		return o;
 	}
 	// more batches than distinct priorities: the priority buckets stay monotone and the rank breaks ties inside a bucket through the transparent
 	// sort offset (the camera distance of the batch is tiny against the 1e5 step)
-	o.priority = (int)((rank * levels) / count) - 128;
+	o.priority = (int)((rank * levels) / count) + kParticleRenderPriorityMin;
 	o.sortOffset = (float)rank * 100000.0f;
 	return o;
 }

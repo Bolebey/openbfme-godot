@@ -8,7 +8,10 @@
 //
 // TARGET FACTS (RotWK game.dat, S-001 caveat): the call RW 0x7987EE -> 0x797A96(pos, options 5, builder, tmpl, angle, owner) exists. GameData's
 // AllowedHeightVariationForBuilding / SupplyBuildBorder / MaxLineBuildObjects exist in gamedata.ini (10 / 20 / 50); RotWK also parses
-// MinDistFromEdgeOfMapForBuild (GlobalData +0xA68) and checks every footprint sample against the active playable boundary (RW 0x794BF2..0x794C5A; equality allowed).
+// MinDistFromEdgeOfMapForBuild (GlobalData +0xA68) and checks every footprint sample against the active playable boundary (RW 0x794BF2..0x794C5A;
+// equality allowed). Clean BFME2 1.06 keeps the same rows: its data/ini/gamedata.ini (ini.big) reads MinDistFromEdgeOfMapForBuild = 30.0,
+// SupplyBuildBorder = 20.0, AllowedHeightVariationForBuilding = 10.0, MaxLineBuildObjects = 50, so both editions load all four and neither loses
+// buildRulesLoaded to this port (BFME1 data is not on the measuring host: a file without the row is a named error, never a silent zero).
 // DONOR (ZH, followed): the order of the checks (extent, shroud, object overlap, enemy overlap, supply border, clear path, terrain restrictions); object overlap
 // ignores removable-for-construction objects, mines and inert objects, an IMMOBILE object blocks, a mobile enemy of the builder blocks (friends move away);
 // terrain restrictions sample the footprint at 3 * cell and at 1 * cell size, refuse cliff cells and water and a ground height spread above the GameData value.
@@ -16,7 +19,7 @@
 // LBC_TOO_CLOSE_TO_SUPPLIES on overlap before the DOZER clear-path gate (RW 0x796942..0x796A3C); sample type-4 obstacles also reject a missing object or
 // an INERT template (+0x113 & 2, KindOf 89; RW 0x794AE2..0x794B21); HERO is +0x113 & 4 and does not trigger that branch, contrary to the issue prose.
 // INFERENCE / stop S-301: template Geometry (BOX with its radii, CYLINDER / SPHERE a disc) is tested in 2D; shroud (VIS-1), the clear-path query, factory
-// exit width / extra bib checks, cleared-by-build objects and exact non-ground sample-layer selection remain unported. The preview's PortSnapView carries only
+// exit width / extra bib checks, cleared-by-build objects and the WALL_SEGMENT sample layer (RW 0x680B70, taken as the ground: S-161) remain unported. The preview's PortSnapView carries only
 // immutable settings/boundary data; it deliberately does not read live pathfinder cells or objects while the logic worker runs.
 //
 // Simulation maths goes through SimMath.
@@ -44,7 +47,11 @@ enum LegalBuildCode
 	LBC_OBJECTS_IN_THE_WAY,
 	LBC_NO_CLEAR_PATH,
 	LBC_SHROUD,
-	LBC_TOO_CLOSE_TO_SUPPLIES
+	LBC_TOO_CLOSE_TO_SUPPLIES,
+	// P-106: RotWK's raw 9 (the decomp's `LBC_9`, BuildAssistant.cpp:2181), which ZH does not have: a WALL_HUB build outside the MaxBuildoutDistance of its
+	// hub's data from every command centre of its owner. It keeps RW's number because the ghost's colour path asks it (PlacementIcons' `code == 9`: the blue
+	// tint of RW 0x6A3A0B .. 0x6A3A26, the bib of RW 0x6A3B0B, neither the illegal red)
+	LBC_BEYOND_BUILDOUT = 9
 };
 
 // ZH BuildAssistant.h LocationLegalFlags
@@ -56,7 +63,11 @@ enum LocationLegalFlags
 	LLF_USE_QUICK_PATHFIND = 0x00000008,
 	LLF_SHROUD_REVEALED = 0x00000010,
 	LLF_NO_ENEMY_OBJECT_OVERLAP = 0x00000020,
-	LLF_FORCE_CHECK = 0x00000040
+	LLF_FORCE_CHECK = 0x00000040,
+	// P-77, RotWK only (the name is the port's): the castle's legality thunk RW 0x797A96 always adds it (`or dh, 1` at RW 0x797AAC); isLocationLegalToBuild
+	// hands it to the object-overlap pass only (RW 0x7968C5 .. 0x7968CE; the enemy pass RW 0x79690B .. 0x796921 does not get it). There, with a BASE_SITE
+	// builder, the builder castle's own members, the builder and a DOZER do not block (RW 0x796D63, 0x796E9A .. 0x796EE3; see isLocationClearOfObjects)
+	LLF_CASTLE_MEMBERS_CLEAR = 0x00000100
 };
 
 namespace BuildPlacement

@@ -15,6 +15,7 @@
 #pragma once
 
 #include "Common/CommandPoints.h"
+#include "Common/LightPointTracker.h"
 #include "Common/Money.h"
 #include "Common/NameKeyGenerator.h"
 #include "Common/PlayerHeroList.h"
@@ -43,11 +44,45 @@ class GameLogic;
 class PlayerEconomyHost;
 class TunnelTracker;
 struct ObjectFilter;
+class SpecialPowerTemplate;
 
 enum PlayerType
 {
 	PLAYER_HUMAN = 0,
 	PLAYER_COMPUTER
+};
+
+struct BattlePlanBonuses
+{
+	float armorScalar = 1.0f;
+	int bombardment = 0;
+	int searchAndDestroy = 0;
+	int holdTheLine = 0;
+	float sightRangeScalar = 1.0f;
+	KindOfMaskType validKindOf{};
+	KindOfMaskType invalidKindOf{};
+	bool isUntouched() const
+	{
+		if (armorScalar != 1.0f || bombardment != 0 || searchAndDestroy != 0 || holdTheLine != 0 || sightRangeScalar != 1.0f)
+		{
+			return false;
+		}
+		for (std::uint32_t w : validKindOf)
+		{
+			if (w != 0)
+			{
+				return false;
+			}
+		}
+		for (std::uint32_t w : invalidKindOf)
+		{
+			if (w != 0)
+			{
+				return false;
+			}
+		}
+		return true;
+	}
 };
 
 class Player
@@ -136,10 +171,11 @@ public:
 		m_nameKey = key;
 		m_displayName = displayName;
 	}
-	void setPlayerType(PlayerType type, bool skirmish)
+	// RW 0x6AA450: type == PLAYER_COMPUTER (1) upgrades to AISkirmishPlayer when skirmish || AIData.ForceSkirmishAI (+ 0x65)
+	void setPlayerType(PlayerType type, bool skirmish, bool forceSkirmishAI = false)
 	{
 		m_type = type;
-		m_skirmish = skirmish;
+		m_skirmish = skirmish || (type == PLAYER_COMPUTER && forceSkirmishAI);
 	}
 	void setMultiplayerStartIndex(int i) { m_mpStartIndex = i; }
 
@@ -328,6 +364,34 @@ public:
 	ResourceGatheringManager &resourceGatheringManager() { return m_resourceGathering; }
 	const ResourceGatheringManager &resourceGatheringManager() const { return m_resourceGathering; }
 
+	// PORT-113 (issue #280, docs/ennorath/PORT113_RW_ANALYSIS.md): the light points of the War of the Ring, the tracker at RW + 0x338 (the points at
+	// + 0x33C, the level indices at + 0x340). Scripts give and take them (actions 351 .. 354), the special powers test and spend them.
+	const LightPointTracker &lightPoints() const { return m_lightPoints; }
+	int getLightPoints() const { return m_lightPoints.getPoints(); } // RW 0x6AA8F4
+	// RW 0x6AB148: the amount goes to the tracker (RW 0x8309E3, a negative one too); then, for a positive amount and a template with a
+	// LightPointsUpSound (+ 0x1A4), that sound is added for this player (RW 0x6AB191 .. 0x6AB1B6)
+	void giveLightPoints(int amount);
+	void spendLightPoints(int cost) { m_lightPoints.subtractPoints(cost); } // RW 0x6AA91D (LightPointCost of a special power)
+	void resetLightPoints() { m_lightPoints.resetPoints(); }               // RW 0x6AA931
+	// RW 0x6AA8FB: true without TheLightPointSystem, else its test (RW 0x830AE3: a power no level names passes, a named one needs its LightPointCost)
+	bool hasLightPointsForSpecialPower(const SpecialPowerTemplate *t) const;
+	// RW 0x6AA939 / 0x6AA957: the level with this name (TheLightPointSystem RW 0x830E63 / 0x830BD5); nothing without the system or for an unknown name
+	void giveLightPointLevel(const std::string &levelName);
+	void removeLightPointLevel(const std::string &levelName);
+
+	// PORT-237 (S-1712): RW 0x6AD2B5 / 0x6AD360 / 0x6AD4AE (Player + 0xAC / 0xB0 / 0xB4 / 0xB8)
+	bool hasActiveBattlePlans() const { return (m_bombardmentBattlePlans + m_holdTheLineBattlePlans + m_searchAndDestroyBattlePlans) > 0; }
+	void applyBattlePlanBonusesForObject(Object &obj) const;
+	void removeBattlePlanBonusesForObject(Object &obj) const;
+	void applyBattlePlanBonusesForPlayerObjects(const BattlePlanBonuses &bonus, GameLogic &logic);
+	const BattlePlanBonuses &battlePlanBonuses() const { return m_battlePlanBonuses; }
+	void setBattlePlanCounts(int bombardment, int holdTheLine, int searchAndDestroy)
+	{
+		m_bombardmentBattlePlans = bombardment;
+		m_holdTheLineBattlePlans = holdTheLine;
+		m_searchAndDestroyBattlePlans = searchAndDestroy;
+	}
+
 	void setEconomyHost(PlayerEconomyHost *host) { m_host = host; }
 	PlayerEconomyHost *economyHost() const { return m_host; }
 
@@ -384,4 +448,9 @@ private:
 	int m_orderMode = 0; // lane INPUT-1 r2
 	std::shared_ptr<TunnelTracker> m_tunnelTracker; ///< lane GARRISON-2 (RW + 0x308)
 	ResourceGatheringManager m_resourceGathering; ///< lane LUMBER1 (RW + 0x304)
+	LightPointTracker m_lightPoints;              ///< PORT-113 (RW + 0x338)
+	int m_bombardmentBattlePlans = 0;             ///< PORT-237: RW + 0xAC
+	int m_holdTheLineBattlePlans = 0;             ///< PORT-237: RW + 0xB0
+	int m_searchAndDestroyBattlePlans = 0;        ///< PORT-237: RW + 0xB4
+	BattlePlanBonuses m_battlePlanBonuses;        ///< PORT-237: RW + 0xB8
 };

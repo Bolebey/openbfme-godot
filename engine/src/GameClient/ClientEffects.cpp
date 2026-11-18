@@ -1,6 +1,9 @@
 // OpenBFME. GPL-3.0. See ClientEffects.h.
 
 #include "GameClient/ClientEffects.h"
+#include "GameClient/ParticleDraw.h"
+
+#include "Libraries/WWVegas/WW3D2/lightenvironment.h"
 
 #include <algorithm>
 #include <cmath>
@@ -88,6 +91,20 @@ int DecalFx::opacityAt(std::uint32_t frame) const
 	return std::max(0, std::min(255, out));
 }
 
+DynamicDecalBatchOrder DynamicDecalOrder(int shader)
+{
+	// P-97 / P-52: retail W3DProjectedShadowManager::flushDecals (RW 0x509D80 / 0x50C0B6; DONOR BFME2 0x00109E11) draws decals before particles
+	// with projection depth bias 9.0f (RW 0x509FCF -> 0x51EB60, ZBIAS_SCALE 0.000625). Positive sorting_offset draws later (in front) in Godot,
+	// so ALPHA decals (shader != 1, 0x400) strictly precede ADDITIVE decals (shader == 1, 0x800) after Tracks (-123, offset 0) and before Particles (-122).
+	constexpr float kDecalDepthBias = 9.0f;
+	constexpr float kZBiasScale = 0.000625f;
+	DynamicDecalBatchOrder order;
+	order.priority = FXParticleSystem::kTrackRenderPriority;
+	order.sortOffset = (shader == 1) ? 200000.0f : 100000.0f;
+	order.depthBias = 1.0f / (1.0f + kDecalDepthBias * kZBiasScale);
+	return order;
+}
+
 // ---- dynamic light pulses (TARGET call RW 0x5DFAA3; DONOR BFME2 0x6DF81 / 0x6DE3D) ---------------------------------------------------------------------
 
 float LightPulseFx::range() const
@@ -99,6 +116,37 @@ float LightPulseFx::range() const
 RGBColor LightPulseFx::colorNow() const
 {
 	return RGBColor{ targetColor.red * m_scale, targetColor.green * m_scale, targetColor.blue * m_scale };
+}
+
+void LightPulseToEnvSource(const LightPulseFx &l, LightEnvSourceLight &out)
+{
+	out = LightEnvSourceLight();
+	out.type = LightEnvSourceLight::POINT; // the pool's W3DDynamicLight is built POINT (LightClass ctor with 0, RW 0x46D59B)
+	out.position = Vector3(l.position.x, l.position.y, l.position.z);
+	const RGBColor a = l.ambientNow();
+	const RGBColor d = l.colorNow();
+	const RGBColor f = l.filterNow();
+	// the port keeps ambient and diffuse already multiplied by the intensity (W3DLightDraw::lightColor / lightAmbient); the raw diffuse is the
+	// filter's input (RW 0x540261 reads +0xE0, not times +0xD0)
+	out.ambient = Vector3(a.red, a.green, a.blue);
+	out.diffuse = Vector3(d.red, d.green, d.blue);
+	out.intensity = 1.0f;
+	out.filterDiffuse = Vector3(f.red, f.green, f.blue);
+	out.useFilterDiffuse = true;
+	out.farAttenuation = l.farAttenuation;
+	out.farAttenStart = l.farAttenStart;
+	out.farAttenEnd = l.range();
+	out.enabled = l.enabled;
+}
+
+RGBColor LightPulseFx::ambientNow() const
+{
+	return RGBColor{ targetAmbient.red * m_scale, targetAmbient.green * m_scale, targetAmbient.blue * m_scale };
+}
+
+RGBColor LightPulseFx::filterNow() const
+{
+	return RGBColor{ targetFilter.red * m_scale, targetFilter.green * m_scale, targetFilter.blue * m_scale };
 }
 
 bool LightPulseFx::step()
@@ -147,6 +195,8 @@ bool LightPulsePool::add(const Coord3D &pos, const RGBColor &color, float radius
 	light.farAttenEnd = radius + 1.0f; // DONOR BFME2 0x4423C: FarAttenStart = the inner radius (1), FarAttenEnd = inner + the width
 	light.targetEnd = light.farAttenEnd;
 	light.targetColor = color;
+	light.targetAmbient = color; // RW 0x443BAB: createLightPulse writes the colour to the ambient (+0xD4) and the diffuse (+0xE0)
+	light.targetFilter = color;
 	light.increaseFrames = increaseFrames;
 	light.decreaseFrames = decreaseFrames;
 	light.currentIncrease = increaseFrames;
@@ -159,7 +209,9 @@ bool LightPulsePool::add(const Coord3D &pos, const RGBColor &color, float radius
 	{
 		if (!l.enabled && !l.isPersistent)
 		{
+			const bool farAttenuation = l.farAttenuation; // lane LOCAL-38: the reused light keeps its +0xC8 flags (createLightPulse sets none, RW 0x443B5D)
 			l = light;
+			l.farAttenuation = farAttenuation;
 			return true;
 		}
 	}
@@ -172,7 +224,7 @@ bool LightPulsePool::add(const Coord3D &pos, const RGBColor &color, float radius
 	return true;
 }
 
-int LightPulsePool::addPersistent(const Coord3D &pos, const RGBColor &color, float radius)
+int LightPulsePool::addPersistent(const Coord3D &pos, const RGBColor &color, float radius, const RGBColor *ambient, const RGBColor *rawDiffuse)
 {
 	++m_additions;
 	LightPulseFx light;
@@ -182,6 +234,9 @@ int LightPulsePool::addPersistent(const Coord3D &pos, const RGBColor &color, flo
 	light.farAttenEnd = radius;
 	light.targetEnd = radius;
 	light.targetColor = color;
+	light.targetAmbient = ambient ? *ambient : RGBColor{ 0.0f, 0.0f, 0.0f };
+	light.targetFilter = rawDiffuse ? *rawDiffuse : color;
+	light.farAttenuation = true; // RW 0x4CF227: W3DLightDraw's ctor ORs FAR_ATTENUATION into the light's flags
 	light.increaseFrames = 0;
 	light.decreaseFrames = 0;
 	light.currentIncrease = 0;
@@ -206,7 +261,8 @@ int LightPulsePool::addPersistent(const Coord3D &pos, const RGBColor &color, flo
 	return (int)(m_lights.size() - 1);
 }
 
-void LightPulsePool::updatePersistent(int handle, const Coord3D &pos, const RGBColor &color, float radius, bool enabled)
+void LightPulsePool::updatePersistent(int handle, const Coord3D &pos, const RGBColor &color, float radius, bool enabled, const RGBColor *ambient,
+	const RGBColor *rawDiffuse)
 {
 	if (handle >= 0 && (size_t)handle < m_lights.size())
 	{
@@ -216,6 +272,8 @@ void LightPulsePool::updatePersistent(int handle, const Coord3D &pos, const RGBC
 			l.position = pos;
 			l.color = color;
 			l.targetColor = color;
+			l.targetAmbient = ambient ? *ambient : RGBColor{ 0.0f, 0.0f, 0.0f };
+			l.targetFilter = rawDiffuse ? *rawDiffuse : color;
 			l.farAttenEnd = radius;
 			l.targetEnd = radius;
 			l.enabled = enabled;

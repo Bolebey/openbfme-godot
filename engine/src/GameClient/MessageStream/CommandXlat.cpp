@@ -27,11 +27,13 @@
 #include "GameLogic/ObjectTemplateInfo.h"
 #include "GameLogic/Module/SpecialPowerModules.h"
 #include "GameLogic/Module/BehaviorModule.h"
+#include "GameLogic/Module/SpawnBehavior.h"
 #include "GameLogic/Module/BloodthirstyUpdate.h"
 #include "GameLogic/Module/SiegeModules.h"
 #include "GameLogic/AI/AIPathfind.h"
 #include "GameLogic/AI/AIWorld.h"
 #include "GameLogic/Module/AIUpdate.h"
+#include "GameLogic/Module/GiantBirdAIUpdate.h"
 #include "GameLogic/Object/Object.h"
 #include "GameLogic/SimMath.h"
 
@@ -147,6 +149,19 @@ bool CommandTranslator::objectCanAttack(Object &obj)
 			}
 		}
 	}
+	// PORT-208 (issue #490): RW 0x6913B7 .. 0x691416, the tail of Object::isAbleToAttack: a SPAWNS_ARE_THE_WEAPONS object (KindOf bit 84) whose spawn
+	// interface (RW 0x68C3A3) answers slot 0x1C canAnySlavesAttack (RW 0x862A4E) can attack through its slaves — the AngForStronghold-style lair has no
+	// weapon of its own, so without this branch a selection of it never reaches the force attack
+	if (obj.isKindOf((unsigned)CombatNames::kinds().spawnsAreTheWeapons))
+	{
+		if (const SpawnBehaviorInterface *spawn = SpawnBehaviorInterface::of(obj))
+		{
+			if (spawn->canAnySlavesAttack())
+			{
+				return true;
+			}
+		}
+	}
 	return false;
 }
 
@@ -190,6 +205,22 @@ bool CommandTranslator::objectCanDamage(Object &obj, Object &victim)
 				{
 					return true;
 				}
+			}
+		}
+	}
+	// PORT-208 (issue #490): RW 0x6913B7 .. 0x691416 as in objectCanAttack: a spawner's slaves decide whether the spawner can hurt the victim
+	if (obj.isKindOf((unsigned)CombatNames::kinds().spawnsAreTheWeapons))
+	{
+		if (SpawnBehaviorInterface *spawn = SpawnBehaviorInterface::of(obj))
+		{
+			bool any = false;
+			spawn->forEachSpawnID([&](ObjectID slaveId) {
+				Object *slave = m_ctx.logic.findObjectByID(slaveId);
+				any = any || (slave && !slave->isDestroyed() && objectCanDamage(*slave, victim));
+			});
+			if (any)
+			{
+				return true;
 			}
 		}
 	}
@@ -407,6 +438,41 @@ int CommandTranslator::evaluateForceAttack(Object *target, const Coord3D *pos, E
 	return msgType;
 }
 
+// PORT-208 (issue #490, S-2480): RW 0x81E4B5 (evaluateForceAttack) with the picker's tree stand-in instead of an object. The eligibility test is the
+// same one RW 0x81D9DE makes for an object (the selection's Object::isAbleToAttack, RW 0x691269), plus the object form's reserved-id gate: the message
+// carries the stand-in id and the click's point, and the logic refuses it when AIData AllowForestFires is off (RW 0x77AF29: TheAI's data + 0xBC == 0
+// jumps to the null victim at RW 0x77AF67). A tree the selection cannot attack is no command at all.
+bool CommandTranslator::evaluateForceAttackTree(ObjectID treeID, const Coord3D &pos, EvaluateType type)
+{
+	if (!GameLogic::isTreeStandInID(treeID) || !m_ctx.logic.settings().allowForestFires)
+	{
+		return false;
+	}
+	Object *first = nullptr;
+	for (ObjectID id : m_ctx.ui.selected())
+	{
+		if ((first = m_ctx.logic.findObjectByID(id)) != nullptr)
+		{
+			break;
+		}
+	}
+	if (!first || !objectCanAttack(*first))
+	{
+		return false;
+	}
+	if (type == EvaluateType::DoCommand)
+	{
+		ClientMessage &m = m_ctx.stream.append(MSG_DO_FORCE_ATTACK_OBJECT);
+		m.appendObjectID(treeID);
+		m.appendLocation(pos);
+	}
+	else if (type == EvaluateType::DoHint)
+	{
+		hint(MouseCursorName::ForceAttackObj);
+	}
+	return true;
+}
+
 int CommandTranslator::evaluateContextCommand(Object *obj, const Coord3D *pos, EvaluateType type)
 {
 	// ZH evaluateContextCommand (CommandXlat.cpp:1425), in its order, for the cases whose logic exists (stop S-286)
@@ -489,8 +555,8 @@ int CommandTranslator::evaluateContextCommand(Object *obj, const Coord3D *pos, E
 		}
 	}
 	// lane GARRISON-1 (ZH evaluateContextCommand's ACTIONTYPE_ENTER_OBJECT): a click on a container some selected object may enter (ActionManager::canEnterObject,
-	// RW 0x82CBD5, mode 0) is MSG_ENTER (argument 0 the first selected object, argument 1 the container: the logic case RW 0x77AC26 reads argument 1); the cursor
-	// is EnterFriendly. INFERENCE (S-286): RotWK's order of the context checks is not read; the enter check comes before the attack check here (an enemy
+	// RW 0x82CBD5, mode 0) is MSG_ENTER (argument 0 the first selected object, argument 1 the container: the logic case RW 0x77AC26 reads argument 1).
+	// INFERENCE (S-286): RotWK's order of the context checks is not fully read; the enter check comes before the attack check here (an enemy
 	// container is not enterable by the garrison rules)
 	if (obj && !m_ctx.ui.isInForceAttackMode() && obj->getContain())
 	{
@@ -515,10 +581,21 @@ int CommandTranslator::evaluateContextCommand(Object *obj, const Coord3D *pos, E
 			}
 			else if (type == EvaluateType::DoHint)
 			{
-				// Retail Mouse.ini supplies the animated OneRing asset for this action.
-				hint(dynamic_cast<CitadelSlaughterHordeContain *>(obj->getContain()) &&
-					enterer->testStatus((unsigned)CombatNames::status("HOLDING_THE_RING"))
-					? MouseCursorName::DeliverRing : MouseCursorName::EnterFriendly);
+				// RW 0x81EEEC -> 0x82CEFB uses the entire selection to choose the
+				// enter hint; RW 0x6A4099 dispatches B9/BA/CB/CC to the cursor
+				// indices pushed at 0x6A4031/35/55/59, respectively.
+				std::vector<const Object *> selection;
+				for (ObjectID id : m_ctx.ui.selected())
+				{
+					if (const Object *selected = m_ctx.logic.findObjectByID(id)) selection.push_back(selected);
+				}
+				switch (ActionManager::getEnterMessage(*obj, selection))
+				{
+					case ActionManager::ENTER_MESSAGE_CONTEST: hint(MouseCursorName::EnterAggressive); break;
+					case ActionManager::ENTER_MESSAGE_SLAUGHTER: hint(MouseCursorName::SendToDeath); break;
+					case ActionManager::ENTER_MESSAGE_DELIVER_RING: hint(MouseCursorName::DeliverRing); break;
+					case ActionManager::ENTER_MESSAGE_ENTER: hint(MouseCursorName::EnterFriendly); break;
+				}
 			}
 			return msgType;
 		}
@@ -681,6 +758,22 @@ int CommandTranslator::evaluateContextCommand(Object *obj, const Coord3D *pos, E
 		if (type == EvaluateType::DoHint)
 		{
 			msgType = m_teamExists ? (m_ctx.ui.isInAttackMoveToMode() ? MSG_DO_ATTACKMOVETO : MSG_DO_MOVETO) : 0;
+			// lane LOCAL-43: RW 0x81F65A .. 0x81F743, the move hint's reach test: a point the selection cannot reach (RW 0x69E8D0,
+			// HudObjects::canSelectionReachHint: e.g. inside a building's footprint, own, allied or neutral) is hint 0xC9, the GenericInvalid cursor (12:
+			// jump table RW 0x6A4099 entry 0x18 -> RW 0x6A3F87), unless the single selected object (RW 0x81E6D7: InGameUI vslot 0x118 == 1) is MOVE_ONLY
+			// (RW 0x81F696, template + 0x118 & 0x40) or its AI answers vslot 0x168 (RW 0x81F679: true only for GiantBirdAIUpdate, RW 0x8BD372). Not ported
+			// here (S-1920): the single SHIP + KindOf 217 transport's unload hint 0xBB (RW 0x81F6C1 .. 0x81F72A). INFERENCE: the attack-move hint keeps its
+			// cursor (RW's branch produces 0xBD / 0xC9 / 0xBB / 0xBF only)
+			if (msgType == MSG_DO_MOVETO && !HudObjects::canSelectionReachHint(m_ctx, *pos))
+			{
+				const Object *single = m_ctx.ui.getSelectCount() == 1 ? m_ctx.logic.findObjectByID(m_ctx.ui.firstSelected()) : nullptr;
+				const bool bird = single && dynamic_cast<const GiantBirdAIUpdate *>(const_cast<Object *>(single)->getAIUpdateInterface()) != nullptr;
+				if (!(single && (single->isKindOfName("MOVE_ONLY") || bird)))
+				{
+					hint(MouseCursorName::GenericInvalid);
+					return 0;
+				}
+			}
 			if (msgType != 0)
 			{
 				hint(msgType == MSG_DO_ATTACKMOVETO ? MouseCursorName::AttackMove : MouseCursorName::Move, true);
@@ -1152,6 +1245,10 @@ MessageDisposition CommandTranslator::translate(const ClientMessage &msg)
 				++m_clickOutcomes["off-terrain"];
 				break;
 			}
+			// PORT-208 (issue #490, S-2480): RW 0x81E63D .. 0x81E68A, the head of evaluateContextCommand (RW 0x81E60B): when the picked id is one of the four
+			// tree stand-ins (99999996 .. 99999999), the click's world point is taken from the pointer again (the tactical view slot 0x168) rather than
+			// from an object: a tree is a point, and the commands below carry it. The port's picker never returns a stand-in object (the stand-ins have
+			// no Object; HudObjects::pickTreeStandIn answers the id), and `pos` is already that pointer point
 			if (!isPoint)
 			{
 				++m_clickOutcomes["region"];
@@ -1164,6 +1261,24 @@ MessageDisposition CommandTranslator::translate(const ClientMessage &msg)
 			{
 				Object *draw = pending && pending->m_command == GUI_COMMAND_SPECIAL_POWER
 					? HudObjects::pickForGuiCommand(m_ctx, region.lo, *pending) : HudObjects::pickObject(m_ctx, region.lo);
+				// PORT-208 (issue #490, S-2480): RW 0x48ACF5 .. 0x48ADA0 hands the picker's tree as one of the reserved ids (99999996 .. 99999999) when
+				// its own hit-test found no object and the local player sees the tree; the force attack then names that id with the click's point
+				// (MSG_DO_FORCE_ATTACK_OBJECT) and the logic makes the tree an object (RW 0x77AF3B -> RW 0x68449B)
+				ObjectID treeID = INVALID_ID;
+				if (!draw && m_ctx.ui.isInForceAttackMode() && HudObjects::pickTreeStandIn(m_ctx, region.lo, treeID))
+				{
+					if (evaluateForceAttackTree(treeID, pos, EvaluateType::DoCommand))
+					{
+						++m_clickOutcomes["command on a tree"];
+						disp = MessageDisposition::Destroy;
+						m_ctx.ui.clearAttackMoveToMode();
+					}
+					else
+					{
+						++m_clickOutcomes["no command on a tree"];
+					}
+					break;
+				}
 				int issued = 0;
 				if (m_ctx.ui.isInForceAttackMode())
 				{
@@ -1195,8 +1310,10 @@ MessageDisposition CommandTranslator::translate(const ClientMessage &msg)
 // list names (CommandTrigger, +0x188) that is a SPECIAL_POWER with a template; else MSG_DO_SPECIAL_POWER (0x410) { id, options, NONE, NONE }. Source NONE: the
 // logic casts with the issuer's selection.
 // Location action checks use ActionManager's ported rules, matching the radius cursor; explicitly unported type tests retain its reported pass.
-// NOT PORTED (stop S-2000): object action checks (KindOf / module target filters) and the kind-of / option 0x10 / 0x200000 target drops before them.
-// An object of an allowed relationship passes those unported checks. The at-object branch flashes the target and plays TargetObjectWithSpecialPowerSound
+// Object targets run ActionManager::canDoSpecialPowerAtObject (RW 0x6A437A -> 0x82D925: ObjectFilter, alive/dead, unit cost, readiness, shroud and ported
+// per-type rules; explicitly unported per-type/capture checks retain their pass).
+// NOT PORTED (stop S-2000): the kind-of / option 0x10 / 0x200000 target drops before ActionManager and explicitly unported per-type rules.
+// The at-object branch flashes the target and plays TargetObjectWithSpecialPowerSound
 // (RW 0x81E22B .. 0x81E26D); the unit voice is the HUD's observer (PlayUnitVoiceForMessage).
 int CommandTranslator::issueSpecialPower(const CommandButton &command, Object *target, const Coord3D *pos, EvaluateType type)
 {
@@ -1289,7 +1406,28 @@ int CommandTranslator::evaluateGUISpecialPower(const CommandButton &command, Obj
 			obj = nullptr;
 		}
 	}
-	bool valid = (command.m_options & 7) && obj;
+	bool valid = false;
+	if ((command.m_options & 7) && obj)
+	{
+		// RW 0x81E60B -> 0x6A435C..0x6A438B: walk the selection with ActionManager::canDoSpecialPowerAtObject (RW 0x82D925).
+		// On refusal, drop obj to match RW 0x6A438B before the location/context fallback.
+		const SpecialPowerTemplate *power = TheSpecialPowerStore ? TheSpecialPowerStore->findSpecialPowerTemplate(command.m_specialPowerName) : nullptr;
+		for (ObjectID id : m_ctx.ui.selected())
+		{
+			Object *source = m_ctx.logic.findObjectByID(id);
+			bool unported = false;
+			const bool allowed = source && ActionManager::canDoSpecialPowerAtObject(*source, obj, CMD_FROM_PLAYER, power, command.m_options, true, &unported);
+			if (allowed || unported)
+			{
+				valid = true;
+				break;
+			}
+		}
+		if (!valid)
+		{
+			obj = nullptr;
+		}
+	}
 	const bool locationTarget = command.hasOption(COMMAND_OPTION_NEED_TARGET_POS);
 	const bool contextOnly = command.hasOption(COMMAND_OPTION_CONTEXTMODE_COMMAND) && !(command.m_options & (7u | COMMAND_OPTION_NEED_TARGET_POS));
 	// RW 0x81E147's final branch issues a targetless power for context-only

@@ -8,9 +8,11 @@
 #include "GameLogic/AI/AIWorld.h"
 #include "GameLogic/GameLogic.h"
 #include "GameLogic/Map/TerrainLogic.h"
+#include "GameLogic/Module/CastleModules.h"
 #include "GameLogic/Object/Object.h"
 #include "GameLogic/Object/PartitionManager.h"
 #include "GameLogic/SimMath.h"
+#include "GameLogic/WallSpan.h"
 
 namespace
 {
@@ -45,13 +47,14 @@ bool outsidePlayableMargin(const PlayableExtent &extent, float x, float y, float
 
 // RotWK's checkSampleBuildLocation (0x794A2B -> 0x6EAE05) rejects no cell, bit 18, and a type-4 obstacle whose object is missing or INERT.
 // At RW 0x794B14 the template byte +0x113 is tested with mask 2 (KindOf INERT, index 89); HERO is mask 4 (index 90) and does not trigger this branch.
-// getLayerAt is the current pathfinder analogue of 0x680B70; exact layer selection for non-ground surfaces remains S-301.
+// The layer (review fix, lane PRTRLW): RW 0x794A5C .. 0x794A93 reads the cell on the ground layer (push 1) unless the template is WALL_SEGMENT (+0x11C
+// bit 29, KindOf 189), which asks RW 0x680B70; the type-4 obstacle id (RW 0x794AF4 -> 0x5E3CC9) always asks RW 0x680B70. The port answers RW 0x680B70
+// with the ground everywhere (S-161), so both lookups are the ground layer; the pathfinder's getLayerAt (wall tops, ramps, bridges) is not retail here.
 bool sampleCellRequiresRefusal(GameLogic &logic, AIWorld &ai, float x, float y, float z)
 {
 	Coord3D sample{ x, y, z };
 	Pathfinder &pathfinder = ai.pathfinder();
-	const PathfindLayerEnum layer = pathfinder.getLayerAt(x, y, z);
-	const PathfindCell *cell = pathfinder.getCell(layer, &sample);
+	const PathfindCell *cell = pathfinder.getCell(LAYER_GROUND, &sample);
 	if (!cell || cell->getImpassableToPlayers())
 	{
 		return true;
@@ -73,6 +76,26 @@ bool templateKindOf(GameLogic &logic, const ThingTemplate &tt, const char *name)
 		return false;
 	}
 	return MaskTest(logic.templateInfo(tt.getFinalOverride()).kindOf, (unsigned)bit);
+}
+
+// P-106: RW 0x6B00F3 -> 0x6B00CE (the decomp's Player::rva002AF614, Common/RTS/PlayerRva002AF614.cpp: iterateObjects with the collector that appends the position
+// of every object whose template byte + 0x10A carries bit 2, the KindOf COMMANDCENTER at index 17): the points the hub's buildout range is measured from, in the
+// object list's order. WallSpan.cpp's command centres for the wall plan are the same list (its own copy, read at the same addresses).
+std::vector<Coord3D> commandCentrePoints(GameLogic &logic, const Player *player)
+{
+	std::vector<Coord3D> out;
+	if (!player)
+	{
+		return out;
+	}
+	for (Object *o = logic.getFirstObject(); o; o = o->getNextObject())
+	{
+		if (o->getControllingPlayer() == player && !o->isDestroyed() && o->isKindOfName("COMMANDCENTER"))
+		{
+			out.push_back(*o->getPosition());
+		}
+	}
+	return out;
 }
 
 // ZH BuildAssistant::iterateFootprint as BuildPlacement samples it: every active shape's footprint (lane PATH-2, S-341) on a regular grid of `res` that always
@@ -297,11 +320,16 @@ bool BuildPlacement::isLocationClearOfObjects(GameLogic &logic, const Coord3D &p
 	{
 		return true; // no geometry known: nothing to collide with (stop S-301 counts it)
 	}
-	const bool onlyCheckEnemies = options == LLF_NO_ENEMY_OBJECT_OVERLAP;
+	const bool onlyCheckEnemies = (options & ~(unsigned)LLF_CASTLE_MEMBERS_CLEAR) == LLF_NO_ENEMY_OBJECT_OVERLAP;
 	static const int immobile = ObjectTemplateInfoBuilder::kindOfIndex("IMMOBILE");
 	static const int mine_ = ObjectTemplateInfoBuilder::kindOfIndex("MINE");
 	static const int inert = ObjectTemplateInfoBuilder::kindOfIndex("INERT");
 	static const int clearedByBuild = ObjectTemplateInfoBuilder::kindOfIndex("CLEARED_BY_BUILD");
+	static const int baseSite = ObjectTemplateInfoBuilder::kindOfIndex("BASE_SITE");
+	static const int dozerKind = ObjectTemplateInfoBuilder::kindOfIndex("DOZER");
+	// P-77, RW 0x796D63 .. 0x796D68 (options bit 8) and RW 0x796E9A .. 0x796EB1: the castle's members clear only for a BASE_SITE builder (template KindOf 120,
+	// + 0x117 & 1)
+	const bool castleMembersClear = (options & LLF_CASTLE_MEMBERS_CLEAR) && builder && baseSite >= 0 && builder->isKindOf((unsigned)baseSite);
 	for (Object *them = logic.getFirstObject(); them; them = them->getNextObject())
 	{
 		if (them == builder || them->isDestroyed() || !them->getTemplate() || !them->isInWorld())
@@ -312,6 +340,16 @@ bool BuildPlacement::isLocationClearOfObjects(GameLogic &logic, const Coord3D &p
 			(inert >= 0 && them->isKindOf((unsigned)inert)))
 		{
 			continue;
+		}
+		if (castleMembersClear)
+		{
+			// RW 0x796EB3 .. 0x796EC7: a member of this castle (its CastleMemberBehavior, found by RW 0x797BEF, holds the castle's ID at + 0x18, written by
+			// registerOwnedObject RW 0x79AC87) does not block; RW 0x796ECD .. 0x796ED3 the builder itself; RW 0x796ED9 .. 0x796EE3 a DOZER (template + 0x109 & 0x40)
+			const CastleMemberBehavior *member = dynamic_cast<const CastleMemberBehavior *>(them->findModule("CastleMemberBehavior"));
+			if ((member && member->castleId() == builder->getID()) || (dozerKind >= 0 && them->isKindOf((unsigned)dozerKind)))
+			{
+				continue;
+			}
 		}
 		if (!footprintsOf(logic, *them, other))
 		{
@@ -365,7 +403,7 @@ LegalBuildCode BuildPlacement::isLocationLegalToBuild(GameLogic &logic, const Co
 	{
 		// no shroud exists yet (VIS-1): every cell is revealed (stop S-301)
 	}
-	if ((options & LLF_NO_OBJECT_OVERLAP) && !isLocationClearOfObjects(logic, pos, build, angle, builder, LLF_NO_OBJECT_OVERLAP))
+	if ((options & LLF_NO_OBJECT_OVERLAP) && !isLocationClearOfObjects(logic, pos, build, angle, builder, LLF_NO_OBJECT_OVERLAP | (options & LLF_CASTLE_MEMBERS_CLEAR))) // P-77: RW 0x7968C5 .. 0x7968CE
 	{
 		return LBC_OBJECTS_IN_THE_WAY;
 	}
@@ -527,6 +565,46 @@ LegalBuildCode BuildPlacement::isLocationLegalToBuild(GameLogic &logic, const Co
 			}
 		}
 	}
+	// P-106, RW 0x796C66 .. 0x796D24 (BFME2 decomp BuildAssistant.cpp:2156 .. 2175): a WALL_HUB build (template KindOf 156, + 0x118 & 0x10000000 - the same bit
+	// BuildAssistant::isLineBuildTemplate tests) is legal only inside the range its own WallHubBehavior record carries at + 0x30 (MaxBuildoutDistance; RW 0xC565A4's
+	// unset default 54321.0) of one of its owner's command centres (the collector RW 0x6B00F3 -> 0x6B00CE above). No point in range - a player with no command centre
+	// included - is the raw 9 refusal (the decomp's LBC_9), which the ghost's tint loop of RW 0x6A3A0B .. 0x6A3A26 paints blue (0, 0, 0.5, the 1.7 blue on frame & 4)
+	// with the plain bib, not the illegal red; the release path refuses it the same way (RW 0x83E80D, code != 0). The finder is the decomp's ThingTemplate::rva0033B427
+	// (Common/Thing/ModuleInfoGetNthData.cpp:63: the first behavior module data of the template that answers its slot + 0x18, the WallHubBehavior's here), so a
+	// WALL_HUB template without a WallHubBehavior row is legal everywhere. The owner is the builder's player (the decomp reads builderObject->getControllingPlayer()),
+	// and the port skips the test with no builder at all: a castle layout entry hands the castle's own object and can have none (INFERENCE: RW would crash there).
+	// The port had this test only in the wall-span planner (WallSpan.cpp's `legal`, the tiles' 9), so a WALL_HUB *building* was legal at any distance from its base;
+	// both paths ask this function now. Nothing here reads TheTaintManager: the defiled ground takes no part in RotWK's placement legality (see the issue).
+	if (builder && templateKindOf(logic, build, "WALL_HUB"))
+	{
+		const WallHubBehaviorModuleData *hub = nullptr;
+		for (const auto &n : build.behaviorModules().nuggets())
+		{
+			hub = dynamic_cast<const WallHubBehaviorModuleData *>(n.data.get());
+			if (hub)
+			{
+				break;
+			}
+		}
+		if (hub)
+		{
+			const float range = hub->m_maxBuildoutDistance;
+			bool inRange = false;
+			for (const Coord3D &c : commandCentrePoints(logic, builder->getControllingPlayer()))
+			{
+				const float dx = SimMath::subf32(pos.x, c.x), dy = SimMath::subf32(pos.y, c.y), dz = SimMath::subf32(pos.z, c.z);
+				if ((float)SimMath::length3d(dx, dy, dz) <= range)
+				{
+					inRange = true;
+					break;
+				}
+			}
+			if (!inRange)
+			{
+				return LBC_BEYOND_BUILDOUT;
+			}
+		}
+	}
 	return LBC_OK;
 }
 
@@ -681,6 +759,6 @@ const char *BuildPlacement::codeName(LegalBuildCode code)
 std::vector<std::string> BuildPlacement::stopLines()
 {
 	return {
-		"[S-301] building placement: the template Geometry is tested with the existing 2D footprint helper; cliff/water/height checks, positive MinDistFromEdgeOfMapForBuild (boundary 0; equality allowed), and the disassembled missing-cell / bit-18 / type-4 INERT rule (missing object or template +0x113 & 2; HERO +0x113 & 4 does not block) is ported; CANNOT_BUILD_NEAR_SUPPLIES searches the closest SUPPLY_SOURCE and expands its geometry by SupplyBuildBorder. Still not ported: active-boundary script selection (S-921), exact non-ground sample-layer selection (RW 0x680B70 vs getLayerAt), remaining cell-type cases, shroud (VIS-1), the builder's clear-path query, factory exit width / bib checks, cleared-by-build objects, and byte-exact 3D overlap",
+		"[S-301] building placement: the template Geometry is tested with the existing 2D footprint helper; cliff/water/height checks, positive MinDistFromEdgeOfMapForBuild (boundary 0; equality allowed), and the disassembled missing-cell / bit-18 / type-4 INERT rule (missing object or template +0x113 & 2; HERO +0x113 & 4 does not block) is ported; CANNOT_BUILD_NEAR_SUPPLIES searches the closest SUPPLY_SOURCE and expands its geometry by SupplyBuildBorder. Still not ported: active-boundary script selection (S-921), the WALL_SEGMENT / obstacle sample layer (RW 0x680B70, taken as the ground: S-161), remaining cell-type cases, shroud (VIS-1), the builder's clear-path query, factory exit width / bib checks, cleared-by-build objects, and byte-exact 3D overlap",
 	};
 }

@@ -270,7 +270,7 @@ std::vector<std::string> HeroSystem::stopLines()
 		"BuildableRingHeroesMP + BuildableHeroesMP, its record's image RW 0x7810BC, cost, state and production clock; a press is the build-index "
 		"MSG_QUEUE_UNIT_CREATE) and a hero's special power buttons their lock / ready / recharge state and clock; not ported: the second pass (leftover records "
 		"into free slots), RW 0x942733's UI rules beyond canMakeUnit, Create-A-Hero's own image, the HeroSelect side list of the live heroes' portraits",
-		"[S-851] RespawnUpdate AutoSpawn: state 3 (RW 0x8B3B08 .. 0x8B3C05), searchForSuitableSpawnAtObject (RW 0x8B307E: AutoRespawnAtObjectFilter + 0x08) and getRespawnProgress (RW 0x8B310D) are ported (Local 8, #113); the writer of state 3 is not located and the refund slot RW 0x8B3017 has no caller (neither RotWK 2.01 nor BFME2 1.06 game.dat writes state 3)",
+		"[S-851] RespawnUpdate AutoSpawn: state 3 (RW 0x8B3B08 .. 0x8B3C05), searchForSuitableSpawnAtObject (RW 0x8B307E: AutoRespawnAtObjectFilter + 0x08) and getRespawnProgress (RW 0x8B310D) are ported (Local 8); the writer of state 3 is not located and the refund slot RW 0x8B3017 has no caller (neither RotWK 2.01 nor BFME2 1.06 game.dat writes state 3)",
 		"[S-852] hero records: not ported: the campaign / WotR saved heroes (RW 0x6B1771), the record "
 		"fields Object + 0x47C / + 0x480 / + 0x488 / + 0x458 bit 4 and the tracker's leveled byte, GameLogic + 0x98, RW 0x68C7E9, forced drawable model-condition refresh on creation (RW 0x70E013 / 0x67449C(true)), RW 0x68B934; "
 		"the rank of a purchase record is 1 (RW 0x73CE2A's create module vslot is not identified)",
@@ -283,7 +283,8 @@ std::vector<std::string> HeroSystem::stopLines()
 		"never set), the pool's AntiCategory disable (XP-1's S-633: counted); the aura and AutoHeal scans run on ThePartitionManager (lane MODULES-2, S-1020: the "
 		"retail order of equal distances), the special power trigger and LevelGrant scans still sort the object list by distance (equal distances keep the "
 		"list's order: as an applied modifier can grant an upgrade at once (a CostModifierUpgrade appends to the player's ordered list), that order can change "
-		"shared player state)",
+		"shared player state); lane TAINTAREA-1 ported the TAINT / ELVEN_WOOD condition (RW 0x89F200, BFME2 0x49B98A) on TheTaintManager (RW 0xAD49B0) and the "
+		"destructor's radius clear of a TAINT object (RW 0x89EE67 -> 0x683393)",
 		"[S-858] AutoHealBehavior: not ported: NonStackable (the body's last heal frame, body vslot 0x48: the heal stacks), AffectsWholePlayer (no retail use), "
 		"Object + 0x458 bit 3 in the eligibility, the contain's FX flag; the combat and recent "
 		"damage tests of RW 0x855533 read the healer (verified)",

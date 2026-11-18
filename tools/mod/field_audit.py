@@ -37,7 +37,8 @@ struct's read; the status is wrong only when our member has no read of its own.
 Statuses, from the worst:
   missing-module   the class has no runtime class (an UnportedModule is made): nothing it says happens
   parsed-only-module  the class's data is typed but there is no runtime class: the values are parsed and dropped
-  stub-block       the definition's block keyword is a recording stub: the block is skipped, no value is kept
+  stub-block       the definition's block keyword is a recording stub: the block is skipped, no value is kept (a block with a hand-written
+                   reader of its own that does not ask for the field is parsed-unused, how own-reader-unasked: CursorFile.cpp's MouseCursor)
   raw              the runtime class is ported but its data is raw: no value is parsed (unless a raw reader names the field: used-raw)
   struct-unknown   the coverage says typed, but no binding in the source names the data struct (the tool cannot follow it)
   no-table-row     the class's (or the block's) tables have no row of that name and no catch-all row (the engine would refuse it: the tool missed a
@@ -49,6 +50,8 @@ Statuses, from the worst:
   custom-parser    the row's own parser stores it where the tool cannot follow (no member named in its body): check by hand
   own-reader       a stub block read by a hand-written reader of its own that names the field (TerrainTypes.cpp): the use not followed
   dynamic-row      the row is made at run time from a name list (MiscAudio, "Color" + to_string(i)): parsed, the use not followed
+  used-outside     a parsed-only class (no runtime class) whose data member another file reads unambiguously (W3DStreakDraw's data drawn by
+                   GodotGameWorld.cpp): used, but outside the module; an AMBIGUOUS or INFERENCE read stays parsed-only-module with its where
   used-raw         a raw class whose field name is read by name (a raw reader such as RawModuleData's find) in a file that names the class
   used             the member is read outside the parser
   not-in-rotwk     RotWK's table does not have the field: the mod's own error, RotWK does not use it either
@@ -1512,7 +1515,7 @@ def stops_for(stops, cls: str, field: str) -> str:
 
 # ---- the join --------------------------------------------------------------------------------------------------------------------------------------
 ORDER = ["missing-module", "parsed-only-module", "stub-block", "raw", "struct-unknown", "no-table-row", "not-read", "unmapped-block", "parsed-unused", "custom-parser",
-         "own-reader", "dynamic-row", "used-raw", "used", "not-in-rotwk", "unknown-class"]
+         "own-reader", "dynamic-row", "used-raw", "used-outside", "used", "not-in-rotwk", "unknown-class"]
 
 
 def audit(mod, rw, rw_object, coverage, src: Source, real_blocks: set[str], stops=()):
@@ -1568,6 +1571,26 @@ def audit(mod, rw, rw_object, coverage, src: Source, real_blocks: set[str], stop
         # rows it asks for is not followed, a lead for the hand check
         return "dynamic-row", f"{listed} (a name list of another file, read by index)" if listed else hit, "", "string"
 
+    def init_target(r):
+        """the member a whole table is parsed into, for a row that stores into the instance itself (member nullptr / offset 0): the
+        initFromINI call naming the row's table within 40 lines after it, `ini->initFromINI(&tt->m_threatCategory, fields)` -> m_threatCategory.
+        '' when there is none"""
+        if not r.table:
+            return ""
+        lines = src.files.get(r.file, [])
+        pat = re.compile(r"initFromINI\w*\s*\(\s*&?\s*(?:[\w\[\]]+\s*(?:\.|->)\s*)*(\w+)\s*,\s*" + re.escape(r.table) + r"\b")
+        for k in range(r.line - 1, min(len(lines), r.line + 40)):
+            m = pat.search(lines[k])
+            if m:
+                return m.group(1)
+        return ""
+
+    def own_members(r):
+        """the members a row stores into; a row that stores into the instance itself (member nullptr / offset 0) stores into what its table is
+        parsed into (init_target): only then, a row naming its own member is never followed to the table's target"""
+        members = [m for m in r.member.split("|") if re.fullmatch(r"[A-Za-z_]\w+", m) and m not in ("nullptr", "NULL")]
+        return members or [init_target(r)]
+
     def typed_status(field, structs, nested, files=(), path=(), block="", block_path=()):
         cands = [r for s in structs for r in rows_of(s) if r.field.lower() == field.lower()] if not path else []
         how = "struct"
@@ -1617,7 +1640,7 @@ def audit(mod, rw, rw_object, coverage, src: Source, real_blocks: set[str], stop
             return "no-table-row", "", "", how
         followed = False
         for r in cands:
-            for m in r.member.split("|"):
+            for m in own_members(r):
                 if not re.fullmatch(r"[A-Za-z_]\w+", m) or m in ("nullptr", "NULL"):
                     continue
                 followed = True
@@ -1654,8 +1677,17 @@ def audit(mod, rw, rw_object, coverage, src: Source, real_blocks: set[str], stop
     def raw_block(owner, field):
         """an Object's nested block the template keeps as raw lines (ThingFactory.cpp, stop S-071): its readers are the files that walk the raw
         blocks (rawBlocks) and name the block (AIThreatFinder.cpp's "ThreatBreakdown", LivingWorldUnits.cpp's readSets(tt, "AutoResolveArmor",
-        "Armor", ..)); a field is read when such a file names it. None when no file reads the block"""
+        "Armor", ..)); a field is read when such a file names it. A port may also parse the block typed while keeping the raw lines (Port 227:
+        ThreatBreakdown's AIKindOf row -> initFromINI(&tt->m_threatCategory, ..)): a row of that field in a file naming the block is followed
+        to its member first, so a typed reader is never reported as parsed-unused. None when no file reads the block"""
         block = owner.split("/")[1]
+        naming = {f for f, _ in src.string_lines(block)} | src.files_naming("S_" + block)
+        for r in (r for r in src.rows if r.file in naming and r.field.lower() == field.lower()):
+            for m in own_members(r):
+                if re.fullmatch(r"[A-Za-z_]\w+", m or "") and m not in ("nullptr", "NULL"):
+                    use = src.member_read(m, r.struct or "?", origin=r.file, parser=(r.file, r.func))
+                    if use:
+                        return "used", use, "typed-block"
         readers = {f for f in src.files_naming("rawBlocks") | src.files_naming("m_rawBlocks") if any(g == f for g, _ in src.string_lines(block))}
         if not readers:
             return None
@@ -1693,7 +1725,11 @@ def audit(mod, rw, rw_object, coverage, src: Source, real_blocks: set[str], stop
                         # a catch-all row) is asked for by the Object's reader (UnitVoiceResponse::objectNameVoice asks the selectors first)
                         status, where, how = by_name(BY_NAME_BLOCKS[last], field, object_names)
                 if cov["status"] == "parsed-only" and status in ("used", "parsed-unused"):
-                    status = "parsed-only-module"
+                    # the class has no runtime class, but another file may draw / use its parsed data (W3DStreakDraw's data, drawn by
+                    # GodotGameWorld.cpp): an unambiguous read of the member is used-outside (its own status, never folded into used); an
+                    # AMBIGUOUS or INFERENCE read stays parsed-only-module and keeps its where as a lead to check by hand
+                    certain = status == "used" and "AMBIGUOUS" not in where and "INFERENCE" not in where
+                    status = "used-outside" if certain else "parsed-only-module"
         elif typ == "object":
             if not nested and field.lower() not in rw_object:
                 status = "not-in-rotwk"
@@ -1731,6 +1767,9 @@ def audit(mod, rw, rw_object, coverage, src: Source, real_blocks: set[str], stop
             readers = src.own_reader_files(typ)
             hits = [(f, n) for f, n in src.string_lines(field) if f in readers]
             status, where, how = ("own-reader", f"{hits[0][0]}:{hits[0][1]}", "string") if hits else ("stub-block", "", "")
+            if not hits and readers:
+                # the block is read by its own reader (CursorFile.cpp reads Mouse.ini's MouseCursor blocks), which does not ask for this field
+                status, where, how = "parsed-unused", f"its own reader ({', '.join(sorted(readers))}) does not ask for it", "own-reader-unasked"
             # a key test whose branch stores the value into a member (TerrainRoads.cpp's `if (key == "roadwidth") cur.roadWidth = ..`): followed
             for f, n in hits:
                 member, k = src.branch_member(f, n)

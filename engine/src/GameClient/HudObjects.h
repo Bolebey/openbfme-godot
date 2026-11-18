@@ -33,6 +33,14 @@ bool hiddenFromDrag(const HudContext &ctx, const Object &obj);
 // ZH CanSelectDrawable (SelectionXlat.cpp:81): the drawable of the object can be selected under the rules of the system. `dragSelecting`: structures and
 // foreign objects are refused. A contained object (a horde member inside its horde) is refused.
 bool canSelect(const HudContext &ctx, const Object &obj, bool dragSelecting);
+// lane LOCAL-43: InGameUI's move-hint reach test, RW 0x69E8D0 (BFME2 decomp InGameUI 0x29DE76): true for a point the local player does not see now
+// (RW 0x69E8EC: RW 0xB4D9A0 over the local player's shroud index, Player + 0x54, non-zero); a seen point is true when some selected object can move
+// (RW 0x690E97: only its IMMOBILE test is ported, S-1920) and is ARMY_OF_DEAD (RW 0x69E943, template + 0x11A & 0x80) or has an AI (Object + 0x260)
+// whose quick path test from its own position reaches the point (RW 0x69E955 -> RW 0x66403D -> RW 0x664112: Pathfinder::quickDoesPathExist RW 0x6F5BB0
+// with no locomotor set, the AI's own). Not ported (S-1920): RW 0x66403D's SHIP + GARRISON transport branch with a contain (RW 0x66406F .. 0x6640EC: the
+// set TransportShipLocomotorForUnitInteraction) answers true. Callers: HudInput::hintSpy (createMoveHint RW 0x69F54F) and the context move hint
+// (evaluateContextCommand RW 0x81F65E)
+bool canSelectionReachHint(const HudContext &ctx, const Coord3D &pos);
 // an object the pointer can hit: it exists, is not destroyed, is not contained
 bool isPickable(const Object &obj);
 // ZH View::pickDrawable(pixel, forceAttack, pickType): the nearest pickable object under the pixel, null for none. A horde member resolves to the
@@ -77,6 +85,12 @@ struct PickHit
 std::vector<PickHit> pickHits(const HudContext &ctx, const ICoord2D &pixel, unsigned pickTypes);
 // ZH View::iterateDrawablesInRegion: the objects whose position lies in the region, in object list order; a region of zero size is a point pick
 std::vector<Object *> objectsInRegion(const HudContext &ctx, const IRegion2D &region);
+// PORT-208 (issue #490, S-2480): RW 0x48ACF5 .. 0x48ADA0 in W3DView::pickDrawable (RW 0x48AB28): when the hit-test found nothing, the terrain point
+// under the pixel (the view's screenToTerrain, RW 0x48ACFF -> the tactical view slot 0x168) is looked up in the map's trees (TerrainTrees::findClosestTree
+// 10.0, RW 0x67F4F6) and, when the local player sees that cell (RW 0xB4D9B0: the shroud's cell status is not SHROUDED; skipped when there is no local
+// player or no displayed shroud), the pick answers the stand-in id: 99999999 for a grabbable and harvestable tree, 99999998 for a grabbable only, 99999997
+// for a harvestable only, 99999996 for neither. A tree the client cannot see is no pick. Returns false when nothing tree-like is under the pixel.
+bool pickTreeStandIn(const HudContext &ctx, const ICoord2D &pixel, ObjectID &out);
 // the object a contained object stands for in the selection: the container when it is the horde's member, else itself
 Object *selectionRepresentative(Object &obj);
 // ZH SelectionTranslator's third click test: the camera moved further than DragTolerance3D between the button down and the up (client view maths)

@@ -153,6 +153,8 @@ public:
 	// RW 0x8B911E (SubObjectsUpgrade's UpgradeTexture): every draw module of the drawable takes this list of (original, drawn instead) as its upgrade
 	// textures (draw module vslot 0x84), replacing the one it had; the removal hands an empty list
 	virtual void upgradeTextures(Object &obj, const std::vector<std::pair<std::string, std::string>> &swaps) { (void)obj; (void)swaps; }
+	// PORT-47: RW 0x67273A -> model draw slot +0x78 (0x4B8701), after upgradeTextures, not another texture-change path.
+	virtual void recolorHouse(Object &obj, const std::vector<std::string> &excludeSubobjects) { (void)obj; (void)excludeSubobjects; }
 	// lane STEALTH-2, RW 0x776F03 (StealthUpdate's disguise): the object's drawable is destroyed (TheGameClient vslot 0x74) and a new one of `tmpl` made
 	// (RW 0x6CFE8C) and bound (RW 0x625AA4) at the object's position and orientation with its model conditions, in `color` when `hasColor`
 	virtual void replaceDrawable(Object &obj, const ThingTemplate *tmpl, bool hasColor, std::uint32_t color) { (void)obj; (void)tmpl; (void)hasColor; (void)color; }
@@ -203,6 +205,9 @@ public:
 	virtual void setCustomColors(Object &obj, int kind, std::uint32_t c0, std::uint32_t c1, std::uint32_t c2) { (void)obj; (void)kind; (void)c0; (void)c1; (void)c2; }
 	// RW 0x699077 -> RW 0x67561E: notify drawable on object death (m_evaEnemySightedAfterRespawn = 1)
 	virtual void objectDied(Object &obj) { (void)obj; }
+	// P-87, RW 0x8A519B .. 0x8A51AE -> RW 0x6713A8: SlavedUpdate::onEnslave hands the slave's drawable its slaver; a slave with
+	// UseSlaverAsControlForEvaObjectSightedEvents takes the slaver drawable's two Eva sighting flags (+ 0x445, + 0x446)
+	virtual void objectEnslaved(Object &slave, const Object &slaver) { (void)slave; (void)slaver; }
 };
 
 class StateHasher;
@@ -215,6 +220,7 @@ struct GameLogicSettings
 	// lane AIDATA-1: every AIData default below is the AIData constructor's (RW 0x6FFBEF; BFME2 decomp AIConstructor_Unresolved.cpp TAiData::TAiData), so a mod
 	// aidata.ini that leaves a field out gets retail's value; no AIData field is required (retail's parser RW 0x7017AA requires none)
 	bool enableRepulsors = false;                    ///< AIData EnableRepulsors (RW 0xDE4B40 + 0x18 + 0x64, ctor 0): the RepulsorHelper condition
+	bool forceSkirmishAI = false;                    ///< AIData ForceSkirmishAI (+ 0x65, row RW 0xC1CC80 parseBool; ctor RW 0x6FFBEF / 0x6FFD49 stores 0): RW 0x6AA450 Player::setPlayerType gives PLAYER_COMPUTER an AISkirmishPlayer even when skirmish == false
 	float repulsedDistance = 0.0f;                   ///< AIData RepulsedDistance (+ 0x60, lane MODULES-3): the safe path radius beyond the vision range
 	bool useFormations = true;                       ///< AIData UseFormations (+ 0xBD, row RW 0xC1CE90 parseBool; the constructor RW 0x6FFDE5 stores 1; lane BACKLOG6): AIGroup RW 0x774897's formation gate
 	float minDistanceForGroup = 100.0f;              ///< AIData MinDistanceForGroup (+ 0x6C, row RW 0xC1D390 parseReal; the constructor stores RW 0xBD88D8 = 100.0f at RW 0x6FFD56; lane BACKLOG6): RW 0x76F115's group move distance
@@ -242,8 +248,8 @@ struct GameLogicSettings
 	float formationEnemyDistance = 600.0f;
 	float narrowPassageScale = 1.0f;
 	bool waitForOthers = false;
-	// lane PORT-13: AIData AttackMoveUsesFormations (+ 0xBA, row RW 0xC1CE50 parseBool RW 0x42E558; the constructor RW 0x6FFD9E stores 1; retail default\aidata.ini
-	// sets No, Ennorath Yes): AIGroup::groupAttackMoveToPosition's formation gate (RW 0x774E55)
+	// lane PORT-13: AIData AttackMoveUsesFormations (+ 0xBA, row RW 0xC1CE50, parseBool RW 0x42E558; the constructor RW 0x6FFD9E stores 1 and both editions'
+	// default\aidata.ini set Yes): the gate of AIGroup::groupAttackMoveToPosition's formation march (RW 0x774E6B). Hashed only when a mod turns it off
 	bool attackMoveUsesFormations = true;
 	// lane STEALTHFLY1: AIData MinFlightHeight (+ 0xB0, row RW 0xC1CE60 parseReal RW 0x42ED00; the constructor's FLT_MAX RW 0xBD1910 = none): the flight ground
 	// height's floor (RW 0x777ED7). No retail aidata.ini sets it; a map's map.ini AIData block does (map wor dol guldur 76, map evil rivendell 300)
@@ -256,6 +262,10 @@ struct GameLogicSettings
 	unsigned forceIdleFrames = 1; // lane AIDATA-1: the constructor's 1 (RW 0x6FFBEF: + 0x14)
 	float attackPriorityDistanceModifier = 0.0f;
 	bool attackUsesLineOfSight = true;
+	// PORT-437: AIData AICrushesInfantry (+ 0x8C, row RW 0xC1CDA0, parseBool RW 0x42E558; the constructor RW 0x6FFD70 stores 1, copy RW 0x6FEFEF): the
+	// generic attack machine's crush condition RW 0x745945 reads TheAI + 0x18 -> + 0x8C. With it on, a unit whose crush policy accepts the victim (RW 0x69519A)
+	// walks into it instead of shooting (table RW 0xC29DD4 record 2 -> Chase 0x64)
+	bool aiCrushesInfantry = true;
 	bool attackIgnoreInsignificantBuildings = false;
 	float artilleryMaxFriendlyFire = 1.0f;
 	// lane AIDATA-1: ChaseFromBehindLimit + 0xD0 (row RW 0xC1CEF0, parseReal RW 0x42ED00; ctor 50.0 = RW 0xBD88C4): a melee unit that is
@@ -269,7 +279,7 @@ struct GameLogicSettings
 	float skirmishGroupFudgeDistance = 0.0f;
 	// lane PORT-40: AIData MaxRecruitRadius + 0x5C (row RW 0xC1CCD0, parseReal RW 0x42ED00; the constructor's 0.0, RW 0x6FFD04 with xmm0 zeroed at
 	// RW 0x6FFC01): the radius a team recruits units within — the script action TEAM_RECRUIT_UNITS (RW 0x7C2BFB -> Team RW 0x7A491C); the AI player
-	// reads it for its own team building too (RW 0x8F8E2C / RW 0x8F9530 -> Team RW 0x7A41D4), which is not ported
+	// reads it for its own team building too (RW 0x8F8E2C / RW 0x8F9530 -> Team RW 0x7A41D4), which is not ported (S-412)
 	float maxRecruitRadius = 0.0f;
 	// lane AIDATA-1: the pathfinder's AIData rows (before: PathfindConfigLoader's own text scan; now the shared table, so a map.ini / solo.ini AIData block
 	// reaches the pathfinder too: PathfindConfigLoader::applyAIData). Rows and constructor values (RW 0x6FFBEF): WadeWaterDepth + 0x98 (row RW 0xC1CDD0, 5.0 RW
@@ -282,6 +292,10 @@ struct GameLogicSettings
 	float meleeApproachDist = 60.0f;
 	float castleSiegeStandBackDistance = 100.0f;
 	bool hordesWaitForHordes = true;
+	// lane LOCAL-42: AllowForestFires + 0xBC (row RW 0xC1CE80, parseBool RW 0x42E558; the constructor RW 0x6FFDDF stores 0). Read through TheAI's data
+	// (RW 0xDE4B40 + 0x18): FireSpreadUpdate's tree branch (RW 0x88EF0F) and the attack on a map tree (RW 0x77AF3B / 0x77C1E5) make a tree an object
+	// (TerrainTrees::makeTreeObject, RW 0x68449B) only with it set. Retail 2.01 and Ennorath set No (defaultidata.ini)
+	bool allowForestFires = false;
 	// lane PORT-38 (issue #123): the AI player's team build tempo — six AIData rows of the table that starts at RW 0xC1CB20, and the constructor
 	// RW 0x6FFBEF stores 0.0f / 0 to all of them (so a data set that leaves them out divides by a zero rate, exactly as the image does; the rules
 	// and their callers are GameLogic/SkirmishAI/AITeamTempo.h, stop S-5620 for the team build that would consume them):
@@ -475,6 +489,9 @@ struct GameLogicSettings
 	// lane CHAT-1: MultiplayerSettings MaxBeaconsPerPlayer (+ 0x18): a player's beacons at most (retail multiplayer.ini: 3). INFERENCE: the default is ZH's
 	// MultiplayerSettings constructor value (RotWK's constructor was not read). Not hashed (crc below): data every peer of a game reads alike (the profile)
 	int maxBeaconsPerPlayer = 3;
+	// Local 56 (issue #412, P-96): MultiplayerSettings ShowRandomStartPos (constructor RW 0x7836C0 +0x1E = 1, parse table RW 0xC2F798 -> INI::parseBool
+	// RW 0x42E558): when Yes, opponents' Random start positions remain hidden as -1 on the loading screen and diplomacy window (RW 0x801249).
+	bool showRandomStartPos = true;
 	// MultiplayerSettings colours (`MultiplayerColor <Name>` blocks of data\\ini\\multiplayer.ini, lane START-1): the lobby's colour list, in file order; the index is the
 	// slot's colour. ZH MultiplayerColorDefinition: RGBColor and RGBNightColor are the day and night player colours (0xRRGGBB here; Player::setPlayerColor
 	// takes 0xFF000000 | rgb), TooltipName a game text label, AvailableInWotR whether the strategic (War of the Ring) lobby offers it.
@@ -808,6 +825,13 @@ public:
 	// ZH GameLogic::friend_createObject / ThingFactory::newObject (Common/Thing/ThingFactoryObjects.cpp): the whole creation order
 	Object *newObject(const ThingTemplate *tt, Team *team, const ObjectStatusMaskType &status, ObjectID id = INVALID_ID);
 	Object *findObjectByID(ObjectID id) const;
+	// lane LOCAL-42 / PORT-208 (S-2480): the stand-in a clicked map tree is picked as. RW 0x77AF18 / 0x77C1C2 compare the message's victim id with
+	// 0x5F5E0FF (99999999) and the client's picker RW 0x48ACF5 .. 0x48ADA0 hands out 99999996 .. 99999999, the four ids of the tree stand-ins GameLogic
+	// keeps (RW 0x62F508: ids 0x5F5E0FF, 0x5F5E0FE, 0x5F5E0FC, 0x5F5E0FD made from TheOneTree / TheNonInteractableTree / TheGrabbableTree /
+	// TheHarvestableTree, one per tree flavour). The port makes no object for them: a stand-in is an ID only, never looked up, never hashed, never saved,
+	// and the logic turns it into a real tree object with TerrainTrees::makeTreeObject (RW 0x68449B) when the command executes
+	static bool isTreeStandInID(ObjectID id) { return id >= 99999996u && id <= 99999999u; }
+	static const ObjectID kTreeStandInID = 99999999; ///< the one the picker returns (RW 0x48AD57: grabbable AND harvestable)
 	Object *getFirstObject() const { return m_objectHead; }
 	Object *getLastObject() const { return m_objectTail; }
 	size_t getObjectCount() const { return m_objectCount; }

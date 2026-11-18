@@ -46,6 +46,7 @@
 #include <vector>
 
 class ModuleFactory;
+class Team;
 class SlaughterHordeContainBehaviorData;
 class CitadelSlaughterHordeContainBehaviorData;
 struct DieMuxData;
@@ -88,9 +89,13 @@ public:
 	UpdateSleepTime update() override;
 	// ---- ContainModuleInterface ----
 	bool addToContain(Object *obj) override;
-	void removeFromContain(Object *obj) override;
+	void removeFromContain(Object *obj, bool exposeStealthUnits = false) override;
 	void containReactToTransformChange() override;
 	bool isGarrisonable() const override { return true; }
+	// slot 0x1C RW 0x87B308: `mov eax, [ecx - 0x1C]; mov al, [eax + 0xA1]; ret` -- the module data's ImmuneToClearBuildingAttacks (GarrisonContain,
+	// HordeGarrisonContain, SlaughterHordeContain and CitadelSlaughterHordeContain tables RW 0xC5C698 / 0xC5C9F0 / 0xC5F0D0 / 0xC5F2E8; the garrison reads
+	// it through OpenContain's `garrison` member, whose +0xA1 is the same byte, GarrisonContainRuntime.h's data layout)
+	bool isImmuneToClearBuildingAttacks() const override; // RW 0x87B308, out of line: the module data is incomplete here
 	bool isPassengerAllowedToFire() const override { return true; } // slot 0xB4 RW 0x8BD372 (GarrisonContain, HordeGarrisonContain, TunnelContain; lane DECOMP-3)
 	bool isDisplayedOnControlBar() const override { return true; } // slot 0xC8 RW 0x8BD372 (lane UI-1)
 	bool isValidContainerFor(const Object &obj, bool checkCapacity, bool checkPath) const override;
@@ -116,6 +121,8 @@ public:
 	int getContainMax() const override;
 	// RW 0x87B0F1: 0 pristine, 1 damaged, 2 really damaged / rubble, -1 otherwise
 	int findConditionIndex() const;
+	// RW 0x87B7E3 (contain slot 0x130): the free garrison point of the current damage state nearest *targetPos
+	bool calcBestGarrisonPosition(Coord3D *sourcePos, const Coord3D *targetPos) override;
 	const std::array<GarrisonPoint, MAX_GARRISON_POINTS> &points() const { return m_points; }
 	int pointsInUse() const { return m_pointsInUse; }
 	int pointCount(int condition) const { return condition >= 0 && condition < GARRISON_POINT_CONDITIONS ? m_pointCount[condition] : 0; }
@@ -128,7 +135,7 @@ public:
 	const Coord3D &exitRallyPoint() const { return m_exitRallyPoint; }
 	bool exitRallyValid() const { return m_rallyValid; }
 	// RW 0x87B4DC: every rider leaves (onDie with EjectPassengersOnDeath, the evacuation of a dying building)
-	void removeAllContained() override;
+	void removeAllContained(bool exposeStealthUnits = false) override;
 
 	// lane GARRISON-1 counters (reported)
 	struct Stats
@@ -151,12 +158,16 @@ public:
 		unsigned long long rallyExits = 0;             // the exit path's second waypoint was the contain's rally point (RW 0x87CC13, lane BACKLOG-1)
 	};
 	const ExitStats &exitStats() const { return m_exitStats; }
+	// RW 0x87B69A: the stored original team (interface + 0xDC = module + 0xFC) looked up by id, null when unset
+	Team *originalTeam() const;
 
 protected:
 	void onContaining(Object *obj, bool wasSelected) override; // RW 0x87BEC8
 	void onRemoving(Object *obj) override;                     // RW 0x87BFA6
 	const GarrisonContainModuleData &garrison() const { return *m_garrison; }
 	bool hordeMemberInside(const Object &obj, Object **horde) const; // RW 0x990CB9
+	// RW 0x87B682: the interface's slot + 0x54 stores the team's id (0 for none); the container's own team is not touched
+	void setOriginalTeam(const Team *team);
 
 private:
 	friend class GarrisonContainTestAccess;

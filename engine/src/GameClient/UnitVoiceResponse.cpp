@@ -2,6 +2,7 @@
 // BFME1's two Bloodthirsty voice slots follow Open-BFME-1 MessageStream/CommandXlatVoice.cpp, case 0x7E9 and its playback tail.
 
 #include "GameClient/UnitVoiceResponse.h"
+#include "GameClient/InGameUI.h"
 
 #include "Common/AsciiString.h"
 #include "Common/Audio/AudioEntryPoints.h"
@@ -33,6 +34,8 @@
 #include <cstdlib>
 #include <sstream>
 #include <utility>
+
+#include <set>
 
 // Common/ModelState.h cannot be included next to Object.h (two ModelConditionFlags typedefs); the one function used is declared here.
 namespace ModelCondition
@@ -429,10 +432,16 @@ bool UnitVoiceResponse::fillName(Choice &c, const Object &obj, const std::string
 
 const UnitVoiceResponse::CrowdThreshold *UnitVoiceResponse::pickCrowd(const std::vector<std::pair<Object *, int>> &candidates) const
 {
-	// RW 0x8DEF63 .. 0x8DF003: every candidate whose template has a CrowdResponseKey (tt + 0x4AC) adds the response's Weight to its total; the largest
-	// total wins (a later one only with a larger total); RW 0x825C45 then takes the Threshold entry with the largest count <= the number of units
-	// (INFERENCE S-700: the count is the number of candidates with that key, as CrowdResponse.ini documents)
-	std::map<std::string, std::pair<int, int>> votes; // name -> weight total, units
+	// RW 0x8DEF6F .. 0x8DEFB9: every candidate whose template's CrowdResponse (tt + 0x4AC) is set adds that response's Weight (+4, RW 0x8DEFB6) to its
+	// total; the largest total wins (RW 0x8DEFDB .. 0x8DEFF0: a later one only with a larger total). RW 0x8DEFF4 then hands 0x825C45 the element count of
+	// the objects table (RW 0x8DEEF9 / 0x8DEF40 insert into the map at [ebp-0x134], whose count is its dword +0x10 = [ebp-0x124], RW 0x54876B): every
+	// collected object, including the ones whose template names no response, not the objects that voted for the winning key.
+	std::set<const Object *> collected;
+	for (const auto &cand : candidates)
+	{
+		collected.insert(cand.first);
+	}
+	std::map<std::string, int> votes; // name -> weight total
 	std::vector<std::string> order;
 	for (const auto &cand : candidates)
 	{
@@ -460,20 +469,19 @@ const UnitVoiceResponse::CrowdThreshold *UnitVoiceResponse::pickCrowd(const std:
 		{
 			order.push_back(key);
 		}
-		votes[key].first += cr->second.weight;
-		votes[key].second += 1;
+		votes[key] += cr->second.weight;
 	}
 	const CrowdResponse *best = nullptr;
-	int bestTotal = 0, units = 0;
+	int bestTotal = 0;
 	for (const std::string &k : order)
 	{
-		if (votes[k].first > bestTotal)
+		if (votes[k] > bestTotal)
 		{
-			bestTotal = votes[k].first;
+			bestTotal = votes[k];
 			best = &m_crowd.at(k);
-			units = votes[k].second;
 		}
 	}
+	const int units = (int)collected.size(); // RW 0x8DEFF4
 	if (!best)
 	{
 		return nullptr;
@@ -491,9 +499,31 @@ const UnitVoiceResponse::CrowdThreshold *UnitVoiceResponse::pickCrowd(const std:
 
 bool UnitVoiceResponse::parseCrowdResponses(const std::string &text, std::string *error)
 {
-	// CrowdResponse <Name> / Threshold <Count> / <voice row> = <value> / UnitSpecificSounds ... End / End / Weight = ## / End (CrowdResponse.ini's syntax
-	// comment; the binary's parser was not read: S-700)
+	// RW 0x826674 is the block parser the "CrowdResponse" keyword names in the block table at VA 0xDA775C: it demands the store at 0xDE8B3C and refuses a
+	// block whose name is taken ("Multiple CrowdResponse blocks named %s", 0xC5187C). Its fields are the table at VA 0xC5184C: Weight (+4) through
+	// RW 0x42EC5E (parseInt) and Threshold (+8) through RW 0x8264D2.
+	// RW 0x8264D2 reads the minimum-unit count as an integer (RW 0x42E9D7 -> 0x42CDB1: digits, or a define that resolves to them), parses one record
+	// with the rowed UnitSpecificSounds table (RW 0x825FC9 constructor, RW 0x825B52 the record parse: the template's own rows and a nested
+	// UnitSpecificSounds block at +0x1C0) and inserts it into the response's count -> record map (RW 0x826080 / 0x826396); a count already there is
+	// refused (RW 0x826553 -> 0xC51808 "CrowdResponse: Multiple Thresholds with minimum units %d"). RW 0x825B52 refuses an EVA: override, in a row
+	// (0x825BB7 -> 0xC51700) and in the nested block (0x825BD4 -> 0xC516A8).
 	std::istringstream in(text);
+	auto scanInt = [](const std::string &token, int &out) {
+		size_t i = (!token.empty() && (token[0] == '-' || token[0] == '+')) ? 1 : 0;
+		if (i >= token.size())
+		{
+			return false;
+		}
+		for (size_t j = i; j < token.size(); ++j)
+		{
+			if (token[j] < '0' || token[j] > '9')
+			{
+				return false;
+			}
+		}
+		out = std::atoi(token.c_str());
+		return true;
+	};
 	std::string line;
 	CrowdResponse *cur = nullptr;
 	CrowdThreshold *thr = nullptr;
@@ -530,6 +560,10 @@ bool UnitVoiceResponse::parseCrowdResponses(const std::string &text, std::string
 			{
 				return fail("expected CrowdResponse <Name>");
 			}
+			if (m_crowd.count(b) != 0)
+			{
+				return fail("Multiple CrowdResponse blocks named " + b); // RW 0x826674, 0xC5187C
+			}
 			cur = &m_crowd[b];
 			*cur = CrowdResponse();
 			cur->name = b;
@@ -553,15 +587,31 @@ bool UnitVoiceResponse::parseCrowdResponses(const std::string &text, std::string
 		}
 		if (!thr)
 		{
+			int value = 0;
 			if (a == "Threshold")
 			{
+				if (!scanInt(b, value)) // RW 0x8264D2 -> 0x42E9D7
+				{
+					return fail("Threshold needs an integer minimum-unit count, not '" + b + "'");
+				}
+				for (const CrowdThreshold &t : cur->thresholds)
+				{
+					if (t.threshold == value) // RW 0x826553, 0xC51808
+					{
+						return fail("CrowdResponse: Multiple Thresholds with minimum units " + std::to_string(value));
+					}
+				}
 				cur->thresholds.push_back(CrowdThreshold());
-				cur->thresholds.back().threshold = std::atoi(b.c_str());
+				cur->thresholds.back().threshold = value;
 				thr = &cur->thresholds.back();
 			}
 			else if (a == "Weight")
 			{
-				cur->weight = std::atoi(b.c_str());
+				if (!scanInt(b, value)) // RW 0xC5184C +4 -> 0x42EC5E
+				{
+					return fail("Weight needs an integer, not '" + b + "'");
+				}
+				cur->weight = value;
 			}
 			else
 			{
@@ -569,7 +619,7 @@ bool UnitVoiceResponse::parseCrowdResponses(const std::string &text, std::string
 			}
 			continue;
 		}
-		if (a == "UnitSpecificSounds")
+		if (AsciiStringUtil::compareNoCase(a, "UnitSpecificSounds") == 0)
 		{
 			inUnitSpecific = true;
 			continue;
@@ -577,6 +627,12 @@ bool UnitVoiceResponse::parseCrowdResponses(const std::string &text, std::string
 		if (b.empty())
 		{
 			return fail("'" + a + "' has no value");
+		}
+		if (b.size() >= 4 && AsciiStringUtil::compareNoCase(b.substr(0, 4), "EVA:") == 0)
+		{
+			// RW 0x825B52: a crowd response is a sound-only record; an Eva override is refused where it is written
+			return fail(inUnitSpecific ? "You cannot use EVA: sound overrides in CrowdResponseTemplates (UnitSpecificSound block)"
+									   : "You cannot use EVA: sound overrides in CrowdResponseTemplates");
 		}
 		thr->voices[a] = b;
 	}
@@ -639,6 +695,29 @@ void UnitVoiceResponse::selectVoices(Object &obj, int msgType, const Info *, Cho
 	}
 }
 
+std::string UnitVoiceResponse::Sink::planningModeOrderSound() const
+{
+	const AudioManager *audio = AudioApi::current();
+	return audio ? audio->miscAudio("PlanningModeOrderGiven") : std::string();
+}
+
+bool UnitVoiceResponse::planningOrderVoice(const Object &obj, int msgType, Choice &c) const
+{
+	// RW 0x8DEE0E: the bypass bool is original message 0x46A, not force-attack.
+	// RW 0x8DE901 / 0x8DDFD7 / 0x8DF416: planning replaces move/attack/enter
+	// before their normal rules. Even an empty MiscAudio slot exits: no unit fallback.
+	constexpr int kPlanningVoiceBypassMessage = 0x46A; // RW 0x8DEE0E
+	const Player *player = obj.getControllingPlayer();
+	if (isEnterState(msgType) || msgType == kPlanningVoiceBypassMessage || !player || player->orderMode() != 2)
+	{
+		return false;
+	}
+	Voice voice;
+	voice.sound = m_sink.planningModeOrderSound();
+	fill(c, voice);
+	return true;
+}
+
 void UnitVoiceResponse::moveVoices(Object &obj, int msgType, const Info *info, Choice &c, Rank &rank) const
 {
 	// RW 0x8DE838
@@ -647,8 +726,11 @@ void UnitVoiceResponse::moveVoices(Object &obj, int msgType, const Info *info, C
 	const int base = enterState ? 27 : VOICE_MOVE;
 	const int whileAttacking = enterState ? 32 : VOICE_MOVE_WHILE_ATTACKING;
 	const int higherGround = enterState ? 28 : VOICE_MOVE_TO_HIGHER_GROUND;
-	// the planning mode branch (player + 0x770 == 2: MiscAudio PlanningModeOrderGiven), VoiceCrush (GameData + 0x8B9 and a crushable target), the busy gate
-	// (GameData + 0x8B0) are not ported: stop S-704
+	if (planningOrderVoice(obj, msgType, c))
+	{
+		return;
+	}
+	// VoiceCrush remains S-704 (InGameUI +0x8B9, not GameData).
 	if (!enterState && msgType == MSG_DO_SALVAGE)
 	{
 		if (fillName(c, obj, "VoiceSalvage"))
@@ -659,6 +741,14 @@ void UnitVoiceResponse::moveVoices(Object &obj, int msgType, const Info *info, C
 	if (rank.special > 0)
 	{
 		return; // RW 0x8DEA60: a special voice ends the rule list
+	}
+	// RW 0x8DEA22–0x8DEA5C: this is InGameUI waypoint mode, not a GameData
+	// busy flag. Special voices above survive the early return; enter-state ignores it.
+	const AIUpdateInterface *ai = obj.getAIUpdateInterface();
+	if (!enterState && m_ui && m_ui->isInWaypointMode() && ai &&
+		(ai->isMoving() || ai->mover().isWaitingForPath()))
+	{
+		return;
 	}
 	const bool hasPosition = info && info->hasPosition;
 	// RW 0x8DDBC4 (donor BFME2 0x004D990E): the movement-sensitive module scan, before the camp rule (RW 0x8DEA6E .. 0x8DEAAB)
@@ -842,6 +932,10 @@ void UnitVoiceResponse::attackVoices(Object &obj, int msgType, const Info *info,
 	const int structure = enterState ? 25 : VOICE_ATTACK_STRUCTURE;
 	const int machine = enterState ? 26 : VOICE_ATTACK_MACHINE;
 	c.charge = true;
+	if (planningOrderVoice(obj, msgType, c))
+	{
+		return;
+	}
 	if (msgType == MSG_DO_FORCE_ATTACK_GROUND)
 	{
 		fillName(c, obj, "VoiceBombard");
@@ -890,8 +984,10 @@ void UnitVoiceResponse::attackVoices(Object &obj, int msgType, const Info *info,
 	if (!done(c))
 	{
 		// RW 0x671ED8: the charge voice is allowed when neither the unit nor its horde is ATTACKING (RW 0x694154(0x25): the model condition bit 37 through
-		// 0x46E918, the horde resolved by 0x693A1A(0); review r1 fix 5) and obj + 0x384 (frame + VoiceAttackChargeTimeout) has passed. The retail
-		// function also answers false for an object without a drawable (obj + 0xFC); that gate is not ported here (S-704)
+		// 0x46E918, the horde resolved by 0x693A1A(0); review r1 fix 5) and drawable + 0x384 (frame + VoiceAttackChargeTimeout) has passed. The retail
+		// receiver is the DRAWABLE (RW 0x8DDF50 -> 0x8DE15C); +0xFC is its Object.
+		// RW 0x671EE4 rejects an unbound drawable, not a headless Object. This picker
+		// already has a live Object reference; do not test Object::clientHooks here.
 		static const int attacking = ModelCondition::indexOf("ATTACKING");
 		const Object *horde = obj.getContainedBy();
 		if (horde && !(horde->getContain() && horde->getContain()->getHordeContainInterface()))
@@ -1197,6 +1293,10 @@ bool UnitVoiceResponse::pickAndPlay(const std::vector<ObjectID> &selection, int 
 				break;
 			case MSG_ENTER:
 			{
+				if (planningOrderVoice(obj, msgType, c))
+				{
+					break; // RW 0x8DF40A–0x8DF47F
+				}
 				// RW 0x8DF484 .. 0x8DF4FF: VoiceEnterUnit<target template>
 				const Object *target = enterTarget;
 				if (target && target->getTemplate())
@@ -1492,10 +1592,11 @@ bool UnitVoiceResponse::pickAndPlay(const std::vector<ObjectID> &selection, int 
 std::vector<std::string> UnitVoiceResponse::acceptanceStops()
 {
 	return {
-		"[S-700] unit voice: the crowd response (the second voice slot, RW 0x8DEF63 / 0x825C45) is ported from CrowdResponse.ini's documentation: the weighted "
-		"vote of the candidates' CrowdResponseKey, the Threshold entry with the largest count <= the number of units with that key (INFERENCE: the count), "
-		"the INI read with the file's documented syntax (the binary's CrowdResponse parser was not read; Stats::crowdResponseSkipped counts keys naming no "
-		"loaded response)",
+		"[S-700] unit voice: the crowd response (the second voice slot) is ported from the binary: the weighted vote of the candidates' CrowdResponse (RW "
+		"0x8DEFB9), the Threshold entry with the largest count <= the number of collected objects (RW 0x8DEFF4 / 0x825C45) and CrowdResponse.ini read with "
+		"the block parser's rules (RW 0x826674 / 0x8264D2 / 0x825B52); INFERENCE: the file is read as text (RW loads the block through the INI store), so a "
+		"CrowdResponseKey that names no response is counted at voice time (Stats::crowdResponseSkipped) where RW 0x825DC2 refuses the template "
+		"(\"Unknown CrowdResponse name '%s'\", 0xC51760)",
 		"[S-701] unit voice: the sound selectors (lane DECOMP-2: Model condition / Upgrade / RandomSoundSelectorClientBehavior, the only ClientBehavior classes whose vslot "
 		"0x34 answers RW 0x676A8A / 0x674FFE / 0x675095) override rows, names and VoicePriority; INFERENCE: the drawable's model condition flags are the object's, "
 		"a random selector rolls at the picker's first query of the object (retail: at the drawable's creation) from the picker's own client generator (S-093) and "
@@ -1505,8 +1606,7 @@ std::vector<std::string> UnitVoiceResponse::acceptanceStops()
 		"[S-703] unit voice: message types of RW 0x8DEDBB not answered here: weapon modes (0x43A), "
 		"the planned action queue (0x46A), the Ring voices (0x7E4, 0x7E5); combine hordes (0x423, RW 0x8DF2EB) is answered (PORT-84); 0x7DB .. 0x7DD are answered (PORT-86); "
 		"0x7EA (RW 0x8DFD0D) and 0x7EB (RW 0x8DFE7B) are answered (PORT-87), the post of 0x7EA is stop S-7226",
-		"[S-704] unit voice: rules of the move / attack / enter helpers not ported: the planning order mode (player + 0x770 == 2 -> MiscAudio PlanningModeOrderGiven), "
-		"VoiceCrush (GameData + 0x8B9, crushable target), the busy gate (GameData + 0x8B0), the charge voice's drawable gate (RW 0x671EE4: no drawable, no charge)",
+		"[S-704] unit voice: VoiceCrush (InGameUI + 0x8B9, crushable target) is not ported; planning and waypoint movement gates are ported (PORT-462)",
 		"[S-705] unit voice: the candidate order is selection then member order (retail iterates a hash map keyed by Object pointers), a count tie between "
 		"two sounds goes to the lower-case name order (retail: the lower audio info POINTER, RW 0x8DE522's unsigned compare), and a hero's level is the "
 		"minimum (the experience tracker RW 0x79D12A is lane XP-1's): which sound wins a tie and which object of a bucket speaks may differ from retail",

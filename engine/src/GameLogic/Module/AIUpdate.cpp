@@ -28,6 +28,7 @@
 #include "GameLogic/Module/SquishCollide.h"
 #include "GameLogic/AI/AIAttackMelee.h"
 #include "GameLogic/AI/AIGuard.h"
+#include "GameLogic/AI/AITNGuard.h"
 #include "GameLogic/AI/AIHunt.h"
 #include "GameLogic/AI/AIWaypointPath.h"
 #include "GameLogic/AI/AIWorld.h"
@@ -45,6 +46,7 @@
 #include "GameLogic/SimMath.h"
 #include "GameLogic/UnitSpecificSound.h"
 #include "Common/Audio/AudioRequests.h"
+#include "GameClient/UnitVoiceResponse.h"
 
 #include <cmath>
 #include <cstring>
@@ -558,7 +560,27 @@ public:
 		}
 		return logic.settings().gravity;
 	}
-	bool hasStealthModule() const override { return StealthUpdate::of(obj()) != nullptr; } // RW 0x68FBD3
+	// Port 202, RW 0x5E7C08 .. 0x5E7C22: the sequence of the Climb portal's reveal (RW 0x66A143 .. 0x66A166, lane WALL-2), instruction for instruction
+	void revealDisguisedClimber() override { m_ai.revealDisguiseOnClimb(); }
+	// Port 202, RW 0x5E579A .. 0x5E57E8 (the wading updater's reads). The water query is the pathfinder's map view, as isUnderwater above; a game without a
+	// map has no water areas, and NO_Z_MOTIVE_FORCE's height there is the logic's ground query (layerHeightAt), so the answer is "dry", not an error
+	bool wadingWaterAt(float x, float y, WadingWater &out) const override
+	{
+		if (m_ai.m_adapter && m_ai.m_adapter->getLayer() != LAYER_GROUND) // RW 0x5E579A: Object::getLayer (RW 0x68BBE0) == 1
+		{
+			return false;
+		}
+		const PathfindTerrain *terrain = m_ai.m_world ? m_ai.m_world->pathfinder().terrainView() : nullptr;
+		float waterZ = 0.0f, terrainZ = 0.0f;
+		if (!terrain || !terrain->isUnderwater(x, y, &waterZ, &terrainZ)) // RW 0x5E57CB: TheTerrainLogic vslot 0x4C
+		{
+			return false;
+		}
+		out.waterZ = waterZ;
+		out.terrainZ = terrainZ;
+		out.wadeWaterDepth = obj().logic().settings().wadeWaterDepth; // RW 0x5E57D2 .. 0x5E57E3: TheAI -> + 0x18 -> + 0x98
+		return true;
+	}
 	bool isKindOfSubmarine() const override
 	{
 		static const int kSubmarine = CombatNames::kindOf("SUBMARINE"); // KindOf 187: template + 0x11F bit 3
@@ -692,6 +714,8 @@ std::unique_ptr<AIStateMachine> AIUpdateInterface::makeStateMachine()
 	// lane PLAY-4 (RW 0x753755): AIGuardState 16 (RW 0x74109B) and AIGoingIdleState 0x4E (RW 0x7410C2), both ending in idle (AIGuard.cpp)
 	m->defineState(AI_GUARD, std::make_unique<AIGuardState>(*m), AI_IDLE, AI_IDLE);
 	m->defineState(AI_GOING_IDLE, std::make_unique<AIGoingIdleState>(*m), AI_IDLE, AI_IDLE);
+	// PORT-203 (RW 0x754259): AITunnelNetworkGuardState 0x18 (AITNGuard.cpp)
+	m->defineState(AI_TUNNEL_NETWORK_GUARD, std::make_unique<AITunnelNetworkGuardState>(*m), AI_IDLE, AI_IDLE);
 	// lane SCRIPT-3: the waypoint path states (RW 0x753755: 2 as a team, 3 as individuals, 4 / 5 the exact forms; AIWaypointPath.cpp)
 	m->defineState(AI_FOLLOW_WAYPOINT_PATH_AS_TEAM, std::make_unique<AIFollowWaypointPathState>(*m, true, false), AI_IDLE, AI_IDLE);
 	m->defineState(AI_FOLLOW_WAYPOINT_PATH_AS_INDIVIDUALS, std::make_unique<AIFollowWaypointPathState>(*m, false, false), AI_IDLE, AI_IDLE);
@@ -839,6 +863,10 @@ UpdateSleepTime AIUpdateInterface::update()
 	{
 		getObject()->logic().scriptModelConditionEvents(*getObject(), m_luaConditionSnapshot); // lane HERO-2: RW 0x66964D -> 0x663E32
 	}
+	// RW 0x669652 .. 0x669708 (DONOR BFME2 0x0026A05D, Rva0026A05DUpdate.cpp; both editions): a stunned non-member unit
+	// cannot run its AI state machine, attack-move scan, turret, or locomotor until PhysicsBehavior clears m_stunned (+0x5C).
+	const PhysicsBehavior *const phys = !memberUpdate ? getObject()->physicsModule() : nullptr;
+	const bool stunnedNormalUnit = phys != nullptr && phys->isStunned();
 	if (ObjectWeapons *w = getObject()->getWeapons())
 	{
 		// the weapon model conditions (RW 0x68E197) are the WeaponStatusHelper's (lane PROJ-2: a PHASE_FINAL module, after this update; RW 0x66DA50 is
@@ -846,7 +874,7 @@ UpdateSleepTime AIUpdateInterface::update()
 		w->updateFiringTracker(); // RW 0x8E30DD
 	}
 	updateBeforeBase();
-	if (m_attackMoveActive && !m_mover->isAiDead())
+	if (m_attackMoveActive && !m_mover->isAiDead() && !stunnedNormalUnit)
 	{
 		// ZH AIAttackMoveToState::update: look around while marching; a target interrupts the march (the idle state resumes it). Lane TARGET-1: the scan is
 		// RotWK's mood scan (RW 0x755798 -> RW 0x66844A(1, 0)); its cadence is the mood check's (AI + 0x21C)
@@ -864,6 +892,31 @@ UpdateSleepTime AIUpdateInterface::update()
 	{
 		// RW 0x66E6FF .. 0x66E707: horde member update returns sleep and jumps to 0x66E711
 		finalSleep = hordeMemberUpdate();
+	}
+	else if (stunnedNormalUnit)
+	{
+		// RW 0x66966A .. 0x669708 (DONOR BFME2 0x0026A05D): keep AI halted while knocked back / stunned / standing up.
+		if (getObject()->isEffectivelyDead())
+		{
+			if (currentStateId() != (unsigned)AI_DEAD && !m_machine->isLocked())
+			{
+				m_machine->setState(AI_DEAD); // RW 0x669673 .. 0x6696B2
+			}
+		}
+		else
+		{
+			if (currentStateId() != (unsigned)AI_IDLE)
+			{
+				m_mover->destroyPath(); // RW 0x66276B
+				setLocomotorGoalNone(); // AI vslot 0x220
+			}
+			m_world->pathfinder().removeGoal(*m_adapter); // RW 0x68B401 -> 0x8E2138
+		}
+		static const int cMoving = CombatNames::modelCondition("MOVING");
+		static const int cBackingUp = CombatNames::modelCondition("BACKING_UP");
+		getObject()->setModelConditionState(cMoving, false);     // RW 0x6696FA: bit 61
+		getObject()->setModelConditionState(cBackingUp, false);  // RW 0x6696FA: bit 156
+		finalSleep = (unsigned)UPDATE_SLEEP_NONE;
 	}
 	else
 	{
@@ -921,6 +974,7 @@ UpdateSleepTime AIUpdateInterface::update()
 			moverSleep = (unsigned)UPDATE_SLEEP_FOREVER;
 		}
 		finalSleep = moverSleep;
+		m_world->noteStop(kStopUpdate);
 	}
 	if (m_combat.fadeOnPortals)
 	{
@@ -928,7 +982,6 @@ UpdateSleepTime AIUpdateInterface::update()
 	}
 	m_isInUpdate = false;
 	getObject()->setStatus((unsigned)CombatNames::statuses().updatingAI, false);
-	m_world->noteStop(kStopUpdate);
 	return (UpdateSleepTime)(finalSleep < 1u ? 1u : finalSleep);
 }
 
@@ -1059,6 +1112,11 @@ void AIUpdateInterface::goalPositionClipped(const Coord3D &pos, CommandSourceTyp
 
 void AIUpdateInterface::aiMoveToPosition(const Coord3D &pos, CommandSourceType source)
 {
+	aiMoveToPosition(pos, source, true);
+}
+
+void AIUpdateInterface::aiMoveToPosition(const Coord3D &pos, CommandSourceType source, bool postMoveVoice)
+{
 	if (!acceptCommand(source, 0))
 	{
 		return; // lane MODULES-3: RW 0x667174
@@ -1078,7 +1136,7 @@ void AIUpdateInterface::aiMoveToPosition(const Coord3D &pos, CommandSourceType s
 	{
 		m_attackMoveActive = false; // a move order ends an attack-move (COMBAT-1)
 	}
-	privateMoveToPosition(pos, source);
+	privateMoveToPosition(pos, source, postMoveVoice);
 	wakeUpNow();
 }
 
@@ -1105,7 +1163,7 @@ void AIUpdateInterface::aiMoveToPositionEvenIfSleeping(const Coord3D &pos, Comma
 	{
 		m_attackMoveActive = false;
 	}
-	privateMoveToPosition(pos, source);
+	privateMoveToPosition(pos, source, true);
 	wakeUpNow();
 }
 
@@ -1140,6 +1198,10 @@ bool AIUpdateInterface::aiAttackMoveToPosition(const Coord3D &pos, CommandSource
 			weapon->setMaxShotCount(0x7fffffff);
 		}
 	resetNextMoodCheckTime();
+	// PORT-151, RW 0x66C128 .. 0x66C136 (helper RW 0x66B2F5): the attack-move body asks the unit voice for the enter-state attack-move message 0x7E8
+	// with the goal, for a PLAYER or SCRIPT order only (the source test is inside the helper); it asks for nothing else (the move body's 0x7E7 at
+	// RW 0x66B4D2 is a different command)
+	postEnterStateAttackMoveVoice(*obj, pos, source);
 	wakeUpNow();
 	return true;
 }
@@ -1160,7 +1222,9 @@ bool AIUpdateInterface::aiMoveToPositionFromAttackMove(const Coord3D &goal)
 			return true;
 		}
 	}
-	privateMoveToPosition(goal, CMD_FROM_PLAYER);
+	// PORT-151: the march resume of the port's attack-move stand-in (S-328) is not a command of RW's table: it must not repeat the move voice of a
+	// player order, and whether RW's re-issue of the attack-move (0x66C0B9) speaks again is not proven (S-7341) -> silent
+	privateMoveToPosition(goal, CMD_FROM_PLAYER, false);
 	wakeUpNow();
 	return true;
 }
@@ -1171,7 +1235,7 @@ const char *AIUpdateInterface::preferredPointStopLine()
 		   "and nine other callers do not set it, so a CanMoveBackwards unit's backing-up test (RW 0x5E83FD) reads the point of its last enter / move-away";
 }
 
-void AIUpdateInterface::privateMoveToPosition(const Coord3D &pos, CommandSourceType source)
+void AIUpdateInterface::privateMoveToPosition(const Coord3D &pos, CommandSourceType source, bool postMoveVoice)
 {
 	Object *obj = getObject();
 	// lane BUGS-1: RW 0x66B3FD .. 0x66B425 (BFME2 decomp AIUpdateInterfacePrivateCommands.cpp:privateMoveToPosition, tier B for RW 0x66B3FD): nothing when
@@ -1205,6 +1269,13 @@ void AIUpdateInterface::privateMoveToPosition(const Coord3D &pos, CommandSourceT
 		m_machine->setGoalObject(INVALID_ID);
 		setLastCommandSource(source);
 		m_machine->setState(AI_MOVE_TO);
+		// PORT-151, RW 0x66B4C4 .. 0x66B4D2 (helper RW 0x66B379): an ordinary move of a PLAYER or SCRIPT order asks the unit voice for the enter-state
+		// move message 0x7E7 with the goal; the temporary-state branch above jumps to RW 0x66B4D7 and says nothing. The route (AudioApi) is the one the
+		// other logic voice events use; the client's picker answers 0x7E7 with the enter-state rows (RW 0x8DE838, rows 0x1B .. 0x20)
+		if (postMoveVoice && (source == CMD_FROM_PLAYER || source == CMD_FROM_SCRIPT))
+		{
+			AudioApi::postUnitVoice(UnitVoiceResponse::VOICE_EVENT_ENTER_STATE_MOVE, obj->getID(), 0, INVALID_ID, &pos);
+		}
 	}
 }
 
@@ -1497,7 +1568,7 @@ void AIUpdateInterface::aiFollowPathAsTeam(const std::vector<Coord3D> &path, Obj
 
 void AIUpdateInterface::aiFollowPathAsTeamAttack(const std::vector<Coord3D> &path, Object *ignoreObject, float angle, CommandSourceType source)
 {
-	// RW 0x66BC68 (AI command 0x25, RW 0x66ABAF -> AI vslot 0x80): identical to RW 0x66BB9D except it enters state 61 (0x3D)
+	// RW 0x66BC68 (AI command 0x25, RW 0x66ABAF -> AI vslot 0x80): identical to RW 0x66BB9D except it enters state 61 (0x3D), the attack march
 	if (!acceptCommand(source, 0x25))
 	{
 		return;
@@ -2156,6 +2227,8 @@ PathfindObjectID AIUpdateInterface::enterTargetOf(const PathfindObject &o) const
 	return target ? (PathfindObjectID)target->getID() : PATHFIND_INVALID_ID;
 }
 
+// lane PORT-9: RW 0x664D12 itself, without the PathfindObject wrapper the pathfinder's two queries take. OpenContain::onCollide (RW 0x865A00) calls the
+// slot with the object it touched and compares the answer with the container
 const Object *AIUpdateInterface::enterTarget() const
 {
 	// RW 0x664D16 the state type (RW 0x662D70), RW 0x664D20 the machine's goal object (RW 0x8DBACE); RW 0x664D29 .. 0x664D45 the entering states;

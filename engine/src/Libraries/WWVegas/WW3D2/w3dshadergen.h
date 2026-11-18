@@ -15,6 +15,10 @@
 constexpr int W3D_PALETTE_WIDTH_LOG2 = 10;
 constexpr int W3D_PALETTE_WIDTH = 1 << W3D_PALETTE_WIDTH_LOG2;
 constexpr int W3D_PALETTE_TEXELS_PER_PIVOT = 3;
+// lane LOCAL-38 (stop S-687): every instance's palette block starts with its render object's light environment (RTS3DScene::renderOneObject
+// RW 0x46F48E, LightEnvironmentClass RW 0x540250), three RGBA texels in front of its pivots (INSTANCE_CUSTOM.x points at the first pivot):
+// PointLight[0] position + range, its colour + the dropped global lights, the dynamic lights' ambient (W3DInstancer::update_object_lights)
+constexpr int W3D_PALETTE_LIGHT_TEXELS = 3;
 
 // The compile-time shape of one material. Equal keys share one Shader.
 struct W3DShaderKey
@@ -87,6 +91,11 @@ struct W3DShaderKey
 	// GameClient/SelectionDecals.h). Set by the material factory for an opaque surface of a wall model (W3DMaterialFactory::Set_Selection_Decals); the
 	// generator ignores it for any other surface. The decal is laid over the lit colour as on the terrain, kept above the object shadows
 	bool SelectionDecals = false;
+	// P-103: W3DFloorDraw conforms subdivided floor meshes to the height map and applies terrain decal projection depth bias.
+	bool Floor = false;
+	// P-92 / Local 49: Vegetation.fx (RW 0x4E6753, 0x4E699E, 0x4E9BD5; DONOR BFME2 Rva000E6D94AllocateBuffers.cpp):
+	// W3DTreeBuffer and W3DShrubBuffer shade both sides of foliage with abs(N.L) and omit specular.
+	bool Vegetation = false;
 
 	std::string Id() const;
 };
@@ -141,3 +150,7 @@ void W3D_FixedFunction_House_Color(const float t0[4], const float diffuse[3], fl
 // The stop line ("[S-6023] ...") of a fixed-function surface whose house colour specular rests on assumptions about the D3D runtime and the caps. Empty
 // when the surface is not fixed-function lit with the secondary gradient set.
 std::string W3D_FixedFunction_House_Color_Stop(bool converted, bool lit, int secGradient);
+
+// Transparent-pass render priority for a W3D surface (RW 0x4E2F3A RenderFloors, RW 0x470F5E SortLevel 0,
+// RW 0x47166A -> 0x576240 StaticSortLists descending 32..1). Both W3DMaterialFactory and W3DInstancer call this.
+int W3D_Surface_Render_Priority(int sortLevel, int pass, bool floorBlend);

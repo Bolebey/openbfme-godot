@@ -14,14 +14,18 @@
 #include "GameLogic/ObjectTemplateInfo.h"
 #include "GameEngineDevice/W3DDevice/GameClient/Drawable/Draw/W3DTreeDraw.h"
 #include "GameEngineDevice/W3DDevice/GameClient/Drawable/Draw/W3DModelDrawVariants.h"
+#include "GameEngineDevice/W3DDevice/GameClient/Drawable/Draw/W3DSailModelDraw.h"
 #include "GameEngineDevice/W3DDevice/GameClient/Drawable/Draw/W3DLightDraw.h"
+#include "GameEngineDevice/W3DDevice/GameClient/Drawable/Draw/W3DTornadoDraw.h"
 #include "GameEngineDevice/W3DDevice/GameClient/Drawable/Draw/W3DModelDrawBones.h"
+#include "GameEngineDevice/W3DDevice/GameClient/Drawable/Draw/W3DQuadrupedDraw.h"
 #include "Common/ModelState.h"
 #include "GameLogic/SimMath.h"
 #include "GameLogic/Locomotor.h"
 #include "GameLogic/Object/ObjectGeometry.h"
 
 #include <cmath>
+#include <cstdio>
 #include <cstring>
 #include <variant>
 
@@ -108,6 +112,10 @@ void Drawable::reactToTransformChange(const Coord3D *oldPos, float oldAngle)
 		{
 			e.lightDraw->reactToTransformChange(oldPos, oldAngle);
 		}
+		if (e.tornadoDraw)
+		{
+			e.tornadoDraw->reactToTransformChange(oldPos, oldAngle);
+		}
 	}
 }
 
@@ -116,6 +124,13 @@ void Drawable::friend_boundToObject()
 	for (std::unique_ptr<DrawableModule> &m : m_clientModules)
 	{
 		m->onDrawableBoundToObject();
+	}
+	for (DrawEntry &e : m_entries)
+	{
+		if (e.tornadoDraw)
+		{
+			e.tornadoDraw->onDrawableBoundToObject();
+		}
 	}
 }
 
@@ -167,6 +182,7 @@ void Drawable::addEntry(DrawServices &services, const ThingTemplate::Nugget &nug
 			{
 				W3DScriptedModelDraw::Options o;
 				o.scale = m_scale;
+				o.instanceScale = [this]() { return m_scale; }; // PORT-126: live scale after Drawable::setInstanceScale
 				o.variation = m_variation; // RandomTexture (RW 0x4C238A)
 				o.buildBones = false; // turrets, barrels and particle bones are not drawn (S-095 / S-097)
 				o.cameraFadeAvailable = static_cast<bool>(services.cameraPosition); // PORT-49: the device camera source is installed before the load
@@ -199,6 +215,14 @@ void Drawable::addEntry(DrawServices &services, const ThingTemplate::Nugget &nug
 				if (const W3DHordeModelDrawModuleData *hd = dynamic_cast<const W3DHordeModelDrawModuleData *>(nugget.data.get()))
 				{
 					e.draw.reset(new W3DHordeModelDraw(*hd, 2, services.drawAssets, services.random, &services.host, o)); // LOD HIGH (S-114)
+				}
+				else if (const W3DQuadrupedDrawModuleData *qd = dynamic_cast<const W3DQuadrupedDrawModuleData *>(nugget.data.get()))
+				{
+					e.draw.reset(new W3DQuadrupedDraw(*qd, services.drawAssets, services.random, &services.host, o));
+				}
+				else if (const W3DSailModelDrawModuleData *sail = dynamic_cast<const W3DSailModelDrawModuleData *>(data))
+				{
+					e.draw.reset(new W3DSailModelDraw(*sail, services.drawAssets, services.random, &services.host, o)); // RW 0x46478F
 				}
 				else
 				{
@@ -240,13 +264,30 @@ void Drawable::addEntry(DrawServices &services, const ThingTemplate::Nugget &nug
 		{
 			problems.push_back(err);
 		}
-		e.staticModel = m.model;
-		e.notDrawnReason = m.notDrawnReason;
+		if (e.kind == W3D_DRAWKIND_TREE)
+		{
+			// RW 0xBE3010 (W3DTreeDraw vtable, slot 11 RW 0x9F3A3C ret 4; DONOR BFME2 W3DTreeDraw.cpp): W3DTreeDraw never draws on a
+			// live Drawable — map static trees render in W3DTreeBuffer via MapObjectDrawables, while a live interactable tree's
+			// Drawable renders only through its W3DScriptedModelDraw (which hides via PASSENGER CLUB Model = None, P-81 / issue #404).
+			e.notDrawnReason = "W3DTreeDraw draws in W3DTreeBuffer (RW 0xBE3010)";
+		}
+		else
+		{
+			e.staticModel = m.model;
+			e.notDrawnReason = m.notDrawnReason;
+		}
 		// RENDER-2: a floor draw hidden by its HideIfModelConditions at creation (resolveDrawModel with no flags) is still the floor the structure shows
 		// once the flags change: keep its model and its conditions, and let setModelConditionFlags decide (the foundation floor while being built)
 		if (const W3DFloorDrawModuleData *fl = dynamic_cast<const W3DFloorDrawModuleData *>(nugget.data.get()))
 		{
 			e.hideIf = fl->m_hideIfModelConditions;
+			// RW 0x4CE91B / 0x6789B4: StartHidden floor draws (e.g. Level 2/3 bibs) keep their model on the drawable and start moduleHidden so SubObjectsUpgrade / showModule can reveal them
+			if (fl->m_startHidden && !fl->m_modelName.empty())
+			{
+				e.staticModel = fl->m_modelName;
+				e.notDrawnReason.clear();
+				e.moduleHidden = true;
+			}
 		}
 		// lane LOCAL-28: W3DLightDraw (RW 0x004CE750 / DONOR BFME2 0x004CEF80)
 		if (ci->kind == W3D_DRAWKIND_NOT_DRAWN && (nugget.name == "W3DLightDraw" || dynamic_cast<const W3DLightDrawModuleData *>(nugget.data.get()) != nullptr))
@@ -259,6 +300,16 @@ void Drawable::addEntry(DrawServices &services, const ThingTemplate::Nugget &nug
 				e.animated = true;
 			}
 		}
+		// Local 73 (P-146): W3DTornadoDraw (RW 0x004D102E / DONOR BFME2 0x004D181D)
+		if (ci->kind == W3D_DRAWKIND_NOT_DRAWN && (nugget.name == "W3DTornadoDraw" || dynamic_cast<const W3DTornadoDrawModuleData *>(nugget.data.get()) != nullptr))
+		{
+			const auto *td = dynamic_cast<const W3DTornadoDrawModuleData *>(nugget.data.get());
+			if (td)
+			{
+				e.tornadoDraw = std::make_unique<W3DTornadoDraw>(this, td);
+				e.animated = true;
+			}
+		}
 	}
 	m_entries.push_back(std::move(e));
 }
@@ -267,7 +318,7 @@ bool Drawable::hasAnimatedEntry() const
 {
 	for (const DrawEntry &e : m_entries)
 	{
-		if (e.animated && (e.draw || e.lightDraw))
+		if (e.animated && (e.draw || e.lightDraw || e.tornadoDraw))
 		{
 			return true;
 		}
@@ -357,7 +408,8 @@ bool Drawable::showModule(const std::string &name, bool visible, bool permanent)
 	(void)permanent; // RW 0x736412 passes permanent = 1; nothing here changes a drawable's modules afterwards, so permanent and temporary hides coincide
 	for (DrawEntry &e : m_entries)
 	{
-		if (e.tag == name)
+		// RW 0x6789B4 compares module tags through TheNameKeyGenerator->nameToKey (RW 0x49F474), which is case-insensitive
+		if (AsciiStringUtil::compareNoCase(e.tag, name) == 0)
 		{
 			e.moduleHidden = !visible;
 			if (e.lightDraw)
@@ -1326,6 +1378,186 @@ bool Drawable::boneWorldPosition(const std::string &boneName, Coord3D &outPos) c
 	return false;
 }
 
+int Drawable::currentClientBonePositions(const std::string &boneNamePrefix, int startIndex, std::vector<Matrix3D> &outTransforms, int maxBones) const
+{
+	// P-149 (RW 0x672AEE; DONOR BFME2 Drawable::getCurrentClientBonePositions / W3DModelDraw::getCurrentBonePositions)
+	if (boneNamePrefix.empty() || maxBones <= 0)
+	{
+		return 0;
+	}
+	int remaining = maxBones > 64 ? 64 : maxBones;
+	int count = 0;
+	std::string lowerPrefix = boneNamePrefix;
+	AsciiStringUtil::toLower(lowerPrefix);
+	const int endIndex = (startIndex == 0) ? 0 : 99;
+
+	for (const DrawEntry &e : m_entries)
+	{
+		if (remaining <= 0)
+		{
+			break;
+		}
+		if (!e.draw)
+		{
+			continue;
+		}
+		const W3DDrawFrame f = e.draw->frame();
+		if (!f.model || !f.model->Tree)
+		{
+			continue;
+		}
+		bool poseComputed = false;
+		HTreePose pose;
+		for (int i = startIndex; i <= endIndex && remaining > 0; ++i)
+		{
+			char buffer[128];
+			if (i == 0)
+			{
+				std::snprintf(buffer, sizeof(buffer), "%s", lowerPrefix.c_str());
+			}
+			else
+			{
+				std::snprintf(buffer, sizeof(buffer), "%s%02d", lowerPrefix.c_str(), i);
+			}
+			const int boneIdx = f.model->Tree->Get_Bone_Index(buffer);
+			if (boneIdx <= 0)
+			{
+				break;
+			}
+			if (!poseComputed)
+			{
+				if (f.blending && f.motion1 != nullptr)
+				{
+					f.model->Tree->Blend_Pose(Matrix3D(), f.motion0, f.frame0, f.motion1, f.frame1, f.blendPercentage, pose);
+				}
+				else if (f.motion0 != nullptr)
+				{
+					f.model->Tree->Anim_Pose(Matrix3D(), f.motion0, f.frame0, pose);
+				}
+				else
+				{
+					f.model->Tree->Base_Pose(Matrix3D(), pose);
+				}
+				poseComputed = true;
+			}
+			if ((size_t)boneIdx >= pose.Transform.size())
+			{
+				break;
+			}
+			Matrix3D m = pose.Transform[(size_t)boneIdx];
+			m.Row[0][3] *= m_scale;
+			m.Row[1][3] *= m_scale;
+			m.Row[2][3] *= m_scale;
+			outTransforms.push_back(m);
+			++count;
+			--remaining;
+		}
+	}
+	return count;
+}
+
+bool Drawable::swirlInfluence(const Coord3D &worldPos, UnsignedInt clientFrame, Coord3D &outTangent) const
+{
+	// P-149 (RW 0x678BF2 -> 0x676BD7 -> 0x676C7D; DONOR BFME2 0x002768AC / 0x00276952; both editions)
+	if (m_swirlMoveOnly < 0)
+	{
+		const int kMoveOnly = ObjectTemplateInfoBuilder::kindOfIndex("MOVE_ONLY");
+		bool moveOnly = isKindOfIndex(kMoveOnly);
+		if (!moveOnly && kMoveOnly >= 0)
+		{
+			if (const ThingTemplate *tt = getTemplate())
+			{
+				moveOnly = MaskTest(ObjectTemplateInfoBuilder::build(*tt).kindOf, (unsigned)kMoveOnly);
+			}
+		}
+		m_swirlMoveOnly = moveOnly ? 1 : 0;
+	}
+	if (m_swirlMoveOnly == 0)
+	{
+		return false;
+	}
+
+	if (!m_swirlCacheValid || m_swirlCacheFrame < clientFrame)
+	{
+		m_swirlCacheFrame = clientFrame;
+		m_swirlCacheValid = true;
+		m_swirlCacheMats.clear();
+		if (currentClientBonePositions("B_TORNADO", 1, m_swirlCacheMats, 16) == 0)
+		{
+			// RW 0x676C25 -> 0x6765B9: fallback to Thing::getTransformMatrix()
+			float basis[9];
+			Coord3D dpos;
+			getPresentationPose(basis, dpos);
+			Matrix3D tm;
+			for (int r = 0; r < 3; ++r)
+			{
+				for (int c = 0; c < 3; ++c)
+				{
+					tm.Row[r][c] = basis[r * 3 + c];
+				}
+			}
+			tm.Row[0][3] = dpos.x;
+			tm.Row[1][3] = dpos.y;
+			tm.Row[2][3] = dpos.z;
+			m_swirlCacheMats.push_back(tm);
+		}
+	}
+	if (m_swirlCacheMats.empty())
+	{
+		return false;
+	}
+
+	const Coord3D *dpos = getPosition();
+	if (!dpos)
+	{
+		return false;
+	}
+	const Coord3D rel{ worldPos.x - dpos->x, worldPos.y - dpos->y, worldPos.z - dpos->z };
+
+	float best = 2000.0f;
+	int which = -1;
+	for (size_t i = 0; i < m_swirlCacheMats.size(); ++i)
+	{
+		const Matrix3D &m = m_swirlCacheMats[i];
+		const float ax = std::fabs(rel.x - m.Row[0][3]);
+		const float ay = std::fabs(rel.y - m.Row[1][3]);
+		const float az = std::fabs(rel.z - m.Row[2][3]);
+		float hi = ax;
+		float mid = ay;
+		float lo = az;
+		if (hi < mid) { float t = hi; hi = mid; mid = t; }
+		if (hi < lo) { float t = hi; hi = lo; lo = t; }
+		if (mid < lo) { mid = lo; }
+		const float distance = hi + 0.34375f * mid + 0.25f * lo;
+		if (distance < best)
+		{
+			best = distance;
+			which = (int)i;
+		}
+		else if (distance > best + 100.0f)
+		{
+			break;
+		}
+	}
+	if (which < 0)
+	{
+		return false;
+	}
+	const Matrix3D &chosen = m_swirlCacheMats[(size_t)which];
+	const float dx = chosen.Row[0][3] - rel.x;
+	const float dy = chosen.Row[1][3] - rel.y;
+	const float lenSq = dx * dx + dy * dy;
+	if (lenSq <= 0.0f)
+	{
+		return false;
+	}
+	const float invLen = 1.0f / std::sqrt(lenSq);
+	const float nx = dx * invLen;
+	const float ny = dy * invLen;
+	outTangent = Coord3D{ ny, -nx, 0.0f };
+	return true;
+}
+
 // RW 0xAD1920: maximum geometry height above position for the drawable's template
 float Drawable::geometryHeight() const
 {
@@ -1394,6 +1626,27 @@ bool Drawable::entryTransform(const DrawEntry &e, Matrix3D &outMatrix) const
 // Stop S-7222: the entry points, the dispatcher, the step gate and the wheels field loads are checked in RotWK game.dat; the arithmetic inside
 // the five bodies follows the BFME2 donor (INFERENCE that RotWK keeps it)
 // ------------------------------------------------------------------------------------------------
+
+namespace
+{
+// RenderInterpolation::Pose leaves pose.basis as identity when pose.zRotation is true (only pose.angle is set);
+// mirror commitSync / syncFromSnapshot so physics and presentation poses keep the actual yaw.
+void resolvePoseBasis(const RenderInterpolation::Pose &pose, float outBasis[9])
+{
+	if (pose.zRotation)
+	{
+		const float c = SimMath::cosf32(pose.angle);
+		const float s = SimMath::sinf32(pose.angle);
+		outBasis[0] = c;    outBasis[1] = -s;   outBasis[2] = 0.0f;
+		outBasis[3] = s;    outBasis[4] = c;    outBasis[5] = 0.0f;
+		outBasis[6] = 0.0f; outBasis[7] = 0.0f; outBasis[8] = 1.0f;
+	}
+	else
+	{
+		std::memcpy(outBasis, pose.basis, sizeof(float) * 9);
+	}
+}
+} // namespace
 
 bool Drawable::calcPitchRoll(const Coord3D &pos, const Coord3D &dir, const LocomotorTemplate *loco, float &pitch, float &roll)
 {
@@ -1570,7 +1823,9 @@ void Drawable::calcPhysicsXformWheels(const LocomotorTemplate *loco, const Objec
 	}
 
 	const Coord3D &pos = pose.position;
-	Coord3D dir{ pose.basis[0], pose.basis[3], 0.0f };
+	float basis[9];
+	resolvePoseBasis(pose, basis);
+	Coord3D dir{ basis[0], basis[3], 0.0f };
 	float dirLen = std::sqrt(dir.x * dir.x + dir.y * dir.y);
 	if (dirLen > 0.0f)
 	{
@@ -1808,6 +2063,7 @@ void Drawable::calcPhysicsXformTreads(const LocomotorTemplate *loco, const Objec
 
 void Drawable::calcPhysicsXformHugeFourLegs(const LocomotorTemplate *loco, const ObjectSnapshot &rec, const RenderInterpolation::Pose &pose, PhysicsXformInfo &info)
 {
+	(void)rec;
 	const float ACCEL_PITCH_LIMIT = loco->m_accelerationPitchLimit;
 	const float PITCH_STIFFNESS = loco->m_pitchStiffness;
 	const float ROLL_STIFFNESS = loco->m_rollStiffness;
@@ -1815,33 +2071,112 @@ void Drawable::calcPhysicsXformHugeFourLegs(const LocomotorTemplate *loco, const
 	const float ROLL_DAMPING = loco->m_rollDamping;
 	const float UNIFORM_AXIAL_DAMPING = loco->m_uniformAxialDamping;
 
-	float length = 15.0f;
-	float width = 15.0f;
-	if (m_template)
+	const Coord3D &pos = pose.position;
+
+	// PORT-126 (issue #310): RW 0x67B894..0x67B8E4 walks draw modules in template order, calls
+	// ObjectDrawInterface::getFootLocations(points, false) (slot 47 / +0xBC; RW 0x4C9A39 on W3DQuadrupedDraw),
+	// and falls back to object geometry corners only when none supplies >= 4 feet.
+	std::vector<Coord3D> points;
+	bool gotFootLocations = false;
+	for (const DrawEntry &e : m_entries)
 	{
-		const std::vector<ObjectGeometry::Shape> &shapes = ObjectGeometry::cachedShapesOf(*m_template);
-		if (!shapes.empty())
+		if (!e.draw)
 		{
-			length = shapes[0].majorRadius;
-			width = shapes[0].minorRadius;
+			continue;
+		}
+		Matrix3D renderMtx;
+		if (!e.attachToBone.empty() && boneTransform(e.attachToBone, renderMtx))
+		{
+			e.draw->adjustAttachedTransform(renderMtx);
+		}
+		else
+		{
+			float basis[9];
+			resolvePoseBasis(pose, basis);
+			for (int r = 0; r < 3; ++r)
+			{
+				for (int c = 0; c < 3; ++c)
+				{
+					renderMtx.Row[r][c] = basis[r * 3 + c];
+				}
+			}
+			renderMtx.Row[0][3] = pos.x;
+			renderMtx.Row[1][3] = pos.y;
+			renderMtx.Row[2][3] = pos.z;
+			if (m_hasPhysicsXform)
+			{
+				renderMtx.Translate(Vector3(0.0f, 0.0f, m_lastPhysicsInfo.m_totalZ));
+				renderMtx.Rotate_Y(m_lastPhysicsInfo.m_totalPitch);
+				renderMtx.Rotate_X(-m_lastPhysicsInfo.m_totalRoll);
+				renderMtx.Rotate_Z(m_lastPhysicsInfo.m_totalYaw);
+			}
+			if (e.noRotate)
+			{
+				renderMtx.Row[0][0] = 1.0f; renderMtx.Row[0][1] = 0.0f; renderMtx.Row[0][2] = 0.0f;
+				renderMtx.Row[1][0] = 0.0f; renderMtx.Row[1][1] = 1.0f; renderMtx.Row[1][2] = 0.0f;
+				renderMtx.Row[2][0] = 0.0f; renderMtx.Row[2][1] = 0.0f; renderMtx.Row[2][2] = 1.0f;
+			}
+			if (e.constructionOffsetZ != 0.0f)
+			{
+				const float k = e.constructionOffsetZ * m_scale;
+				renderMtx.Row[0][3] += renderMtx.Row[0][2] * k;
+				renderMtx.Row[1][3] += renderMtx.Row[1][2] * k;
+				renderMtx.Row[2][3] += renderMtx.Row[2][2] * k;
+			}
+			for (int r = 0; r < 3; ++r)
+			{
+				for (int c = 0; c < 3; ++c)
+				{
+					renderMtx.Row[r][c] *= m_scale;
+				}
+			}
+		}
+
+		std::vector<Coord3D> candidate;
+		if (e.draw->getFootLocations(candidate, false, renderMtx) && candidate.size() >= 4)
+		{
+			points = std::move(candidate);
+			gotFootLocations = true;
+			break;
 		}
 	}
 
-	const Coord3D &pos = pose.position;
-	float direction = pose.angle;
-	float s = std::sin(direction);
-	float c = std::cos(direction);
+	if (!gotFootLocations)
+	{
+		float length = 15.0f;
+		float width = 15.0f;
+		if (m_template)
+		{
+			const std::vector<ObjectGeometry::Shape> &shapes = ObjectGeometry::cachedShapesOf(*m_template);
+			if (!shapes.empty())
+			{
+				length = shapes[0].majorRadius;
+				width = shapes[0].minorRadius;
+			}
+		}
 
-	Coord3D points[4];
-	points[0] = Coord3D{ -length * c - width * s + pos.x, -width * c + -length * s + pos.y, pos.z };
-	points[1] = Coord3D{  length * c - width * s + pos.x, -width * c +  length * s + pos.y, pos.z };
-	points[2] = Coord3D{ -length * c + width * s + pos.x,  width * c + -length * s + pos.y, pos.z };
-	points[3] = Coord3D{  length * c + width * s + pos.x,  width * c +  length * s + pos.y, pos.z };
+		float direction = pose.angle;
+		float s = std::sin(direction);
+		float c = std::cos(direction);
+
+		points.resize(4);
+		points[0] = Coord3D{ -length * c - width * s + pos.x, -width * c + -length * s + pos.y, pos.z };
+		points[1] = Coord3D{  length * c - width * s + pos.x, -width * c +  length * s + pos.y, pos.z };
+		points[2] = Coord3D{ -length * c + width * s + pos.x,  width * c + -length * s + pos.y, pos.z };
+		points[3] = Coord3D{  length * c + width * s + pos.x,  width * c +  length * s + pos.y, pos.z };
+	}
 
 	float heights[4];
 	for (int i = 0; i < 4; ++i)
 	{
-		heights[i] = m_services.groundHeight ? m_services.groundHeight(points[i].x, points[i].y, nullptr) : pos.z;
+		if (i == 0 || points[i].x != points[i - 1].x || points[i].y != points[i - 1].y)
+		{
+			heights[i] = m_services.groundHeight ? m_services.groundHeight(points[i].x, points[i].y, nullptr) : pos.z;
+		}
+		else
+		{
+			heights[i] = heights[i - 1];
+		}
 	}
 
 	float front = (heights[0] + heights[1]) * 0.5f;
@@ -1853,7 +2188,7 @@ void Drawable::calcPhysicsXformHugeFourLegs(const LocomotorTemplate *loco, const
 	float dx = frontX - backX;
 	float dy = frontY - backY;
 	float dist = std::sqrt(dx * dx + dy * dy);
-	if (dist < 1.0f) dist = 1.0f;
+	if (!gotFootLocations && dist < 1.0f) dist = 1.0f;
 	float pitch = std::atan2(back - front, dist);
 
 	m_locoInfo->m_pitchRate += (-PITCH_STIFFNESS * (m_locoInfo->m_pitch - pitch)) + (-PITCH_DAMPING * m_locoInfo->m_pitchRate);
@@ -1911,12 +2246,33 @@ void Drawable::calcPhysicsXformHugeFourLegs(const LocomotorTemplate *loco, const
 
 void Drawable::calcPhysicsXformGiantBird(const LocomotorTemplate *loco, const ObjectSnapshot &rec, const RenderInterpolation::Pose &pose, PhysicsXformInfo &info)
 {
-	// RW 0x670E09 / donor 0x00270B0F: roll ease towards banked angle, clamped to +-0.8
-	m_locoInfo->m_giantBirdRoll *= 0.8f;
-	info.m_totalRoll = m_locoInfo->m_giantBirdRoll;
+	(void)loco;
+	(void)pose;
+	info.m_totalRoll = 0.0f;
 	info.m_totalPitch = 0.0f;
 	info.m_totalYaw = 0.0f;
 	info.m_totalZ = 0.0f;
+	// RW 0x670E09 .. 0x670E9F / DONOR BFME2 0x00270B0F (DrawablePhysicsXformTreads.cpp):
+	// checks AI vslot 0x168 (true only for GiantBirdAIUpdate, RW 0x8BD372; false returns early
+	// without updating m_giantBirdRoll or info.m_totalRoll), reads AI + 0x600 (turnRate) via
+	// vslot 0x188 (RW 0x8CEF91), eases m_giantBirdRoll * 0.8f + (turnRate * 4.0f) * 0.2f and
+	// clamps to [-0.8f, 0.8f] (constants 0xbd88c0=4.0, 0xbde8d8=0.8, 0xbdad78=0.2, 0xc10ea0=-0.8).
+	if (!rec.giantBirdAI)
+	{
+		return;
+	}
+	const float targetRoll = rec.giantBirdTurnRate * 4.0f;
+	float roll = m_locoInfo->m_giantBirdRoll * 0.8f + targetRoll * 0.2f;
+	if (roll < -0.8f)
+	{
+		roll = -0.8f;
+	}
+	else if (roll > 0.8f)
+	{
+		roll = 0.8f;
+	}
+	m_locoInfo->m_giantBirdRoll = roll;
+	info.m_totalRoll = roll;
 }
 
 void Drawable::calcPhysicsXformShip(const LocomotorTemplate *loco, const ObjectSnapshot &rec, const RenderInterpolation::Pose &pose, PhysicsXformInfo &info)
@@ -1946,7 +2302,9 @@ void Drawable::calcPhysicsXformShip(const LocomotorTemplate *loco, const ObjectS
 		}
 	}
 
-	Coord3D dir{ pose.basis[0], pose.basis[3], 0.0f };
+	float shipBasis[9];
+	resolvePoseBasis(pose, shipBasis);
+	Coord3D dir{ shipBasis[0], shipBasis[3], 0.0f };
 	float dirLen = std::sqrt(dir.x * dir.x + dir.y * dir.y);
 	if (dirLen > 0.0f)
 	{
@@ -1993,11 +2351,24 @@ void Drawable::calcPhysicsXformShip(const LocomotorTemplate *loco, const ObjectS
 	else if (m_locoInfo->m_accelerationRoll < -ACCEL_PITCH_LIMIT)
 		m_locoInfo->m_accelerationRoll = -ACCEL_PITCH_LIMIT;
 
-	// Bobbing modulators (donor 0x00272FB6: pitch and roll sinusoidal bobbing)
-	m_locoInfo->m_yawModulator += 0.05f;
-	info.m_totalRoll += std::sin(m_locoInfo->m_yawModulator) * 0.02f;
-	m_locoInfo->m_pitchModulator += 0.03f;
-	info.m_totalPitch += std::cos(m_locoInfo->m_pitchModulator) * 0.02f;
+	// PORT-132 (issue #334): the bobbing amplitudes and rates are the locomotor template's four correction fields, not constants. A ship rights
+	// its roll and pitch with them: the mod's 13 ship locomotors set them (LargeShipLocomotor, VeryLargeShipLocomotor, TransportShipLocomotor,
+	// SmallShipLocomotor ...: 0.073 / 0.021 / 0.163 / 0.016 and others), and a template that leaves them 0 neither bobs nor is corrected.
+	// The reads are in this ship body (RW 0x6732DC; the parse rows RW 0xBF48E8 / 0xBF48F8 / 0xBF4908 / 0xBF4918, parser RW 0x42ED00):
+	//   RW 0x67386C movss xmm0,[eax+0x120] (AeleronCorrectionRate)  -> RW 0x673874 addss xmm0,[ecx+0x34] -> RW 0x673879 store: the roll
+	//   accumulator DrawableLocoInfo +0x34 (m_yawModulator) steps by the rate, then RW 0x67388C call 0xA3CF90 (sin) ->
+	//   RW 0x673891 fmul dword ptr [ebp+8] (the AeleronCorrectionDegree read at RW 0x673847 mov ecx,[eax+0x11C], kept at RW 0x673855) ->
+	//   RW 0x673894 fadd dword ptr [esi+4] -> RW 0x673897: PhysicsXformInfo::m_totalRoll takes the amplitude times the sine.
+	//   RW 0x67384D movss xmm0,[eax+0x118] (ElevatorCorrectionRate) -> RW 0x6738A5 addss xmm0,[ebp+0xc] -> RW 0x6738AA store into
+	//   DrawableLocoInfo +0x38 (m_pitchModulator), then RW 0x6738BB call 0xA3CF84 (cos) -> RW 0x6738C0 fmul dword ptr [ebp-0x40] (the
+	//   ElevatorCorrectionDegree read at RW 0x673858 mov ecx,[eax+0x114], kept at RW 0x67385E) -> RW 0x6738C5 fadd dword ptr [esi] ->
+	//   RW 0x6738CD: PhysicsXformInfo::m_totalPitch takes the amplitude times the cosine.
+	// The two accumulators sit at +0x34 / +0x38 of the 0x58-byte DrawableLocoInfo, whose order this struct keeps; the donor agrees
+	// (DONOR BFME2 0x00272FB6, DrawablePhysicsXformShip.cpp:298-305: the same four offsets, sin for the roll and cos for the pitch).
+	m_locoInfo->m_yawModulator += loco->m_aeleronCorrectionRate;
+	info.m_totalRoll += std::sin(m_locoInfo->m_yawModulator) * loco->m_aeleronCorrectionDegree;
+	m_locoInfo->m_pitchModulator += loco->m_elevatorCorrectionRate;
+	info.m_totalPitch += std::cos(m_locoInfo->m_pitchModulator) * loco->m_elevatorCorrectionDegree;
 
 	float pitchHeight = std::sin(info.m_totalPitch) * length;
 	float rollHeight = std::sin(info.m_totalRoll) * width;
@@ -2045,12 +2416,14 @@ void Drawable::applyPhysicsXform(const ObjectSnapshot &rec, const RenderInterpol
 	{
 		const PhysicsXformInfo &info = m_lastPhysicsInfo;
 
+		float basis[9];
+		resolvePoseBasis(pose, basis);
 		Matrix3D mtx;
 		for (int r = 0; r < 3; ++r)
 		{
 			for (int c = 0; c < 3; ++c)
 			{
-				mtx.Row[r][c] = pose.basis[r * 3 + c];
+				mtx.Row[r][c] = basis[r * 3 + c];
 			}
 		}
 		mtx.Row[0][3] = pose.position.x;
@@ -2120,6 +2493,14 @@ void Drawable::applyReleaseBlend(RenderInterpolation::Pose &p)
 
 void Drawable::getPresentationPose(float outBasis[9], Coord3D &outPos) const
 {
+	// PORT-146 (issue #363): an object on a bone of its container is drawn with the pose the container's presentation gives it (the client part S-1104
+	// records as the drawable bone attachment); DrawableManager::syncTransforms works it out once every drawable has its own pose
+	if (m_containedPoseValid)
+	{
+		std::memcpy(outBasis, m_containedPose.basis, sizeof(m_containedPose.basis));
+		outPos = m_containedPose.pos;
+		return;
+	}
 	if (m_hasPhysicsXform)
 	{
 		std::memcpy(outBasis, m_presentationBasis, sizeof(m_presentationBasis));
@@ -2134,6 +2515,10 @@ void Drawable::getPresentationPose(float outBasis[9], Coord3D &outPos) const
 
 Coord3D Drawable::getPresentationPosition() const
 {
+	if (m_containedPoseValid)
+	{
+		return m_containedPose.pos;
+	}
 	if (m_hasPhysicsXform)
 	{
 		return m_presentationPosition;

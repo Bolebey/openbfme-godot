@@ -89,6 +89,9 @@ private:
 		uint64_t instId = 0, bibId = 0; ///< the nodes' ids (freed by id: GodotPlacementGhost.cpp freeNode)
 		std::string bibTexture;
 		const ThingTemplate *bibTemplate = nullptr; ///< the template the bib quad was built for (a reused wall slot can change template)
+		bool bibConformValid = false;
+		Coord3D bibPos{};
+		float bibBasis[9] = {};
 		// lane OWNERFIX-2: the decal shadow of the drawable's current model state (Shadow = SHADOW_ALPHA_DECAL ...: e.g. a well's or a statue's area
 		// of effect on its BUILD_PLACEMENT_CURSOR state); lane PLACEDECAL-1: drawn by the terrain and wall shaders with the selection decals
 		SelectionDecal shadowDecal; ///< valid while shadowTexture is not empty
@@ -101,6 +104,9 @@ private:
 	void error(const std::string &e);
 	void clearTransient(); // the formation preview, the resource decal and label
 	void parkViews(const std::string &templateName); // lane FOGFX-1: m_views hidden and kept under the template's name
+	void prewarm(LiveGame &game);                     // P-113: the local builders' structures' ghosts built and parked when the game starts
+	size_t m_prewarmed = 0;
+	double m_prewarmMs = 0.0;
 	static constexpr size_t kMaxParked = 48;         ///< lane FOGFX-1: more parked templates than this and the parked ones are freed
 	std::map<std::string, std::vector<IconView>> m_parked;
 	W3DInstancer *newInstancer(const char *name);

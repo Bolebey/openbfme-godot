@@ -24,6 +24,9 @@
 #include "GameEngineDevice/W3DDevice/GameClient/HouseColor.h"
 #include "Libraries/WWVegas/WW3D2/w3dstops.h"
 #include "Libraries/WWVegas/WW3D2/w3dsort.h"
+#include "Libraries/WWVegas/WW3D2/lightenvironment.h" // lane LOCAL-38
+
+class LightPulsePool; // lane LOCAL-38 (GameClient/ClientEffects.h)
 
 #include <godot_cpp/classes/image.hpp>
 #include <godot_cpp/variant/color.hpp>
@@ -110,6 +113,8 @@ public:
 	// i.e. what the retail BeginScript bodies hide): a hidden sub object is not written to its MultiMesh for that instance. An empty list shows
 	// everything again. Unknown names are an error (returns false, recorded). (Added by lane MAPOBJ-1.)
 	bool set_instance_hidden_subobjects(int64_t instance, const PackedStringArray &names);
+	// P-88: a draw module's complete hidden set (W3DScriptedModelDraw::hiddenSubObjects): a mesh with W3D_MESH_FLAG_HIDDEN that is not named is drawn
+	bool set_instance_hidden_subobjects_exact(int64_t instance, const PackedStringArray &names);
 	int64_t get_instance_count() const { return (int64_t)Instances.size(); }
 	// Stop S-119 (lane MAPOBJ-1): team colours. After setup() and BEFORE the first add_model, enable them and every classic surface whose stage
 	// 0 texture has a housecolor.ini texture gets the HouseColor shader permutation (W3DShaderKey::HouseColor: the texture recoloured with the instance's
@@ -137,6 +142,8 @@ public:
 	// C++ only: the next add_model builds a W3DFloorDraw's model (a structure's floor / bib): its opaque surfaces blend by their texel alpha, no depth write
 	// (W3DMaterialFactory::Set_Floor_Blend, stop S-4974); the model is cached under its own name ("#floor"). The add clears it.
 	void Set_Build_Floor(bool floor) { PendingFloor = floor; }
+	// P-92 / Local 49: the next add_model builds a W3DTreeDraw tree/shrub using Vegetation.fx lighting
+	void Set_Build_Vegetation(bool veg) { PendingVegetation = veg; }
 	// lane SELWALL-1 (C++ only): the next add_model / add_model_colored builds a wall top or bridge model (KINDOF_WALK_ON_TOP_OF_WALL): its meshes are built
 	// again under a name with "#sel", their opaque surfaces draw the selection decals (W3DShaderKey::SelectionDecals: the merge decals and, lane HERORING-1,
 	// the alpha decals). The add clears it
@@ -211,6 +218,19 @@ public:
 	bool get_draw_culling() const { return DrawCulling; }
 	// lane PERF-3 (tests): the palette texels of one instance as the last update wrote them (3 RGBA texels per pivot), empty for an unknown instance
 	PackedFloat32Array get_instance_palette(int64_t instance) const;
+	// lane LOCAL-38 (stop S-687, C++ only): the scene's dynamic lights (RTS3DScene's list +0x114: W3DLightDraw lights and light pulses). Every live
+	// instance is a render object with its own light environment (RTS3DScene::renderOneObject RW 0x46F48E, LightEnvironmentClass RW 0x540250,
+	// Libraries/WWVegas/WW3D2/lightenvironment.h), ranked against the global lights W3D_Apply_Object_Lighting last set, and written to the three
+	// palette texels in front of its pivots (W3D_PALETTE_LIGHT_TEXELS). Null (the default): no dynamic light reaches this instancer's objects (an
+	// Apt View3D or viewer scene of its own)
+	void set_scene_dynamic_lights(const ::LightPulsePool *pool) { SceneLights = pool; }
+	// lane LOCAL-38: update_now writes the light environments; a scene that updates itself by hand (set_auto_update(false)) calls this every frame
+	// (the lights move and flicker): the changed texels are written and uploaded
+	void refresh_object_lights();
+	// lane LOCAL-38 (tests): the light texels of one instance (12 floats: point light position + range, colour + dropped global lights, ambient),
+	// empty for an unknown instance; and how many instances the last update lit with a dynamic light
+	PackedFloat32Array get_instance_light_texels(int64_t instance) const;
+	int get_lit_instance_count() const { return LitInstances; }
 	bool get_pose_culling() const { return PoseCulling; }
 
 	// Evaluates everything now (also done by _process).
@@ -255,6 +275,7 @@ protected:
 	static void _bind_methods();
 
 private:
+	bool set_hidden_subobjects(int64_t instance, const PackedStringArray &names, bool exact); // P-88
 	struct MeshGpu
 	{
 		MeshRenderData Data;
@@ -298,6 +319,7 @@ private:
 		std::string Name;
 		const RenderObjPrototype *Proto = nullptr;
 		std::vector<DrawItem> Draws;
+		std::vector<std::uint8_t> DefaultHiddenSubs; // P-88: by sub object index, 1 = the mesh carries W3D_MESH_FLAG_HIDDEN; empty = no such mesh
 		std::vector<int> InstanceIds;    // the LIVE instances in creation order (SMOOTH-1: a removed instance leaves the list)
 		Dictionary Report;
 		// lane SMOOTH-1: per-frame work only where something changed
@@ -353,6 +375,8 @@ private:
 		const HAnimClass *MemoAnim[2] = { nullptr, nullptr };
 		const void *MemoKey[2] = { nullptr, nullptr };
 		std::vector<std::pair<int, float>> BoneSpins; // lane COMBAT-4: (pivot, angle about its Y) applied after the pose (set_instance_bone_spins_native)
+		float LightTexels[12] = {};           // lane LOCAL-38: the light environment last written in front of the pivots
+		bool LightTexelsWritten = false;      // lane LOCAL-38: false for a new block (a reused block holds another instance's texels)
 	};
 	// lane PERF-3: the radius around an instance's origin, in model units, that holds every vertex of the model in any pose (pose culling)
 	float cull_radius(Model &m) const;
@@ -368,6 +392,7 @@ private:
 	void evaluate_pose(Instance &inst) const;
 	void evaluate_animation_pose(Instance &inst) const; ///< the animation part of evaluate_pose (lane COMBAT-4 adds the bone spins after it)
 	void write_palette(const Instance &inst);
+	bool update_object_lights(); // lane LOCAL-38: true when a light texel changed (its rows are noted for the upload)
 	void write_buffers();
 	// lane GPUPERF-2: draw culling. cull_frustum gathers the camera planes (false without a camera: nothing is culled); compute_in_view marks every live
 	// instance whose sphere meets them; pack_draw writes d's buffer from d.Order (minus the culled ones while culling) with the MultiMeshes' boxes
@@ -383,6 +408,8 @@ private:
 	void bind_palette_gpu();
 	void upload_palette();
 	void release_palette_rd();
+	void note_instance_param_node(PackedStringArray &errors); ///< P-99: counts a draw node with instance uniforms, reports a full buffer once
+	static int64_t instance_param_capacity();                ///< P-99: draw nodes the global shader buffer holds
 	Ref<Texture2D> palette_sampler() const;
 	void mark_model(int64_t instance);       // SMOOTH-1: the instance's model rewrites its buffers
 	void run_parallel(size_t count, const std::function<void(size_t, size_t)> &fn);
@@ -397,6 +424,8 @@ private:
 	const std::map<std::string, HouseColorParams> *PendingMeshColors = nullptr; // LOCAL-21
 	std::vector<std::pair<std::string, std::string>> PendingSwaps; // stop S-5015: Set_Build_Texture_Swaps, taken by the next add_model
 	bool PendingFloor = false; // stop S-4974: Set_Build_Floor, taken by the next add_model
+	bool PendingVegetation = false; // P-92 / Local 49: Set_Build_Vegetation, taken by the next add_model
+	bool BuildingFloor = false; // P-103: active while building a #floor model
 	bool PendingSelectionDecals = false; // lane SELWALL-1: Set_Build_Selection_Decals, taken by the next add_model
 	std::vector<std::unique_ptr<Model>> Models;
 	std::vector<Instance> Instances;
@@ -405,6 +434,9 @@ private:
 	std::vector<Ref<ShaderMaterial>> AllMaterials;
 	std::vector<W3DMapperBinding> Mappers;
 
+	const ::LightPulsePool *SceneLights = nullptr;      // lane LOCAL-38: set_scene_dynamic_lights
+	std::vector<::LightEnvSourceLight> LightScratch;  // lane LOCAL-38: the enabled dynamic lights of the frame
+	int LitInstances = 0;                           // lane LOCAL-38: instances the last update lit with a dynamic light
 	// palette (lane PERF-3: the poses are written into PaletteImage's own buffer, PaletteWrite during an update; no separate copy is kept)
 	float *PaletteWrite = nullptr;
 	int PaletteTexels = 0;

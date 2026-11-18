@@ -52,7 +52,6 @@
 namespace
 {
 const char *const kAmoebaCpp = "HordeMeleeAmoeba.cpp"; // RW string; the line of the draw is not read
-const unsigned kReadyCacheFrames = 15;                 // RotWK 3 * FPS
 const unsigned kWaitPathRetry = 7;                     // RotWK FPS + 2
 const float kNearestMemberStart = 99999.0f;            // RW 0xBDF350 (RW 0x86FA87: the start of the nearest-member search and its range without one)
 const float kCellStep = 10.0f;
@@ -148,9 +147,10 @@ float absF(float a)
 // next victim; one that passes crushPolicy becomes the machine's goal (vslot 0x38), computePath (false: FAILURE) and the byte is set again. A goal id of 0 fails the update
 // with IS_MELEE_ATTACKING = canCrush. computePath is refused while the AI is blocked (+ 0x16C > 0), forces a re-path when the AI has no path and none pending (+ 0x140,
 // + 0x3B1), keeps the goal point's z (no ground snap) and normalises with RW 0x405553 (1 / len, then products).
-// INFERENCE (stop S-583): the AI byte +0x3CC (its only writer clears it: taken as 0), the state's own pending byte + 0x49 (the port's internal move keeps its own wait), the
-// line test of crushPolicy (RW 0x6F5BB0) is not ported (taken as passing); RW 0x701443 is lane TARGET-1's AI::findClosestEnemy (merge queue q23; FLANK-1 had the
-// TargetFinder stand-in) and a zero-length direction keeps the victim's point (retail's normalise gives NaN); the stealth test of the goal is RW 0x694C0D (lane STEALTH-1).
+// INFERENCE (stop S-583): the AI byte +0x3CC (its only writer clears it: taken as 0), the state's own pending byte + 0x49 (the port's internal move keeps its own wait);
+// crushPolicy's quick path test (RW 0x69511D .. 0x695160 -> RW 0x6F5BB0 with RW 0x664485 / 0x5E2DF4 bypass) is ported (Port 204); RW 0x701443 is lane TARGET-1's
+// AI::findClosestEnemy (merge queue q23; FLANK-1 had the TargetFinder stand-in) and a zero-length direction keeps the victim's point (retail's normalise gives NaN); the
+// stealth test of the goal is RW 0x694C0D (lane STEALTH-1).
 // NOT REACHED YET (S-583): RotWK's AIAttackState::update (RW 0x7510EC) keeps running this inner machine when the outer victim is dead (non-ARMY_OF_DEAD), the port's
 // AIAttackState (AIAttack.cpp, ZH donor) ends the attack first, so the re-acquisition only runs in a machine of its own (test_flank1.cpp).
 struct HordeSquishState : AIState
@@ -179,12 +179,26 @@ struct HordeSquishState : AIState
 		Object *c = v.getContainedBy();
 		return c && c->getContain() && c->getContain()->getHordeContainInterface() ? c : &v;
 	}
-	// RW 0x69519A(victim, 2)
+	// RW 0x69519A(victim, 2) -> RW 0x6950F3(victim, 2)
 	static bool crushPolicy(Object &self, Object &victim)
 	{
 		if (!(ObjectCrush::crusherLevel(self) > 0 && ObjectCrush::crusherLevel(self) > ObjectCrush::crushableLevel(victim)))
 		{
 			return false;
+		}
+		// RW 0x69511D .. 0x695160 (Port 204): quick path test unless moving along an explicit-Z / waypoint path (RW 0x664485 / 0x5E2DF4)
+		AIWorld *world = self.logic().aiWorld();
+		if (world && world->mapReady())
+		{
+			AIUpdateInterface *ai = self.getAIUpdateInterface();
+			const Path *path = (ai && ai->isMoving()) ? ai->mover().path() : nullptr;
+			if (!(path && path->hasExplicitZ()))
+			{
+				if (!ai || !world->pathfinder().quickDoesPathExist(ai->adapter(), self.getPosition(), victim.getPosition(), nullptr))
+				{
+					return false;
+				}
+			}
 		}
 		if (self.testStatus((unsigned)CombatNames::status("RAMPAGING")) || self.testStatus((unsigned)CombatNames::status("FLEE_OFF_MAP")) ||
 			self.testModelCondition(CombatNames::modelCondition("CHARGING")))
@@ -735,6 +749,11 @@ struct HordeMeleeApproachState : AIState
 		{
 			self.setStatusAcrossHorde((unsigned)runningDown, false); // RW 0x748650(0x4B, 0) (lane AIDATA-1)
 		}
+		// RW 0x74AB5A .. 0x74AB87 (lane FLEECHASE-1): setMeleeTargetID (slot 0x168) with the goal's horde id for a HORDE_MEMBER goal in a horde, else the goal's
+		{
+			const Object *goalHorde = victim->testStatus((unsigned)CombatNames::statuses().hordeMember) ? victim->getHordeObject(false) : nullptr;
+			h.setMeleeTargetId(goalHorde ? goalHorde->getID() : victim->getID());
+		}
 		if (fleeing)
 		{
 			// RW 0x87631F: the run-down. Lane IDLEMOTION-1: a member is ordered when its AI state is not active (RW 0x87636B: AI vslot 0x1BC, RW 0x662B3C, the
@@ -848,7 +867,15 @@ struct HordeMeleeApproachState : AIState
 	}
 };
 
-// B1 AIAttackMeleeHordeWaitState: the melee phase
+// B1 AIAttackMeleeHordeWaitState: the melee phase. Lane FLEECHASE-1 (RotWK RW 0x74697A onEnter, RW 0x74ACAD update, RW 0x746C2A onExit; BFME2 0x744F57 /
+// 0x7492BD, decomp AIAttackMeleeHordeWaitState.cpp:42 / AIAttackMeleeHordeWaitStateUpdate.cpp:101, the same gates: both editions):
+//   * onEnter: a HORDE_MEMBER victim is replaced by its horde (RW 0x7469DB .. 0x7469F7, RW 0x693A1A(0)); a fleeing victim (RW 0x7468D5) FAILS; one that is not ready
+//     (slot 0x154) must be nearer than 40 (squared footprint edge distance RW 0x66352C against 40 * 40), 60 for a SIEGE_TOWER victim (template + 0x113 bit 5) while the
+//     horde is not on layer 1 (RW 0x68BBE0), and then refreshes the readiness (slot 0x164); then the melee target id (slot 0x168, + 0x16C) is the victim's, the wait
+//     ends 3 * LOGICFRAMES_PER_SECOND frames from now and the melee begins (slot 0x134);
+//   * update: a victim stealthed and not detected by the horde's player (RW 0x694C0D) FAILS, a fleeing one FAILS; a ready victim begins the melee again and
+//     restarts the wait, else the wait running out FAILS (WaitPath). Retail sets no current victim here (the port did);
+//   * onExit: unless the horde is being destroyed (Object + 0x94 bit 0), the melee ends (slot 0x138) and the melee target id is cleared (slot 0x168(0)).
 struct HordeMeleeWaitState : AIState
 {
 	explicit HordeMeleeWaitState(AIStateMachine &m) : AIState(m, "AIAttackMeleeHordeWaitState") {}
@@ -856,21 +883,39 @@ struct HordeMeleeWaitState : AIState
 
 	StateReturnType onEnter() override
 	{
-		Object *victim = machine().goalObject();
-		if (!victim || !CombatQueries::isAlive(*victim))
+		Object *goal = machine().goalObject();
+		if (!goal || !CombatQueries::isAlive(*goal))
 		{
 			return STATE_SUCCESS;
 		}
 		HordeAIUpdate &h = hordeAi(*this);
+		Object &self = *h.getObject();
+		Object *victim = goal;
+		if (goal->testStatus((unsigned)CombatNames::statuses().hordeMember))
+		{
+			if (Object *horde = goal->getHordeObject(false))
+			{
+				victim = horde;
+			}
+		}
+		if (targetFleeing(self, *victim))
+		{
+			return STATE_FAILURE;
+		}
 		if (!h.isMeleeTargetReady(*victim))
 		{
-			// not ready: the targets must be within 40 of each other (60 for a siege tower off layer 1: not ported)
-			if (edgeDistance(*h.getObject(), *victim) > 40.0f)
+			static const int kSiegeTower = CombatNames::kindOf("SIEGE_TOWER");
+			const int reach = victim->isKindOf((unsigned)kSiegeTower) && AIWorld::objectLayer(self) != LAYER_GROUND ? 60 : 40;
+			// RW 0x746A3E .. 0x746A56: RW 0x66352C = RW 0x6634BF(the horde's position, victim, the victim's position), x87 at PC24, the horde's radius first;
+			// fild reach * reach, fcompi, jbe -> FAILURE
+			if (!(CombatQueries::edgeDistanceSquared2D(self, *self.getPosition(), *victim, *victim->getPosition()) < (float)(reach * reach)))
 			{
 				return STATE_FAILURE;
 			}
+			h.refreshMeleeReadiness(*victim);
 		}
-		m_waitUntil = h.frame() + kReadyCacheFrames;
+		h.setMeleeTargetId(victim->getID());
+		m_waitUntil = h.frame() + 3u * (unsigned)LOGICFRAMES_PER_SECOND;
 		h.beginMelee(*victim);
 		return STATE_CONTINUE;
 	}
@@ -882,11 +927,15 @@ struct HordeMeleeWaitState : AIState
 		{
 			return STATE_SUCCESS;
 		}
-		h.setCurrentVictim(victim);
+		Object &self = *h.getObject();
+		if (InvisibilityManager::isStealthedAndUndetected(*victim, self.getControllingPlayer()) || targetFleeing(self, *victim))
+		{
+			return STATE_FAILURE;
+		}
 		if (h.isMeleeTargetReady(*victim))
 		{
 			h.beginMelee(*victim);
-			m_waitUntil = h.frame() + kReadyCacheFrames;
+			m_waitUntil = h.frame() + 3u * (unsigned)LOGICFRAMES_PER_SECOND;
 		}
 		else if (h.frame() >= m_waitUntil)
 		{
@@ -899,7 +948,9 @@ struct HordeMeleeWaitState : AIState
 	{
 		if (!ai().isDestroying()) // an object being deleted: the derived AI and the modules are already gone
 		{
-			hordeAi(*this).endMelee();
+			HordeAIUpdate &h = hordeAi(*this);
+			h.endMelee();
+			h.setMeleeTargetId(INVALID_ID);
 		}
 	}
 	void crc(StateHasher &h) const override { h.addU32(m_waitUntil); }
@@ -1023,7 +1074,7 @@ bool HordeAIUpdate::isMeleeTargetReady(Object &targetIn)
 	Object *horde = getObject();
 	Object *target = hordeOfTarget(targetIn);
 	Object &t = target ? *target : targetIn;
-	if (t.getID() == m_cacheTarget && frame() < m_cacheExpiry)
+	if ((targetIn.getID() == m_cacheTarget || t.getID() == m_cacheTarget) && frame() < m_cacheExpiry) // RW 0x86BEFB .. 0x86BF2B: the target's id or its horde's
 	{
 		return true;
 	}
@@ -1079,11 +1130,8 @@ bool HordeAIUpdate::isMeleeTargetReady(Object &targetIn)
 			break;
 		}
 	}
-	if (ready)
-	{
-		m_cacheTarget = t.getID();
-		m_cacheExpiry = frame() + kReadyCacheFrames;
-	}
+	// lane FLEECHASE-1: the answer writes no cache. RW 0x86BEEA (slot 0x154) answers from + 0x16C / + 0x170 and else asks the melee behaviour (+ 0x1AC slot 0x38 =
+	// RW 0x98FA8E), which stores nothing; the id is written by setMeleeTargetID (slot 0x168) and the expiry by refreshMeleeReadiness (slot 0x164) alone
 	return ready;
 }
 
@@ -1846,11 +1894,11 @@ void HordeAIUpdate::crc(StateHasher &h) const
 
 const char *HordeAIUpdate::squishStopLine()
 {
-	return "[S-583] horde crush attack: AIAttackMeleeSquishState is the RotWK body (onEnter RW 0x74F21A, update RW 0x74F31F, computePath RW 0x742271, crushPolicy RW 0x69519A, onExit "
-	       "RW 0x74B1B7; lane FLANK-1: the destroyed-goal test RW 0x8DBDFF, the flung-goal test RW 0x792973, the re-acquisition of the next victim when the goal dies, the blocked / "
-	       "no-path rules of computePath); NOT ported: the AI byte +0x3CC (taken as 0), crushPolicy's line test RW 0x6F5BB0 (taken as passing), the state's pending byte + 0x49, "
-	       "and RW 0x701443 is lane TARGET-1's AI::findClosestEnemy (merge queue q23); the re-acquisition is not reached in a game until AIAttackState::update follows RW 0x7510EC "
-	       "(retail keeps running the inner machine on a dead victim, the port's ZH-donor state ends the attack first)";
+	return "[S-583] horde crush attack: AIAttackMeleeSquishState is the RotWK body (onEnter RW 0x74F21A, update RW 0x74F31F, computePath RW 0x742271, crushPolicy RW 0x69519A / "
+	       "0x6950F3 with quickDoesPathExist RW 0x6F5BB0 and explicit-Z bypass RW 0x664485 / 0x5E2DF4, onExit RW 0x74B1B7; lane FLANK-1: the destroyed-goal test RW 0x8DBDFF, "
+	       "the flung-goal test RW 0x792973, the re-acquisition of the next victim when the goal dies, the blocked / no-path rules of computePath); NOT ported: the AI byte "
+	       "+0x3CC (taken as 0), the state's pending byte + 0x49, and RW 0x701443 is lane TARGET-1's AI::findClosestEnemy (merge queue q23); the re-acquisition is not reached "
+	       "in a game until AIAttackState::update follows RW 0x7510EC (retail keeps running the inner machine on a dead victim, the port's ZH-donor state ends the attack first)";
 }
 
 const char *HordeAIUpdate::approachStopLine()

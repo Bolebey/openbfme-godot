@@ -32,6 +32,7 @@
 #include "GameLogic/Combat/ObjectWeapons.h"
 #include "GameLogic/FXEvents.h"
 #include "GameLogic/Module/AIUpdate.h"
+#include "GameLogic/AI/AIClosestEnemy.h"
 #include "GameLogic/AI/AIEmotionStates.h"
 #include "GameLogic/AI/AIPathfind.h"
 #include "GameLogic/AI/AIWorld.h"
@@ -610,16 +611,9 @@ bool anySet(const std::array<std::uint32_t, 19> &b) // RW 0x4B3783
 	return false;
 }
 
-float visionRangeOf(const Object &o) // RW 0x68E43B: Object + 0x1B0 (the template's VisionRange; the VISION modifier and height terms as STEALTH-1, S-1227)
+float visionRangeOf(Object &o) // RW 0x68E43B: Object::getVisionRange (VisionRange * (1 + attributeModifierSum(16)) * heightBonus)
 {
-	if (const FieldValue *v = o.getTemplate()->getFinalOverride()->findField("VisionRange"))
-	{
-		if (const float *f = std::get_if<float>(v))
-		{
-			return *f;
-		}
-	}
-	return 0.0f;
+	return AIUpdateInterface::objectVisionRangeOf(o);
 }
 
 void AutoAbilityBehaviorModuleData::buildFieldParse(MultiIniFieldParse &p)
@@ -804,7 +798,14 @@ bool AutoAbilityBehavior::canAct(const CommandButton &b) const
 	{
 		return false;
 	}
-	return true; // the AI's + 0x34 (INFERENCE: 0)
+	if (const AIUpdateInterface *ai = obj->getAIUpdateInterface())
+	{
+		if (ai->hasTemporaryStateMachine()) // RW 0x85D693 .. 0x85D6A1: AI + 0x34 (m_temporaryKeptMachine)
+		{
+			return false;
+		}
+	}
+	return true;
 }
 
 Object *AutoAbilityBehavior::pickTarget(const std::vector<Object *> &hits, const CommandButton &b) const
@@ -990,20 +991,18 @@ UpdateSleepTime AutoAbilityBehavior::update()
 	}
 	if (!anyQuery)
 	{
-		// RW 0x701443(object, range, 0x4A, 0, 0, 0) -> RW 0x7006D7: the AI's closest enemy (INFERENCE, S-1227: the closest alive ENEMIES object it can see)
+		// RW 0x85DD3A -> RW 0x701443(object, range, 0x4A, 0, 0, 0) -> RW 0x7006D7: CAN_ATTACK (0x2) | ATTACK_BUILDINGS (0x8) | AUTO_ACQUIRE (0x40)
 		++stats().closestEnemyQueries;
-		PartitionFilterFn chain([&](Object &o) { return !o.isEffectivelyDead() && obj->getRelationship(o) == ENEMIES && EmotionModules::canSeeObject(*obj, o, range); });
-		for (const PartitionHit &h : logic.partition().iterateObjectsInRange(*obj->getPosition(), range, FROM_CENTER_2D, { &chain }, ITER_SORTED_NEAR_TO_FAR))
-		{
-			target = h.object;
-			break;
-		}
+		target = AI::findClosestEnemy(*obj, range, 0x4Au, nullptr, nullptr, 0);
 	}
 	if (!target)
 	{
 		return (UpdateSleepTime)(framesPerSecond + 1);
 	}
-	// RW 0x85DD6B: the AI's + 0x48 := 2 (the field is not identified: S-1227)
+	if (ai)
+	{
+		ai->setLastCommandSource(CMD_FROM_AI); // RW 0x85DD69 .. 0x85DD70: AI + 0x48 := 2
+	}
 	// RW 0x85D930: the auto ability sound (client) unless NO_PLAY_UNIT_SPECIFIC_SOUND_FOR_AUTO_ABILITY
 	Coord3D pos = *target->getPosition();
 	// RW 0x85DDA4 .. 0x85DDCC (lane BACKLOG-8): with an AI, AdjustAttackMeleePosition (data + 0x5E) and a target whose geometry is not small (Object + 0xAC, the
@@ -1253,9 +1252,10 @@ void WeaponModeSpecialPowerUpdate::initiate()
 			}
 		}
 	}
-	else if (weapons)
+	else
 	{
-		weapons->setWeaponLock(m_data->m_lockWeaponSlot, LOCKED_PERMANENTLY); // RW 0x69121A(slot, 2)
+		// P-141 (RW 0x898432 -> 0x69121A, Both editions): propagate lock through Contain/HordeContain even when a horde container itself has no weapons
+		ObjectWeapons::setObjectWeaponLock(*obj, m_data->m_lockWeaponSlot, LOCKED_PERMANENTLY);
 	}
 	if (!m_data->m_attributeModifier.empty())
 	{
@@ -1270,9 +1270,10 @@ void WeaponModeSpecialPowerUpdate::initiate()
 UpdateSleepTime WeaponModeSpecialPowerUpdate::update()
 {
 	Object *obj = getObject();
+	// P-141 (RW 0x8983C1 -> 0x68DF11, Both editions): release lock through Contain/HordeContain even when a horde container itself has no weapons
+	ObjectWeapons::releaseObjectWeaponLock(*obj, LOCKED_PERMANENTLY);
 	if (ObjectWeapons *weapons = obj->getWeapons())
 	{
-		weapons->releaseWeaponLock(LOCKED_PERMANENTLY); // RW 0x68DF11(2)
 		for (int bit = 0; bit < 0x68; ++bit)
 		{
 			if ((m_data->m_weaponSetFlags[(size_t)bit >> 5] >> (bit & 31)) & 1u)
@@ -1994,9 +1995,10 @@ UpdateSleepTime FellBeastSwoopPower::update()
 		return (UpdateSleepTime)1;
 	}
 	AIUpdateInterface *ai = obj->getAIUpdateInterface();
-	if (ai && ai->isIdle()) // AI vslot 0x1B8 (vslot 0x1D0 not identified: S-1223)
+	// RW 0x8CB304 .. 0x8CB331: finish once the AI idles (vslot 0x1B8, RW 0x6643FC / 0x769E8F) or enters follow-through (vslot 0x1D0, RW 0x662B28 -> State::vslot 0x34 RW 0x8BD372)
+	if (ai && (ai->isIdle() || ai->isInFollowThruState()))
 	{
-		finishAbility(false, false); // vslot 0x34
+		finishAbility(false, false); // vslot 0x34 (RW 0x8CB194)
 		return UPDATE_SLEEP_FOREVER;
 	}
 	// RW 0x8CB336 .. 0x8CB3A9: SPECIAL_WEAPON_ONE (+ 0x128 bit 20) while the height above the terrain is below the bounding sphere radius (GeometryInfo + 0x14)
@@ -2010,7 +2012,7 @@ UpdateSleepTime FellBeastSwoopPower::update()
 	return (UpdateSleepTime)1;
 }
 
-// RW 0x8CB28B: the AI command 0x3F (the target object) or 0x40 (the location), source 2
+// RW 0x8CB28B: dispatches AI command 0x3F (RW 0x8CB1BA, target object) or 0x40 (RW 0x8CB21F, location), source CMD_FROM_AI (2)
 void FellBeastSwoopPower::triggerAbilityEffect()
 {
 	Object *obj = getObject();
@@ -2275,6 +2277,28 @@ TeleportSpecialAbilityUpdate::TeleportSpecialAbilityUpdate(Thing *thing, const T
 {
 }
 
+// RW 0x896608 (slot 8 of the class's special power update table RW 0xC6490C; the base's slot is RW 0x851B6E): the place must lie within
+// MaxDistance (+ 0xDC) of the object. A null place (RW 0x89660C), no data (0x896611) or no object (0x896629) and MaxDistance 0 or below
+// (0x896618 / 0x896620 against the zero RW 0xC1B594) answer the base's; otherwise |place - position|^2 (RW 0x896630 .. 0x896675 of the
+// object's + 0x38 / + 0x3C / + 0x40) above MaxDistance^2 (RW 0x896679) answers no (0x89667E). The data and the object cannot be null in the
+// port: the constructor takes the data and the object is the module's owner.
+bool TeleportSpecialAbilityUpdate::allowsSpecialPowerUse(const Coord3D *loc) const
+{
+	if (loc && 0.0f < m_tp->m_maxDistance)
+	{
+		const Coord3D *pos = getObject()->getPosition();
+		const float dz = SimMath::subf32(loc->z, pos->z);
+		const float dy = SimMath::subf32(loc->y, pos->y);
+		const float dx = SimMath::subf32(loc->x, pos->x);
+		const float d2 = SimMath::addf32(SimMath::addf32(SimMath::mulf32(dz, dz), SimMath::mulf32(dy, dy)), SimMath::mulf32(dx, dx));
+		if (SimMath::mulf32(m_tp->m_maxDistance, m_tp->m_maxDistance) < d2)
+		{
+			return false; // RW 0x89667E
+		}
+	}
+	return SpecialAbilityUpdate::allowsSpecialPowerUse(loc); // RW 0x851B6E (RW 0x896682)
+}
+
 // TheWeaponStore->createAndFireTempWeapon(weapon, object, position) (RW 0x6CC5DF + 0x6CF530)
 void TeleportSpecialAbilityUpdate::fireTempWeapon(const std::string &name, const Coord3D &at)
 {
@@ -2477,14 +2501,13 @@ std::vector<std::string> HeroAbilityModules::stopLines()
 		"than HordeContain (a defecting transport's / garrison's passengers keep their side; reported when met); (6) the selected drawable's deselection (RW "
 		"0x6993B5 .. 0x6993D0) and restoreOriginalTeam's selection refresh are the client's; (7) ActivateModuleSpecialPower's tags are resolved when used "
 		"(retail makes the keys while parsing); (8) setTeam's redirect keeps a team without a controlling player (retail reads its player without a test)",
-		"[S-1223] FellBeastSwoopPower (lane HERO-2): the module runs (RW 0x8CB2CE / 0x8CB28B / 0x8CB194); the level attack itself is GiantBirdAIUpdate's swoop "
-		"(AI commands 0x3F / 0x40, AI vslots 0x90 / 0x94: GiantBirdAIUpdate runs as the base AI, S-222): the command is counted by the AI (aiUnported) and the "
-		"ability ends when the AI idles; AI vslot 0x1D0 is not identified",
-		"[S-1227] AutoAbilityBehavior (lane HERO-2): the auto cast runs (RW 0x85D9D1 with RW 0x85D5EA / 0x85D4B5, MSG_DO_AUTO_ABILITY RW 0x77B9BA, StartsActive); "
-		"INFERENCE / not ported: the closest enemy of a module without Query (RW 0x701443 flags 0x4A read as the closest alive enemy it can see), the AI + 0x34 / "
-		"+ 0x48 fields (+ 0x34 read as 0, + 0x48 := 2 not written), the command types other than "
-		"SPECIAL_POWER / SPELL_BOOK (a FIRE_WEAPON auto button is toggled by MSG_DO_AUTO_ABILITY_WEAPON, RW 0x77B8EE, lane AUTOCAST-1, but not fired), the vision "
-		"range modifiers (RW 0x68E43B), the auto sound (client), a disabled object's auto cast exception (RW 0x68E5A3 with 0x20000000); the control bar's "
+		"[S-1223] FellBeastSwoopPower (lane HERO-2, Port 257): the module runs (RW 0x8CB2CE / 0x8CB28B / 0x8CB194); AI command 0x3F (RW 0x8CB1BA) runs "
+		"GiantBirdAIUpdate's level swoop (state 0x3F3, RW 0x76A139) and command 0x40 (RW 0x8CB21F) does nothing there (RW 0x76DA5C); other AI classes count "
+		"both (aiUnported); the ability ends when the AI idles (vslot 0x1B8) or enters AIGiantBirdFollowThruState (vslot 0x1D0, RW 0x662B28 -> State::vslot 0x34 RW 0x8BD372)",
+		"[S-1227] AutoAbilityBehavior (lane HERO-2, PORT-191): the auto cast runs (RW 0x85D9D1 with RW 0x85D5EA / 0x85D4B5, RW 0x855830 DISABLED_HELD, "
+		"RW 0x68E43B vision range, RW 0x701443 flags 0x4A without Query, AI + 0x34 / + 0x48 := 2, RW 0x68E5A3 / 0x68E67A disabled exception with 0x20000000, "
+		"MSG_DO_AUTO_ABILITY RW 0x77B9BA, StartsActive); not ported: the command types other than SPECIAL_POWER / SPELL_BOOK (a FIRE_WEAPON auto button is "
+		"toggled by MSG_DO_AUTO_ABILITY_WEAPON, RW 0x77B8EE, lane AUTOCAST-1, but not fired) and the auto sound (client, RW 0x85D930); the control bar's "
 		"right press toggle and glow are lane AUTOCAST-1's (ControlBar::rightPressButton, S-3460)",
 		"[S-1228] WeaponModeSpecialPowerUpdate and DualWeaponBehavior (lane HERO-2): the mode runs (RW 0x89841E / 0x8983B5 over the base timer RW 0x991660 / "
 		"0x991500 / 0x9913BC) and the close range switch runs (RW 0x85DF88); not ported: the firing tracker reset at the start (RW 0x8E302A, COMBAT-1's), the "
@@ -2591,6 +2614,7 @@ void CurseSpecialPower::xfer(Xfer &x)
 	x.xferUnsignedInt(&m_cursed);
 }
 
+// RW 0x008CB167
 void FellBeastSwoopPower::xfer(Xfer &x)
 {
 	SnapshotXfer::version(x, 1, 1);

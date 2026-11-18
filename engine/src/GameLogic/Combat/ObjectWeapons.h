@@ -46,6 +46,25 @@ enum WeaponChoiceCriteria
 	PREFER_TEMPLATE_DEFAULT = 5
 };
 
+// ZH AbleToAttackType (RW 0x6C8652 attackType: bit 3 = ATTACK_CONTINUED, 4 = ATTACK_TUNNEL_NETWORK_GUARD)
+enum AbleToAttackType
+{
+	ATTACK_NEW_TARGET = 0,
+	ATTACK_NEW_TARGET_FORCED = 1,
+	ATTACK_TUNNEL_NETWORK_GUARD = 4,
+	ATTACK_CONTINUED = 8,
+	ATTACK_CONTINUED_FORCED = 9
+};
+
+// ZH CanAttackResult (RW 0x68B5FA / RW 0x6C8652)
+enum CanAttackResult
+{
+	ATTACKRESULT_NOT_POSSIBLE = 0,
+	ATTACKRESULT_INVALID_SHOT = 1,
+	ATTACKRESULT_POSSIBLE_AFTER_MOVING = 2,
+	ATTACKRESULT_POSSIBLE = 3
+};
+
 // ZH WeaponLockType
 enum WeaponLockType
 {
@@ -130,6 +149,8 @@ public:
 	// TOP20 #21 r3: canAttackObject without the order's shroud gate (VIS-1, RW 0x82C167: the action helper's, not RW 0x6C9147's): the attack machine's
 	// continue test RW 0x7417E4 .. 0x741807 calls RW 0x68D6A6 -> RW 0x6C9147, which has no shroud test
 	bool canAttackObjectNoShroud(const Object &victim, CommandSourceType source, bool forced) const;
+	// PORT-208 (issue #490): RW 0x68B5FA Object::getAbleToUseWeaponAgainstTarget -> RW 0x6C8652 WeaponSet::getAbleToUseWeaponAgainstTarget
+	CanAttackResult getAbleToUseWeaponAgainstTarget(int attackType, const Object *victim, const Coord3D *pos, CommandSourceType source) const;
 
 	// ---- range ---------------------------------------------------------------------------------------------------------------------
 	// RW 0x6CC653: Weapon::isWithinAttackRange(source, victim, extra, checkMinRange) for the current weapon; the AI passes extra 0 and checkMin true
@@ -137,6 +158,9 @@ public:
 	bool isWithinAttackRange(const Coord3D &pos) const;
 	// lane GARRISON-2: RW 0x6CC653 for the weapon in `slot` (TurretAI::isAnyWeaponInRangeOf, RW 0x8DC626)
 	bool isSlotWithinAttackRange(int slot, const Object &victim, float extra = 0.0f, bool checkMin = true) const;
+	// PORT-208: RW 0x6CC622 (Weapon::isWithinAttackRange(source, pos)) and RW 0x6CBFF1 (Weapon::isSourceWithGoalPositionWithinAttackRange) for `slot`
+	bool isSlotWithinAttackRange(int slot, const Coord3D &pos) const;
+	bool isSlotSourceWithGoalWithinAttackRange(int slot, const Coord3D &goalPos, const Object *victim, const Coord3D &targetPos) const;
 	// isWithinAttackRange with the current weapon's bonus computed by the caller (currentWeaponBonus): the bonus is the attacker's alone, so a loop over many
 	// victims computes it once (performance, the same answers and the same melee reach left in the range host). False without a current weapon
 	bool currentWeaponBonus(WeaponBonus &out) const;
@@ -201,7 +225,8 @@ public:
 	// lane MODS-3: RW 0x6CF3AE (source, victim): privateFireWeapon RW 0x6CEF6D at the victim with argument 6 (ignore the ranges) = 1 and argument 7 (a projectile
 	// detonation, RW 0x6CB7BD: the nuggets delivered at the victim at once) = 1; no lock, no tracker (Edain Unchained's FireAtAttacker shot)
 	void fireExtraWeaponDetonationAt(Weapon &w, Object &victim);
-	// lane HERO-1: RW 0x691014 Object::hasWeaponSetFor(bit): the template has a weapon set naming the condition (RW 0x73F6B9; INFERENCE: any set with the bit)
+	// Both editions: RW 0x691014 (DONOR BFME2 0x0029091E ObjectRva0029091E.cpp) builds a single-bit WeaponSetFlags and calls
+	// ThingTemplate::findWeaponTemplateSet (RW 0x73F6B9 -> 0x73EE52 -> 0x73D89F), returning true whenever any template weapon set exists
 	bool hasWeaponSetFor(int bit) const;
 	// the status of the current weapon (RW 0x6CD142), WEAPON_OUT_OF_AMMO when there is none
 	int currentStatus() const;

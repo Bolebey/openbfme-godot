@@ -33,6 +33,7 @@
 #include "GameLogic/Combat/CombatNames.h"
 #include "GameLogic/Combat/CombatQueries.h"
 #include "GameLogic/GameLogic.h"
+#include "GameLogic/Economy.h"
 #include "GameLogic/AI/AIGroup.h"
 #include "GameLogic/Module/AIUpdate.h"
 #include "GameLogic/ScriptEngine/ScriptEngine.h"
@@ -593,20 +594,25 @@ void SpecialPowerModule::onScienceAcquired()
 	// RW 0x896BD9 ..: a PublicTimer power of a STRUCTURE adds the in-game UI timer (client)
 }
 
-// RW 0x8969E5 (GameLogic + 0x114 == 3, S-525: the MP / skirmish filter in a skirmish or multiplayer game, no filter otherwise)
+// RW 0x8969E5 (DONOR BFME2 0x00493251, SpecialPowerModuleRva0049466D.cpp): GameLogic + 0x114 != 3 (RW 0x8969EE .. 0x8969FE) selects
+// RequirementsFilterStrategic (+0x3C); GameLogic + 0x114 == 3 tests RW 0x625456 (RW 0x896A00 .. 0x896A07 -> true when not skirmish / multiplayer)
+// and selects RequirementsFilterMPSkirmish (+0x38, RW 0x896A09). RW 0x896A0E -> RW 0x762977 passes an unset filter (constructor RW 0x896834:
+// RW 0x89695E / 0x896982 -> RW 0x763D11) or one whose +0x88 flag is 0 (NONE); otherwise RW 0x896A17 .. 0x896A2D asks RW 0x68B678
+// (Object::getControllingPlayer) -> RW 0x6ABD0B (Player::hasObjectMatching(filter, true)).
 bool SpecialPowerModule::requirementsMet() const
 {
+	const bool kind3 = getObject()->logic().economy().context().gameKind == 3;
 	Player *p = getObject()->getControllingPlayer();
-	if (!p || !p->science().mode().skirmishOrMultiplayer)
+	if (kind3 && (!p || !p->science().mode().skirmishOrMultiplayer))
 	{
 		return true;
 	}
-	const std::shared_ptr<const ObjectFilter> &f = m_spData->m_requirementsFilterMPSkirmish;
-	if (!f)
+	const std::shared_ptr<const ObjectFilter> &f = kind3 ? m_spData->m_requirementsFilterMPSkirmish : m_spData->m_requirementsFilterStrategic;
+	if (!f || !f->flag)
 	{
-		return true; // RW 0x896A0E: an unset filter (S-523 for its default)
+		return true;
 	}
-	return p->hasObjectMatching(*f, true); // RW 0x6ABD0B
+	return !p || p->hasObjectMatching(*f, true);
 }
 
 // RW 0x897E87 / 0x897987 (the ported part)
@@ -730,9 +736,11 @@ void SpecialPowerModule::triggerSpecialPower(const Coord3D *loc, const Object *)
 		}
 	}
 	Player *player = obj->getControllingPlayer();
-	if (player && t && t->m_lightPointCost != 0)
+	if (player && t)
 	{
-		++m_unported; // RW 0x6AA91D: Player + 0x33C -= LightPointCost (the light point system is not ported, S-531)
+		// PORT-113 (issue #280), RW 0x897A41 .. 0x897A5E: the owner pays the LightPointCost of the template's final override (RW 0x6AA91D: the points drop,
+		// never below 0). Unlike SpecialAbilityUpdate's trigger (RW 0x853FA5) this one does not test TheLightPointSystem.
+		player->spendLightPoints(t->getFinalOverride()->m_lightPointCost);
 	}
 	// lane HERO-1: SetModelCondition (`ModelConditionState:<name>`, RW 0x869F22: unknown -1) with SetModelConditionTime > 0: the special model condition for
 	// _ftol(LOGICFRAMES_PER_SECOND * time) frames (fild [0xD9F608]; fmul; RW 0x68B581), and with DisableDuringAnimDuration DISABLED_HELD until then (RW 0x6907F1(3))
@@ -1155,6 +1163,25 @@ OCLSpecialPower::OCLSpecialPower(Thing *thing, const OCLSpecialPowerModuleData *
 }
 
 // RW 0x8C7393: the first UpgradeOCL whose science the player owns, else OCL
+// issue #464: RW 0x8C74C4 (the interface's slot 0x5C) asks the object creation list RW 0x8C7393 picks for the name its slot 0 returns. INFERENCE: that
+// slot 0 body was not read; the port's list keeps its nuggets as data, so the name is the first CreateObject nugget's first ObjectNames entry.
+std::string OCLSpecialPower::firstCreatedTemplateName() const
+{
+	const ObjectCreationList *ocl = pickOCL(); // RW 0x8C7393
+	if (!ocl)
+	{
+		return std::string();
+	}
+	for (const OCLNugget &n : ocl->nuggets())
+	{
+		if (n.kind == OCLNugget::CREATE_OBJECT && !n.objectNames.empty())
+		{
+			return n.objectNames.front();
+		}
+	}
+	return std::string();
+}
+
 const ObjectCreationList *OCLSpecialPower::pickOCL() const
 {
 	Player *p = getObject()->getControllingPlayer();
@@ -1174,18 +1201,68 @@ const ObjectCreationList *OCLSpecialPower::pickOCL() const
 	return TheObjectCreationListStore ? TheObjectCreationListStore->findObjectCreationList(oclName) : nullptr;
 }
 
-void OCLSpecialPower::createOCL(const ObjectCreationList *ocl, const Coord3D &where, bool hasSecondary)
+// PORT-249: RW 0x5F08C2, the generic nugget's vtable (RW 0xBF72F8) slot 5, which RW 0x5EFB95 asks of every nugget of the list with the (object, location)
+// pair; the answer folds an AND over the list, so one refusal refuses the cast. The placement part (RW 0x5F091B .. 0x5F0B6B) is not ported (S-7426):
+// counted, and the nugget answers yes.
+bool OCLSpecialPower::nuggetAllowsCreate(Object &obj, const OCLNugget &nugget)
+{
+	if (nugget.count != 1)
+	{
+		return true; // RW 0x5F08D5: a Count other than 1 answers yes
+	}
+	if (nugget.spreadFormation)
+	{
+		return true; // RW 0x5F08DB: the byte at + 0xAB (SpreadFormation) set answers yes
+	}
+	if (nugget.objectNames.empty())
+	{
+		return false; // RW 0x5F08EB: the names vector is empty (its byte size is below 4) answers no
+	}
+	if (!obj.logic().things().findTemplate(nugget.objectNames.front()))
+	{
+		return false; // RW 0x5F08FF .. 0x5F0916: the first name is not a template answers no
+	}
+	// RW 0x5F091B: with the template's KindOf + 0x115 bit 0 set, a placement walk (the build assistant's RW 0x798F70 and the partition's RW 0x72D72F);
+	// without it, the + 0x108 bit 7 / bit 10 branches: the formation path or one object placed at the location + Offset through RW 0xDE8200's vslot 0x44
+	++m_unportedPlacementTests;
+	obj.logic().noteStop("[S-7426] OCLSpecialPower's nugget test (RW 0x5F08C2): the placement branch (RW 0x5F091B .. 0x5F0B6B: the build assistant's "
+						 "placement and the formation walk) is not ported: the nugget answers yes");
+	return true;
+}
+
+// PORT-249: RW 0x8C744B, OCLSpecialPower's answer for the interface slot 0x48 (asked before the base RW 0x897E01). Linearly: RW 0x8C7457 asks the
+// object's disabled mask (Object + 0x1C8, RW 0x9325B4: any of its one word's bits) and answers no when a bit is set (RW 0x8C7460); then, with a list
+// (RW 0x8C7393), a location and an object (RW 0x8C746D .. 0x8C747E), RW 0x8C72C3 forwards the pair to the list's nuggets (RW 0x5EFB95): one that answers
+// no answers no (RW 0x8C748D). The base's own tests follow at RW 0x8C7492.
+bool OCLSpecialPower::locationRequirementsMet(Object &obj, const Coord3D &loc)
+{
+	if (obj.getDisabledMask() != 0)
+	{
+		return false; // RW 0x9325B4 (called at RW 0x8C7457): any bit of the disabled mask
+	}
+	const ObjectCreationList *ocl = pickOCL(); // RW 0x8C7393
+	if (ocl)
+	{
+		for (const OCLNugget &nugget : ocl->nuggets())
+		{
+			if (!nuggetAllowsCreate(obj, nugget))
+			{
+				return false; // RW 0x8C72C3 -> RW 0x5EFB95
+			}
+		}
+	}
+	(void)loc; // RW 0x5EFB95 hands the location to the nugget test; the ported part of RW 0x5F08C2 reads only the nugget and the template
+	return true;
+}
+
+void OCLSpecialPower::createOCL(const ObjectCreationList *ocl, const Coord3D &where, const Coord3D *secondary)
 {
 	if (!ocl)
 	{
 		return; // RW 0x8C7690: no list, nothing made
 	}
-	if (hasSecondary)
-	{
-		++m_unported; // the OCL's secondary position (RW 0x5F00CA's third argument) is not handed to the CreateObject port (S-530)
-	}
 	Object *obj = getObject();
-	for (Object *o : ocl->create(obj->logic(), obj, where))
+	for (Object *o : ocl->create(obj->logic(), obj, where, secondary))
 	{
 		m_created.push_back(o->getID());
 	}
@@ -1197,7 +1274,7 @@ void OCLSpecialPower::doSpecialPower(unsigned options)
 	m_created.clear();
 	const Coord3D pos = *getObject()->getPosition();
 	baseDo(&pos, nullptr, options);
-	createOCL(pickOCL(), pos, false);
+	createOCL(pickOCL(), pos);
 }
 
 // RW 0x8C73D7: doSpecialPowerAtLocation at the target's position (vslot 0x30)
@@ -1220,23 +1297,23 @@ void OCLSpecialPower::doSpecialPowerAtLocation(const Coord3D &loc, unsigned opti
 	switch (m_data->m_createLocation)
 	{
 	case 3: // CREATE_AT_LOCATION
-		createOCL(ocl, loc, false);
+		createOCL(ocl, loc);
 		break;
 	case 4: // USE_OWNER_OBJECT (RW 0x8C7660: RW 0x5F006B with the object, the location twice)
-		createOCL(ocl, loc, true);
+		createOCL(ocl, loc, &loc);
 		break;
 	case 5: // CREATE_ABOVE_LOCATION: z + 300.0f (RW 0xBD9E90; an SSE single add)
 	{
 		Coord3D p = loc;
 		p.z = SimMath::addf32(p.z, 300.0f);
-		createOCL(ocl, p, false);
+		createOCL(ocl, p);
 		break;
 	}
 	case 8: // USE_SECONDARY_OBJECT_LOCATION (RW 0x8C78A4)
 	{
 		if (!m_data->m_nearestSecondaryObjectFilter)
 		{
-			createOCL(ocl, loc, false); // RW 0x8C78B6: no valid filter: at the location
+			createOCL(ocl, loc); // RW 0x8C78B6: no valid filter: at the location
 			break;
 		}
 		// RW 0x8C7988 .. 0x8C79BB: ThePartitionManager's closest object to the location (range FLT_MAX, RW 0xBD1910; distance type 0) that the filter allows
@@ -1244,7 +1321,7 @@ void OCLSpecialPower::doSpecialPowerAtLocation(const Coord3D &loc, unsigned opti
 		Player *p = obj->getControllingPlayer();
 		PartitionFilterFn allowed([&](Object &o) { return ObjectFilterMatch::allows(obj->logic(), *m_data->m_nearestSecondaryObjectFilter, o, p); });
 		Object *best = obj->logic().partition().getClosestObject(loc, std::numeric_limits<float>::max(), FROM_CENTER_2D, { &allowed });
-		createOCL(ocl, loc, best != nullptr); // RW 0x8C76A0: at the location, the found object's position as the secondary
+		createOCL(ocl, loc, best ? best->getPosition() : nullptr); // RW 0x8C76A0: at the location, the found object's position as the secondary
 		m_secondaryUsed = best ? best->getID() : (ObjectID)INVALID_ID;
 		break;
 	}
@@ -1515,6 +1592,11 @@ bool SpecialPowerModules::canUseSpecialPower(const Object &obj, const SpecialPow
 			return false;
 		}
 	}
+	// PORT-113 (issue #280), RW 0x7B1DFD .. 0x7B1E0E: the owner's light point test (RW 0x6AA8FB) between the sciences and the statuses
+	if (p && !p->hasLightPointsForSpecialPower(t))
+	{
+		return false;
+	}
 	for (unsigned w = 0; w < 4; ++w) // RW 0x75CDC4: any PreventActivationConditions status on the object
 	{
 		for (unsigned b = 0; b < 32; ++b)
@@ -1530,9 +1612,30 @@ bool SpecialPowerModules::canUseSpecialPower(const Object &obj, const SpecialPow
 
 namespace
 {
-SpecialPowerModuleInterface *usable(Object &obj, const SpecialPowerTemplate *t, bool force)
+// RW 0x68E5AC .. 0x68E5FB / 0x68E683 .. 0x68E6D2: when options has AUTO_ABILITY_TRIGGERED (0x20000000), a disabled object may cast through
+// doSpecialPower / doSpecialPowerAtObject iff its AutoAbilityBehavior's getDisabledTypesToProcess (RW 0x855830: DISABLED_HELD) intersects its disabled mask
+// (RW 0x6252E4); doSpecialPowerAtLocation (RW 0x68E754 / 0x68E760) has no 0x20000000 exception.
+bool disabledBlocksSpecialPower(Object &obj, unsigned options, bool allowAutoAbilityDisabled)
 {
-	if (obj.getDisabledMask() != 0) // RW 0x68E760
+	if (obj.getDisabledMask() == 0)
+	{
+		return false;
+	}
+	if (!allowAutoAbilityDisabled || (options & 0x20000000u) == 0)
+	{
+		return true;
+	}
+	const UpdateModule *aa = dynamic_cast<const UpdateModule *>(obj.findModule("AutoAbilityBehavior"));
+	if (!aa)
+	{
+		return true;
+	}
+	return (aa->getDisabledTypesToProcess() & obj.getDisabledMask()) == 0;
+}
+
+SpecialPowerModuleInterface *usable(Object &obj, const SpecialPowerTemplate *t, unsigned options, bool force, bool allowAutoAbilityDisabled)
+{
+	if (disabledBlocksSpecialPower(obj, options, allowAutoAbilityDisabled))
 	{
 		return nullptr;
 	}
@@ -1546,7 +1649,7 @@ SpecialPowerModuleInterface *usable(Object &obj, const SpecialPowerTemplate *t, 
 
 bool SpecialPowerModules::doSpecialPowerAtLocation(Object &obj, const SpecialPowerTemplate *t, const Coord3D &loc, unsigned options, bool force)
 {
-	SpecialPowerModuleInterface *m = usable(obj, t, force);
+	SpecialPowerModuleInterface *m = usable(obj, t, options, force, false); // RW 0x68E754 / 0x68E760
 	if (!m)
 	{
 		return false;
@@ -1557,7 +1660,7 @@ bool SpecialPowerModules::doSpecialPowerAtLocation(Object &obj, const SpecialPow
 
 bool SpecialPowerModules::doSpecialPowerAtObject(Object &obj, const SpecialPowerTemplate *t, Object *target, unsigned options, bool force)
 {
-	SpecialPowerModuleInterface *m = usable(obj, t, force);
+	SpecialPowerModuleInterface *m = usable(obj, t, options, force, true); // RW 0x68E67A
 	if (!m)
 	{
 		return false;
@@ -1568,7 +1671,7 @@ bool SpecialPowerModules::doSpecialPowerAtObject(Object &obj, const SpecialPower
 
 bool SpecialPowerModules::doSpecialPower(Object &obj, const SpecialPowerTemplate *t, unsigned options, bool force)
 {
-	SpecialPowerModuleInterface *m = usable(obj, t, force);
+	SpecialPowerModuleInterface *m = usable(obj, t, options, force, true); // RW 0x68E5A3
 	if (!m)
 	{
 		return false;

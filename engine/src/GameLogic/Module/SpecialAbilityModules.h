@@ -208,9 +208,11 @@ public:
 	virtual bool drivesSpecialPower(const SpecialPowerTemplate *t) const = 0;
 	virtual void initiateIntentToDoSpecialPower(const SpecialPowerTemplate *t, Object *target, const Coord3D *loc, unsigned options, int extra) = 0;
 	virtual bool isActive() const = 0;
-	// slot 0x20 (lane AIPOW-1, asked by the module's location requirements RW 0x897E01): may the power be used now (the location is not read by
-	// SpecialAbilityUpdate's RW 0x851B6E)
-	virtual bool allowsSpecialPowerUse() const = 0;
+	// slot 0x20 (lane AIPOW-1, asked by the module's location requirements RW 0x897E01 with the place: RW 0x897E82 pushes it): may the power be
+	// used now at that place. SpecialAbilityUpdate's RW 0x851B6E does not read it (it hands it to RW 0x851551, which ignores it);
+	// TeleportSpecialAbilityUpdate's RW 0x896608 cuts its MaxDistance with it. A null place is what the object form RW 0x82DAAB hands over and
+	// the branch RW 0x89660C falls back to the base with.
+	virtual bool allowsSpecialPowerUse(const Coord3D *loc = nullptr) const = 0;
 };
 
 class SpecialAbilityUpdate : public UpdateModule, public SpecialPowerUpdateInterface
@@ -225,13 +227,13 @@ public:
 	// RW 0x852E8F
 	void initiateIntentToDoSpecialPower(const SpecialPowerTemplate *t, Object *target, const Coord3D *loc, unsigned options, int extra) override;
 	bool isActive() const override { return m_active; }
-	// lane BACKLOG4 (S-1222): the special power update interface's slot 0x18 (RW 0x851C92) asked without a command button, as Object RW 0x693919 asks it:
-	// false with the packing state (+ 0x30) 0; else true for the template types 0x1A and 0x1D, else the within-range flag (+ 0x80). The command button
-	// branches (RW 0x851C9E .. 0x851CE1) are not this caller's
+	// lane BACKLOG4 (S-1222) / PORT-188: the special power update interface's slot 0x18 (RW 0x851C92) asked without a command button, as Object RW 0x693919
+	// and SpecialAbilityUpdate::initiateIntentToDoSpecialPower RW 0x85307F ask it: false with the packing state (+ 0x30) 0; else true for the template types
+	// 0x1A and 0x1D, else the within-range flag (+ 0x80). The command button branches (RW 0x851C9E .. 0x851CE1) are not these callers'
 	bool isPowerCurrentlyInUse() const;
 	// RW 0x851B6E: the RequiredConditions / RejectedConditions (RW 0x851551); a power of the garrison types 0x27 / 0x28 also needs room in the object's
-	// contain (contain slots 0x114 / 0x70)
-	bool allowsSpecialPowerUse() const override;
+	// contain (contain slots 0x114 / 0x70). The place argument is passed on to RW 0x851551, which does not read it: only subclasses cut with it.
+	bool allowsSpecialPowerUse(const Coord3D *loc = nullptr) const override;
 	void crc(StateHasher &h) const override;
 
 	const SpecialAbilityUpdateModuleData *abilityData() const { return m_data; }
@@ -249,6 +251,8 @@ public:
 	std::uint32_t activeLoopKey() const { return m_activeLoopKey; }
 	bool activeLoopHeld() const { return m_activeLoopHeld; }
 	bool withinAbortRangeForTest() const { return withinAbortRange(); }
+	// test hook (upstream lane APPROACH-859): the fork's approach point RW 0x851607 (abilityApproachPoint) for this object and its AI
+	bool approachPointForTest(Coord3D &pos, float range);
 
 	// RW 0x8530BA (slot 0x34): the ability ends (aborted: the abort paralysis; ownerDying: the special objects die with the owner)
 	virtual void finishAbility(bool ownerDying, bool aborted);
@@ -331,7 +335,8 @@ public:
 	~WeaponFireSpecialAbilityUpdate() override;
 	void finishAbility(bool ownerDying, bool aborted) override; // RW 0x896033
 	unsigned shotsFired() const { return m_shots; }
-	Weapon *ownedWeapon() { return specialWeapon(); } // the special weapon (made on first use), for tests
+	Weapon *ownedWeapon() { return m_weapon.get(); } // RW +0x88: made and loaded in the constructor (RW 0x895DE1 .. 0x895E22)
+	const Weapon *ownedWeapon() const { return m_weapon.get(); }
 	void crc(StateHasher &h) const override;
 
 protected:
@@ -341,11 +346,9 @@ protected:
 
 private:
 	int specialWeaponCondition() const;
-	Weapon *specialWeapon();
 	ObjectWeapons *weaponHost(); // the object's ObjectWeapons, else m_ownHost
 	const WeaponFireSpecialAbilityUpdateModuleData *m_wf;
 	std::unique_ptr<Weapon> m_weapon; // + 0x88
-	bool m_weaponMade = false;
 	unsigned m_shots = 0;
 	// lane WALL-1: the weapon host of an object without a weapon set (the deployed mine's Detonate): retail's Object embeds its WeaponSet and the special
 	// weapon's status and fire (RW 0x6CDCE7, RW 0x6CF3D2) are the Weapon's own, so the shot needs no set; the port's shot needs an ObjectWeapons host, made
@@ -361,9 +364,9 @@ public:
 	CreateModuleInterface *getCreate() override { return this; }
 	void onCreate() override {}
 	void onBuildComplete() override; // RW 0x8B11FE (create interface slot 1): TriggerInstantlyOnCreate triggers at once
+	bool handlePackingProcessing() override; // RW 0x8B1142 (vtable 0xC6BDA0 slot 0x50): the drawable fade, no new simulation state
 	// RW 0x8B1FDA (slot 0 of the special power update interface RW 0xC6BCB8, shared with SummonReplacement; lane SUMMON-1)
 	void initiateIntentToDoSpecialPower(const SpecialPowerTemplate *t, Object *target, const Coord3D *loc, unsigned options, int extra) override;
-	bool handlePackingProcessing() override; // RW 0x8B1142 (vtable 0xC6BDA0 slot 0x50): drawable fade, no new simulation state
 	void finishAbility(bool ownerDying, bool aborted) override; // RW 0x8B1219
 	unsigned toggles() const { return m_toggles; }
 	ObjectID replacement() const { return m_replacement; }
@@ -404,6 +407,12 @@ public:
 	LevelGrantSpecialPower(Thing *thing, const LevelGrantSpecialPowerModuleData *data);
 	unsigned granted() const { return m_granted; }
 	void crc(StateHasher &h) const override;
+	// lane PORT-222: the per-object grant of RW 0x8C6E82 on one object, as the partition walk of RW 0x8C6FA4 hands it over, and the whole
+	// trigger of RW 0x8C6FA4 (the ordinary trigger plus the walk), which the ability's own update calls once its preparation ends
+	void grantForTest(Object &o) { grant(o); }
+	void triggerForTest() { triggerAbilityEffect(); }
+	// the walk reads the module's target position (+ 0x44, RW 0x8C6FF8); a test names the ground point of the cast
+	void triggerAtForTest(const Coord3D &pos) { m_targetPos = pos; triggerAbilityEffect(); }
 
 protected:
 	void triggerAbilityEffect() override; // RW 0x8C6FA4

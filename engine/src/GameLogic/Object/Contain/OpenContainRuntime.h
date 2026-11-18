@@ -19,8 +19,8 @@
 //   * the exit interface (module + 0x30, RW 0xC59ABC): isExitBusy RW 0x9188EB (never), reserveDoorForExit RW 0x88B20C (DOOR_1), exitObjectViaDoor RW 0x8682D9.
 // The derived classes' hooks (virtual, RW slot in the comment): onContaining (contain 0x58), onRemoving (0x5C), redeployOccupants (main 0x48), the apparent
 // controller (main 0x50 / 0x54), isEnclosingContainerFor (the ENCLOSED status of the data), addToContainList (contain 0xA0), removeAllContained (0xA8).
-// NOT PORTED (stop S-1100): the enter / exit sounds and the door model conditions of RW 0x865F9A / 0x8680F4 (client side), ModifierToGiveOnExit, the radar,
-// DamagePercentToUnits' passenger damage (contain slot 0x148), the exposed stealth units' detection (RW 0x865EE7). Determinism: the list keeps insertion order.
+// NOT PORTED (stop S-1100): the object SoundEnter / SoundExit and the door model conditions of RW 0x865F9A / 0x8680F4 (client side), ModifierToGiveOnExit, the radar,
+// DamagePercentToUnits' passenger damage (contain slot 0x148). Determinism: the list keeps insertion order.
 
 #pragma once
 
@@ -50,11 +50,17 @@ public:
 	DieModuleInterface *getDie() override { return this; }
 	CollideModuleInterface *getCollide() override { return this; }
 	void onDelete() override; // main slot 0x20 RW 0x86708F
-	// ---- CollideModuleInterface (RW 0xC5D650, module + 0x24, slot +0x04 getCollide RW 0x64F3EA) ----
-	void onCollide(Object *other, const Coord3D *loc, const Coord3D *normal) override; // RW 0x8659D8
+	// ---- CollideModuleInterface (the subobject at module + 0x24, vtable RW 0xC5D650, getCollide RW 0x64F3EA) ----
+	// lane PORT-9, RW 0x8659D8: an object that touches this container while its AI is entering it (AI vslot 0x1FC) is picked up when CollidePickup is set,
+	// after the enemy STEALTH_GARRISON occupants it collides with are revealed (RW 0x867C40). Retail installs this slot in OpenContain (RW 0x867FC1),
+	// TransportContain (RW 0x86B6CF), HordeTransportContain (RW 0x87A2CF), SiegeEngineContain (RW 0x87F525), HordeSiegeEngineContain (RW 0x88051C),
+	// GarrisonContain (RW 0x87B1FA), HordeGarrisonContain (RW 0x87D30F) and TunnelContain (RW 0x880EBB); every class that derives from this one inherits it
+	// here, and HordeContain - not an OpenContain in this port - keeps the empty RW 0x46E918 slot it installs at RW 0x872800
+	void onCollide(Object *other, const Coord3D *loc, const Coord3D *normal) override;
 	bool wouldLikeToCollideWith(const Object &other) const override { (void)other; return false; } // RW 0x7FEAC1
-	// RW 0x867C40 (module vslot 0x4C, INFERENCE on C++ name): the entering units collision reveals and evacuates enemy STEALTH_GARRISON riders
-	bool tryToEvacuate(Object *entering); // RW keeps it in module vslot 0x4C; no RotWK contain class replaces it, so it is not virtual here
+	// RW 0x867C40, module vslot 0x4C (the C++ name is INFERENCE): the STEALTH_GARRISON occupants an entering object collides with are revealed and ordered out.
+	// No RotWK contain class replaces the slot, so it is not virtual here
+	bool tryToEvacuate(Object *entering);
 	Object *passengerToHit(const Coord3D &pos) const override; // slot 0xF4 RW 0x8663B6 (TOP20 S-321)
 	// RW 0x990D14: the member nearest to `pos` (2D, strictly nearer than FLT_MAX) of the hordes in `contained` whose drawable is not hidden (RW 0x67055A)
 	static Object *nearestShownHordeMember(const ContainedItemsList &contained, const Coord3D &pos);
@@ -64,8 +70,10 @@ public:
 	// ---- ContainModuleInterface ----
 	const ContainedItemsList *getContainedItemsList() const override { return &m_contained; }
 	unsigned getContainCount() const override { return (unsigned)m_contained.size(); }
+	unsigned countContainedMatching(const ObjectFilter &filter) const override; // RW 0x865CE3 (slot 0x114 with a filter)
+	Object *takeContainedMatching(const ObjectFilter &filter) override; // RW 0x866367 (slot 0x13C: the projectile of a container-ammo weapon)
 	bool addToContain(Object *obj) override;    // RW 0x8674C2
-	void removeFromContain(Object *obj) override; // RW 0x8665BE
+	void removeFromContain(Object *obj, bool exposeStealthUnits = false) override; // RW 0x8665BE
 	bool isValidContainerFor(const Object &obj, bool checkCapacity, bool checkPath) const override; // RW 0x86603B
 	std::uint32_t getPlayerWhoEntered() const override { return m_playerEnteredMask; } // RW 0x5F2DC6, slot 0x144 (lane SCRIPT-4)
 	const ObjectStatusMaskType *getObjectStatusOfContained() const override;
@@ -85,6 +93,7 @@ public:
 	bool isExitBusy() const override { return false; }                                 // RW 0x9188EB
 	int reserveDoorForExit(const Object &obj) override { (void)obj; return 0; }        // RW 0x88B20C
 	void exitObjectViaDoor(Object *obj, int door) override;                            // RW 0x8682D9
+	void exitObjectInAHurry(Object *obj) override;                                     // RW 0x868759
 	// contain slots 0x158 / 0x15C / 0x160 (RW 0x8657D1 / 0x8657B6 / 0x867ACD): where an entering unit walks to and where a rider leaves: the container's position;
 	// a SHIP enters at the pathfinder's shore spot of its position when there is one (RW 0x6EFBB8 from slot 0x158; slot 0x15C asks slot 0x158; lane SHIP-1)
 	bool getEntryPosition(Coord3D &out) const override;
@@ -103,6 +112,15 @@ public:
 	void onDie(const DieModuleInterface::Event &event) override;
 
 	const OpenContainModuleData &openData() const { return *m_open; }
+	struct SoundState
+	{
+		unsigned lastUnloadFrame = 0; // RW 0x86804E: module +0x7C
+		unsigned lastLoadFrame = 0;   // RW 0x868051: module +0x80
+		bool loadEnabled = true;     // RW 0x868098: module +0xDD
+	};
+	// RW 0x8658A3 / 0x865932: common module-data sound paths, independent per container.
+	static void playContainSound(Object &container, const OpenContainModuleData &data, SoundState &state, bool entering);
+	void enableLoadSounds(bool enabled) override { m_soundState.loadEnabled = enabled; } // RW 0x867AA5
 	// RW module + 0xDE (interface + 0xBE): the data's Enabled, read by the control bar's transport inventory (RW 0x94251F, lane UI-1)
 	bool isEnabled() const { return m_enabled; }
 	// contain slot 0x150 getContainerPipCounts (RW 0x866411)
@@ -136,7 +154,7 @@ public:
 	bool isEnclosingContainerFor(const Object &obj) const;
 	bool ridersFireFromContainer() const;
 	// slot 0xA8 RW 0x866675: every rider through RW 0x865EB6 until the list is empty (the derived classes add their own parts)
-	virtual void removeAllContained();
+	virtual void removeAllContained(bool exposeStealthUnits = false);
 	// RW 0x865D3D OpenContain::addOrRemoveObjFromWorld: a rider of an ENCLOSED container leaves the world and its drawable hides; back in, it is teleported to
 	// the container (RW 0x696E63) and shown; the rider's own riders follow when this contain encloses them
 	void addOrRemoveObjFromWorld(Object *obj, bool add);
@@ -164,8 +182,8 @@ public:
 
 protected:
 	// ---- the hooks of the derived classes ----
-	virtual void onContaining(Object *obj, bool wasSelected); // contain slot 0x58 (OpenContain RW 0x865F9A: the EnterSound, client side)
-	virtual void onRemoving(Object *obj);                     // contain slot 0x5C (OpenContain RW 0x8680F4: the ExitSound, ModifierToGiveOnExit, client / S-1100)
+	virtual void onContaining(Object *obj, bool wasSelected); // contain slot 0x58 (OpenContain RW 0x865F9A: object SoundEnter, client side)
+	virtual void onRemoving(Object *obj);                     // contain slot 0x5C (OpenContain RW 0x8680F4: object SoundExit, ModifierToGiveOnExit, client / S-1100)
 	virtual void redeployOccupants();                         // main slot 0x48 (OpenContain RW 0x8671F5: the riders on their bones, RW 0x868A70)
 	virtual bool forceOrientationContainer() const { return true; } // main slot 0x38 (OpenContain RW 0x9B501B; TransportContain RW 0x869F97: the data's)
 	// contain slot 0x6C: a rider was placed (RW 0x868A70), `hidden` its drawable's state (OpenContain RW 0x8851E4: nothing)
@@ -181,7 +199,7 @@ protected:
 	// RW 0x68C5AF Object::getSingleLogicalBonePosition through the launch bone provider, then RW 0x70BCE7 (the object's transform); false without a provider or
 	// without exactly one such bone
 	static bool boneWorldPosition(Object &obj, const std::string &bone, Coord3D &out);
-	virtual void recalcApparentControllingPlayer() {}         // main slots 0x50 / 0x54 / 0x58 (the apparent controller is the owner, S-1100)
+	virtual void recalcApparentControllingPlayer() {}         // main slot 0x50 (the apparent controller is the owner, S-1100)
 	virtual void addToContainList(Object *obj);               // contain slot 0xA0 (RW 0x866987)
 	virtual void removeFromContainList(Object *obj);          // main slot 0x34 (RW 0x865E78: the list erase)
 public:
@@ -191,16 +209,18 @@ public:
 protected:
 	// contain slot 0xB0(obj) (OpenContain RW 0x865C15: the data's ObjectStatusOfContained; SiegeEngineContain RW 0x87ED55: a crew member's ObjectStatusOfCrew)
 	virtual const ObjectStatusMaskType &statusMaskFor(const Object *obj) const;
-	// RW 0x8674C2's body (main slot 0x74 of the horde contains calls it directly)
-	void openContainAdd(Object *obj);
+	// RW 0x8674C2's body (main slot 0x74 of the horde contains calls it directly). False when the rider is not inside afterwards: it was in a container
+	// already, or onContaining killed the rider or the container (see the body)
+	bool openContainAdd(Object *obj);
 	// RW 0x8665BE -> 0x865EB6
-	void openContainRemove(Object *obj);
+	void openContainRemove(Object *obj, bool exposeStealthUnits = false);
 	void objectOnContainedBy(Object *rider); // RW 0x6901AE
 	void objectOnRemovedFrom(Object *rider); // RW 0x69024C
 	void processDamageToRider(Object *rider); // RW 0x866B69
 	const DieMuxData &dieMux() const { return *m_dieMux; }
 	OpenStats &openStatsMutable() { return m_openStats; }
 
+	SoundState m_soundState;
 	const OpenContainModuleData *m_open;
 	const DieMuxData *m_dieMux;
 	ContainedItemsList m_contained;           // RW interface + 0x34 (insertion order)

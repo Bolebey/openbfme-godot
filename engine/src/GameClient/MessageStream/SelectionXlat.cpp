@@ -479,6 +479,13 @@ MessageDisposition SelectionTranslator::translate(const ClientMessage &msg)
 			{
 				// the mouseover hint for the command translator and the cursor
 				Object *under = HudObjects::pickForHover(m_ctx, pixel); // RW 0x83CC13
+				// RW 0x81E691..0x81E6BF (both editions): a masked object loses cursor hover unless SHRUBBERY, FORCEATTACKABLE, ROCK, or ROCK_VENDOR.
+				if (under && under->isMasked()
+					&& !under->isKindOfName("SHRUBBERY") && !under->isKindOfName("FORCEATTACKABLE")
+					&& !under->isKindOfName("ROCK") && !under->isKindOfName("ROCK_VENDOR"))
+				{
+					under = nullptr;
+				}
 				if (under && (!HudObjects::isEffectivelyDead(*under) || under->isKindOfName("ALWAYS_SELECTABLE")))
 				{
 					m_ctx.ui.setMouseover(under->getID());
@@ -504,8 +511,14 @@ MessageDisposition SelectionTranslator::translate(const ClientMessage &msg)
 				}
 				else
 				{
+					// P-15: RW 0x69FCFC .. 0x69FD73 (without a selection, InGameUI vslot 0x118 == 0): the drawable under the pointer that can be selected
+					// (RW 0x83BCB1) AND is locally controlled (RW 0x68B749) gives Select (13), anything else Arrow (2); the port gave Select over any
+					// selectable object, an enemy's too. With a selection RotWK's command hint sets the cursor (RW 0x69FD0C -> 0x69FD7E), Select over an own
+					// selectable object included (RW 0x6A3F8E); the port's command hint has no Select path, so this one keeps giving it for every
+					// selection and the command hint replaces it over enemies and allies (attack, move)
 					m_ctx.ui.setCursor(MouseCursorName::Arrow);
-					if (under && m_ctx.ui.getGUICommand() == nullptr && HudObjects::canSelect(m_ctx, *under, false) && !under->isKindOfName("SHRUBBERY"))
+					if (under && m_ctx.ui.getGUICommand() == nullptr && HudObjects::canSelect(m_ctx, *under, false) && !under->isKindOfName("SHRUBBERY")
+						&& HudObjects::isLocallyControlled(m_ctx, *under))
 					{
 						m_ctx.ui.setCursor(MouseCursorName::Select);
 					}

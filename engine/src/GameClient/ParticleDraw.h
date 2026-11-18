@@ -193,6 +193,25 @@ struct BatchOrder
 };
 BatchOrder OrderForBatch(size_t rank, size_t count);
 
+// Local 52 (P-100) / P-101 / P-52: the transparent pass's render priorities. Godot accepts only RENDER_PRIORITY_MIN (-128) .. RENDER_PRIORITY_MAX
+// (127): Material::set_render_priority refuses anything else with an error and keeps 0 (checked with Godot 4.7.2). Order follows RotWK's
+// RTS3DScene::Flush (RW 0x470F44) and HeightMapRenderObjClass::Render (RW 0x4E2E00): terrain decals and W3DFloorDraw floors (-128..-122:
+// roads 0x4E2ECD, floors 0x4E2F3A -> 0x4E53D3, scorches 0x4E2FD0, tracks 0x4E3108), then W3D blended/sorted meshes (-121..-23: SortLevel 0
+// at RW 0x470F5E then StaticSortLists 32..1 at RW 0x47166A -> 0x576240), then FX particles (1..114: RW 0x4716EE -> 0x44C84A, strictly above
+// every W3D surface and Godot's default priority 0).
+constexpr int kRenderPriorityMin = -128;
+constexpr int kTerrainRenderPriority = -128;
+constexpr int kWaterRenderPriority = -127;
+constexpr int kRiverRenderPriority = -126;
+constexpr int kRoadRenderPriority = -125;
+constexpr int kFloorRenderPriority = -124;
+constexpr int kScorchRenderPriority = -123;
+constexpr int kTrackRenderPriority = -122;
+constexpr int kW3DRenderPriorityMin = -121;
+constexpr int kW3DRenderPriorityMax = -23;
+constexpr int kParticleRenderPriorityMin = 1;
+constexpr int kParticleRenderPriorityMax = 114;
+
 // Whether a merged sprite batch may be reordered back to front: only non-deferred ALPHA batches. Deferred (SortLevel 1) systems bypass the sorting
 // renderer in retail (RW 0x44cbed) and keep their list order.
 bool SpriteBatchDepthSorted(int shader, bool deferred);

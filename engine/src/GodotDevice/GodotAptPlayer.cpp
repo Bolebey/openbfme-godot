@@ -544,15 +544,13 @@ public:
 	// manager takes one step (vslot 0x28 = SubsystemInterface::update, RW 0x81D283) so the track starts behind the screen instead of after the load
 	void playLoadScreenMusic(const std::string &eventName) override
 	{
-		AudioManager *audio = AudioApi::current();
-		if (!audio || !audio->isValidAudioEvent(eventName))
+		// PORT-158: the switch itself is AudioApi::playLoadScreenMusic (RW 0x81D225 .. 0x81D283): it also stops the menu
+		// track in the registered shell music manager, which this device path alone could not reach (issue #376)
+		AudioLog::Scope tag("load screen music " + eventName);
+		if (AudioApi::playLoadScreenMusic(eventName) == AHSV_NoSound)
 		{
 			return;
 		}
-		AudioLog::Scope tag("load screen music " + eventName);
-		audio->stopMusic(true);
-		audio->addAudioEvent(AudioEventRTS(eventName, 2));
-		audio->update(audio->nowMs() + AudioManager::tickIntervalMs());
 		events.push_back({ "load_music", eventName, "" });
 	}
 	void removeAudioEvent(std::uint32_t handle) override
@@ -3298,8 +3296,10 @@ Dictionary AptMenuPlayer::set_load_screen_from_game(const Dictionary &resolved)
 		return out;
 	}
 	ShellMode *sm = m->shell.get();
+	const int localSlot = (int)(int64_t)resolved.get("local_slot", (int64_t)-1);
 	LoadScreenInfo next = makeLoadScreenInfo(message.game, m->shell->setup, m->shell->text.get(),
-		[sm](const std::string &name) { return sm->skins.images.findImageByName(name) != nullptr; });
+		[sm](const std::string &name) { return sm->skins.images.findImageByName(name) != nullptr; }, sm->profiles.get(),
+		(bool)resolved.get("online_game", false), localSlot); // lane RANKICON-1: an online game reads no local stats (makeLoadScreenInfo)
 	if (!next.error.empty())
 	{
 		out["error"] = toGodot(next.error);
@@ -3326,6 +3326,7 @@ Dictionary AptMenuPlayer::set_load_screen_from_game(const Dictionary &resolved)
 	out["loading_type"] = info.gameLoadingType;
 	if (info.mapStartCount > LEGACY_MAX_SLOTS) out["map_start_count"] = info.mapStartCount;
 	out["rules_summary"] = toGodot(loadScreenU16ToUtf8(info.rulesSummary)); // lane RULES-1
+	if (!info.rankStatsError.empty()) out["rank_stats_error"] = toGodot(info.rankStatsError); // lane RANKICON-1: reported, the game still loads
 	return out;
 }
 
@@ -3415,14 +3416,27 @@ Dictionary AptMenuPlayer::strategic_setup(const Dictionary &request)
 	{
 		return out;
 	}
+	// OpenBFME presentation (both editions): the setup's viewport is drawn above
+	// the APT canvas. Yield it to covering screens and lobby message boxes so
+	// Start's refusal remains visible and receives clicks instead of the map.
+	auto boxOpen = [](AptMessageBox *box) { return box && box->type() != AptMessageBox::TYPE_NONE; };
+	bool covered = m->shell->shell->inputTop() != screen || boxOpen(screen->ruleBox());
+	if (auto *lan = dynamic_cast<AptLanLobby *>(screen))
+	{
+		covered = covered || boxOpen(lan->messageBox());
+	}
+	if (auto *online = dynamic_cast<AptOnlineShell *>(screen))
+	{
+		covered = covered || boxOpen(online->messageBox());
+	}
 	const std::string kind = toNative(String(request.get("kind", "state")));
 	if (kind == "hover")
 	{
-		screen->hoverRegion((int)(int64_t)request.get("region", (int64_t)-1));
+		screen->hoverRegion(covered ? -1 : (int)(int64_t)request.get("region", (int64_t)-1));
 	}
 	else if (kind == "click")
 	{
-		out["taken"] = screen->clickRegion((int)(int64_t)request.get("region", (int64_t)-1), !(bool)request.get("right", false));
+		out["taken"] = !covered && screen->clickRegion((int)(int64_t)request.get("region", (int64_t)-1), !(bool)request.get("right", false));
 	}
 	const LivingWorldSetupCampaign *c = screen->strategicCampaign();
 	GameWindow *w = screen->livingWorldWindow();
@@ -3443,7 +3457,7 @@ Dictionary AptMenuPlayer::strategic_setup(const Dictionary &request)
 		{
 			visible = visible && !p->winIsHidden();
 		}
-		out["visible"] = visible;
+		out["visible"] = visible && !covered;
 	}
 	out["region_campaign"] = c ? toGodot(c->name) : String();
 	// the slot's MultiplayerColor index (-1: random): the device fills the region with that colour's LivingWorldColor (RW 0x975E04 -> RW 0x78385B)
@@ -4020,6 +4034,11 @@ int AptMenuPlayer::tick(double delta)
 		// WindowManager::update (retail 0x0046E850): pending pop / loads, focus, the movies, the gadget layer, the screens' updates, the tooltip.  Gadgets change
 		// with input between movie steps, so the canvas is rebuilt on every tick in shell mode.
 		m->shell->wm->update(ms);
+		if (m->shell->strategicHud)
+		{
+			const Vector2 window = windowSize();
+			m->shell->strategicHud->setViewportSize((int)window.x, (int)window.y, m_fit);
+		}
 		stepped = 1;
 		if (m->shell->cursorTooltip && m->shell->metrics)
 		{
@@ -4190,6 +4209,10 @@ void AptMenuPlayer::render(bool force)
 	m->mapping.windowW = window.x;
 	m->mapping.windowH = window.y;
 	m->mapping.mode = m_fit ? AptStageMapping::Mode::Fit : AptStageMapping::Mode::Stretch;
+	if (m->shell && m->shell->strategicHud)
+	{
+		m->shell->strategicHud->setViewportSize((int)window.x, (int)window.y, m_fit);
+	}
 
 	Time *time = Time::get_singleton();
 	std::uint64_t t0 = time->get_ticks_usec();
@@ -6158,6 +6181,10 @@ Vector2 AptMenuPlayer::window_to_stage(const Vector2 &w) const
 	const Vector2 window = windowSize(); // the mapping follows the window between renders (events may come first)
 	m->mapping.windowW = window.x;
 	m->mapping.windowH = window.y;
+	if (m->shell && m->shell->strategicHud)
+	{
+		m->shell->strategicHud->setViewportSize((int)window.x, (int)window.y, m_fit);
+	}
 	float x, y;
 	m->mapping.windowToStage(w.x, w.y, x, y);
 	return Vector2(x, y);

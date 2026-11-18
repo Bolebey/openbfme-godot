@@ -50,7 +50,8 @@ TEST_CASE("shader text: the world-space normal varying includes the instance rot
 TEST_CASE("shader text: the camera-normal mapper's world path reads the same world-space normal")
 {
 	const std::string code = Generate_W3D_Shader_Code(envKey(true, W3D_TEXGEN_CAMERA_NORMAL));
-	CHECK(has(code, "vec4(vec3(v_wnrm.x, -v_wnrm.z, v_wnrm.y), 1.0)"));
+	// Local 38 (98f706d1) packs the normal into v_wnrm4 (w carries the per-vertex light term): the mapper reads its xyz
+	CHECK(has(code, "vec4(vec3(v_wnrm4.x, -v_wnrm4.z, v_wnrm4.y), 1.0)"));
 	CHECK(has(code, "v_wnrm = normalize(MODEL_NORMAL_MATRIX * NORMAL);"));
 }
 
@@ -229,7 +230,8 @@ std::vector<std::string> varyingNames(const ShaderVaryings::Result &result)
 
 std::vector<std::string> expectedW3DVaryings(bool fx, bool shadow, bool selectionDecals)
 {
-	std::vector<std::string> names = { "v_instance", "v_pack_pos", "v_uv", "v_vnrm", "v_wnrm", "v_wview" };
+	// Local 38 (98f706d1): the three normal varyings are vec4s (w: normalmapped.fxo's per-vertex light term), declared as v_vnrm4 / v_wnrm4 / v_wview4
+	std::vector<std::string> names = { "v_instance", "v_pack_pos", "v_uv", "v_vnrm4", "v_wnrm4", "v_wview4" };
 	if (fx)
 	{
 		names.push_back("v_light0");
@@ -355,6 +357,7 @@ TEST_CASE("shader budget: no other W3D key field changes the varying set")
 		{ "HouseColorBaked", 2, [](W3DShaderKey &k, int v) { k.HouseColorBaked = v != 0; } },
 		{ "Fog", 4, [](W3DShaderKey &k, int v) { k.Fog = v; } },
 		{ "SelectionDecals", 2, [](W3DShaderKey &k, int v) { k.SelectionDecals = v != 0; } },
+		{ "Vegetation", 2, [](W3DShaderKey &k, int v) { k.Vegetation = v != 0; } },
 	};
 	int checked = 0;
 	int worst = -1;
@@ -407,7 +410,7 @@ TEST_CASE("shader budget: no other W3D key field changes the varying set")
 			}
 		}
 	}
-	CHECK(checked == 2 * 3 * 8 * 2 * 101);
+	CHECK(checked == 2 * 3 * 8 * 2 * 103);
 	CHECK(worst == 28); // the new worst: Fx + opaque + selection decals + shadow receiver (see the next test)
 	std::fprintf(stderr, "w3d shader budget: %d single-field variants counted, the most is %d/%d (%s; Fx %d, occlusion %d, blend %d, alpha override %d)\n",
 		checked, worst, ShaderVaryings::kMaxVaryings, worstField.c_str(), worstKey.Fx, worstKey.OcclusionPass, worstKey.Blend, worstKey.AlphaOverride);

@@ -1078,13 +1078,19 @@ int modelConditionIndex(const std::string &name)
 	return -1;
 }
 
-// RW 0x911086 (DamageContainedNugget slot 1): the base test, the owner present, a victim contain holding something (slot 0x114), garrisonable (slot 0x10) and not
-// slot 0x1C (INFERENCE: unidentified, false for every ported contain), and a contained object not effectively dead (+ 0x458 bit 0) with every KillKindof bit
-// (+ 0x14C) and none of KillKindofNot (+ 0x168) (RW 0x70C4FE)
+// RW 0x911086 (DamageContainedNugget slot 1): the base test, the owner present, a victim contain holding something (slot 0x114), garrisonable (slot 0x10) and NOT
+// immune to the clearing of a building it attacks (slot 0x1C, RW 0x87B308: the garrison data's ImmuneToClearBuildingAttacks; true for every other contain class,
+// RW 0x8BD372), and a contained object not effectively dead (+ 0x458 bit 0) with every KillKindof bit (+ 0x14C) and none of KillKindofNot (+ 0x168)
+// (RW 0x70C4FE)
 bool damageContainedApplicable(GameLogic &logic, const DamageContainedNugget &n, const WeaponTemplate &w, const Object *owner, Object &victim)
 {
 	ContainModuleInterface *c = victim.getContain();
 	if (!shouldDeliver(n, w, owner, victim, logic) || !owner || !c || c->getContainCount() == 0 || !c->isGarrisonable())
+	{
+		return false;
+	}
+	// RW 0x9110E4 .. 0x9110ED: slot 0x1C answering true skips the nugget (the garrison of a building it may clear is spared)
+	if (c->isImmuneToClearBuildingAttacks())
 	{
 		return false;
 	}
@@ -1420,8 +1426,8 @@ void damageFieldTo(GameLogic &logic, const DamageFieldNugget &n, const WeaponTem
 
 // ---- DamageContainedNugget (vtable RW 0xC7BA60: slot 1 RW 0x911086, slot 2 false, slot 5 RW 0x91117C). BFME2 decomp WeaponEffects/Rva0050AEE4KillContained.cpp
 // (0x0050AEE4) is the same body ----
-// RW 0x91117C: the victim and the source object; the victim's contain (Object + 0x258) holding something (slot 0x114(0)), garrisonable (slot 0x10) and not slot 0x1C
-// (INFERENCE as slot 1's: false for every ported contain); a copy of its list (slot 0x118, RW 0x76CB49): while fewer than KillCount (+ 0x148) were killed, each
+// RW 0x91117C: the victim and the source object; the victim's contain (Object + 0x258) holding something (slot 0x114(0)), garrisonable (slot 0x10) and not immune to
+// the clearing of a building it attacks (slot 0x1C, RW 0x911F3 .. 0x911F8: the garrison's ImmuneToClearBuildingAttacks); a copy of its list (slot 0x118, RW 0x76CB49): while fewer than KillCount (+ 0x148) were killed, each
 // occupant alive (+ 0x458 bit 0) with KillKindof and none of KillKindofNot (RW 0x70C4FE): a HORDE occupant (template + 0x115 bit 5) puts its HordeContain's members
 // (a copy of that list) through the same test, each scored to the source (RW 0x6955BC(member, 1)) and killed (RW 0x698EC3: UNRESISTABLE, DeathType + 0x184); any
 // other occupant itself
@@ -1430,7 +1436,7 @@ void damageContained(GameLogic &logic, const DamageContainedNugget &n, ObjectID 
 	static const int kHorde = MetaImpact::kindIndex("HORDE");
 	Object *source = logic.findObjectByID(sourceId);
 	ContainModuleInterface *c = victim.getContain();
-	if (!source || !c || c->getContainCount() == 0 || !c->isGarrisonable() || !c->getContainedItemsList())
+	if (!source || !c || c->getContainCount() == 0 || !c->isGarrisonable() || c->isImmuneToClearBuildingAttacks() || !c->getContainedItemsList()) // RW 0x911F3
 	{
 		return;
 	}
@@ -1737,8 +1743,8 @@ void deliver(GameLogic &logic, ObjectID ownerId, bool atVictim, const Coord3D &p
 // (RotWK vtables, read with capstone): DamageNugget / DOTNugget RW 0x90E855 (damageApplicable); ProjectileNugget RW 0x90F954 (the base test RW 0x90D77C, a
 // warhead (+ 0x148) and RW 0x6CB779 on the warhead); MetaImpactNugget RW 0x910070; AttributeModifier / WeaponOCL / OpenGate / SpecialModelCondition RW 0x9114B4
 // and EmotionWeapon / StealMoney RW 0x90D77C (the base test); LuaEventNugget RW 0x8470FA (true); FireLogicNugget RW 0x8F8014 (false); HordeAttackNugget
-// RW 0x9119CB (the base test, then with an owner that has a horde interface: a member's current weapon RW 0x6CDBF3 against the victim, else true; the member the
-// interface slots 0x50 / 0x114(0xA4) pick is INFERENCE: the first living member); Paralyze RW 0x90F0E8, DamageField RW 0x90F501, Grab RW 0x910C27, DamageContained
+// RW 0x9119CB (the base test, then with an owner whose contain answers a horde interface: the picks below, then that member's current weapon RW 0x68B58C and
+// RW 0x6CDBF3 against the victim, else true); Paralyze RW 0x90F0E8, DamageField RW 0x90F501, Grab RW 0x910C27, DamageContained
 // RW 0x911086 and SpawnAndFade RW 0x911BCF are ported (lane DECOMP-1 r2). SlaveAttack RW 0x910DCF asks the owner's SlaveWatcherBehavior for its slave's current
 // weapon (RW 0x6CDBF3; lane MODCOMPAT-MOD1: SlaveAttack::applicable)
 bool WeaponTemplateAnyNuggetApplicable(GameLogic &logic, const WeaponTemplate &t, ObjectID ownerId, Object *victim, int depth)
@@ -1802,22 +1808,18 @@ bool WeaponTemplateAnyNuggetApplicable(GameLogic &logic, const WeaponTemplate &t
 			break;
 		case NUGGET_HORDE_ATTACK:
 		{
+			// RW 0x9119CB: the base test, then the owner's contain (Object + 0x258) must answer; the contain's horde interface (slot 0x7C, RW 0x68C866) must
+			// too. RW 0x911A09 picks the member by the owner's template KindOf COMBO_HORDE (template + 0x115 bit 6): set, the interface's slot 0x50
+			// (RW 0x86FEEC, the longest-reaching member); clear, slot 0x114(0xA4) (RW 0x8705A6, the first member that is not KindOf BANNER, else the first
+			// member). No member: true (RW 0x911A51). A member: its current weapon (RW 0x68B58C) and RW 0x6CDBF3 against the victim (RW 0x911A3A .. 0x911A4A).
 			ok = shouldDeliver(n, t, owner, *victim, logic);
-			static const int kHorde = ObjectTemplateInfoBuilder::kindOfIndex("HORDE");
-			if (ok && owner && owner->getContain() && owner->isKindOf((unsigned)kHorde))
+			static const int kComboHorde = ObjectTemplateInfoBuilder::kindOfIndex("COMBO_HORDE");
+			static const int kBanner = ObjectTemplateInfoBuilder::kindOfIndex("BANNER");
+			ContainModuleInterface *ownerContain = ok && owner ? owner->getContain() : nullptr;
+			HordeContainInterface *horde = ownerContain ? ownerContain->getHordeContainInterface() : nullptr;
+			if (ok && horde)
 			{
-				const Object *member = nullptr;
-				if (const ContainModuleInterface::ContainedItemsList *items = owner->getContain()->getContainedItemsList())
-				{
-					for (const Object *m : *items)
-					{
-						if (m && !m->isEffectivelyDead())
-						{
-							member = m;
-							break;
-						}
-					}
-				}
+				const Object *member = owner->isKindOf((unsigned)kComboHorde) ? horde->memberWithLongestAttackRange() : horde->firstMemberNotKindOf((unsigned)kBanner);
 				const ObjectWeapons *mw = member ? const_cast<Object *>(member)->getWeapons() : nullptr;
 				const Weapon *cw = mw ? mw->currentWeapon() : nullptr;
 				if (cw && cw->getTemplate())
@@ -2110,6 +2112,7 @@ void ObjectWeaponDelivery::fireWeaponTemplate(const WeaponBonus &bonus, int curB
 			shot.bonus = bonus;
 			shot.barrel = curBarrel;
 			shot.slot = m_firing->getSlot(); // the firing weapon's slot (lane DECOMP-1 r3); the nugget's WeaponLaunchBoneSlotOverride still wins in the launcher
+			shot.streamID = m_firing->projectileStreamID(); // issue #99 / PORT-27: the stream the firing weapon holds (Weapon + 0x5C, RW 0x90FB80)
 			shot.nugget = &pn;
 			if (pn.m_useAlwaysAttackOffset)
 			{
@@ -2292,9 +2295,9 @@ Coord3D ObjectWeaponDelivery::scatterTargetPos(Object *victim, Coord3D pos)
 // RW 0x6CB85A(out, source, victim, flag 1), the aim query of the fire FX block (lane FX-2 review). TARGET FACTS: RW 0x6CB81A first asks the victim for the
 // weapon's PreferredTargetBone (+0x90): a non-empty name found exactly once among the victim drawable's pristine bones (RW 0x68C5AF -> 0x672A73, then
 // 0x70BCE7 to world) is the answer with no draw; otherwise GameLogicRandomValue(0, 0xBC614E = 12345678) is drawn (Weapon.cpp:1749, RW 0x6CB8C2..0x6CB8D3)
-// and handed as the seed to RW 0x690BD2, the victim geometry's contact point. The contact point is stop S-362's approximation (the geometry centre, the seed
-// unused) exactly as BezierProjectileBehavior::aimPosition has it. The bone answer comes from the launch bone provider (template data and logic state);
-// without one (a GameLogic without the W3D assets) no bone is found.
+// and handed as the seed to RW 0x690BD2, the victim geometry's contact point with preference 3. S-362's geometry-centre approximation is replaced by this
+// contact-point aim. The bone answer comes from the launch bone provider (template data and logic state); without one (a GameLogic without the W3D assets)
+// no bone is found.
 Coord3D ObjectWeaponDelivery::fireFXAimPosition(const Object &victim)
 {
 	GameLogic &logic = m_source->logic();
@@ -2304,10 +2307,13 @@ Coord3D ObjectWeaponDelivery::fireFXAimPosition(const Object &victim)
 		return bone;
 	}
 	const int seed = logic.random().getValue(0, 12345678, kWeaponCpp, 1749);
-	(void)seed; // RW 0x690BD2's aim point choice (S-362)
-	Coord3D aim = *victim.getPosition();
-	aim.z = SimMath::addf32(aim.z, SimMath::mulf32(CombatQueries::geometry(victim).height, 0.5f));
-	return aim;
+	Coord3D aim;
+	if (ObjectGeometry::worldspaceBestContactPoint(victim, *m_source->getPosition(), "", 3, seed, false, aim))
+	{
+		return aim;
+	}
+	// RW 0x6CB8F8..0x6CB963: no contact point answered -> the victim's position
+	return *victim.getPosition();
 }
 
 // RW 0x6CC915, the fire FX block (0x6CCAA7..0x6CCBF6; lane FX-2). It runs when the source has a drawable (RW 0x70E013): every object has one in retail

@@ -15,7 +15,7 @@ std::vector<std::string> BuildStops::lines()
 	std::vector<std::string> out = {
 		"[S-300] castle layouts: a CastleBehavior asks the CastleTemplateStore for the file Bases/<name>/<name>.bse when it unpacks (retail fills the store from a name list at start, RW 0x7311FB: same files, "
 		"same parser RW 0x731010); a missing or unparsable file is an error. The maps-and-terrain spec's claim that no CastleTemplates chunk exists in the corpus is wrong: all 207 retail .bse files have one",
-		"[S-303] castle: the instant unpack of RW 0x79C265 (the starting fortress, the camps and castles of the maps) is ported; the options 5 of the legality call RW 0x797A96 are taken as NO_OBJECT_OVERLAP "
+		"[S-303] castle: the instant unpack of RW 0x79C265 (the starting fortress, the camps and castles of the maps) is ported; the options 5 of the legality call RW 0x797A96 are taken as NO_OBJECT_OVERLAP, with the thunk's bit 8 (the castle's own members, the castle and a DOZER do not block a BASE_SITE castle: P-77) "
 		"(its clear-path half needs an AI the castle does not have); ported since: PreBuiltList and the castle after its unpack (CASTLE-1, S-951 / S-952), CastleUpgrade "
 		"(FACT-B), the creation interface's site clearing RW 0x858C41 and push out RW 0x858CFC around every member (BACKLOG2); not ported: the creation interface "
 		"RW 0x859198's own construct for a member (slot 7, RW 0x858701 with the castle as the plot: the port places the member itself), FactionDecal, the damage "
@@ -60,11 +60,12 @@ std::vector<std::string> BuildStops::lines()
 	}
 	out.push_back("[S-1281] contact points (lane BUILD-3): GeometryContactPoint rows (RW 0xAD3D30) and getBestContactPoint mode 0 with a preferred call (RW 0xAD30E0, "
 	              "via Object::getWorldspaceBestContactPoint RW 0x690BD2 and AIUpdateInterface::findNearestLabeledContactPointOnTarget RW 0x667C76) are ported; the "
-	              "points are the template's, the shapes the object's own GeometryInfo (lane MODCOMPAT-MOD1: a GeometryUpgrade can change them); the other modes (1: the highest "
-	              "point, 3: a random point) are refused (a call without `preferred` and its overlap test: lane AIMAIM-1); the label compare is taken as exact bytes (RW 0x406585)");
+	              "points are the template's, the shapes the object's own GeometryInfo (lane MODCOMPAT-MOD1: a GeometryUpgrade can change them); mode 1 (RW 0xAD3340: the highest "
+	              "GeometryContactPoint row of the template, z clamped to the geometry height) and mode 3 (a seeded blend) are ported (PORT-164 / Local 41); a mode that is not 0, 1 or 3 "
+	              "answers false (RW 0xAD350E); the label compare is taken as exact bytes (RW 0x406585)");
 	out.push_back("[S-1282] dozer machine gaps (lane BUILD-3): not ported: the selection removed when a porter goes into the structure it builds (RW 0x88C51B; "
 	              "its drawable's fade out / in over BuilderFadeOutTime / BuilderFadeInTime is ported, lane PORTERFOG-1; a snapshot loaded while it works "
-	              "makes the drawable again without the fade, so it is drawn until it comes out), the face command 0x26 before the work (AI state 36), the bridge tower branch of the dock position "
+	              "makes the drawable again without the fade, so it is drawn until it comes out), the bridge tower branch of the dock position "
 	              "(RW 0x88CC08), the bored wander of an AI player's idle dozer (RW 0x88E17F), the ActionManager's canRepairObject / canResumeConstructionOf (RW "
 	              "0x82D7F2 / 0x82C84C: the owner's finished resp. unfinished structure stands for them), the script engine's note at the arrival (RW 0x756C87); the "
 	              "idle worker list is the dozer's marked flag (TheInGameUI vslots 0x1A4 / 0x1A8); the primary machine reset after a PLAYER command runs before the "

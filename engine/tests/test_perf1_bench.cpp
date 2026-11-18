@@ -651,13 +651,50 @@ TEST_CASE("perf1 bench: 4-player skirmish (medium computer players, 20 game minu
 // pin: Local 30 (issue #246) re-measured the big battle once (OPENBFME_PERF1_REGEN=1, Windows MSVC, station-3): a hit in the record's own or the next frame
 // replaces the last damage record only as RW 0x8C4294 .. 0x8C42F5 says (a living source; the old one gone, or INFANTRY / CAVALRY / RW 0x68DAE6's five
 // structure kinds), so who-hit-me-last, the attacker marks and the retaliation it feeds change from frame 54; the skirmish and the allied blob do not move
+// pin: P-86 (command point bonus from upgrades, CommandPoints / Economy) re-measured the skirmish once on main 6042959f (OPENBFME_PERF1_REGEN=1,
+// Windows MSVC, station-2): the switch-off run with P-86 disabled keeps the old vector; the big battle and the allied blob do not move
+// pin: Port 27 (fork PR 355, ProjectileStreamName: a weapon with a stream creates its stream object, WeaponState hashes the stream id only while
+// it holds one) re-measured the skirmish once on station-2 (OPENBFME_PERF1_REGEN=1, Windows MSVC), moving from frame 1662; the switch-off run without
+// PR 355 keeps the old vector (PRs 349 and 358 off: still moved); the big battle and the allied blob do not move
+// pin: the arena PR batch of 2026-11-14 (2) (fork PRs 440 .. 476, 15 merged, on top of Port 140 and Local 45 / 47 / 48) re-measured the battle and the skirmish
+// once on the merged tree (OPENBFME_PERF1_REGEN=1, Linux GCC on Colab, whose hashes match the MSVC pins): PORT-437 (#476), the generic attack machine's
+// object conditions RW 0x7457DF (out of reach -> chase) and RW 0x745901 (crush the victim instead), moves the battle from frame 45 and the skirmish from
+// frame 540. Attributed by a switch-off run: the merged tree with #476 reverted passes the previous vectors; the allied blob keeps its file
+// pin: Local 73 P-144 (RW 0x691014 -> 0x73F6B9 -> 0x73D89F): ObjectWeapons::hasWeaponSetFor matches default None WeaponTemplateSet, moving 4-player skirmish from frame 5389 (big_battle_400 and allied_blob_300 unchanged; switch-off run without P-144 passed 12676/12676)
+// pin: batch 3 of 2026-11-15 (fork PRs 484 .. 501, 10 merged) re-measured it once on the merged tree (REGEN=1, Linux GCC on Colab, whose hashes
+// match the MSVC pins). The per-PR checks (each PR alone on main 157b917f) name the movers: Local 59 (#500, WeaponFireSpecialAbilityUpdate makes and
+// loads its weapon in the constructor and crc() hashes it, RW 0x895DE1: from frame 0), Local 61 (#501, stunned units skip the AI update, RW 0x669652),
+// Port 464 (#487, a summoned helper's AI steering) and Port 201 (#496, the captured building's production cancel and upgrade reset)
 TEST_CASE("perf1: the big battle (400 frames) and a 4-player AI skirmish after another AI game (6000 frames) hash as the build before PERF-1 did in every frame")
 {
 	// Ambient movement: target idle wandering adds RNG draws and origin state,
 	// so these engine references are measured again for this simulation change.
 	// pin: P-33 re-measured the skirmish vector: the ground fire hits as LOGICAL_FIRE (RW 0x688A13), not FLAME, from frame 1346 (with FLAME it matches the
 	// previous vector); the big battle has no fire and keeps its vector.
+	// pin: the fork's merge of upstream 1d505ac3 (2026-11-13) re-measured the battle and the skirmish once on the merged tree (OPENBFME_PERF1_REGEN=1, Windows MSVC,
+	// station-2): upstream's REQTHROTTLE-1 (path requests within 2 frames, RW 0x663887), ENTERADJUST-1 and the shipped ports of PRs #289-#298 on top of the fork; the allied blob keeps its file
+	// pin: P-77 (2026-11-13) re-measured the battle and the skirmish once on station-0 (OPENBFME_PERF1_REGEN=1, Windows MSVC): a BASE_SITE castle's unpack no longer
+	// refuses its own members, the castle or a DOZER (thunk RW 0x797A96 bit 8, RW 0x796E9A .. 0x796EE3), so the starting fortresses place members the port
+	// used to drop; the allied blob keeps its file
+	// pin: the fork's merge of upstream 234f5742 (2026-11-13) re-measured the battle and the skirmish once on the merged tree (OPENBFME_PERF1_REGEN=1, Linux GCC on Colab, whose hashes
+	// match the MSVC pins frame for frame on main df5f0b41): PORT-13's GameLogicSettings::crc hashes AttackMoveUsesFormations only when it is false (both editions'
+	// aidata.ini set Yes), so every frame's settings hash moves; with the old condition put back the old pins pass, so nothing else moved
+	// pin: the arena PR batch of 2026-11-14 (fork PRs 217, 359 .. 424: 20 ports) re-measured the battle and the skirmish once on the merged tree (OPENBFME_PERF1_REGEN=1, Linux GCC on Colab,
+	// whose hashes match the MSVC pins): with the batch only perf1 and uber1 move against main bc66c72f on the same machine (every other suite of the
+	// batch run fails or passes as on main); the batch's logic changes are Port 138 (a rubble rebuild), Port 145 (SHIP enter legs), Port 148 (GIANT_BIRD
+	// separation), Port 164 (the giant bird's contact point, mode 1) and Port 29 (BuildingBehavior's fire lists); not bisected between them
+	// pin: the fork's merge of upstream 942fd79e (2026-11-16) re-measured the battle and the skirmish once on the merged tree (OPENBFME_PERF1_REGEN=1,
+	// Linux GCC on Colab, whose hashes match the MSVC pins): the merge's AIAttack and ThreatFinderUpdate changes move the battle from frame 48 and
+	// the skirmish from frame 24 (allied_blob_300 unchanged); not bisected between them
 	const std::vector<std::uint32_t> battleRef = perf1::readHashes("big_battle_400.hashes");
+	// pin: the landing of 2026-11-17 re-measured the skirmish once on the merged tree (OPENBFME_PERF1_REGEN=1, Linux GCC on Colab): Port 227 (fork PR 590:
+	// the skirmish AI's formation wait, ForceSkirmishAI and the AIKindOf threat category) moves it from frame 9 (merge points: main + PR 588 keeps it, + PR 590
+	// moves it); PRs 588, 591, 587 and the merge of upstream 16474d71 keep it; the battle and the blob are unchanged
+	// pin: batch 2026-11-17a re-measured the skirmish once on the batch tree (OPENBFME_PERF1_REGEN=1, Linux GCC on Colab): Port 237 (#596: death / create
+	// modules, ObjectCreationList, OCLUpdate) moves it from frame 1661; merge-point bisect: 6e3b8a16 (before #596) passes, 2ce6a623 (with it) differs
+	// pin: batch 2026-11-18a re-measured the skirmish once on the batch tree (OPENBFME_PERF1_REGEN=1, Linux GCC on Colab): Port 224 (#581: a creep lair
+	// or hole destroyed while it rebuilds gives no money or treasure and stays destroyed) moves it from line 1964 of the file; merge-point bisect: 61d4dfa7
+	// (main + #586 + #584) passes, de944025 (+ #581) differs; the battle and the blob are unchanged
 	const std::vector<std::uint32_t> skirmishRef = perf1::readHashes("skirmish4_6000.hashes");
 	// OPENBFME_PERF1_REGEN=1 rewrites the two reference vectors from this build instead of comparing: run it only when a merged change is MEANT to
 	// change the simulation (a retail port), and say so in the commit; a pure optimisation must pass against the stored vectors unchanged
@@ -716,6 +753,13 @@ TEST_CASE("perf1: the big battle (400 frames) and a 4-player AI skirmish after a
 // pin: issue #88 (S-322, S-321): unconditional GameLogicSettings::crc of attributeModifierArmorMaxBonus and damageRadiusMinimumForSplash moves the vector from frame 0 (with the two fields unhashed it matches the previous vector).
 TEST_CASE("perf1: the allied blob (300 frames) hashes as the build before the collision module caches did in every frame")
 {
+	// pin: the fork's merge of upstream 234f5742 (2026-11-13) re-measured the allied blob once on the merged tree (OPENBFME_PERF1_REGEN=1, Linux GCC on Colab, whose hashes
+	// match the MSVC pins frame for frame on main df5f0b41): PORT-13's GameLogicSettings::crc hashes AttackMoveUsesFormations only when it is false (both editions'
+	// aidata.ini set Yes), so every frame's settings hash moves; with the old condition put back the old pins pass, so nothing else moved
+	// pin: the arena PR batch of 2026-11-14 (fork PRs 217, 359 .. 424: 20 ports) re-measured the allied blob once on the merged tree (OPENBFME_PERF1_REGEN=1, Linux GCC on Colab,
+	// whose hashes match the MSVC pins): with the batch only perf1 and uber1 move against main bc66c72f on the same machine (every other suite of the
+	// batch run fails or passes as on main); the batch's logic changes are Port 138 (a rubble rebuild), Port 145 (SHIP enter legs), Port 148 (GIANT_BIRD
+	// separation), Port 164 (the giant bird's contact point, mode 1) and Port 29 (BuildingBehavior's fire lists); not bisected between them
 	const std::vector<std::uint32_t> blobRef = perf1::readHashes("allied_blob_300.hashes");
 	const char *regenEnv = std::getenv("OPENBFME_PERF1_REGEN");
 	const bool regen = regenEnv && *regenEnv == '1';

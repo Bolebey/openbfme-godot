@@ -25,8 +25,10 @@
 #include "Common/Science.h"
 #include "Common/SpecialPower.h"
 #include "GameLogic/Module/SpecialPowerModules.h"
+#include "GameLogic/ActionManager.h"
 #include "GameLogic/Object/Contain/OpenContainRuntime.h"
 #include "GameLogic/Object/Contain/TransportContainRuntime.h"
+#include "GameLogic/Object/Contain/HordeContainRuntime.h"
 #include "Common/Team.h"
 #include "GameLogic/WeaponSetToggle.h"
 #include "GameLogic/Module/CastleModules.h"
@@ -43,6 +45,7 @@
 #include "GameLogic/WeaponState.h"
 
 #include <algorithm>
+#include <cstdint>
 
 namespace ModelCondition
 {
@@ -87,6 +90,84 @@ ButtonState buildAvailability(CanMakeType make, bool &commandPointsShort)
 }
 } // namespace
 
+// PORT-130 (issue #332): CommandButton::AffectsKindOf (RW +0x110, parse row RW 0xC2BD28). The reader is the
+// NEEDS_CASTLE_KINDOF branch of RotWK's ControlBar::getCommandAvailability (RW 0x942733), read with rw.py dis:
+//   RW 0x942993 `mov eax,[edi+0x1c]`, RW 0x942996 `test ah,8` -> Options bit 11 (0x800);
+//   RW 0x9429A0 `call 0x797bef` -> CastleMemberBehavior, RW 0x9429AA `push [eax+0x18]` its castle id,
+//   RW 0x9429B3 `call 0x449681` findObjectByID, RW 0x9429C2/0x9429CA the CastleBehavior module on that castle;
+//   RW 0x9429E9 `add eax,0x110` + RW 0x9429F6 `call 0x444d65` + RW 0x942A08 `rep movsd` copy the button's
+//   28-byte KindOf mask into a filter; RW 0x942A12 `call 0x7999e2` walks the castle's objects;
+//   callback RW 0x942348 calls RW 0x70C548 -> RW 0x661359 (7-dword ANY intersection), RW 0x94235B sets matched;
+//   RW 0x942A17 `cmp [ebp-0x4c],0`, RW 0x942A1B -> RW 0x942C5D `push 3; pop eax` = COMMAND_HIDDEN.
+// DONOR BFME2 0x53B946 (ControlBarCommand.cpp:446) and ControlBarRappellerCount.cpp:525/536 are the same branch;
+// the RW addresses above are the source of truth. This is the button's availability, not a cursor target test.
+namespace
+{
+// RW 0x661359: `test [ecx],esi` over seven 32-bit words; any bit common to the two masks.
+bool kindOfMasksIntersect(const KindOfMaskType &objectMask, const KindOfMaskType &buttonMask)
+{
+	for (size_t word = 0; word < objectMask.size(); ++word)
+	{
+		if (objectMask[word] & buttonMask[word])
+		{
+			return true;
+		}
+	}
+	return false;
+}
+} // namespace
+
+bool ControlBar::castleKindOfAllows(const CommandButton &b, Object &obj)
+{
+	// RW 0x942999 `je 0x942a24`: without Options = NEEDS_CASTLE_KINDOF the mask is not read at all.
+	if (!b.hasOption(COMMAND_OPTION_NEEDS_CASTLE_KINDOF))
+	{
+		return true;
+	}
+	// RW 0x9429A8 `je 0x942a24`: an object with no CastleMemberBehavior keeps its normal availability.
+	const CastleMemberBehavior *member = nullptr;
+	for (const std::unique_ptr<BehaviorModule> &m : obj.modules())
+	{
+		member = dynamic_cast<const CastleMemberBehavior *>(m.get());
+		if (member)
+		{
+			break;
+		}
+	}
+	if (!member)
+	{
+		return true;
+	}
+	// RW 0x9429BC `je 0x942c5d`: a member whose castle object no longer exists hides the button (3).
+	Object *castle = obj.logic().findObjectByID(member->castleId());
+	if (!castle)
+	{
+		return false;
+	}
+	// RW 0x9429D4 `je 0x942a24`: no CastleBehavior on the castle object -> the filter is skipped.
+	const CastleBehavior *behaviour = CastleBehavior::of(*castle);
+	if (!behaviour)
+	{
+		return true;
+	}
+	// RW 0x7999E2 walks the castle itself, its keep, foundations, members, crew and defence foundations;
+	// CastleBehavior::forEachMemberId is the port's walk over exactly that set. RW 0x942348 stops at the
+	// first match (returns 0); the callback here only records it. A null object is skipped (RW 0x799A2D).
+	bool matched = false;
+	behaviour->forEachMemberId([&](ObjectID id)
+	{
+		if (matched)
+		{
+			return;
+		}
+		if (const Object *o = obj.logic().findObjectByID(id))
+		{
+			matched = kindOfMasksIntersect(o->getKindOf(), b.m_affectsKindOf);
+		}
+	});
+	return matched; // RW 0x942A1B -> RW 0x942C5D: no object of the castle has any of the button's KindOf bits
+}
+
 ButtonState ControlBar::evaluate(const CommandButton &b, Object &obj, bool &commandPointsShort, bool ignoreDisabled)
 {
 	// ZH ControlBar::getCommandAvailability (ControlBarCommand.cpp:1017), the subset whose logic is ported (stop S-290)
@@ -109,6 +190,14 @@ ButtonState ControlBar::evaluate(const CommandButton &b, Object &obj, bool &comm
 	}
 	// RW 0x942490: each mask is an ANY intersection. SPECIAL_POWER defers this check until after readiness (RW 0x9435C3 / 0x9435DC).
 	if (b.m_command != GUI_COMMAND_SPECIAL_POWER && !modelConditionsAllow(b, obj))
+	{
+		return ButtonState::Restricted;
+	}
+	// PORT-220 (issue #529): RW 0x942826 .. 0x94282D, after the script availability call (RW 0x942490) and before the experience tracker's gate
+	// (RW 0x942833): an object whose single-use command flag (Object + 0x45B) is set disables every button of its command set (RW 0x9438C8: availability 0).
+	// The flag's writer is processCommandUI's RW 0x94066B (ControlBarCommandProcessing.cpp); the flag is never cleared (no RW instruction writes 0 to it
+	// after the constructor's RW 0x699C88), so the object keeps its gray buttons. Command 0x18 skips only RW 0x942490 (RW 0x94280D .. 0x942811), not this gate.
+	if (obj.hasSingleUseCommandBeenUsed())
 	{
 		return ButtonState::Restricted;
 	}
@@ -175,6 +264,12 @@ ButtonState ControlBar::evaluate(const CommandButton &b, Object &obj, bool &comm
 			return ButtonState::Restricted;
 		}
 	}
+	// PORT-130: RW 0x942993..0x942A1B, before every command's own rule (as in RW, after NEED_UPGRADE).
+	// A NEEDS_CASTLE_KINDOF button whose castle owns no object of AffectsKindOf is HIDDEN, not restricted.
+	if (!castleKindOfAllows(b, obj))
+	{
+		return ButtonState::Hidden; // RW 0x942A1B -> RW 0x942C5D (availability 3)
+	}
 	ProductionUpdateInterface *pu = obj.getProductionUpdate();
 	if (pu && pu->firstProduction() && b.hasOption(COMMAND_OPTION_NOT_QUEUEABLE))
 	{
@@ -184,9 +279,7 @@ ButtonState ControlBar::evaluate(const CommandButton &b, Object &obj, bool &comm
 	{
 		case GUI_COMMAND_REVIVE:
 			return ButtonState::Enabled; // record-specific rules follow in reviveButton; these common gates run first
-		case GUI_COMMAND_UNIT_BUILD:
-		case GUI_COMMAND_DOZER_CONSTRUCT:     // BUILD-1: a builder's or a plot's building button (the same availability: command set, price, command points, maximum)
-		case GUI_COMMAND_FOUNDATION_CONSTRUCT:
+		case GUI_COMMAND_UNIT_BUILD: // RW 0x942733 arm 3: the production path, the only arm that asks canMakeUnit
 		{
 			const ThingTemplate *tt = b.getThingTemplate();
 			if (!tt)
@@ -206,12 +299,43 @@ ButtonState ControlBar::evaluate(const CommandButton &b, Object &obj, bool &comm
 			{
 				return ButtonState::Restricted;
 			}
+			// RW 0x942733 arm 3: 7 -> 7, canMakeUnit 6 / 5 -> 0 (disabled), 2 -> 6, anything else -> 1 (enabled). The maximum of the
+			// template is arm 3's alone (canMakeUnit RW 0x793ECB, its count at RW 0x794054).
 			const CanMakeType make = BuildAssistant::canMakeUnit(obj, tt, -1);
-			if (make == CANMAKE_UNKNOWN_7 && b.m_command != GUI_COMMAND_UNIT_BUILD)
+			return buildAvailability(make, commandPointsShort);
+		}
+		case GUI_COMMAND_FOUNDATION_CONSTRUCT: // PORT-212 (fork issue 502): RW 0x942733 arm 1 — a build plot's construction button
+		case GUI_COMMAND_DOZER_CONSTRUCT:      // RW 0x942733 arm 0x35 — a dozer's construction button
+		{
+			// PORT-212 (fork issue 502): the two construction arms of RW 0x942733 were read for what they do NOT contain (the switch
+			// inventory in docs/re/rotwk/RW_0x942733.md): arm 1 is "Buildable gate; template kind flags; ...; allowedToBuild / canBuild
+			// tests, radial hide, prerequisite and money results" and arm 0x35 is "Kind flags, controlling player +0x770 == 0, optional
+			// dozer slot 0x78, allowedToBuild/canBuild/money checks". Neither calls BuildAssistant::canMakeUnit, so MaxSimultaneousOfType,
+			// the production queue and the command points never restrict a construction button: those are arm 3's (UNIT_BUILD) and, for a
+			// builder, the per-click query of the placement translator (RW 0x83E771). This is why Ennorath's LothlorienEntMoot
+			// (MaxSimultaneousOfType = 1 in the mod's INI) may be built any number of times on its plots in RotWK; the shared arm the port
+			// used before made the second one unavailable through canMakeUnit's maximum (CANMAKE_MAXED_OUT_FOR_PLAYER).
+			const ThingTemplate *tt = b.getThingTemplate();
+			if (!tt)
+			{
+				return ButtonState::Hidden;
+			}
+			const int buildable = BuildAssistant::buildable(*tt, obj.logic());
+			if (buildable == 2 || (buildable == 3 && player->getPlayerType() != PLAYER_COMPUTER))
+			{
+				return ButtonState::Hidden; // Buildable = No, and Only_By_AI for a human
+			}
+			// Player::canBuild: allowedToBuild + Buildable + every prerequisite (RW 0x6AAA2E; the port's BuildAssistant::playerCanBuild)
+			if (!BuildAssistant::playerCanBuild(*player, tt, m_ctx.logic))
 			{
 				return ButtonState::Restricted;
 			}
-			return buildAvailability(make, commandPointsShort);
+			// the money result of the two arms: availability 6, the same state the production arm's CANMAKE_NO_MONEY gives
+			if ((std::uint32_t)BuildAssistant::calcCostToBuild(*tt, player, &obj, -1) > player->getMoney()->countMoney())
+			{
+				return ButtonState::CantAfford;
+			}
+			return ButtonState::Enabled;
 		}
 		case GUI_COMMAND_PUSH_VISIBLE_COMMAND_RANGE:
 		case GUI_COMMAND_POP_VISIBLE_COMMAND_RANGE:
@@ -231,6 +355,7 @@ ButtonState ControlBar::evaluate(const CommandButton &b, Object &obj, bool &comm
 			return StancesBehavior::of(obj) ? ButtonState::Enabled : ButtonState::Restricted;
 		case GUI_COMMAND_SET_STANCE:
 			return ButtonState::Enabled; // RW 0x942733: type 0x3A is in the default (available) arm
+		case GUI_COMMAND_WAKE_AUTO_PICKUP: // PORT-137: RW 0x942A5C table shares the contain gate with TOGGLE_WEAPONSET
 		case GUI_COMMAND_TOGGLE_WEAPONSET:
 			// lane HUD-4: RW 0x942FC6: restricted while a non-horde contain of the object holds someone, else available
 			return WeaponSetToggle::isRestrictedByContain(obj) ? ButtonState::Restricted : ButtonState::Enabled;
@@ -399,6 +524,13 @@ ButtonState ControlBar::evaluate(const CommandButton &b, Object &obj, bool &comm
 					return ButtonState::Restricted;
 				}
 			}
+			// PORT-250 (fork issue 578): RW 0x943439 .. 0x943480, the UnitCost gate of this arm, before the module search: the template's final
+			// override (RW 0x688D3C) + 0x80 (UnitCost); with a cost the object's contain (Object + 0x258 slot 0x7C) horde member count (slot 0x188,
+			// RW 0x943477) below it answers 0 = disabled. ActionManager runs the same test for a press (RW 0x82E000 / 0x82D605)
+			if (!ActionManager::unitCostMet(obj, *t))
+			{
+				return ButtonState::Restricted;
+			}
 			SpecialPowerModuleInterface *sp = t ? SpecialPowerModules::findModule(obj, t) : nullptr;
 			if (!sp)
 			{
@@ -470,7 +602,6 @@ ButtonState ControlBar::evaluate(const CommandButton &b, Object &obj, bool &comm
 		case GUI_COMMAND_TOGGLE_WEAPON:          // RW 0x9437E7
 		case GUI_COMMAND_ONE_RING:               // RW 0x94387B
 		case GUI_COMMAND_CREW_EVACUATE:          // RW 0x94331B
-		case GUI_COMMAND_WAKE_AUTO_PICKUP:       // RW 0x942FC6
 		case GUI_COMMAND_START_SELF_REPAIR:      // RW 0x942D83
 		case GUI_COMMAND_HORDE_SET_FORMATION:    // RW 0x9438A0
 		case GUI_COMMAND_START_NEIGHBORHOOD_REPAIR: // RW 0x942DED
@@ -829,6 +960,7 @@ void ControlBar::noteUpgradeCompleted(const UpgradeTemplate *upgrade)
 void ControlBar::update()
 {
 	(void)kPaletteSize;
+	const bool wasDirty = m_dirty;
 	m_dirty = false; // RW 0x71EBED: the refresh RW 0x71FD81 gates on +0x28 consumes the mark (evaluateContextUI clears it)
 	Player *local = m_ctx.localPlayer();
 	if (local)
@@ -842,18 +974,100 @@ void ControlBar::update()
 	m_money = local && local->getMoney() ? local->getMoney()->countMoney() : 0;
 	m_cpUsed = local ? local->commandPoints().getUsage() : 0;
 	m_cpLimit = local ? m_cpUsed + local->commandPointsAvailable() : 0;
-	Object *obj = m_ctx.logic.findObjectByID(m_ctx.ui.firstSelected());
-	if (obj && obj->isDestroyed())
+
+	// PORT-221 (issue #531, P-140): evaluateContextUI (RW 0x71EBDA..0x71ED02) enters CB_CONTEXT_MULTI_SELECT (7)
+	// when >1 live controllable objects are selected. populateMultiSelect (RW 0x94475A..0x94490C) first checks for
+	// a non-IGNORED_IN_GUI HERO with a valid ExperienceLevel rank (RW 0x94478A..0x944839: highest rank, lowest
+	// ObjectID tie-break) and delegates to single-object populate/update on that senior hero; otherwise
+	// addCommonCommands (RW 0x944534..0x944757) intersects slots across non-IGNORED_IN_GUI, non-SOLD selected
+	// objects (requiring OK_FOR_MULTI_SELECT on the first and pointer equality on the rest, except
+	// GUI_COMMAND_ATTACK_MOVE 0xA union RW 0x9446DE), updateContextMultiSelect (RW 0x944911..0x944B87) evaluates
+	// availability across non-IGNORED_IN_GUI selected objects, and processCommandUI (RW 0x9404D0..0x940511) uses
+	// the first non-IGNORED_IN_GUI selected object as m_source.
+	static const unsigned kSoldStatus = (unsigned)ObjectTemplateInfoBuilder::objectStatusIndex("SOLD");
+	std::vector<Object *> liveSelected;
+	liveSelected.reserve(m_ctx.ui.selected().size());
+	for (ObjectID selId : m_ctx.ui.selected())
 	{
-		obj = nullptr;
+		if (Object *sel = m_ctx.logic.findObjectByID(selId); sel && !sel->isDestroyed())
+		{
+			liveSelected.push_back(sel);
+		}
 	}
+	bool multiSelectCommon = false;
+	bool multiSelectHero = false;
+	std::vector<Object *> commonObjects;
+	std::vector<Object *> evalObjects;
+	Object *obj = liveSelected.empty() ? nullptr : liveSelected.front();
+	if (liveSelected.size() > 1 && obj && HudObjects::isLocallyControlled(m_ctx, *obj))
+	{
+		Object *firstNonIgnored = nullptr;
+		Object *bestHero = nullptr;
+		int bestRank = 0;
+		for (Object *sel : liveSelected)
+		{
+			if (sel->isKindOfName("IGNORED_IN_GUI"))
+			{
+				continue;
+			}
+			if (!firstNonIgnored)
+			{
+				firstNonIgnored = sel;
+			}
+			evalObjects.push_back(sel);
+			if (!sel->testStatus(kSoldStatus))
+			{
+				commonObjects.push_back(sel);
+			}
+			if (sel->isKindOfName("HERO"))
+			{
+				const ExperienceTracker *xp = sel->getExperienceTracker();
+				int rank = 0;
+				if (xp && xp->currentLevelRank(rank))
+				{
+					if (!bestHero || rank > bestRank
+						|| (rank == bestRank && static_cast<std::int32_t>(sel->getID()) < static_cast<std::int32_t>(bestHero->getID())))
+					{
+						bestHero = sel;
+						bestRank = rank;
+					}
+				}
+			}
+		}
+		if (bestHero)
+		{
+			multiSelectHero = true;
+			obj = bestHero; // RW 0x944826..0x944839: m_currentSelectedDrawable = bestHero -> populateObject(bestHero, 0)
+		}
+		else
+		{
+			multiSelectCommon = true;
+			obj = firstNonIgnored; // RW 0x9404D0..0x940511: processCommandUI resolves context object to first non-IGNORED_IN_GUI
+		}
+	}
+	// PORT-213 (issue #503): AptPalantir::setDrawable receives the single selected object (RW 0x9443BD -> 0x6D4671)
+	// or the senior qualifying HERO picked by populateMultiSelect (RW 0x94482B), and INVALID_ID otherwise (RW 0x9448FC).
+	const ObjectID contextId = (obj && (liveSelected.size() == 1 || multiSelectHero))
+		? obj->getID()
+		: (ObjectID)INVALID_ID;
+
 	const ObjectID id = obj ? obj->getID() : (ObjectID)INVALID_ID;
+	// PORT-189 (issue #455): clear click-predicted toggle indices whenever ControlBar would re-populate
+	// (selection, command set, under-construction context, or m_UIDirty RW 0x71FD81).
+	const bool contextChanged = wasDirty || id != m_source || contextId != m_contextSource || m_ctx.ui.selected() != m_pendingSelection
+		|| !obj || (!multiSelectCommon && isUnderConstructionContext(*obj)) || obj->getCommandSetName() != m_setName;
+	if (contextChanged)
+	{
+		m_pendingToggles.clear();
+		m_pendingSelection = m_ctx.ui.selected();
+	}
 	if (id != m_source)
 	{
 		m_source = id;
 		m_setName.clear();
 		resetRanges();
 	}
+	m_contextSource = contextId;
 	m_palantir.clear();
 	m_side.clear();
 	m_offBar.clear();
@@ -862,7 +1076,7 @@ void ControlBar::update()
 	m_displayName.clear();
 	m_underConstruction = false;
 	m_foreignView = false;
-	if (obj && isUnderConstructionContext(*obj))
+	if (!multiSelectCommon && obj && isUnderConstructionContext(*obj))
 	{
 		m_displayName = obj->getTemplate() ? obj->getTemplate()->getName() : std::string();
 		m_setName.clear();
@@ -875,36 +1089,113 @@ void ControlBar::update()
 		// lane OWNERFIX-3: evaluateContextUI (RW 0x71EBDA; BFME2 0x71D230, tier B) gives any object with a command set context 1, populateCommand (RW 0x943D6F),
 		// whoever controls it: the bar shows another player's command set too. updateContextCommand (RW 0x94397F) then disables its buttons while the local
 		// player is active (foreignView, below); an inactive local player (observer, defeated: RW 0x6AAC52 false) sees their real availability
-		m_foreignView = !mine && localPlayerActive(local);
+		m_foreignView = !multiSelectCommon && !mine && localPlayerActive(local);
 		m_setName = obj->getCommandSetName();
 		const CommandStore *store = m_ctx.commands;
-		const CommandSet *set = (store && !m_setName.empty()) ? store->findCommandSet(m_setName) : nullptr;
+		const CommandSet *set = (!multiSelectCommon && store && !m_setName.empty()) ? store->findCommandSet(m_setName) : nullptr;
 		// the queue and the production count (RW 0x729D9A reads the selected object's production interface whoever owns it; the Palantir skips the count of a
-		// foreign object, RW 0x9D2B49, and the ring is cleared for it, RW 0x945938): none for a foreign view
-		ProductionUpdateInterface *pu = m_foreignView ? nullptr : obj->getProductionUpdate();
-		if (set)
+		// foreign object, RW 0x9D2B49, and the ring is cleared for it, RW 0x945938): none for a foreign view or common-commands multi-select
+		ProductionUpdateInterface *pu = (m_foreignView || multiSelectCommon) ? nullptr : obj->getProductionUpdate();
+		std::array<const CommandButton *, CommandSet::STORAGE> commonSlots{};
+		if (multiSelectCommon && !commonObjects.empty())
+		{
+			const bool extLimit = ModEngineFeatures::has(ModEngineFeature::EdainUnchainedCommandSetLimit);
+			const int cap = extLimit ? (int)CommandSet::STORAGE : (int)CommandSet::MAX_BUTTONS;
+			const int rStart = m_rangeStack.back().first, rCount = m_rangeStack.back().second;
+			auto visibleSlotOf = [&](const CommandSet &cs, int s) -> const CommandButton * {
+				int csShown = m_rangeStack.size() == 1 ? std::min(cs.m_initialVisible, (int)CommandSet::MAX_BUTTONS) : rCount;
+				if (extLimit)
+				{
+					csShown = rStart >= CommandSet::STORAGE ? 0
+						: std::max(0, std::min({ m_rangeStack.size() == 1 ? cs.m_initialVisible : rCount, (int)CommandSet::MAX_BUTTONS, (int)CommandSet::STORAGE - rStart }));
+				}
+				return (s >= rStart && s < rStart + csShown && s < cap) ? cs.getCommandButton(s) : nullptr;
+			};
+			// RW 0x944853..0x9448C6 -> addCommonCommands RW 0x944534..0x944757
+			bool firstObj = true;
+			for (Object *co : commonObjects)
+			{
+				const std::string &coSetName = co->getCommandSetName();
+				const CommandSet *coSet = (store && !coSetName.empty()) ? store->findCommandSet(coSetName) : nullptr;
+				if (firstObj)
+				{
+					firstObj = false; // RW 0x9448BF: cleared after the first non-IGNORED_IN_GUI, non-SOLD object even if coSet is null
+					if (!coSet)
+					{
+						continue;
+					}
+					for (int s = 0; s < cap; ++s)
+					{
+						const CommandButton *b = visibleSlotOf(*coSet, s);
+						if (b && b->hasOption(COMMAND_OPTION_OK_FOR_MULTI_SELECT)) // RW 0x9445DA: [b + 0x1c] & 0x100
+						{
+							commonSlots[(size_t)s] = b;
+						}
+					}
+				}
+				else if (coSet) // RW 0x94457F: null CommandSet leaves existing windows as-is
+				{
+					for (int s = 0; s < cap; ++s)
+					{
+						const CommandButton *b = visibleSlotOf(*coSet, s);
+						if (b && b->m_command == GUI_COMMAND_ATTACK_MOVE) // RW 0x9446DD: ATTACK_MOVE union
+						{
+							commonSlots[(size_t)s] = b;
+						}
+						else if (b != commonSlots[(size_t)s]) // RW 0x94472E: clear non-matching slot
+						{
+							commonSlots[(size_t)s] = nullptr;
+						}
+					}
+				}
+			}
+		}
+		if (set || multiSelectCommon)
 		{
 			const int start = m_rangeStack.back().first, count = m_rangeStack.back().second;
-			const int initial = m_rangeStack.size() == 1 ? std::min(set->m_initialVisible, (int)CommandSet::MAX_BUTTONS) : count;
-			int shown = m_rangeStack.size() == 1 ? initial : count, end = CommandSet::MAX_BUTTONS;
+			const int initial = (!multiSelectCommon && m_rangeStack.size() == 1) ? std::min(set->m_initialVisible, (int)CommandSet::MAX_BUTTONS) : count;
+			int shown = (!multiSelectCommon && m_rangeStack.size() == 1) ? initial : count, end = CommandSet::MAX_BUTTONS;
 			if (ModEngineFeatures::has(ModEngineFeature::EdainUnchainedCommandSetLimit))
 			{
 				// lane MODS-3: edain-unchained.commandset-limit's populate hook (its 0xED447D after RW 0x71CF0A): 33 windows over 64 slots, a range
 				// past the end shows nothing
-				shown = start >= CommandSet::STORAGE ? 0 : std::max(0, std::min({ m_rangeStack.size() == 1 ? set->m_initialVisible : count, (int)CommandSet::MAX_BUTTONS, (int)CommandSet::STORAGE - start }));
+				const int lim = (!multiSelectCommon && m_rangeStack.size() == 1) ? set->m_initialVisible : count;
+				shown = start >= CommandSet::STORAGE ? 0 : std::max(0, std::min({ lim, (int)CommandSet::MAX_BUTTONS, (int)CommandSet::STORAGE - start }));
 				end = CommandSet::STORAGE;
 			}
 			for (int slot = start; slot < start + shown && slot < end; ++slot)
 			{
-				const CommandButton *b = set->getCommandButton(slot);
+				const CommandButton *b = multiSelectCommon ? commonSlots[(size_t)slot] : set->getCommandButton(slot);
+				// lane PORT-152: RW 0x943E59 first asks the object for status 0x64 COMMAND_BUTTON_TOGGLED (RW 0x44DDEC; TheObjectStatusNames
+				// RW 0xD8AFF0), and only while it is set: RW 0x943E67 .. 0x943E85 replaces a button whose ToggleButtonName (+0x48) is not empty by the
+				// button of that name (TheControlBar->findButtonByName RW 0x71D6EA, the override chain RW 0x465AF4), when one is found; the bar slot
+				// then shows the toggle button, whose image index RW 0x75D22E updates at RW 0x943E91 (value 0)
+				static const unsigned kCommandButtonToggled = (unsigned)ObjectTemplateInfoBuilder::objectStatusIndex("COMMAND_BUTTON_TOGGLED");
+				if (!multiSelectCommon && b && obj->testStatus(kCommandButtonToggled) && !b->m_toggleButtonName.empty() && store)
+				{
+					if (const CommandButton *toggle = store->findCommandButton(b->m_toggleButtonName))
+					{
+						b = toggle;
+					}
+				}
 				if (!b || !b->m_showButton)
 				{
 					continue;
 				}
+				// lane PORT-152: RW 0x943F75 .. 0x943F91 (updateContextCommand's button loop): a RequiresValidContainer button (+0x107) is skipped
+				// when the object's contain (Object +0x258) is an OpenContain whose Enabled byte (module +0xDE, slot 4 asOpenContain) is off
+				if (!multiSelectCommon && b->m_requiresValidContainer)
+				{
+					const OpenContain *open = dynamic_cast<const OpenContain *>(obj->getContain());
+					if (open && !open->isEnabled())
+					{
+						continue;
+					}
+				}
 				ControlBarButton cb;
 				cb.slot = slot;
 				cb.button = b;
-				if (b->m_command == GUI_COMMAND_REVIVE)
+				if (!multiSelectCommon && b->m_command == GUI_COMMAND_REVIVE)
 				{
 					// lane HERO-1 (S-850): RW 0x943D6F's first pass. The jth REVIVE button of the set (counting every REVIVE slot of the set) stands for the jth
 					// template of the player template's BuildableRingHeroesMP then BuildableHeroesMP (RW 0x6AB249: + 0x198 then + 0x18C), and shows that template's
@@ -964,55 +1255,168 @@ void ControlBar::update()
 					place(cb, start);
 					continue;
 				}
-				cb.state = evaluate(*b, *obj, cb.commandPointsShort);
-				// lane HUD-6: RW 0x943B39 .. 0x943B4C: a disabled button (availability 0) with the option HIDE_WHILE_DISABLED (CommandButton + 0x1E & 0x40,
-				// option bit 22 of RW 0xDA4C88) is hidden (3): the Mordor fortress's spire fireball before its upgrade. Lane OWNERFIX-3: the exception (bl,
-				// RW 0x943B18) is only for a button updateContextCommand itself turned to 0 in a foreign view (foreignDisable): one whose own availability was
-				// already 0 hides for every viewer
-				if (cb.state == ButtonState::Restricted && b->hasOption(0x400000u))
+				Object *timerObj = obj;
+				if (multiSelectCommon)
 				{
-					continue;
+					// PORT-221: updateContextMultiSelect (RW 0x944911..0x944B87): evaluate across every non-IGNORED_IN_GUI selected object.
+					// Any Hidden or Restricted+HIDE_WHILE_DISABLED (RW 0x944A1F..0x944A65) hides the slot; availCount > 0 (Enabled / Active,
+					// RW 0x944AE7..0x944B73) enables the button; otherwise keep the disabled state (NotReady > CantAfford > Purchased > Restricted).
+					bool hidden = false;
+					int availCount = 0;
+					ButtonState enabledState = ButtonState::Enabled;
+					ButtonState disabledState = ButtonState::Restricted;
+					bool anyCpShort = false;
+					for (Object *sel : evalObjects)
+					{
+						bool cpShort = false;
+						const ButtonState st = evaluate(*b, *sel, cpShort);
+						if (st == ButtonState::Hidden || (st == ButtonState::Restricted && b->hasOption(0x400000u)))
+						{
+							hidden = true;
+							break;
+						}
+						if (st == ButtonState::Enabled || st == ButtonState::Active)
+						{
+							++availCount;
+							enabledState = st;
+						}
+						else if (st == ButtonState::NotReady)
+						{
+							disabledState = ButtonState::NotReady;
+							timerObj = sel;
+						}
+						else if (disabledState != ButtonState::NotReady)
+						{
+							if (st == ButtonState::CantAfford)
+							{
+								disabledState = ButtonState::CantAfford;
+								anyCpShort = anyCpShort || cpShort;
+							}
+							else if (disabledState != ButtonState::CantAfford && st == ButtonState::Purchased)
+							{
+								disabledState = ButtonState::Purchased;
+							}
+						}
+					}
+					if (hidden)
+					{
+						continue;
+					}
+					cb.state = availCount > 0 ? enabledState : disabledState;
+					cb.commandPointsShort = availCount > 0 ? false : anyCpShort;
 				}
-				if (cb.state == ButtonState::Hidden)
+				else
 				{
-					continue;
+					cb.state = evaluate(*b, *obj, cb.commandPointsShort);
+					// lane HUD-6: RW 0x943B39 .. 0x943B4C: a disabled button (availability 0) with the option HIDE_WHILE_DISABLED (CommandButton + 0x1E & 0x40,
+					// option bit 22 of RW 0xDA4C88) is hidden (3): the Mordor fortress's spire fireball before its upgrade. Lane OWNERFIX-3: the exception (bl,
+					// RW 0x943B18) is only for a button updateContextCommand itself turned to 0 in a foreign view (foreignDisable): one whose own availability was
+					// already 0 hides for every viewer
+					if (cb.state == ButtonState::Restricted && b->hasOption(0x400000u))
+					{
+						continue;
+					}
+					if (cb.state == ButtonState::Hidden)
+					{
+						continue;
+					}
 				}
 				cb.inPalantir = b->m_inPalantir;
-				cb.image = b->m_buttonImageName.empty() ? std::string() : b->m_buttonImageName.front();
-				cb.textLabel = b->m_textLabel.empty() ? std::string() : b->m_textLabel.front();
-				cb.descriptLabel = b->m_descriptLabel.empty() ? std::string() : b->m_descriptLabel.front();
-				if (b->hasOption(COMMAND_OPTION_TOGGLE_IMAGE_ON_WEAPONSET) && b->m_buttonImageName.size() > 1)
-				{
-					// lane HUD-4 (INFERENCE, S-1672): the second image and labels while the object has one of the button's FlagsUsedForToggle
-					const WeaponConditionFlags &f = obj->getWeaponSetFlags();
-					bool on = false;
-					for (size_t w = 0; w < f.size() && w < b->m_flagsUsedForToggle.size(); ++w)
-					{
-						on = on || (f[w] & b->m_flagsUsedForToggle[w]) != 0;
-					}
-					if (on)
-					{
-						cb.image = b->m_buttonImageName[1];
-						cb.textLabel = b->m_textLabel.size() > 1 ? b->m_textLabel[1] : cb.textLabel;
-						cb.descriptLabel = b->m_descriptLabel.size() > 1 ? b->m_descriptLabel[1] : cb.descriptLabel;
-					}
-				}
 				if (b->m_command == GUI_COMMAND_TOGGLE_STANCE)
 				{
-					// lane PLAY-4: the toggle shows the image and labels of the current stance (RW onStancesBehaviorStanceChanged / SetStance: the button's
-					// image slot StanceToButtonSlot(stance), BFME2 0x567B10)
+					// lane PLAY-4 / PORT-143: the button's picture is the entry at its own index (getButtonImage RW 0x75CDFC, getTextLabel RW 0x75CE47 and
+					// getDescriptLabel RW 0x75CECD all read CommandButton +0xFC). The InGameToggleStanceCommandButton's ctor (RW 0x96FF43 .. 0x96FF68) and its
+					// StancesBehavior listener (RW 0x96F5D8 .. 0x96F608) put the object's stance CLASS (RW 0x96FF2F -> RW 0x861D8E) through StanceToButtonSlot
+					// (RW 0x96F2DA) into that index, and with no StancesBehavior the slot is -1, whose jl at RW 0x96FF55 leaves the index where it was: the
+					// picture an order put there (ControlBar::applyToggleStance, the SetStance of RW 0x96F53C) stays on the gray button (the owner's P-25)
 					const int k = stanceSlotOf(*b, *obj);
 					if (k >= 0)
 					{
-						cb.image = (size_t)k < b->m_buttonImageName.size() ? b->m_buttonImageName[(size_t)k] : cb.image;
-						cb.textLabel = (size_t)k < b->m_textLabel.size() ? b->m_textLabel[(size_t)k] : cb.textLabel;
-						cb.descriptLabel = (size_t)k < b->m_descriptLabel.size() ? b->m_descriptLabel[(size_t)k] : cb.descriptLabel;
+						b->setCurrentIndex(k); // RW 0x75D082 takes it (its own bounds test is the same ButtonImage list)
+					}
+					if (const std::string *img = b->getButtonImage())
+					{
+						cb.image = *img;
+					}
+					cb.textLabel = b->getTextLabel(); // the text override of RW 0x75CE4B (CommandButton +0x7C) is not ported (S-7335): the list is the entry
+					cb.descriptLabel = b->getDescriptLabel();
+				}
+				else
+				{
+					// PORT-169 (issue #398, RW 0x943E91 / 0x944603 / 0x9446A5): keep CommandButton +0xFC synchronized with object/multi-select state
+					if (multiSelectCommon)
+					{
+						updateMultiSelectToggleIndex(*b, obj);
+					}
+					else
+					{
+						updateToggleIndex(*b, obj, false);
+					}
+					if (usesToggleIndex(*b))
+					{
+						// PORT-189 (issue #455): preserve click-predicted +0xFC (RW 0x941367 / 0x941A22 / 0x9414E7) until the
+						// authoritative object state leaves preClickIndex or context/dirty refreshes (RW 0x71FD81 skips
+						// populateCommand while m_UIDirty is 0, so 60+ FPS HUD updates between 30 Hz logic ticks or during
+						// SPECIAL_POWER unpack do not revert +0xFC and freeze the re-composed help box on the old labels).
+						const auto pit = m_pendingToggles.find(b);
+						if (pit != m_pendingToggles.end())
+						{
+							if (b->getToggleIndex() == pit->second.preClickIndex)
+							{
+								b->setToggleIndex(pit->second.predictedIndex, m_ctx.images);
+							}
+							else
+							{
+								m_pendingToggles.erase(pit);
+							}
+						}
+						cb.image = b->getToggleImageName(m_ctx.images);
+						cb.textLabel = b->getToggleTextLabel();
+						cb.descriptLabel = b->getToggleDescriptLabel();
+					}
+					else
+					{
+						cb.image = b->m_buttonImageName.empty() ? std::string() : b->m_buttonImageName.front();
+						cb.textLabel = b->m_textLabel.empty() ? std::string() : b->m_textLabel.front();
+						cb.descriptLabel = b->m_descriptLabel.empty() ? std::string() : b->m_descriptLabel.front();
+					}
+				}
+				if (b->hasOption(COMMAND_OPTION_TOGGLE_IMAGE_ON_WEAPON) && b->m_command == GUI_COMMAND_TOGGLE_WEAPON)
+				{
+					// lane PORT-152: RW 0x75D22E's 0x800000 arm (RW 0x75D2BB .. 0x75D319, DONOR BFME2 0x35B5C2): the image index (+0xFC) is the
+					// button's WeaponSlotToggle2 (+0x88) for KindOf 0x91, WeaponSlotToggle3 (+0x8C) for KindOf 0x92, else WeaponSlotToggle1 (+0x84);
+					// the image is that index of the ButtonImage list (RW 0x75D19E: null past the end), the labels the same index clamped to the last
+					const int index = obj->isKindOf(0x91) ? b->m_weaponSlotToggle2 : obj->isKindOf(0x92) ? b->m_weaponSlotToggle3 : b->m_weaponSlotToggle1;
+					cb.image = index >= 0 && (size_t)index < b->m_buttonImageName.size() ? b->m_buttonImageName[(size_t)index] : std::string();
+					if (!b->m_textLabel.empty())
+					{
+						cb.textLabel = b->m_textLabel[std::min<size_t>((size_t)std::max(index, 0), b->m_textLabel.size() - 1)];
+					}
+					if (!b->m_descriptLabel.empty())
+					{
+						cb.descriptLabel = b->m_descriptLabel[std::min<size_t>((size_t)std::max(index, 0), b->m_descriptLabel.size() - 1)];
 					}
 				}
 				cb.hotkey = hotkeyOf(cb.textLabel);
+				if (cb.state == ButtonState::NotReady && b->m_command == GUI_COMMAND_FIRE_WEAPON)
+				{
+					// P-64 (Erkenbrand's Time to Strike showed no recharge): the availability RW 0x942733 writes the clock's percent (its out parameter + 0x14,
+					// 1.0 at entry RW 0x942752) in the not-ready branch of case 0x17 (RW 0x943215 .. 0x943243): a weapon RELOADING_CLIP (3) or whose template
+					// can fire while charging or always shows its readiness (RW 0x6CA415) gets Weapon::getPercentReadyToFire (RW 0x6CDB73), any other 0;
+					// updateContextCommand draws it as the button's clock (RW 0x943C9C .. 0x943CB0, percent * 100)
+					ObjectWeapons *weapons = timerObj->getWeapons();
+					const Weapon *weapon = weapons ? weapons->weaponInSlot(b->m_weaponSlot) : nullptr;
+					const WeaponTemplate *wt = weapon ? weapon->getTemplate() : nullptr;
+					if (weapon && wt)
+					{
+						const int status = weapons->slotStatus(b->m_weaponSlot);
+						cb.timer = status == WEAPON_RELOADING_CLIP || wt->m_canFireWhileCharging || wt->m_forceDisplayPercentReady
+							? weapon->percentReadyToFire(status, m_ctx.logic.getFrame()) : 0.0f;
+					}
+				}
 				if (cb.state == ButtonState::NotReady && b->m_command == GUI_COMMAND_SPECIAL_POWER)
 				{
-					if (SpecialPowerModuleInterface *sp = SpecialPowerModules::findModule(*obj, specialPowerOf(*b)))
+					if (SpecialPowerModuleInterface *sp = SpecialPowerModules::findModule(*timerObj, specialPowerOf(*b)))
 					{
 						cb.timer = sp->getPercentReadyForDisplay(); // lane HERO-1: the recharge clock of the ability button
 					}
@@ -1061,19 +1465,22 @@ void ControlBar::update()
 				place(cb, start);
 			}
 			// RW 0x943D6F: a contain that shows its riders on the control bar (contain slot 0xC8) fills the set's EXIT_CONTAINER buttons
-			if (ContainModuleInterface *c = obj->getContain(); c && c->isDisplayedOnControlBar())
+			if (!multiSelectCommon)
 			{
-				doTransportInventoryUI(*obj);
-				for (auto *list : { &m_palantir, &m_side, &m_offBar })
+				if (ContainModuleInterface *c = obj->getContain(); c && c->isDisplayedOnControlBar())
 				{
-					for (ControlBarButton &r : *list)
+					doTransportInventoryUI(*obj);
+					for (auto *list : { &m_palantir, &m_side, &m_offBar })
 					{
-						foreignDisable(r); // the riders' buttons too (RW 0x94251F runs before updateContextCommand)
+						for (ControlBarButton &r : *list)
+						{
+							foreignDisable(r); // the riders' buttons too (RW 0x94251F runs before updateContextCommand)
+						}
 					}
 				}
 			}
 		}
-		else if (obj->getCommandSetName().empty())
+		else if (!multiSelectCommon && obj->getCommandSetName().empty())
 		{
 			structureInventory(*obj, local);
 		}
@@ -1334,6 +1741,21 @@ bool ControlBar::isUnderConstructionContext(const Object &obj)
 	return gb->forceComplete();
 }
 
+// RW 0x96F2DA (InGameToggleStanceCommandButton's StanceToButtonSlot): walk the button's Stances list (CommandButton +0x234, the entry getter RW 0x75D324)
+// for a value equal to the argument, -1 when the list has none. SetStance (RW 0x96F54C) hands it the stance the player ordered as it is; the widget's ctor
+// (RW 0x96FF49) and its stance listener (RW 0x96F5E4) hand it the stance's class
+int ControlBar::stanceSlotOf(const CommandButton &b, int stance)
+{
+	for (size_t i = 0; i < b.m_stances.size(); ++i)
+	{
+		if (b.m_stances[i] == stance)
+		{
+			return (int)i;
+		}
+	}
+	return -1;
+}
+
 int ControlBar::stanceSlotOf(const CommandButton &b, Object &obj)
 {
 	const StancesBehavior *sb = StancesBehavior::of(obj);
@@ -1343,15 +1765,7 @@ int ControlBar::stanceSlotOf(const CommandButton &b, Object &obj)
 	}
 	// RW 0x96FF2F -> 0x861D8E: the toggle looks up the stance's class, not the stance (Uninitialized shows Battle, Porcupine / HoldGroundMoving show
 	// HoldGround), in the button's Stances (RW 0x96F2DA); the change listener RW 0x96F5DE gets the class too
-	const int stanceClass = StancesBehavior::stanceClass(sb->getStance());
-	for (size_t i = 0; i < b.m_stances.size(); ++i)
-	{
-		if (b.m_stances[i] == stanceClass)
-		{
-			return (int)i;
-		}
-	}
-	return -1;
+	return stanceSlotOf(b, StancesBehavior::stanceClass(sb->getStance()));
 }
 
 void ControlBar::populateUnderConstruction(Object &obj, bool mine)
@@ -1381,14 +1795,14 @@ void ControlBar::populateUnderConstruction(Object &obj, bool mine)
 void ControlBar::emitStateKey()
 {
 	// the version moves when the picture of the bar changes
-	std::string key = std::to_string(m_source) + "|" + m_setName + (m_underConstruction ? "|uc" : "") + "|" + std::to_string(m_rangeStack.size()) + "|" + std::to_string(m_rangeStack.back().first) + "|" + std::to_string(m_money) + "|"
+	std::string key = std::to_string(m_source) + ":" + std::to_string(m_contextSource) + "|" + m_setName + (m_underConstruction ? "|uc" : "") + "|" + std::to_string(m_rangeStack.size()) + "|" + std::to_string(m_rangeStack.back().first) + "|" + std::to_string(m_money) + "|"
 		+ std::to_string(m_cpUsed) + "/" + std::to_string(m_cpLimit);
 	for (const auto *v : { &m_palantir, &m_side, &m_offBar })
 	{
 		for (const ControlBarButton &b : *v)
 		{
 			key += std::string(v == &m_palantir ? "a" : (v == &m_side ? "s" : "o")) + std::to_string(b.position) + "|" + std::to_string(b.slot) + ":" + std::to_string((int)b.state) + ":" + std::to_string(b.queued) + ":" + std::to_string((int)(b.timer * 100.0f)) + ":" +
-				std::to_string(b.rider) + ":" + b.image + (b.autoAbility ? ":auto" : "");
+				std::to_string(b.rider) + ":" + b.image + ":" + b.textLabel + ":" + b.descriptLabel + (b.autoAbility ? ":auto" : "");
 		}
 	}
 	if (key != m_lastKey)
@@ -1396,6 +1810,154 @@ void ControlBar::emitStateKey()
 		m_lastKey = key;
 		++m_version;
 	}
+}
+
+void ControlBar::updateToggleIndex(const CommandButton &b, const Object *obj, bool invert) const
+{
+	// RW 0x75D22E (CommandButton::updateToggleImage)
+	if (!obj)
+	{
+		return;
+	}
+	if (b.resolvedButtonImageCount(m_ctx.images) < 2)
+	{
+		b.resetToggleIndex();
+		return;
+	}
+	if (b.hasOption(COMMAND_OPTION_TOGGLE_IMAGE_ON_WEAPONSET))
+	{
+		const WeaponConditionFlags &f = obj->getWeaponSetFlags();
+		bool has = false;
+		for (size_t w = 0; w < f.size() && w < b.m_flagsUsedForToggle.size(); ++w)
+		{
+			if ((f[w] & b.m_flagsUsedForToggle[w]) != 0)
+			{
+				has = true;
+				break;
+			}
+		}
+		b.setToggleIndex((has != invert) ? 1 : 0, m_ctx.images);
+	}
+	else if (b.hasOption(COMMAND_OPTION_TOGGLE_IMAGE_ON_FORMATION))
+	{
+		const Object *horde = obj->getHordeObject(false); // RW 0x693A1A(0)
+		const ContainModuleInterface *contain = horde ? horde->getContain() : nullptr;
+		const HordeContainInterface *hc = contain ? const_cast<ContainModuleInterface *>(contain)->getHordeContainInterface() : nullptr;
+		if (!hc)
+		{
+			return; // RW 0x75D29B..0x75D2AD: leaves +0xFC unchanged
+		}
+		b.setToggleIndex((hc->isMainFormation() == invert) ? 1 : 0, m_ctx.images);
+	}
+	else if ((b.m_options & 0x800000u) != 0 && b.m_command == GUI_COMMAND_TOGGLE_NO_AUTO_ACQUIRE)
+	{
+		static const int kNoAutoAcquire = ObjectTemplateInfoBuilder::objectStatusIndex("NO_AUTO_ACQUIRE");
+		const bool has = kNoAutoAcquire >= 0 && obj->testStatus(static_cast<unsigned>(kNoAutoAcquire));
+		b.setToggleIndex((has == invert) ? 1 : 0, m_ctx.images);
+	}
+	else if (b.m_command != GUI_COMMAND_TOGGLE_STANCE && b.m_command != GUI_COMMAND_TOGGLE_WEAPON)
+	{
+		b.resetToggleIndex();
+	}
+}
+
+void ControlBar::updateMultiSelectToggleIndex(const CommandButton &b, const Object *fallback) const
+{
+	// RW 0x944603..0x9446A5 (populateMultiSelect)
+	static const int kIgnoredInGui = ObjectTemplateInfoBuilder::kindOfIndex("IGNORED_IN_GUI");
+	static const int kSold = ObjectTemplateInfoBuilder::objectStatusIndex("SOLD");
+	if (b.m_command == GUI_COMMAND_HORDE_TOGGLE_FORMATION)
+	{
+		if (b.resolvedButtonImageCount(m_ctx.images) < 2)
+		{
+			b.resetToggleIndex();
+			return;
+		}
+		int vote = 0;
+		for (ObjectID selId : m_ctx.ui.selected())
+		{
+			Object *sel = m_ctx.logic.findObjectByID(selId);
+			if (!sel || (kIgnoredInGui >= 0 && sel->isKindOf(static_cast<unsigned>(kIgnoredInGui)))
+				|| (kSold >= 0 && sel->testStatus(static_cast<unsigned>(kSold))))
+			{
+				continue;
+			}
+			const Object *horde = sel->getHordeObject(false);
+			const ContainModuleInterface *contain = horde ? horde->getContain() : nullptr;
+			const HordeContainInterface *hc = contain ? const_cast<ContainModuleInterface *>(contain)->getHordeContainInterface() : nullptr;
+			if (!hc)
+			{
+				continue;
+			}
+			if (hc->isMainFormation())
+			{
+				--vote;
+			}
+			else
+			{
+				++vote;
+			}
+		}
+		b.setToggleIndex(vote >= 0 ? 1 : 0, m_ctx.images);
+		return;
+	}
+	const Object *firstNonIgnored = nullptr;
+	for (ObjectID selId : m_ctx.ui.selected())
+	{
+		Object *sel = m_ctx.logic.findObjectByID(selId);
+		if (sel && (kIgnoredInGui < 0 || !sel->isKindOf(static_cast<unsigned>(kIgnoredInGui))))
+		{
+			firstNonIgnored = sel;
+			break;
+		}
+	}
+	updateToggleIndex(b, firstNonIgnored ? firstNonIgnored : fallback, false);
+}
+
+bool ControlBar::usesToggleIndex(const CommandButton &b)
+{
+	return b.hasOption(COMMAND_OPTION_TOGGLE_IMAGE_ON_WEAPONSET | COMMAND_OPTION_TOGGLE_IMAGE_ON_FORMATION)
+		|| ((b.m_options & 0x800000u) != 0 && b.m_command == GUI_COMMAND_TOGGLE_NO_AUTO_ACQUIRE);
+}
+
+void ControlBar::applyPredictedToggle(const CommandButton &b, const Object *obj)
+{
+	// PORT-189 (issue #455): processCommandUI (RW 0x941367 / 0x941A22 / 0x9414E7 -> RW 0x75D22E(obj, 1))
+	// flips +0xFC immediately, processContextSensitiveButtonClick (RW 0x941C14..0x941C1D) refreshes the
+	// button image from +0xFC, and OldSchoolHelpBoxContentSource::createContent (RW 0x807D9C / 0x807EB3 ->
+	// RW 0x75CECD / 0x75CE47) reads labels live from +0xFC.
+	const auto existing = m_pendingToggles.find(&b);
+	const int preClickIndex = existing != m_pendingToggles.end() ? existing->second.preClickIndex : b.getToggleIndex();
+	updateToggleIndex(b, obj, true);
+	if (!usesToggleIndex(b))
+	{
+		return;
+	}
+	const int predictedIndex = b.getToggleIndex();
+	if (predictedIndex != preClickIndex)
+	{
+		m_pendingToggles[&b] = PendingToggle{ preClickIndex, predictedIndex };
+	}
+	else
+	{
+		m_pendingToggles.erase(&b);
+	}
+	const std::string img = b.getToggleImageName(m_ctx.images);
+	const std::string &txt = b.getToggleTextLabel();
+	const std::string &desc = b.getToggleDescriptLabel();
+	for (std::vector<ControlBarButton> *list : { &m_palantir, &m_side, &m_offBar })
+	{
+		for (ControlBarButton &cb : *list)
+		{
+			if (cb.button == &b)
+			{
+				cb.image = img;
+				cb.textLabel = txt;
+				cb.descriptLabel = desc;
+			}
+		}
+	}
+	emitStateKey();
 }
 
 ControlBar::Placement ControlBar::placementOf(const CommandButton &b, int slot, int rangeStart)

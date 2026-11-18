@@ -14,6 +14,9 @@
 #include "Libraries/WWVegas/WW3D2/hanim.h"
 #include "Libraries/WWVegas/WW3D2/motchan.h"
 #include "Libraries/WWVegas/WW3D2/w3dsort.h"
+#include "Libraries/WWVegas/WW3D2/lightenvironment.h"
+#include "GameClient/ClientEffects.h"
+#include "GameEngineDevice/W3DDevice/GameClient/W3DObjectLighting.h"
 
 #include <cmath>
 
@@ -24,6 +27,7 @@
 #include <godot_cpp/classes/array_mesh.hpp>
 #include <godot_cpp/classes/camera3d.hpp>
 #include <godot_cpp/classes/geometry_instance3d.hpp>
+#include <godot_cpp/classes/project_settings.hpp>
 #include <godot_cpp/classes/viewport.hpp>
 #include <godot_cpp/core/class_db.hpp>
 #include <godot_cpp/variant/aabb.hpp>
@@ -51,6 +55,10 @@ namespace godot
 
 namespace
 {
+
+// P-99: the draw nodes of every instancer (each holds 16 global shader slots for its instance uniforms) and whether the overflow was reported
+std::atomic<int64_t> g_instanceParamNodes{ 0 };
+std::atomic<bool> g_instanceParamOverflowReported{ false };
 
 // lane PERF-HD: every MultiMesh's custom AABB, a box beyond any map. Without one Godot recomputes the AABB over every instance at each set_buffer,
 // and an animated model's buffers are rewritten every frame; one MultiMesh holds a model's instances across the whole battlefield, so its own
@@ -377,6 +385,36 @@ W3DInstancer::W3DInstancer()
 W3DInstancer::~W3DInstancer()
 {
 	release_palette_rd();
+	// P-99: the draw nodes are this instancer's children and go with it (their instance shader slots are freed by the server)
+	int64_t mine = 0;
+	for (const std::unique_ptr<Model> &m : Models) mine += (int64_t)m->Draws.size();
+	g_instanceParamNodes.fetch_sub(mine);
+}
+
+// P-99: every draw node's material declares instance uniforms (w3dshadergen: w3d_tint, w3d_receive_shadows), so the rendering server gives
+// each node ShaderLanguage::MAX_INSTANCE_UNIFORM_INDICES (16) slots of the global shader buffer (Godot 4.7.2 instance_uniforms.cpp
+// materials_finish -> MaterialStorage::global_shader_parameters_instance_allocate). A model's nodes stay until the instancer goes, so a long
+// game keeps adding them. When the buffer is full the server keeps the instance's key but returns -1, and every later update of that
+// instance allocates again and prints "instance_buffer_pos.has(p_instance)" (the owner's endless error, and the lag that came with it).
+// project.godot raises the buffer to its maximum; this count says once, with the numbers, if the game still outgrows it.
+int64_t W3DInstancer::instance_param_capacity()
+{
+	ProjectSettings *ps = ProjectSettings::get_singleton();
+	const int64_t setting = ps ? (int64_t)ps->get_setting("rendering/limits/global_shader_variables/buffer_size", 65536) : 65536;
+	return std::max<int64_t>(4096, setting) / 16; // MaterialStorage: MAX(4096, setting) values, 16 per instance
+}
+
+void W3DInstancer::note_instance_param_node(PackedStringArray &errors)
+{
+	const int64_t nodes = g_instanceParamNodes.fetch_add(1) + 1;
+	const int64_t capacity = instance_param_capacity();
+	if (nodes > capacity && !g_instanceParamOverflowReported.exchange(true))
+	{
+		const std::string msg = "P-99: " + std::to_string(nodes) + " W3D draw nodes use instance shader parameters, the global shader buffer holds "
+		                        + std::to_string(capacity) + " (rendering/limits/global_shader_variables/buffer_size / 16): the new nodes get no slot";
+		UtilityFunctions::push_error(toGodot(msg));
+		errors.push_back(toGodot(msg));
+	}
 }
 
 void W3DInstancer::_bind_methods()
@@ -419,6 +457,7 @@ void W3DInstancer::_bind_methods()
 	ClassDB::bind_method(D_METHOD("set_sort_camera", "transform"), &W3DInstancer::set_sort_camera);
 	ClassDB::bind_method(D_METHOD("get_draw_order", "model", "draw"), &W3DInstancer::get_draw_order);
 	ClassDB::bind_method(D_METHOD("set_instance_hidden_subobjects", "instance", "names"), &W3DInstancer::set_instance_hidden_subobjects);
+	ClassDB::bind_method(D_METHOD("set_instance_hidden_subobjects_exact", "instance", "names"), &W3DInstancer::set_instance_hidden_subobjects_exact);
 	ClassDB::bind_method(D_METHOD("set_auto_update", "enabled"), &W3DInstancer::set_auto_update);
 	ClassDB::bind_method(D_METHOD("set_house_colors_enabled", "enabled"), &W3DInstancer::set_house_colors_enabled);
 	ClassDB::bind_method(D_METHOD("get_house_colors_enabled"), &W3DInstancer::get_house_colors_enabled);
@@ -847,6 +886,10 @@ std::shared_ptr<W3DInstancer::MeshGpu> W3DInstancer::build_mesh(const MeshModelC
 		MeshCache[key] = nullptr;
 		return nullptr;
 	}
+	if (BuildingFloor)
+	{
+		Subdivide_Floor_Mesh_Data(gpu->Data, 5.0f);
+	}
 	const MeshRenderData &d = gpu->Data;
 	const int64_t nv = (int64_t)d.NumVertices;
 	gpu->Mesh.instantiate();
@@ -915,7 +958,8 @@ std::shared_ptr<W3DInstancer::MeshGpu> W3DInstancer::build_mesh(const MeshModelC
 		if (blends && surf.Sorted)
 		{
 			gpu->HasSorted = true;
-			gpu->SortPriorities.insert(std::clamp(surf.Pass - std::min(surf.SortLevel, 31) * 4, -128, 127)); // the render_priority the material gets
+			const bool floorBlend = Materials && Materials->Floor_Blend();
+			gpu->SortPriorities.insert(W3D_Surface_Render_Priority(surf.SortLevel, surf.Pass, floorBlend)); // the render_priority the material gets
 		}
 		if (surf.Kind == MATERIAL_FX || (surf.Kind == MATERIAL_CLASSIC && surf.State.Blend == W3D_GODOT_BLEND_OPAQUE)) gpu->HasOpaque = true;
 		Array arrays;
@@ -1066,7 +1110,7 @@ int64_t W3DInstancer::add_model(const String &model_name)
 		BuildSuffix = savedSuffix;
 		return id;
 	}
-	if (PendingSwaps.empty() && !PendingFloor)
+	if (PendingSwaps.empty() && !PendingFloor && !PendingVegetation)
 	{
 		return build_model(model_name);
 	}
@@ -1075,18 +1119,25 @@ int64_t W3DInstancer::add_model(const String &model_name)
 	swaps.swap(PendingSwaps);
 	const bool floor = PendingFloor;
 	PendingFloor = false;
+	const bool vegetation = PendingVegetation;
+	PendingVegetation = false;
 	const std::string savedSuffix = BuildSuffix;
-	BuildSuffix += Texture_Swap_Suffix(swaps) + (floor ? "#floor" : "");
+	BuildSuffix += Texture_Swap_Suffix(swaps) + (floor ? "#floor" : "") + (vegetation ? "#veg" : "");
+	const bool savedBuildingFloor = BuildingFloor;
+	BuildingFloor = floor;
 	if (Materials)
 	{
 		Materials->Set_Texture_Swaps(swaps);
 		Materials->Set_Floor_Blend(floor);
+		Materials->Set_Vegetation(vegetation);
 	}
 	const int64_t id = build_model(model_name);
+	BuildingFloor = savedBuildingFloor;
 	if (Materials)
 	{
 		Materials->Set_Texture_Swaps({});
 		Materials->Set_Floor_Blend(false);
+		Materials->Set_Vegetation(false);
 	}
 	BuildSuffix = savedSuffix;
 	return id;
@@ -1130,7 +1181,16 @@ int64_t W3DInstancer::build_model(const String &model_name)
 		if (sub.Type == RenderSubObject::SUB_UNRESOLVED)
 		{
 			s["reason"] = toGodot(sub.Reason);
-			errors.push_back(toGodot("sub object " + sub.Name + " unresolved: " + sub.Reason));
+			if (sub.AbsentFromData)
+			{
+				// P-99: the model's own data names a sub object no file has (vanilla MUSauronEye's HLOD lists MUSAURONEYE.BOX01, musauroneye.w3d has
+				// no W3D_CHUNK_BOX): retail's HLodClass creates nothing for it and goes on (BFME2 hlod.cpp:1108 .. 1112), so the model is complete
+				notes.push_back(toGodot("sub object " + sub.Name + " is in no file: skipped as retail's HLodClass does (" + sub.Reason + ")"));
+			}
+			else
+			{
+				errors.push_back(toGodot("sub object " + sub.Name + " unresolved: " + sub.Reason));
+			}
 		}
 		else if (sub.Type == RenderSubObject::SUB_EMITTER)
 		{
@@ -1140,10 +1200,13 @@ int64_t W3DInstancer::build_model(const String &model_name)
 		{
 			if (sub.Mesh->Is_Hidden())
 			{
+				// P-88: W3D_MESH_FLAG_HIDDEN is the mesh's starting state, not "never drawn": a draw module's ShowSubObject (SubObjectsUpgrade, a state
+				// script) shows it. The mesh is built as any other; an instance starts with it hidden (Model::DefaultHiddenSubs) until a draw module
+				// gives its own complete hidden set (set_instance_hidden_subobjects_exact).
 				s["hidden"] = true;
-				notes.push_back(toGodot("mesh " + sub.Name + " has the HIDDEN flag and is not drawn"));
-				subs.push_back(s);
-				continue;
+				notes.push_back(toGodot("mesh " + sub.Name + " has the HIDDEN flag: hidden until an instance shows it"));
+				if (model->DefaultHiddenSubs.empty()) model->DefaultHiddenSubs.assign(proto->SubObjects.size(), 0);
+				model->DefaultHiddenSubs[(size_t)(&sub - proto->SubObjects.data())] = 1;
 			}
 			std::vector<std::string> meshErrors;
 			std::shared_ptr<MeshGpu> gpu = build_mesh(*sub.Mesh, meshErrors);
@@ -1188,7 +1251,12 @@ int64_t W3DInstancer::build_model(const String &model_name)
 			item.Node->set_multimesh(item.MM);
 			item.Node->set_cast_shadows_setting(GeometryInstance3D::SHADOW_CASTING_SETTING_OFF);
 			item.Node->set_instance_shader_parameter("w3d_receive_shadows", ShadowReceiving);
+			if (BuildingFloor)
+			{
+				item.Node->set_sorting_offset(100000.0f);
+			}
 			add_child(item.Node);
+			note_instance_param_node(errors);
 			model->Draws.push_back(std::move(item));
 		}
 		subs.push_back(s);
@@ -1311,6 +1379,7 @@ int64_t W3DInstancer::add_instance(int64_t model, const Transform3D &transform, 
 	inst.Pose.Resize(Models[(size_t)model]->Proto->Tree->Num_Pivots());
 	inst.PaletteAnimated = !clip.is_empty();
 	inst.DrawPoseState.resize(Models[(size_t)model]->Draws.size());
+	inst.HiddenSubs = Models[(size_t)model]->DefaultHiddenSubs; // P-88: the meshes' own HIDDEN flags
 	allocate_palette(inst);
 	Instances.push_back(std::move(inst));
 	const int id = (int)Instances.size() - 1;
@@ -1429,8 +1498,10 @@ void W3DInstancer::note_palette_rows(int offset, int texels)
 
 void W3DInstancer::allocate_palette(Instance &inst)
 {
-	const int size = inst.Pose.Num_Pivots() * W3D_PALETTE_TEXELS_PER_PIVOT;
+	// lane LOCAL-38: the block starts with the render object's light environment (W3D_PALETTE_LIGHT_TEXELS), the pivots follow
+	const int size = W3D_PALETTE_LIGHT_TEXELS + inst.Pose.Num_Pivots() * W3D_PALETTE_TEXELS_PER_PIVOT;
 	inst.PaletteSize = size;
+	inst.LightTexelsWritten = false;
 	std::map<int, std::vector<int>> &freeList = inst.PaletteAnimated ? PaletteAnimFree : PaletteFree;
 	auto it = freeList.find(size);
 	if (it != freeList.end() && !it->second.empty())
@@ -1937,11 +2008,24 @@ bool W3DInstancer::set_instance_pose(int64_t instance, const String &clip0, doub
 
 bool W3DInstancer::set_instance_hidden_subobjects(int64_t instance, const PackedStringArray &names)
 {
+	return set_hidden_subobjects(instance, names, false);
+}
+
+bool W3DInstancer::set_instance_hidden_subobjects_exact(int64_t instance, const PackedStringArray &names)
+{
+	return set_hidden_subobjects(instance, names, true);
+}
+
+// P-88: exact = the names are a draw module's complete hidden set (it starts from the meshes' HIDDEN flags and its ShowSubObject clears them);
+// otherwise the names are hidden on top of the meshes' HIDDEN flags (a caller that knows nothing of the flags must not reveal such a mesh).
+bool W3DInstancer::set_hidden_subobjects(int64_t instance, const PackedStringArray &names, bool exact)
+{
 	if (instance < 0 || instance >= (int64_t)Instances.size()) return false;
 	Instance &inst = Instances[(size_t)instance];
 	const Model &m = *Models[(size_t)inst.Model];
 	std::vector<std::uint8_t> hidden;
-	if (!names.is_empty()) hidden.assign(m.Proto->SubObjects.size(), 0);
+	if (!exact) hidden = m.DefaultHiddenSubs;
+	if (!names.is_empty() && hidden.empty()) hidden.assign(m.Proto->SubObjects.size(), 0);
 	for (int64_t i = 0; i < names.size(); ++i)
 	{
 		const std::string want = AsciiStringUtil::lowered(toNative(names[i]));
@@ -2093,10 +2177,159 @@ PackedFloat32Array W3DInstancer::get_instance_palette(int64_t instance) const
 	{
 		return out;
 	}
-	out.resize((int64_t)inst.PaletteSize * 4);
+	// the pivots only (lane LOCAL-38: the light texels in front of them are get_instance_light_texels)
+	const int pivotTexels = inst.PaletteSize - W3D_PALETTE_LIGHT_TEXELS;
+	out.resize((int64_t)pivotTexels * 4);
 	const PackedByteArray data = PaletteImage->get_data();
-	std::memcpy(out.ptrw(), data.ptr() + (size_t)inst.PaletteOffset * 16, (size_t)inst.PaletteSize * 16);
+	std::memcpy(out.ptrw(), data.ptr() + (size_t)(inst.PaletteOffset + W3D_PALETTE_LIGHT_TEXELS) * 16, (size_t)pivotTexels * 16);
 	return out;
+}
+
+PackedFloat32Array W3DInstancer::get_instance_light_texels(int64_t instance) const
+{
+	PackedFloat32Array out;
+	if (instance < 0 || instance >= (int64_t)Instances.size())
+	{
+		return out;
+	}
+	const Instance &inst = Instances[(size_t)instance];
+	if (inst.Removed || inst.PaletteSize == 0)
+	{
+		return out;
+	}
+	out.resize(12);
+	std::memcpy(out.ptrw(), inst.LightTexels, sizeof(inst.LightTexels));
+	return out;
+}
+
+bool W3DInstancer::update_object_lights()
+{
+	LitInstances = 0;
+	if (PaletteImage.is_null())
+	{
+		return false;
+	}
+	// the enabled dynamic lights in the pool's order (renderOneObject walks the scene's list, RW 0x46FC97, and skips a disabled one, RW 0x46FCAE)
+	LightScratch.clear();
+	if (SceneLights)
+	{
+		for (const LightPulseFx &l : SceneLights->lights())
+		{
+			if (l.enabled)
+			{
+				LightEnvSourceLight s;
+				LightPulseToEnvSource(l, s);
+				LightScratch.push_back(s);
+			}
+		}
+	}
+	// the global lights as Add_Light sees them: the shaders' colours without the SAS doubling (RW 0x54CFD0: the effect colour is the light's
+	// diffuse times 2.0 while RW 0xD9B03C is set); the scene ambient likewise
+	const W3DObjectLighting &lit = W3D_Current_Object_Lighting();
+	const float cs = lit.colorScale > 0.0f ? lit.colorScale : 1.0f;
+	LightEnvSourceLight suns[2][3];
+	int sunCount[2] = { 0, 0 };
+	::Vector3 sceneAmb[2];
+	for (int set = 0; set < 2; ++set)
+	{
+		const W3DLightSet &ls = set == 0 ? lit.objects : lit.infantry;
+		sunCount[set] = std::min(ls.count, 3);
+		for (int i = 0; i < sunCount[set]; ++i)
+		{
+			LightEnvSourceLight &s = suns[set][i];
+			s.type = LightEnvSourceLight::DIRECTIONAL;
+			s.diffuse = ::Vector3(ls.color[i][0] / cs, ls.color[i][1] / cs, ls.color[i][2] / cs);
+			s.direction = ::Vector3(ls.toLight[i][0], ls.toLight[i][1], ls.toLight[i][2]);
+		}
+		sceneAmb[set] = ::Vector3(ls.ambient[0] / cs, ls.ambient[1] / cs, ls.ambient[2] / cs);
+	}
+	const Transform3D nodeXf = is_inside_tree() ? get_global_transform() : Transform3D();
+	const Vector3 ns = nodeXf.basis.get_scale_abs();
+	const real_t nodeScale = std::max(ns.x, std::max(ns.y, ns.z));
+	float *img = reinterpret_cast<float *>(PaletteImage->ptrw());
+	bool changed = false;
+	for (size_t i = 0; i < Instances.size(); ++i)
+	{
+		Instance &inst = Instances[i];
+		if (inst.Removed || inst.PaletteSize == 0)
+		{
+			continue;
+		}
+		float t[12] = {};
+		// a fogged (last seen) object is drawn with the fogged environment and no dynamic light (RW 0x46FA9A: rendered and returned before the
+		// light lists, DONOR RTS3DSceneRenderOneObject.cpp)
+		if (!LightScratch.empty() && !inst.Fogged)
+		{
+			Model &m = *Models[(size_t)inst.Model];
+			const Vector3 sc = inst.Xf.basis.get_scale_abs();
+			const real_t scale = std::max(sc.x, std::max(sc.y, sc.z)) * nodeScale;
+			// quick reject with the pose-culling sphere around the origin (it holds the model in every pose, S-1730): no light sphere reaches it
+			const Vector3 o = nodeXf.xform(inst.Xf.origin);
+			const ::Vector3 os((float)o.x, (float)-o.z, (float)o.y);
+			const float cr = (float)(cull_radius(m) * scale);
+			bool reaches = false;
+			for (const LightEnvSourceLight &l : LightScratch)
+			{
+				if (W3D_Spheres_Intersect(os, cr, l.position, l.farAttenEnd))
+				{
+					reaches = true;
+					break;
+				}
+			}
+			::Vector3 c;
+			float radius = 0.0f;
+			if (reaches && m.Proto && W3D_Render_Object_Bounding_Sphere(*m.Proto, inst.Pose.Transform, c, radius))
+			{
+				// the HLOD space centre (W3D axes) -> Godot model -> world -> SAGE world; INFERENCE: the radius scales with the drawable's scale
+				const Vector3 g = nodeXf.xform(inst.Xf.xform(Vector3(c.X, c.Z, -c.Y)));
+				const ::Vector3 centre((float)g.x, (float)-g.z, (float)g.y);
+				const int set = inst.InfantryLight ? 1 : 0; // renderOneObject's infantry lights (+0x150) and ambient (+0x144), RW 0x46FAB2
+				const W3DObjectLightSet r = W3D_Collect_Object_Lights(centre, radius * (float)scale, sceneAmb[set], suns[set], sunCount[set],
+					LightScratch.data(), (int)LightScratch.size());
+				if (r.dynamicAdded > 0)
+				{
+					if (r.hasPoint)
+					{
+						// PointLight[0]: Position (Godot world), Range, Color (SAS-scaled, RW 0x54D166)
+						t[0] = r.pointPosition.X;
+						t[1] = r.pointPosition.Z;
+						t[2] = -r.pointPosition.Y;
+						t[3] = r.pointRange;
+						t[4] = r.pointColor.X * cs;
+						t[5] = r.pointColor.Y * cs;
+						t[6] = r.pointColor.Z * cs;
+					}
+					t[7] = (float)r.droppedSuns;
+					// AmbientLight (RW 0x54CF11, SAS-scaled RW 0x54CF57): what the dynamic lights add over the scene's (both clamped to [0, 1])
+					t[8] = (r.ambient.X - sceneAmb[set].X) * cs;
+					t[9] = (r.ambient.Y - sceneAmb[set].Y) * cs;
+					t[10] = (r.ambient.Z - sceneAmb[set].Z) * cs;
+					++LitInstances;
+				}
+			}
+		}
+		if (!inst.LightTexelsWritten || std::memcmp(t, inst.LightTexels, sizeof(t)) != 0)
+		{
+			std::memcpy(img + (size_t)inst.PaletteOffset * 4, t, sizeof(t));
+			std::memcpy(inst.LightTexels, t, sizeof(t));
+			inst.LightTexelsWritten = true;
+			note_palette_rows(inst.PaletteOffset, W3D_PALETTE_LIGHT_TEXELS);
+			changed = true;
+		}
+	}
+	return changed;
+}
+
+void W3DInstancer::refresh_object_lights()
+{
+	if (!Assets || LayoutDirty)
+	{
+		return; // the next update_now lays the palette out and writes the lights with it
+	}
+	if (update_object_lights())
+	{
+		upload_palette();
+	}
 }
 
 void W3DInstancer::ensure_pose(int64_t instance) const
@@ -2121,7 +2354,7 @@ void W3DInstancer::write_palette(const Instance &inst)
 	{
 		return;
 	}
-	float *out = PaletteWrite + (size_t)inst.PaletteOffset * 4;
+	float *out = PaletteWrite + (size_t)(inst.PaletteOffset + W3D_PALETTE_LIGHT_TEXELS) * 4; // lane LOCAL-38: the light texels come first
 	for (int p = 0; p < pivots; ++p)
 	{
 		const Matrix3D &m = inst.Pose.Transform[(size_t)p];
@@ -2437,7 +2670,8 @@ void W3DInstancer::pack_draw(Model &m, DrawItem &d)
 		o[0] = b.rows[0][0]; o[1] = b.rows[0][1]; o[2] = b.rows[0][2]; o[3] = inst.Xf.origin.x;
 		o[4] = b.rows[1][0]; o[5] = b.rows[1][1]; o[6] = b.rows[1][2]; o[7] = inst.Xf.origin.y;
 		o[8] = b.rows[2][0]; o[9] = b.rows[2][1]; o[10] = b.rows[2][2]; o[11] = inst.Xf.origin.z;
-		o[12] = inst.InfantryLight ? -(float)(src.PaletteOffset + 1) : (float)src.PaletteOffset;
+		const int first = src.PaletteOffset + W3D_PALETTE_LIGHT_TEXELS; // lane LOCAL-38: the first pivot texel (the light environment is in front)
+		o[12] = inst.InfantryLight ? -(float)(first + 1) : (float)first;
 		o[13] = fade;
 		o[14] = inst.HcPacked;
 		o[15] = (float)((d.Rigid ? (int)bone : 0) + 1024 * inst.Sway + (inst.Fogged ? 16384 : 0) // lane VISUAL-2: the sway type, the fogged light
@@ -2887,6 +3121,7 @@ void W3DInstancer::update_now()
 
 	t0 = std::chrono::steady_clock::now();
 	write_buffers();
+	update_object_lights(); // lane LOCAL-38: the render objects' light environments (their rows join this upload)
 	// Changed rows only. A static prop stays where it was uploaded; a prop that starts animating has been moved into the animated pool
 	// so its row is inside this span. A missed row would keep the previous pose on the GPU.
 	upload_palette();
@@ -2981,6 +3216,8 @@ Dictionary W3DInstancer::get_stats() const
 	int64_t draws = 0;
 	for (const std::unique_ptr<Model> &m : Models) draws += (int64_t)m->Draws.size();
 	s["draw_items"] = draws;
+	s["instance_param_nodes"] = g_instanceParamNodes.load();      // P-99: every instancer's draw nodes (each takes 16 global shader slots)
+	s["instance_param_capacity"] = instance_param_capacity();    // P-99: how many the global shader buffer holds
 	s["palette_texels"] = PaletteTexels;
 	s["palette_rows"] = PaletteHeight;
 	s["palette_rows_uploaded"] = PaletteRowsUploaded;

@@ -18,8 +18,10 @@
 #include "GameLogic/Object/Object.h"
 #include "GameLogic/Module/BehaviorModule.h"
 #include "GameLogic/Object/Contain/HordeContainRuntime.h"
+#include "Libraries/WWVegas/WWMath/matrix3d.h"
 
 #include <algorithm>
+#include <cmath>
 
 DrawableManager::DrawableManager(WW3DAssetManager &assets, GameLogic &logic)
 	: m_logic(logic)
@@ -426,6 +428,15 @@ void DrawableManager::applyEvents(const std::vector<ClientEvent> &events)
 				d->setUpgradeTextures(ev.textureSwaps);
 			}
 			break;
+		case ClientEvent::HOUSE_RECOLOR: // PORT-47: RW 0x4B8759 / 0x4B8771: kind 1, render slot +0x1F8, after texture slot +0x84.
+			if (Drawable *d = findByObject(ev.object))
+			{
+				HouseColorParams params;
+				params.kind = 1;
+				params.colors[0] = ev.houseColor;
+				d->recolorRenderObject(ev.name, params);
+			}
+			break;
 		case ClientEvent::PLACEMENT:
 			if (Drawable *d = findByObject(ev.object))
 			{
@@ -465,6 +476,15 @@ void DrawableManager::applyEvents(const std::vector<ClientEvent> &events)
 			break;
 		case ClientEvent::FLASH_AS_SELECTED: // RW 0x852BE1 / 0x678FA7
 			flashAsSelected(ev.object, ev.hasFlashColor ? &ev.flashColor : nullptr);
+			break;
+		case ClientEvent::ENSLAVED: // P-87, RW 0x6713A8 (the UseSlaverAsControl gate RW 0x6713AF .. 0x6713B6 is the simulation's, SlavedUpdate::onEnslave)
+			if (Drawable *d = findByObject(ev.object))
+			{
+				if (const Drawable *slaverD = findByObject(ev.slaver)) // RW 0x6713B8 .. 0x6713C3: the slaver's drawable, nothing without one
+				{
+					d->copyEvaSightedFrom(*slaverD);
+				}
+			}
 			break;
 		case ClientEvent::DIED: // RW 0x699077 -> RW 0x67561E
 			if (Drawable *d = findByObject(ev.object))
@@ -681,13 +701,25 @@ void DrawableManager::syncTransforms(const LogicSnapshot &snapshot, double alpha
 			std::uint8_t mark = 0;
 			if (rec && rec->containedBy != INVALID_ID)
 			{
-				// a container's shared set changes during the walk below only when its own flags do, which needs it to be contained itself (a horde
-				// member's horde is not): such a container, or one sharing flags now, keeps the slot for the walk
-				const Drawable *container = findByObject(rec->containedBy);
-				if (container)
+				// Walk up the containment chain to the top-level physical container:
+				// a mumak's archer is contained by its horde, which is contained by
+				// the mumak. The shared flags (MOVING, TURN_*, ...) must come from the
+				// mumak, not the invisible horde placeholder (RW 0x4BF2D8).
+				ObjectID sharedContainerId = rec->containedBy;
+				while (sharedContainerId != INVALID_ID)
 				{
-					const ObjectSnapshot *crec = snapshot.find(container->getObjectID());
-					if (crec && crec->containedBy != INVALID_ID)
+					const ObjectSnapshot *scr = snapshot.find(sharedContainerId);
+					if (!scr || scr->containedBy == INVALID_ID)
+					{
+						break;
+					}
+					sharedContainerId = scr->containedBy;
+				}
+				const Drawable *sharedContainer = findByObject(sharedContainerId);
+				if (sharedContainer)
+				{
+					const ObjectSnapshot *scr = snapshot.find(sharedContainer->getObjectID());
+					if (scr && scr->containedBy != INVALID_ID)
 					{
 						mark = 1; // a container that is contained itself: its flags may change in the walk
 					}
@@ -695,11 +727,11 @@ void DrawableManager::syncTransforms(const LogicSnapshot &snapshot, double alpha
 					{
 						// the container's flags hold through the walk, so the change applyDependencyFlags would make is known now: only a real change
 						// is walked (most horde members already carry their horde's shared bits)
-						const ModelConditionFlags shared = container->dependencySharedModelFlags();
+						const ModelConditionFlags shared = sharedContainer->dependencySharedModelFlags();
 						if (shared.any())
 						{
 							const std::uint32_t *own = d->getModelConditionFlags().words(), *sh = shared.words(),
-												*cf = container->getModelConditionFlags().words();
+												*cf = sharedContainer->getModelConditionFlags().words();
 							for (int w = 0; w < ModelConditionFlags::NUM_WORDS && !mark; ++w)
 							{
 								mark = ((own[w] & ~sh[w]) | (cf[w] & sh[w])) != own[w] ? 1 : 0;
@@ -723,7 +755,19 @@ void DrawableManager::syncTransforms(const LogicSnapshot &snapshot, double alpha
 		{
 			continue;
 		}
-		Drawable *container = findByObject(rec->containedBy);
+		// Walk up to the top-level physical container for shared flags (see the
+		// parallel pass above).
+		ObjectID sharedContainerId = rec->containedBy;
+		while (sharedContainerId != INVALID_ID)
+		{
+			const ObjectSnapshot *scr = snapshot.find(sharedContainerId);
+			if (!scr || scr->containedBy == INVALID_ID)
+			{
+				break;
+			}
+			sharedContainerId = scr->containedBy;
+		}
+		Drawable *container = findByObject(sharedContainerId);
 		if (!container)
 		{
 			continue;
@@ -754,6 +798,7 @@ void DrawableManager::syncTransforms(const LogicSnapshot &snapshot, double alpha
 				}
 			}
 		}
+		syncContainedPoses(snapshot); // PORT-146: the objects on a bone of their container ride its presentation pose
 		m_animationSounds.update();
 		updateEvaAnnounces(snapshot);
 		EvaSighting::update(*this, snapshot, m_logic, m_evaSighting);
@@ -817,11 +862,111 @@ void DrawableManager::syncTransforms(const LogicSnapshot &snapshot, double alpha
 			d->applyPhysicsXform(*prep.rec, prep.pose); // LOCAL-25
 		}
 	}
+	syncContainedPoses(snapshot); // PORT-146: the objects on a bone of their container ride its presentation pose
 	// lane AUDIO-4: TheAnimationSoundModuleManager's client update (RW 0x83F321), after the animations advanced and the drawables moved
 	m_animationSounds.update();
 	updateEvaAnnounces(snapshot);
 	EvaSighting::update(*this, snapshot, m_logic, m_evaSighting);
 	syncTracks(snapshot);
+}
+
+// PORT-146 (issue #363): an object that stands on a bone of its container takes the container's presentation pose times its own place in the
+// container's frame (ContainedPose.h) - the client part S-1104 records as the drawable bone attachment. Every drawable's own pose is final by now (the
+// LOCAL-25 presentation physics ran for all of them), so the pass runs after the loops, in slot order; a rider of a rider finds its container's already
+// composed pose when the container's slot comes first (its drawable was created first, as a container always is) and one frame behind otherwise.
+void DrawableManager::syncContainedPoses(const LogicSnapshot &snapshot)
+{
+	const size_t slots = m_slots.size();
+	for (size_t i = 1; i < slots; ++i)
+	{
+		Drawable *d = m_slots[i].get();
+		if (!d)
+		{
+			continue;
+		}
+		const ObjectSnapshot *rec = snapshot.find(d->getObjectID());
+		if (!rec || !rec->containedOnBone) // a horde's member, a hidden garrison rider, a rider whose container found no bone for it
+		{
+			d->clearContainedPose();
+			continue;
+		}
+		// Walk up the containment chain: a rider on a bone of a horde inside a
+		// transport (a mumak's archer on B_CARGO001) must ride the transport's
+		// presentation pose, not the horde's. The horde is an invisible placeholder
+		// at the transport's position; only the top-level physical container has a
+		// presentation pose (tilt, suspension) worth riding (RW 0x67BE90).
+		ObjectID containerId = rec->containedBoneOwner;
+		if (containerId == INVALID_ID)
+		{
+			containerId = rec->containedBy;
+			while (containerId != INVALID_ID)
+			{
+				const ObjectSnapshot *crec = snapshot.find(containerId);
+				if (!crec || crec->containedBy == INVALID_ID)
+				{
+					break;
+				}
+				containerId = crec->containedBy;
+			}
+		}
+		const Drawable *container = findByObject(containerId);
+		if (!container || container == d)
+		{
+			d->clearContainedPose();
+			continue;
+		}
+		Matrix3D boneMtx;
+		if (!rec->containedBone.empty() && container->boneTransform(rec->containedBone, boneMtx))
+		{
+			// LOCAL-48 (issue #404, P-81): W3DScriptedModelDraw::adjustTransformMtx (RW 0x4B686D) queries
+			// Drawable::getCurrentWorldspaceClientBonePositions (RW 0x672B5B) for the container bone recorded
+			// by putRidersAtBones (RW 0x868A70). Normalize columns to strip container instance scale
+			// (the child's Drawable::entryTransform applies its own m_scale).
+			for (int col = 0; col < 3; ++col)
+			{
+				const float x = boneMtx.Row[0][col];
+				const float y = boneMtx.Row[1][col];
+				const float z = boneMtx.Row[2][col];
+				const float lenSq = x * x + y * y + z * z;
+				if (lenSq > 1e-12f)
+				{
+					const float invLen = 1.0f / std::sqrt(lenSq);
+					boneMtx.Row[0][col] = x * invLen;
+					boneMtx.Row[1][col] = y * invLen;
+					boneMtx.Row[2][col] = z * invLen;
+				}
+			}
+			if (rec->containedRidersCanAttack)
+			{
+				// RW 0x4B6952 (slot 0xB4 isPassengerAllowedToFire, RW 0x865A7E) -> RW 0x4B6960 .. 0x4B6A40:
+				// preserve bone position and tilt, and Rotate_Z around local Z so world yaw matches rider yaw.
+				const float *rb = d->getBasis();
+				const float boneYaw = std::atan2(boneMtx.Row[1][0], boneMtx.Row[0][0]);
+				const float riderYaw = std::atan2(rb[3], rb[0]);
+				boneMtx.Rotate_Z(riderYaw - boneYaw);
+			}
+			containedpose::Pose pose;
+			for (int r = 0; r < 3; ++r)
+			{
+				for (int c = 0; c < 3; ++c)
+				{
+					pose.basis[r * 3 + c] = boneMtx.Row[r][c];
+				}
+			}
+			pose.pos = Coord3D{ boneMtx.Row[0][3], boneMtx.Row[1][3], boneMtx.Row[2][3] };
+			d->setContainedPose(pose);
+			continue;
+		}
+		containedpose::Pose presentation;
+		container->getPresentationPose(presentation.basis, presentation.pos);
+		containedpose::Pose containerLogic;
+		std::memcpy(containerLogic.basis, container->getBasis(), sizeof(containerLogic.basis));
+		containerLogic.pos = *container->getPosition();
+		containedpose::Pose riderLogic;
+		std::memcpy(riderLogic.basis, d->getBasis(), sizeof(riderLogic.basis));
+		riderLogic.pos = *d->getPosition();
+		d->setContainedPose(containedpose::compose(presentation, containerLogic, riderLogic));
+	}
 }
 
 void DrawableManager::syncTracks(const LogicSnapshot &snapshot)

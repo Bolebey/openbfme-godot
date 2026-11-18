@@ -157,6 +157,20 @@ AudioManager *current()
 	return g_manager;
 }
 
+// PORT-158: the shell's music manager (see AudioEntryPoints.h); a plain registration, set and cleared by its owner on the
+// manager's thread, read by playLoadScreenMusic on that same thread
+AudioManager *g_shellMusic = nullptr;
+
+void installShellMusic(AudioManager *manager)
+{
+	g_shellMusic = manager;
+}
+
+AudioManager *currentShellMusic()
+{
+	return g_shellMusic;
+}
+
 std::uint64_t callsWithoutAudio()
 {
 	return g_without.load(std::memory_order_relaxed);
@@ -255,6 +269,22 @@ AudioHandle playSoundAtPositionForPlayer(const std::string &n, const Coord3D &p,
 	return AHSV_Error;
 }
 
+AudioHandle playSoundForPlayer(const std::string &n, int player)
+{
+	AudioManager *mgr = nullptr;
+	switch (route(Binding::Manager, [n, player]() { playSoundForPlayer(n, player); }, &mgr))
+	{
+	case Route::Run:
+		return mgr->playSoundForPlayer(n, player); // the event by name with the player index, then addAudioEvent
+	case Route::Deferred:
+		return AHSV_Error; // S-814: played on the audio owner at the next idle point
+	case Route::Unbound:
+		break;
+	}
+	g_without.fetch_add(1, std::memory_order_relaxed);
+	return AHSV_Error;
+}
+
 AudioHandle playSoundForDrawable(const std::string &n, std::uint32_t id, int player)
 {
 	AudioManager *mgr = nullptr;
@@ -281,6 +311,28 @@ void stopMusic(bool fade)
 {
 	REQUIRE_AUDIO()
 	mgr->stopMusic(fade);
+}
+
+AudioHandle playLoadScreenMusic(const std::string &eventName)
+{
+	AudioManager *mgr = current();
+	if (!mgr || !mgr->isValidAudioEvent(eventName))
+	{
+		return AHSV_NoSound; // RW 0x81D22B -> 0x81D295: an unknown event stops and plays nothing
+	}
+	// RW 0x81D242: the music that plays stops with a fade. RotWK has the one TheAudio (RW 0xDE42FC); the port's menu music
+	// may sit in the registered shell manager, so the same faded stop reaches it there (exactly one track during the load)
+	if (AudioManager *shell = currentShellMusic(); shell && shell != mgr)
+	{
+		shell->stopMusic(true);
+	}
+	mgr->stopMusic(true);
+	// RW 0x81D254 / 0x81D264: AudioEventRTS(info, view type 2), shouldFade off; RW 0x81D278: added; RW 0x81D283: one update
+	AudioEventRTS event(eventName, VIEW_ANY);
+	event.setShouldFade(false);
+	const AudioHandle handle = mgr->addAudioEvent(event);
+	mgr->update(mgr->nowMs() + AudioManager::tickIntervalMs());
+	return handle;
 }
 
 void stopSound(AudioHandle h)
@@ -506,6 +558,17 @@ void postUnitVoice(int voiceEvent, std::uint32_t objectId, std::uint32_t produce
 	p.voiceEvent = voiceEvent;
 	p.objectId = objectId;
 	p.producerId = producerId;
+	dispatchUnitVoice(p);
+}
+
+void postUnitVoice(int voiceEvent, std::uint32_t objectId, std::uint32_t producerId, std::uint32_t targetId, const bool *air)
+{
+	UnitVoiceParams p; // PORT-151: the attack helper's pick info: no power, the victim, the air flag
+	p.voiceEvent = voiceEvent;
+	p.objectId = objectId;
+	p.producerId = producerId;
+	p.targetId = targetId;
+	p.air = air ? *air : false;
 	dispatchUnitVoice(p);
 }
 

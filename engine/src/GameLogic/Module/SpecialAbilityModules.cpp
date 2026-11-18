@@ -19,6 +19,7 @@
 
 #include "Common/GameCommon.h"
 #include "Common/INIException.h"
+#include "Common/LightPointSystem.h"
 #include "Common/Player.h"
 #include "Common/PlayerScience.h"
 #include "Common/SpecialPower.h"
@@ -26,6 +27,7 @@
 #include "Common/Thing/ModuleFactory.h"
 #include "Common/Thing/ThingFactory.h"
 #include "Common/Thing/KindOfTokens.h"
+#include "GameLogic/Map/TerrainTrees.h"
 #include "GameClient/FXList.h"
 #include <atomic>
 #include "GameLogic/BitFlags.h"
@@ -58,27 +60,26 @@
 #include <initializer_list>
 #include <stdexcept>
 
-// RW 0x8B1142 (ToggleMountedSpecialAbilityUpdate vtable 0xC6BDA0 slot 0x50) and its twin RW 0x8B4455
-// (SpecialDisguiseUpdate vtable 0xC6CF88 slot 0x50): while the base handler RW 0x851E9F still has packing frames,
-// UNPACKING (state 2) goes 1.0 -> OpacityTarget over UnpackTime (data + 0x88), PACKING goes OpacityTarget -> 1.0
-// over PackTime (data + 0x84). The fraction is 1 - framesLeft / total under x87 PC24 (RW 0x8B119F .. 0x8B11D7
-// / RW 0x8B44B2 .. 0x8B44EA), then (to - from) * fraction + from, rounded by fstp dword. Only the drawable's
-// opacity is written (RW 0x8B11F0 / RW 0x8B4513: drawable + 0xB0); no module-side float state belongs to RW 0x8B1142.
+// lane PORT-46: RW 0x8B1142 (ToggleMountedSpecialAbilityUpdate vtable 0xC6BDA0 slot 0x50) and its twin RW 0x8B4455 (SpecialDisguiseUpdate vtable
+// 0xC6CF88 slot 0x50): while the base handler RW 0x851E9F still has packing frames, UNPACKING (state 2) goes 1.0 -> OpacityTarget over UnpackTime
+// (data + 0x88) and PACKING goes OpacityTarget -> 1.0 over PackTime (data + 0x84). The fraction is 1 - framesLeft / total under x87 PC24
+// (RW 0x8B119F .. 0x8B11D7 / RW 0x8B44B2 .. 0x8B44EA), then (to - from) * fraction + from, rounded by fstp dword. Only the drawable's opacity is
+// written (RW 0x8B11F0 / RW 0x8B4513: drawable + 0xB0); no module-side float state belongs to RW 0x8B1142
 static float packingFadeOpacity(float opacityTarget, int packingState, unsigned framesLeft, unsigned unpackFrames, unsigned packFrames)
 {
 	float from, to;
 	unsigned total;
 	if (packingState == 2) // RW 0x8B115B / 0x8B4461: state 2 = UNPACKING
 	{
-		from = 1.0f;                 // RW 0x8B1164 / 0x8B4477: DAT 0xBD1908
-		to = opacityTarget;          // RW 0x8B1177 / 0x8B448A: data + 0xD0 / + 0xD4
-		total = unpackFrames;        // RW 0x8B116C / 0x8B447F: data + 0x88
+		from = 1.0f;          // RW 0x8B1164 / 0x8B4477: DAT 0xBD1908
+		to = opacityTarget;   // RW 0x8B1177 / 0x8B448A: data + 0xD0 / + 0xD4
+		total = unpackFrames; // RW 0x8B116C / 0x8B447F: data + 0x88
 	}
 	else // RW 0x8B1181 / 0x8B4494: PACKING
 	{
-		from = opacityTarget;        // RW 0x8B1181 / 0x8B4494
-		to = 1.0f;                   // RW 0x8B1194 / 0x8B44A7
-		total = packFrames;          // RW 0x8B1189 / 0x8B449C: data + 0x84
+		from = opacityTarget; // RW 0x8B1181 / 0x8B4494
+		to = 1.0f;            // RW 0x8B1194 / 0x8B44A7
+		total = packFrames;   // RW 0x8B1189 / 0x8B449C: data + 0x84
 	}
 	const double q = SimMath::pc24SubW(1.0, SimMath::pc24DivW(SimMath::fildU32(framesLeft), SimMath::fildU32(total)));
 	return SimMath::fstpDword(SimMath::pc24AddW(SimMath::pc24MulW(SimMath::pc24SubW((double)to, (double)from), q), (double)from));
@@ -241,7 +242,8 @@ const FieldParse kSpecialAbility[] = { // RW 0xC55F40
 	{ "ChargeAttackSpeedBoost", INI::parseBool, nullptr, SA_OFF(m_chargeAttackSpeedBoost) },
 	{ "CustomAnimAndDuration", parseAnimAndDuration<0>, nullptr, 0 },
 	{ "GrabPassengerAnimAndDuration", parseAnimAndDuration<1>, nullptr, 0 },
-	{ "GrabPassengerHealGainPercent", INI::parsePercentToReal, nullptr, SA_OFF(m_grabPassengerHealGainPercent) },
+	// RW 0xC561C0: parser RW 0x42ED6F (no 0.01 scale: the INI number is the percentage added to the health ratio), offset + 0x30
+	{ "GrabPassengerHealGainPercent", INI::parseNonNegativeReal, nullptr, SA_OFF(m_grabPassengerHealGainPercent) },
 	{ "UnpackingVariation", INI::parseInt, nullptr, SA_OFF(m_unpackingVariation) },
 	{ "MustFinishAbility", INI::parseBool, nullptr, SA_OFF(m_mustFinishAbility) },
 	{ "FreezeAfterTriggerDuration", INI::parseDurationUnsignedInt, nullptr, SA_OFF(m_freezeAfterTriggerFrames) },
@@ -606,11 +608,12 @@ void SpecialAbilityUpdate::initiateIntentToDoSpecialPower(const SpecialPowerTemp
 	}
 	m_active = true;
 	m_approachCounter = 0;
-	// RW 0x852FF9: every other active special power update of the object is finished
+	// PORT-188 (issue #454): RW 0x853062 .. 0x8530A4 (BFME2 1.06 0x004500A3, SpecialAbilityUpdateInitiateIntent.cpp): every other special ability update of
+	// the object whose isPowerCurrentlyInUse(nullptr) (vslot +0x18, RW 0x851C92) answers yes is finished
 	for (const std::unique_ptr<BehaviorModule> &m : obj->modules())
 	{
 		SpecialAbilityUpdate *other = dynamic_cast<SpecialAbilityUpdate *>(m.get());
-		if (other && other != this && other->isActive())
+		if (other && other != this && other->isPowerCurrentlyInUse())
 		{
 			other->finishAbility(false, true);
 		}
@@ -618,9 +621,11 @@ void SpecialAbilityUpdate::initiateIntentToDoSpecialPower(const SpecialPowerTemp
 	setWakeFrame(obj, (UpdateSleepTime)1); // RW 0x850C32(object, 1)
 }
 
-// RW 0x851B6E (the special power update interface's slot 0x20)
-bool SpecialAbilityUpdate::allowsSpecialPowerUse() const
+// RW 0x851B6E (the special power update interface's slot 0x20). The place is pushed to RW 0x851551 and ignored there (0x851551 reads no argument);
+// the port's conditionsAllow() takes no argument for the same reason.
+bool SpecialAbilityUpdate::allowsSpecialPowerUse(const Coord3D *loc) const
 {
+	(void)loc;
 	if (!m_data->m_specialPowerTemplate || !conditionsAllow())
 	{
 		return false; // RW 0x851B75: no power (+ 0x4 of the data) answers no
@@ -1181,6 +1186,13 @@ static bool abilityApproachPoint(Object &caster, AIUpdateInterface &ai, Coord3D 
 	return false;
 }
 
+bool SpecialAbilityUpdate::approachPointForTest(Coord3D &pos, float range)
+{
+	Object *obj = getObject();
+	AIUpdateInterface *ai = obj->getAIUpdateInterface();
+	return ai && abilityApproachPoint(*obj, *ai, pos, range);
+}
+
 // RW 0x85393B
 void SpecialAbilityUpdate::approachTarget()
 {
@@ -1289,15 +1301,37 @@ void SpecialAbilityUpdate::startPreparation()
 		{
 			return;
 		}
+		// Donor BFME2 0x (SpecialAbilityUpdate.cpp:1347): a target the LOCAL player controls hears BuildingBeingStolen at once — the
+		// enemy is taking one of its buildings. The event is the name of predefined index 16 (table RW 0xBF2168, Common/Audio/EvaEvents.cpp)
+		// and it goes to TheEva by name (RW 0x5DD9EE). INFERENCE: the RW 2.01 instruction inside RW 0x853D31 .. 0x853ED0 was not read in
+		// this session's sandbox; the guard is the donor's isLocallyControlled.
+		const Player *local = obj->logic().players().getLocalPlayer();
+		if (t && local && t->getControllingPlayer() == local)
+		{
+			AudioApi::reportEva("BuildingBeingStolen", t->getPosition());
+		}
 		ModelConditionBitsHelper::clearAndSet(*obj, { kMcUnpacking }, { kMcRaisingFlag });
 	}
-	else if (prepType == 0x15 || prepType == 0x1A)
+	else if (prepType == 0x15)
 	{
-		++m_unported; // RW 0x853CF4 / 0x853DB2 (S-860)
+		++m_unported; // RW 0x853CF4 (S-860)
+	}
+	else if (prepType == 0x1A)
+	{
+		// Donor BFME2 0x (SpecialAbilityUpdate.cpp:1364): the black lotus's capture warns the local owner of the target the same way the
+		// infantry capture does (see the 0x1D branch above): BuildingBeingStolen, index 16 of RW 0xBF2168, by name to RW 0x5DD9EE.
+		// INFERENCE: the RW 2.01 instruction inside RW 0x853DB2's branch was not read in this session's sandbox.
+		++m_unported; // RW 0x853DB2 (S-860)
+		Object *t = target();
+		const Player *local = obj->logic().players().getLocalPlayer();
+		if (t && local && t->getControllingPlayer() == local)
+		{
+			AudioApi::reportEva("BuildingBeingStolen", t->getPosition());
+		}
 	}
 	if (SpecialPowerModule *spm = mySpecialPowerModule())
 	{
-		spm->triggerFromUpdate(); // RW 0x853E30: the power module's vslot 0x38 (RW 0x897D25 -> 0x897987(null))
+		spm->triggerFromUpdate(); // RW 0x853E4A: the power module's vslot 0x38 (RW 0x897D25 -> 0x897987(null))
 	}
 	aiIdleFromAI();
 	obj->setStatus(kStatusUsingAbility, true);  // RW 0x68D440(USING_ABILITY | SPECIAL_ABILITY_PACKING_UNPACKING_OR_USING, 1)
@@ -1441,8 +1475,16 @@ void SpecialAbilityUpdate::triggerAbilityEffect()
 			p->science().addSkillPoints((float)skill, false); // RW 0x782AA4(points, 0)
 		}
 	}
-	// RW 0x853F9C: the light points (no manager in a skirmish, S-531); RW 0x853FC0: TriggerSound (client; added for the object before the loop below,
-	// BFME2 0x85116E the same order); RW 0x854008: ActiveLoopSound
+	// PORT-113 (issue #280), RW 0x853FA5 .. 0x853FCB: with TheLightPointSystem (RW 0xDE8C04; retail always has one) and an owner, the owner pays the
+	// LightPointCost of the data's special power template (data + 0x38, its final override + 0x30) through RW 0x6AA91D
+	if (TheLightPointSystem && m_data->m_specialPowerTemplate)
+	{
+		if (Player *p = obj->getControllingPlayer())
+		{
+			p->spendLightPoints(m_data->m_specialPowerTemplate->getFinalOverride()->m_lightPointCost);
+		}
+	}
+	// RW 0x853FD0: TriggerSound (client; added for the object before the loop below, BFME2 0x85116E the same order); RW 0x854008: ActiveLoopSound
 	if (!m_data->m_triggerSound.empty())
 	{
 		const Player *p = obj->getControllingPlayer();
@@ -1544,7 +1586,7 @@ void SpecialAbilityUpdate::triggerAbilityEffect()
 
 // lane MODCOMPAT-MOD1: RW 0x8540A1 .. 0x8544C8, the grab enums of the trigger (SPECIAL_GRAB_PASSENGER 0x27, SPECIAL_GRAB_CHUNK 0x28; the trigger count was
 // raised before). The first trigger, with the object's contain (+ 0x258; none: nothing): without a target object the tree at the target location within
-// 5.0 (RW 0xBDAE58, TheTerrainLogic RW 0x67F52B(loc, 5, 1, 1)) becomes a tree object (RW 0x68449B) that is the target: not ported (S-860, counted). A
+// 5.0 (RW 0xBDAE58, TheTerrainLogic RW 0x67F52B(loc, 5, 1, 1)) becomes a tree object (RW 0x68449B) that is the target (lane LOCAL-42). A
 // CHUNK_VENDOR target of 0x28 or a ROCK_VENDOR target of 0x27 hands out its GrabObject (the body's slot 0x74, made by RW 0x6D165E, produced by the object
 // and contained) and is hurt (RW 0x697E50): ported in PORT-78. Any other target the contain accepts (slot 0x98(target, 1, 0)) leaves the horde
 // that holds it (the holder's horde interface slot 0x38) and is contained (slot 0x9C); a GRAB_AND_KILL target (template + 0x114 bit 3) shows PREPARING
@@ -1569,9 +1611,20 @@ void SpecialAbilityUpdate::grabTrigger(int type)
 		}
 		if (!t)
 		{
-			++m_unported; // RW 0x8540D4 .. 0x854112: the tree object at the location (S-860)
-			obj->logic().noteStop("[S-860] SpecialAbilityUpdate: the grab of a tree (RW 0x68449B makes the tree an object) is not ported");
-			return;
+			// RW 0x8540D4 .. 0x854112 (lane LOCAL-42): a standing grabbable tree within 5.0 of the target location (RW 0xBDAE58, TheTerrainLogic
+			// RW 0x67F52B(loc, 5.0, 1, 1)); none: the trigger ends. It is made an object (RW 0x68449B at RW 0x854100); none made: the trigger ends; else the
+			// object's id (+ 0x74) is the ability's target (+ 0x40) and the object is the target below
+			TerrainTrees &trees = obj->logic().trees();
+			if (!trees.findClosestTree(m_targetPos, 5.0f, true, 1))
+			{
+				return;
+			}
+			t = trees.makeTreeObject(m_targetPos);
+			if (!t)
+			{
+				return;
+			}
+			m_targetID = t->getID();
 		}
 		const bool vendor = (kind(*t, kChunkVendor) && type == 0x28) || (kind(*t, kRockVendor) && type == 0x27);
 		if (vendor)
@@ -1668,8 +1721,10 @@ void SpecialAbilityUpdate::grabTrigger(int type)
 // LINKED_TO_FLAG object within 150 (RW 0xC041F8) of the target (ThePartitionManager RW 0xA39090, distance type 1, the KindOf filter RW 0x445139): the capture
 // flag's structure. Nothing happens when there is none or when both are already the object's team's. Then the target (when it is not the building:
 // START_CAPTURE off, CAPTURED on) and the building take the default team of the object's player (RW 0x6996DC), the building gets CAPTURED, the target's
-// capturer (+ 0x80) clears, and the 0x1A enum restarts the power's recharge. Not ported (S-1225, noted): a garrisonable contain's passengers (vslots 0xA8 /
-// 0x54), an UNDER_CONSTRUCTION building's production cancel and score counts (RW 0x85463E .. 0x8546B5), the upgrades reset RW 0x68E083 (S-952); the radar /
+// capturer (+ 0x80) clears, and the 0x1A enum restarts the power's recharge. Both objects reset their upgrades first (RW 0x8546F4 and RW 0x854717,
+// each a call of RW 0x68E083: the mask clears, every upgrade module drops its upgrade), then take the team with (team, 1) (RW 0x6996DC's second
+// argument, the undetected-defector flag). Not ported (S-1225, noted): a garrisonable contain's passengers (vslots 0xA8 /
+// 0x54), an UNDER_CONSTRUCTION building's production cancel and score counts (RW 0x85463E .. 0x8546B5); the radar /
 // EVA / drawable calls are the client's. Lane DECOMP-3: the skirmish AI's object events RW 0x6A99CB / 0x6A9D9C around the building's capture. Returns false when nothing was captured
 bool SpecialAbilityUpdate::captureTarget(SpecialPowerModule *spm)
 {
@@ -1706,6 +1761,14 @@ bool SpecialAbilityUpdate::captureTarget(SpecialPowerModule *spm)
 	}
 	Player *owner = obj->getControllingPlayer();
 	Team *team = owner ? owner->getDefaultTeam() : nullptr; // Player + 0x30C
+	// Donor BFME2 0x (SpecialAbilityUpdateTriggerAbilityEffect.cpp:784): before the team changes, a target the LOCAL player controls hears
+	// BuildingStolen (predefined index 17 of RW 0xBF2168) at its own position, through RW 0x5DD9EE. INFERENCE: the RW 2.01 instruction
+	// inside RW 0x8544F2 .. 0x854772 was not read in this session's sandbox; the guard is the donor's isLocallyControlled.
+	const Player *local = obj->logic().players().getLocalPlayer();
+	if (t && local && t->getControllingPlayer() == local)
+	{
+		AudioApi::reportEva("BuildingStolen", t->getPosition());
+	}
 	ContainModuleInterface *contain = building->getContain() ? building->getContain() : t->getContain();
 	if (contain && contain->isGarrisonable())
 	{
@@ -1718,9 +1781,11 @@ bool SpecialAbilityUpdate::captureTarget(SpecialPowerModule *spm)
 			logic.noteStop("[S-1225] capture: an UNDER_CONSTRUCTION building's production cancel and score counts (RW 0x85463E .. 0x8546B5) are not ported");
 		}
 		ModelConditionBitsHelper::clearAndSet(*t, { kMcStartCapture }, { kMcCaptured }); // RW 0x8546DC
+		t->resetUpgrades();                                                              // RW 0x8546F4 (RW 0x68E083), before the team changes
 		t->setCapturedTeam(team);                                                       // RW 0x8546F6 / 0x854702
 	}
 	logic.skirmishAI().objectRemoved(*building); // RW 0x854712 (lane DECOMP-3): the skirmish AI manager's removal with the old owner
+	building->resetUpgrades();                   // RW 0x854717 (RW 0x68E083: the mask clears, every upgrade module drops its upgrade)
 	building->setCapturedTeam(team); // RW 0x854719 / 0x854725
 	setCondition(*building, kMcCaptured, true); // RW 0x85473B
 	t->setCapturerID(INVALID_ID);    // RW 0x854740
@@ -1767,7 +1832,18 @@ bool SpecialAbilityUpdate::handlePackingProcessing()
 	}
 	if (--m_packFramesLeft != 0)
 	{
-		// RW 0x851EC1: LoseStealthOnTrigger's unstealth PreTriggerUnstealthTime before the end (S-859)
+		if (m_data->m_loseStealthOnTrigger && m_packFramesLeft < m_data->m_preTriggerUnstealthFrames)
+		{
+			// RW 0x852030 .. 0x85206E (in SpecialAbilityUpdate::handlePackingProcessing RW 0x851E9F; DONOR BFME2 0x0044EFEC, SpecialAbilityUpdate.cpp:1410):
+			// when LoseStealthOnTrigger (+0xB0) is set and the decremented frame counter (+0x28) is below PreTriggerUnstealthTime (+0x8C),
+			// StealthUpdate (RW 0x68FBD3 -> RW 0x7767A9(0, 1, null, true)) and InvisibilityManager (RW 0x81C32C(object, null, 0, 1)) mark the object detected.
+			Object *obj = getObject();
+			if (StealthUpdate *st = StealthUpdate::of(*obj))
+			{
+				st->markAsDetected(0, 1, nullptr, true);
+			}
+			obj->logic().invisibility().markDetected(obj, nullptr, 0, 1);
+		}
 		return true;
 	}
 	Object *obj = getObject();
@@ -2065,28 +2141,61 @@ void SpecialAbilityUpdate::crc(StateHasher &h) const
 // ---------------------------------------------------------------------------------------------------------------------------------
 // WeaponFireSpecialAbilityUpdate
 // ---------------------------------------------------------------------------------------------------------------------------------
+namespace
+{
+// RW 0x6CEE0F (Weapon::loadAmmoNow) takes Object *source and reads only the owner's weapon bonus condition mask (+0x39C), GameData's global
+// WeaponBonusSet ([0xDE4364]+0xAD0) and TheGameLogic->getFrame() ([0xDE412C]+0x40), without touching ObjectWeapons (Object::m_weapons is built
+// after buildModules() at Object.cpp:454). Using a lightweight WeaponHost over Object avoids constructing a premature m_ownHost (ObjectWeapons) on
+// objects that have a WeaponSet.
+class ConstructorWeaponHost final : public WeaponHost
+{
+public:
+	explicit ConstructorWeaponHost(Object &obj)
+		: m_obj(obj)
+	{
+	}
+	std::uint32_t currentFrame() override { return m_obj.logic().getFrame(); }
+	GameLogicRandom &logicRandom() override { return m_obj.logic().random(); }
+	std::uint32_t weaponBonusConditionMask() override { return m_obj.weaponBonusConditionMask(); }
+	const WeaponBonusSet *globalWeaponBonusSet() override { return m_obj.logic().settings().globalWeaponBonusSet.get(); }
+	float rateOfFireAttributeProduct() override { return 1.0f; }
+	bool containedAmmo(const ObjectFilter &, unsigned &count) override
+	{
+		count = 0;
+		return false;
+	}
+	bool ownerHasContainAmmo(const ObjectFilter &) override { return false; }
+	int barrelCount(int) override { return 1; }
+	int firingTrackerShotsAtTarget(bool, unsigned, const Coord3D &) override { return 0; }
+	bool ownerPositionMatchesLastShot() override { return false; }
+	void setOwnerDisabledUntil(std::uint32_t frame) override { m_obj.setDisabled(8, frame); }
+	float groundHeightAt(float x, float y) override { return m_obj.logic().getGroundHeight(x, y); }
+	Coord3D linearTargetPosition(float, float) override { return *m_obj.getPosition(); }
+	Object *streamObjectByID(ObjectID id) override { return id == INVALID_ID ? nullptr : m_obj.logic().findObjectByID(id); }
+	Object *createProjectileStream(const std::string &, Object &) override { return nullptr; }
+	Object *weaponOwner() override { return &m_obj; }
+
+private:
+	Object &m_obj;
+};
+} // namespace
+
+// RW 0x895D98 (DONOR BFME2 0x00492708 WeaponFireSpecialAbilityUpdateCtor.cpp): look up SpecialWeapon (moduleData + 0xD0) via TheWeaponStore
+// (RW 0x6CC5DF); a missing template leaves m_weapon (+0x88) null without an error, else allocate slot-0 weapon (RW 0x68B150), clear its owner id
+// (RW 0x895E16: weapon + 8 = 0) and load its ammo now (RW 0x6CEE0F(m_object)).
 WeaponFireSpecialAbilityUpdate::WeaponFireSpecialAbilityUpdate(Thing *thing, const WeaponFireSpecialAbilityUpdateModuleData *data)
 	: SpecialAbilityUpdate(thing, data)
 	, m_wf(data)
 {
-}
-
-// RW 0x895DF2 (the constructor): the SpecialWeapon from TheWeaponStore (RW 0x6CC5DF), made and loaded; an unknown name leaves no weapon (the trigger then fires
-// nothing). Here the object's weapon host (ObjectWeapons) exists only after the modules are built, so the weapon is made at its first use (a fresh weapon is
-// loaded either way)
-Weapon *WeaponFireSpecialAbilityUpdate::specialWeapon()
-{
-	if (!m_weaponMade)
+	const WeaponTemplate *wt = (!m_wf->m_specialWeapon.empty() && TheWeaponStore) ? TheWeaponStore->findWeaponTemplate(m_wf->m_specialWeapon) : nullptr;
+	if (wt)
 	{
-		m_weaponMade = true;
-		const WeaponTemplate *wt = TheWeaponStore ? TheWeaponStore->findWeaponTemplate(m_wf->m_specialWeapon) : nullptr;
-		ObjectWeapons *w = wt ? weaponHost() : nullptr;
-		if (wt && w)
-		{
-			m_weapon = w->makeExtraWeapon(wt);
-		}
+		Object *obj = getObject();
+		m_weapon = std::make_unique<Weapon>(wt, PRIMARY_WEAPON, obj->logic().getFrame()); // RW 0x68B150(template, 0)
+		m_weapon->setOwnerID(0);                                                          // RW 0x895E16
+		ConstructorWeaponHost loadHost(*obj);
+		m_weapon->loadAmmoNow(loadHost); // RW 0x6CEE0F(m_object)
 	}
-	return m_weapon.get();
 }
 
 ObjectWeapons *WeaponFireSpecialAbilityUpdate::weaponHost()
@@ -2102,7 +2211,14 @@ ObjectWeapons *WeaponFireSpecialAbilityUpdate::weaponHost()
 	return m_ownHost.get();
 }
 
-WeaponFireSpecialAbilityUpdate::~WeaponFireSpecialAbilityUpdate() = default;
+// RW 0x895BFB (DONOR BFME2 0x0049256B): deletes m_weapon (+0x88) via Weapon::~Weapon (RW 0x6CDB57 -> 0x6CD0BE, destroying any ProjectileStreamName object)
+WeaponFireSpecialAbilityUpdate::~WeaponFireSpecialAbilityUpdate()
+{
+	if (m_weapon && getObject())
+	{
+		m_weapon->destroyProjectileStream(getObject()->logic());
+	}
+}
 
 // the model condition of WhichSpecialWeapon (RW 0x895F10: 1 .. 3 SPECIAL_WEAPON_ONE .. THREE at Object + 0x128, 4 .. 6 FOUR .. SIX at + 0x154)
 int WeaponFireSpecialAbilityUpdate::specialWeaponCondition() const
@@ -2141,9 +2257,12 @@ void WeaponFireSpecialAbilityUpdate::startUnpacking()
 			++m_unported; // RW 0x6944A5: the horde passes the condition to its members (S-859)
 		}
 	}
-	if (m_wf->m_playWeaponPreFireFX)
+	// RW 0x895FC4–0x896026: the enabled flag, weapon, template and REGULAR PreAttackFX must all exist; play on the owner's drawable.
+	if (m_wf->m_playWeaponPreFireFX && m_weapon && m_weapon->getTemplate())
 	{
-		++m_unported; // RW 0x895FC4: the weapon's PreAttackFX at the target (client)
+		const WeaponTemplate &wt = *m_weapon->getTemplate();
+		Object &owner = *getObject();
+		owner.logic().fxEvents().emit(FXEventLog::drawablePositionEvent("PreAttackFX", owner.logic().getFrame(), wt.m_preAttackFXs[0], owner, wt.m_weaponSpeed));
 	}
 }
 
@@ -2151,7 +2270,7 @@ void WeaponFireSpecialAbilityUpdate::startUnpacking()
 void WeaponFireSpecialAbilityUpdate::triggerAbilityEffect()
 {
 	Object *obj = getObject();
-	ObjectWeapons *weapons = specialWeapon() ? weaponHost() : obj->getWeapons();
+	ObjectWeapons *weapons = m_weapon ? weaponHost() : obj->getWeapons();
 	// RW 0x896210: the FiringTracker's RW 0x8E302A(1) (the object's + 0x248) is COMBAT-1's: not called here
 	if (!(isHorde(*obj) && m_data->m_suppressForHordes))
 	{
@@ -2168,7 +2287,7 @@ void WeaponFireSpecialAbilityUpdate::triggerAbilityEffect()
 				}
 			}
 		}
-		if (specialWeapon() && weapons && weapons->extraWeaponStatus(*m_weapon) == 0) // RW 0x6CDCE7 == READY_TO_FIRE
+		if (m_weapon && weapons && weapons->extraWeaponStatus(*m_weapon) == 0) // RW 0x6CDCE7 == READY_TO_FIRE
 		{
 			m_weapon->setOwnerID(obj->getID());
 			if (!victim)
@@ -2202,7 +2321,6 @@ void WeaponFireSpecialAbilityUpdate::finishAbility(bool ownerDying, bool aborted
 void WeaponFireSpecialAbilityUpdate::crc(StateHasher &h) const
 {
 	SpecialAbilityUpdate::crc(h);
-	h.addBool(m_weaponMade);
 	h.addBool(m_weapon != nullptr);
 	if (m_weapon)
 	{
@@ -2400,7 +2518,7 @@ bool ToggleMountedSpecialAbilityUpdate::handlePackingProcessing()
 	const float opacity = packingFadeOpacity(m_tm->m_opacityTarget, m_packingState, m_packFramesLeft, m_tm->m_unpackFrames, m_tm->m_packFrames);
 	if (ObjectClientHooks *client = getObject()->clientHooks())
 	{
-		client->setDrawableOpacity(*getObject(), opacity); // RW 0x8B11F0 (client event SET_OPACITY)
+		client->setDrawableOpacity(*getObject(), opacity); // RW 0x8B11F0
 	}
 	return busy; // RW 0x8B11F8: the base busy flag is returned unchanged
 }
@@ -2473,10 +2591,10 @@ void ToggleMountedSpecialAbilityUpdate::initiateIntentToDoSpecialPower(const Spe
 // RW 0x8B125F
 void ToggleMountedSpecialAbilityUpdate::finishAfterPacking()
 {
-	SpecialAbilityUpdate::finishAfterPacking(); // RW 0x8B1263: base 0x8549E7
+	SpecialAbilityUpdate::finishAfterPacking();
 	if (ObjectClientHooks *client = getObject()->clientHooks())
 	{
-		client->setDrawableOpacity(*getObject(), 1.0f); // RW 0x8B126B .. 0x8B1287: drawable + 0xB0 = 1.0
+		client->setDrawableOpacity(*getObject(), 1.0f); // lane PORT-46, RW 0x8B126B .. 0x8B1287: drawable + 0xB0 = 1.0
 	}
 	getObject()->setStatus(kStatusIgnoreAI, false); // RW 0x62684D(0x4A, 0)
 	if (m_replaceAfterPacking && !m_tm->m_mountedTemplate.empty())
@@ -2493,7 +2611,7 @@ void ToggleMountedSpecialAbilityUpdate::finishAbility(bool ownerDying, bool abor
 {
 	if (ObjectClientHooks *client = getObject()->clientHooks())
 	{
-		client->setDrawableOpacity(*getObject(), 1.0f); // RW 0x8B121C .. 0x8B1238: drawable + 0xB0 = 1.0
+		client->setDrawableOpacity(*getObject(), 1.0f); // lane PORT-46, RW 0x8B121C .. 0x8B1238: drawable + 0xB0 = 1.0
 	}
 	getObject()->setStatus(kStatusIgnoreAI, false);
 	SpecialAbilityUpdate::finishAbility(ownerDying, aborted); // RW 0x8B1240: base 0x8530BA
@@ -2570,45 +2688,84 @@ LevelGrantSpecialPower::LevelGrantSpecialPower(Thing *thing, const LevelGrantSpe
 {
 }
 
-// RW 0x8C6E82 -> RW 0x8C6D43: Experience points to the object (RW 0x79D833(xp, 1, 1, 1, 0) when its tracker can still level, RW 0x79D322) with LevelFX;
-// a horde's members share them (Experience / member count each, HordeContain vslot 0x110)
+// RW 0x8C6E82 -> RW 0x8C6D43 (the per-object grant: it is the routine the partition walk of RW 0x8C6FA4 hands each hit to, as
+// RW 0x8C6F97 push esi; mov ecx, ebx; call 0x8c6e82): with a source object (grant + 0x08 == the object's contain interface, set only on the
+// horde branch below) the points go to that interface's vslot 0xC0 with the object and the amount (RW 0x8C6D4F .. 0x8C6D5E: fld [esi];
+// mov ecx,[esi+8]; call [eax+0xC0]); otherwise to the object's own tracker (RW 0x8C6D6A: Object + 0x26C) when it still accepts experience
+// (RW 0x8C6D76 -> RW 0x79D322) — addExperiencePoints(amount, 1, 1, 1, 0) (RW 0x8C6D8F -> RW 0x79D833). LevelFX on that object after either
+// path (RW 0x8C6D94 .. 0x8C6DA2 -> RW 0x4B1B5A). The horde branch of the grant itself (RW 0x8C6E9F .. 0x8C6F07): the object's template has
+// KindOf HORDE (template + 0x114 bit 13, RW 0x8C6EA2 test byte ptr [ecx+0x115], 0x20), its contain interface (RW 0x8C6EAD -> RW 0x694BF8 ->
+// RW 0x68C866: Object + 0x258, vslot 0x7C) answers a member count (vslot 0x180, RW 0x8C6EBD; 0 -> nothing granted), and the pool takes
+// Experience / count with a guard for a negative count (RW 0x8C6EC9 .. 0x8C6EFC -> vslot 0x110 with the routine above), not Experience to each
+// member: HordeContain::addExperience (RW 0x873A02) keeps one pool per member template (a new pool starts at amount + 1.0, RW 0x873A49), sets
+// every member of that template and the horde itself to the pool (RW 0x86BC09 -> RW 0x79D8EF), and a rank the pool raised runs the banner
+// check (RW 0x873ACF -> RW 0x8719E4). So a King's Favor on a Lindon horde (Experience 100 per 6-member horde: L2 needs 100) fills the bar as
+// retail does; dividing the 100 six ways left every member below the next level
 void LevelGrantSpecialPower::grant(Object &o)
 {
 	if (m_lg->m_experience <= 0)
 	{
-		return;
+		return; // RW 0x8C6E92: jle 0x8C6F2C
 	}
-	auto one = [this](Object &victim, float xp) {
-		ExperienceTracker *t = victim.getExperienceTracker();
-		if (!t || !t->isAcceptingExperiencePoints())
+	const int experience = m_lg->m_experience;
+	// the per-object grant of RW 0x8C6D43, the routine the iteration (contain vslot 0x110) and the single-object branch both call
+	auto one = [this](Object &victim, HordeContainInterface *source, float amount) {
+		if (source)
 		{
-			return;
+			source->addExperience(&victim, amount); // RW 0x8C6D4F .. 0x8C6D5E: mov ecx,[esi+8]; call [eax+0xC0]
 		}
-		t->addExperiencePoints(xp, true, true, true, false);
+		else
+		{
+			ExperienceTracker *t = victim.getExperienceTracker(); // RW 0x8C6D6A: Object + 0x26C
+			if (!t || !t->isAcceptingExperiencePoints())          // RW 0x8C6D76 -> RW 0x79D322
+			{
+				return; // RW 0x8C6D7D: je 0x8C6DAA, and no LevelFX either
+			}
+			t->addExperiencePoints(amount, true, true, true, false); // RW 0x8C6D8F -> RW 0x79D833(amount, 1, 1, 1, 0)
+		}
 		++m_granted;
+		// RW 0x8C6D94 .. 0x8C6DA2: the LevelFX of the context (grant + 0xDC, the module data's LevelFX) on the object just granted
 		if (FXEventLog::isFXName(m_lg->m_levelFX))
 		{
 			GameLogic &logic = victim.logic();
 			logic.fxEvents().emit(FXEventLog::objectEvent(FXEvent::OBJECT_FX, "LevelGrantSpecialPower LevelFX", logic.getFrame(), m_lg->m_levelFX, victim)); // RW 0x4B1B5A
 		}
 	};
-	if (!isHorde(o))
+	// RW 0x8C6EA2: the object's template has KindOf HORDE (template + 0x115 bit 5)
+	HordeContainInterface *source = nullptr;
+	ContainModuleInterface *contain = nullptr;
+	float amount = (float)experience;
+	if (isHorde(o))
 	{
-		one(o, (float)m_lg->m_experience);
+		contain = o.getContain();                                                                // RW 0x8C6EAD: RW 0x694BF8 -> RW 0x68C866 (Object + 0x258, vslot 0x7C)
+		HordeContainInterface *horde = contain ? contain->getHordeContainInterface() : nullptr;
+		const unsigned count = horde ? horde->countWithEntering() : 0;                            // RW 0x8C6EBD: vslot 0x180(0)
+		if (count == 0)
+		{
+			return; // RW 0x8C6EC7: je 0x8C6F2B
+		}
+		source = horde;
+		amount = SimMath::divf32((float)experience, (float)count);                                // RW 0x8C6EC9 .. 0x8C6EDD: fild amount; fild count; fdivp
+	}
+	if (!source)
+	{
+		one(o, nullptr, amount); // RW 0x8C6F09 .. 0x8C6F24: source null, cvtsi2ss Experience, call 0x8C6D43
 		return;
 	}
-	ContainModuleInterface *c = o.getContain();
-	const ContainModuleInterface::ContainedItemsList *items = c ? c->getContainedItemsList() : nullptr;
-	const unsigned n = c ? c->getContainCount() : 0;
-	if (!items || n == 0)
+	// RW 0x8C6EE5 .. 0x8C6F01: the object's contain vslot 0x110 iterates the members with RW 0x8C6D43 and the context
+	// { amount, LevelFX, source } — so the pool is fed once per member and the LevelFX lands on the members
+	const ContainModuleInterface::ContainedItemsList *items = contain->getContainedItemsList();
+	if (!items)
 	{
 		return;
 	}
-	const float share = SimMath::divf32((float)m_lg->m_experience, (float)n);
-	std::vector<Object *> members(items->begin(), items->end());
+	const std::vector<Object *> members(items->begin(), items->end());
 	for (Object *m : members)
 	{
-		one(*m, share);
+		if (m)
+		{
+			one(*m, source, amount);
+		}
 	}
 }
 
@@ -2804,7 +2961,10 @@ void SummonReplacementSpecialAbilityUpdate::triggerAbilityEffect()
 void SummonReplacementSpecialAbilityUpdate::finishAfterPacking()
 {
 	SpecialAbilityUpdate::finishAfterPacking();
-	// RW 0x8B2036: the drawable's opacity back to 1.0 (client)
+	if (ObjectClientHooks *client = getObject()->clientHooks())
+	{
+		client->setDrawableOpacity(*getObject(), 1.0f); // lane PORT-46, RW 0x8B2036 .. 0x8B2052: drawable + 0xB0 = 1.0 (0xBD1908)
+	}
 	getObject()->setStatus(kStatusIgnoreAI, false); // RW 0x62684D(0x4A, 0)
 	if (m_replaceAfterPacking && !m_sr->m_mountedTemplate.empty())
 	{
@@ -2816,7 +2976,10 @@ void SummonReplacementSpecialAbilityUpdate::finishAfterPacking()
 // RW 0x8B208A: ToggleMounted's (RW 0x8B1219) then ModelCondition's WhichSpecialPower condition off (RW 0x8945C1's)
 void SummonReplacementSpecialAbilityUpdate::finishAbility(bool ownerDying, bool aborted)
 {
-	// RW 0x8B208D: the drawable's opacity back to 1.0 (client)
+	if (ObjectClientHooks *client = getObject()->clientHooks())
+	{
+		client->setDrawableOpacity(*getObject(), 1.0f); // lane PORT-46, RW 0x8B208D .. 0x8B20A9: drawable + 0xB0 = 1.0
+	}
 	getObject()->setStatus(kStatusIgnoreAI, false);
 	SpecialAbilityUpdate::finishAbility(ownerDying, aborted);
 	setCondition(*getObject(), whichSpecialPowerCondition(m_sr->m_whichSpecialPower), false);
@@ -2966,7 +3129,7 @@ bool SpecialDisguiseUpdate::handlePackingProcessing()
 		return busy;
 	}
 	m_opacity = packingFadeOpacity(m_sd->m_opacityTarget, m_packingState, m_packFramesLeft, m_sd->m_unpackFrames, m_sd->m_packFrames);
-	// RW 0x8B44F0: the drawable's opacity (+ 0xB0) follows (client)
+	// RW 0x8B44F0: the drawable's opacity (+ 0xB0) follows (client): the delivery is its own lane, not this one
 	return busy;
 }
 
@@ -2974,7 +3137,7 @@ bool SpecialDisguiseUpdate::handlePackingProcessing()
 void SpecialDisguiseUpdate::finishAbility(bool ownerDying, bool aborted)
 {
 	SpecialAbilityUpdate::finishAbility(ownerDying, aborted);
-	m_opacity = 1.0f; // RW 0x8B4545: the drawable's opacity back to 1.0 (client)
+	m_opacity = 1.0f; // RW 0x8B4545: the drawable's opacity back to 1.0 (client: its own lane)
 }
 
 void SpecialDisguiseUpdate::crc(StateHasher &h) const
@@ -3041,7 +3204,7 @@ std::vector<std::string> SpecialAbilityModules::stopLines()
 		"(0x1A; SPECIAL_INFANTRY_CAPTURE_BUILDING 0x1D runs: lane HERO-2, S-1225), "
 		"(SPECIAL_CHARGE_ATTACK 0x2A trigger / packing runs since PORT-5; the 0x20 disguise trigger RW 0x8544CD runs: lane STEALTH-2; SPECIAL_SCREECH 0x89, the "
 		"disguise cancels 0x84 / 0x85: lane HERO-2; the grab enums SPECIAL_GRAB_PASSENGER / SPECIAL_GRAB_CHUNK 0x27 / 0x28 run since lane MODCOMPAT-MOD1: the "
-		"object grab, its hold, release and eat; ROCK_VENDOR / CHUNK_VENDOR runs since PORT-78, RW 0x85415C), the grab of a tree (RW 0x68449B makes it an object), "
+		"object grab, its hold, release and eat; ROCK_VENDOR / CHUNK_VENDOR runs since PORT-78, RW 0x85415C), "
 		"the 0x28 unpack model condition (RW 0x85384C), the special objects (SpecialObject: no retail use), ContactPointOverride: counted (the "
 		"unit cost + 0x80 is paid since lane NECRODIE-1, RW 0x85521F; ApproachUntilMembersInRange + 0xC5 runs since PORT-58, RW 0x85213E .. 0x852171)",
 		"[S-861] ToggleMountedSpecialAbilityUpdate: the toggle, CancelDisguiseWhenDismounting and MountedTemplate (the replacement RW 0x8B140D: Construction::"
@@ -3073,9 +3236,11 @@ std::vector<std::string> SpecialAbilityModules::hero2StopLines()
 		"client's), the owner's EVA DisguiseStarted and the enemy-perspective portrait / name (DisguisedAsTemplate_EnemyPerspective, RW 0x8B4440 from RW 0x69194E: "
 		"client)",
 		"[S-1225] the capture (lane HERO-2): SPECIAL_INFANTRY_CAPTURE_BUILDING's preparation, unpack, trigger (RW 0x8544F2: the closest LINKED_TO_FLAG within 150, "
-		"RW 0x6996DC setCapturedTeam), end and the update's captured / ruined target tests run; not ported (noted): a garrisonable contain's passengers (vslots "
-		"0xA8 / 0x54), an UNDER_CONSTRUCTION building's production cancel and score counts, the upgrades reset RW 0x68E083 (S-952), the skirmish AI's object "
-		"events RW 0x6A99CB / 0x6A9D9C, RW 0x6996DC's production cancel, score counts, RW 0x68B303 / 0x8E3ABB and a captured container's passengers; "
+		"RW 0x6996DC setCapturedTeam), end and the update's captured / ruined target tests run; the target's and the building's upgrades reset (RW 0x8546F4 / "
+		"0x854717 -> RW 0x68E083) and setCapturedTeam cancels and releases the previous owner's production (production slot 0x40, RW 0x8A1666: slot 0x3C "
+		"RW 0x8A05B2, the doorway unit and releaseLastExit; lane LOCAL-62); not ported (noted): a garrisonable contain's passengers (vslots "
+		"0xA8 / 0x54), an UNDER_CONSTRUCTION building's production cancel and score counts, the skirmish AI's object "
+		"events RW 0x6A99CB / 0x6A9D9C, RW 0x6996DC's score counts, RW 0x68B303 / 0x8E3ABB and a captured container's passengers; "
 		"SPECIAL_BLACKLOTUS_CAPTURE_BUILDING (0x1A)'s special objects; DoCaptureFX's flash (client); INFERENCE: a target that is gone ends any ability (HERO-1's "
 		"reading; retail only tests a live target)",
 	};
@@ -3139,21 +3304,15 @@ void SpecialAbilityUpdate::xfer(Xfer &x)
 	}
 }
 
-// the special weapon is made on first use (specialWeapon): a load makes it when the snapshot's was made, then loads its state
+// RW 0x895C75 (DONOR BFME2 0x004925E5): m_weapon (+0x88) is made and loaded in the constructor, not lazily; version 2 drops the port's
+// m_weaponMade flag (version 1 saves are refused explicitly). RW 0x895C9F returns immediately on XferCRC after SpecialAbilityUpdate::xfer.
 void WeaponFireSpecialAbilityUpdate::xfer(Xfer &x)
 {
-	SnapshotXfer::version(x, 1, 1);
+	SnapshotXfer::version(x, 2, 2);
 	SpecialAbilityUpdate::xfer(x);
-	bool made = !x.isLoading() && m_weaponMade;
-	x.xferBool(&made);
-	if (x.isLoading() && made != m_weaponMade)
+	if (x.getXferMode() == XFER_CRC)
 	{
-		m_weapon.reset();
-		m_weaponMade = false;
-		if (made)
-		{
-			specialWeapon();
-		}
+		return; // RW 0x895C9F .. 0x895CA4
 	}
 	bool has = !x.isLoading() && m_weapon != nullptr;
 	x.xferBool(&has);

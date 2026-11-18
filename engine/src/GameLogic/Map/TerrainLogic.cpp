@@ -308,6 +308,62 @@ void TerrainLogic::getMapExtentIncludingBorder(float &minX, float &minY, float &
 	maxY = (float)(m_map->m_height - m_map->m_borderSize) * MAP_XY_FACTOR;
 }
 
+Coord3D TerrainLogic::findClosestEdgePoint(const Coord3D &pos) const
+{
+	// RW 0x67D949: extent via vslot 0x20 (getExtent(0), else (0,0)); nearest side in order low y, high x, high y, low x (strictly smaller wins).
+	float hiX = 0.0f, hiY = 0.0f;
+	if (!getExtent(0, hiX, hiY))
+	{
+		hiX = hiY = 0.0f;
+	}
+	const float loX = 0.0f, loY = 0.0f;
+	auto dist = [](float a, float b) { return SimMath::fstpDword(SimMath::absD(SimMath::pc24SubW((double)a, (double)b))); };
+	const float d[4] = { dist(pos.y, loY), dist(pos.x, hiX), dist(pos.y, hiY), dist(pos.x, loX) };
+	int best = 0;
+	float bestD = d[0];
+	for (int i = 1; i < 4; ++i)
+	{
+		if (d[i] < bestD)
+		{
+			bestD = d[i];
+			best = i;
+		}
+	}
+	float x = pos.x, y = pos.y;
+	switch (best)
+	{
+	case 0:
+		y = loY;
+		break;
+	case 1:
+		x = hiX;
+		break;
+	case 2:
+		y = hiY;
+		break;
+	default:
+		x = loX;
+		break;
+	}
+	return Coord3D{ x, y, getGroundHeight(x, y) };
+}
+
+Coord3D TerrainLogic::findFarthestEdgePoint(const Coord3D &pos) const
+{
+	// RW 0x67DA48: extent via vslot 0x20 (getExtent(0), else (0,0)); farthest corner on each axis (mid > pos ? hi : lo), then ground height.
+	float hiX = 0.0f, hiY = 0.0f;
+	if (!getExtent(0, hiX, hiY))
+	{
+		hiX = hiY = 0.0f;
+	}
+	const float loX = 0.0f, loY = 0.0f;
+	const float midX = SimMath::mulf32(SimMath::subf32(hiX, loX), 0.5f);
+	const float midY = SimMath::mulf32(SimMath::subf32(hiY, loY), 0.5f);
+	const float x = midX > pos.x ? hiX : loX;
+	const float y = midY > pos.y ? hiY : loY;
+	return Coord3D{ x, y, getGroundHeight(x, y) };
+}
+
 void TerrainLogic::init(const WorldHeightMap &heightMap, const MapChunks &chunks, std::vector<std::string> *problems)
 {
 	m_map = &heightMap;
@@ -362,13 +418,18 @@ const Waypoint *TerrainLogic::findWaypointById(int id) const
 	return it == m_waypointById.end() ? nullptr : &m_waypoints[it->second];
 }
 
+// lane EDAINMAPS-3: retail's waypoint list is built by the Waypoint constructor (RW 0x6829B0), which PREPENDS each new waypoint to the global head
+// (RW 0xDE4694: this + 0x1C = head; head = this); TerrainLogic::loadMap adds them in map object order (the map file's order, the order objects are
+// created in). The lookups walk that list from its head (TerrainLogic vtable + 0x84 = RW 0x67C54B returns the head; the start code's RW 0x628C29 and
+// getWaypointByName stop at the first name match), so a name used twice answers the LAST such waypoint of the file: m_waypoints (file order) is walked
+// backwards. BFME2: the same constructor list and loadMap (open-bfme-2 TerrainLogic.cpp, tier A); both editions.
 const Waypoint *TerrainLogic::findWaypointByName(const std::string &name) const
 {
-	for (const Waypoint &w : m_waypoints)
+	for (auto it = m_waypoints.rbegin(); it != m_waypoints.rend(); ++it)
 	{
-		if (w.name == name)
+		if (it->name == name)
 		{
-			return &w;
+			return &*it;
 		}
 	}
 	return nullptr;

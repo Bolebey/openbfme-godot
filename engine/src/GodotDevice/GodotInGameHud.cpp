@@ -47,6 +47,7 @@
 #include "GameClient/LiveFX.h"
 #include "GameClient/ProjectedShadowManager.h"
 #include "GameClient/ObjectShadow.h"
+#include "GameEngineDevice/W3DDevice/GameClient/Drawable/Draw/W3DTornadoDraw.h"
 #include "GameClient/TacticalView.h"
 #include "GameLogic/Object/Object.h"
 #include "GameLogic/Object/RetailObjectWorld.h"
@@ -1353,6 +1354,8 @@ void InGameHudNode::_bind_methods()
 	ClassDB::bind_method(D_METHOD("camera_animation_request", "action", "name"), &InGameHudNode::camera_animation_request); // lane CAMANIM-1
 	ClassDB::bind_method(D_METHOD("camera_animation_state"), &InGameHudNode::camera_animation_state);                  // lane CAMANIM-1
 	ClassDB::bind_method(D_METHOD("camera_set_clip_depth_multiplier", "m"), &InGameHudNode::camera_set_clip_depth_multiplier); // lane MODCOMPAT-AI
+	ClassDB::bind_method(D_METHOD("camera_set_focal_length", "focal_mm", "seconds", "ease_in", "ease_out"), &InGameHudNode::camera_set_focal_length); // lane PORT-439
+	ClassDB::bind_method(D_METHOD("camera_focal_degrees"), &InGameHudNode::camera_focal_degrees); // lane PORT-439
 	ClassDB::bind_method(D_METHOD("set_objectives_screen_open", "open"), &InGameHudNode::set_objectives_screen_open); // lane CAMPUI-1
 	ClassDB::bind_method(D_METHOD("flash_palantir_button", "slot", "seconds"), &InGameHudNode::flash_palantir_button); // lane CAMPUI-1
 	ClassDB::bind_method(D_METHOD("is_objectives_flag_flashing"), &InGameHudNode::is_objectives_flag_flashing); // lane CAMPUI-1
@@ -1712,7 +1715,6 @@ void HudDevice::drawSelectionDecals()
 		{
 			if (const Drawable *d = dm.find((DrawableID)id))
 			{
-				SelectionDecal sd;
 				// lane PORT-91 (issue #239; RW 0x4C7848): the contained object's decal shadow waits for the contain's slot 0x2C
 				const ::Object *shadowLogicObject = world->hud_game()->logic().findObjectByID((::ObjectID)d->getObjectID());
 				auto fallbackSize = [d](float &sx, float &sy) {
@@ -1734,9 +1736,26 @@ void HudDevice::drawSelectionDecals()
 				}
 			};
 			const unsigned curFrame = world && world->hud_game() ? world->hud_game()->logic().getFrame() : 0u;
-			if (ObjectShadow::buildDrawableDecalShadow(*d, sd, useShadowDecals, fallbackSize, curFrame, shadowLogicObject))
+			std::vector<SelectionDecal> dShadows;
+			ObjectShadow::buildDrawableDecalShadows(*d, dShadows, useShadowDecals, fallbackSize, curFrame, shadowLogicObject);
+			for (SelectionDecal &item : dShadows)
 			{
-				selExtras.push_back(std::move(sd));
+				selExtras.push_back(std::move(item));
+			}
+			if (!d->clientHidden() && !d->shroudLook().hidden && !d->stealthHidden())
+			{
+				const bool playerIsLocal = (localPlayerIndex < 0 || !shadowLogicObject || !shadowLogicObject->getControllingPlayer() ||
+					shadowLogicObject->getControllingPlayer()->getPlayerIndex() == localPlayerIndex);
+				const std::uint32_t ownerColor = d->indicatorColor() != 0 ? d->indicatorColor() : d->getHouseColor();
+				const unsigned clientFrame = hud->input().ui().clientFrame();
+				for (const DrawEntry &e : d->entries())
+				{
+					if (e.tornadoDraw && !e.moduleHidden && !e.conditionHidden)
+					{
+						e.tornadoDraw->appendSelectionDecals(d->getObjectID(), (unsigned)d->getID(), playerIsLocal,
+							ownerColor, clientFrame, true, selExtras);
+					}
+				}
 			}
 			}
 		}
@@ -3851,6 +3870,7 @@ bool InGameHudNode::press_command_button(const String &template_name)
 	{
 		if (const ControlBarButton *b = find())
 		{
+			// PORT-426: press_command_button is a script-facing plain click (no modifier argument), so shift=false.
 			return cb.pressButton(b->slot, b->inPalantir);
 		}
 		const ControlBarButton *push = nullptr;
@@ -3868,6 +3888,7 @@ bool InGameHudNode::press_command_button(const String &template_name)
 		{
 			return false;
 		}
+		// PORT-426: the page-push helper is a plain click too; real Shift input arrives through InGameHud.
 		cb.pressButton(push->slot, push->inPalantir);
 		cb.update();
 	}
@@ -4391,6 +4412,21 @@ void InGameHudNode::camera_set_clip_depth_multiplier(double m)
 	}
 }
 
+// lane PORT-439: RW 0x7BB627(focal, seconds * 1000, easeIn * 1000, easeOut * 1000) -> TheTacticalView vslot 0xF0 (RW 0x48885E). Client state, no wait
+// for the logic worker (as camera_set_clip_depth_multiplier)
+void InGameHudNode::camera_set_focal_length(double focal_mm, double seconds, double ease_in, double ease_out)
+{
+	if (d->cam)
+	{
+		d->cam->setFocalLength((float)focal_mm, (int)((float)seconds * 1000.0f), (float)ease_in * 1000.0f, (float)ease_out * 1000.0f);
+	}
+}
+
+double InGameHudNode::camera_focal_degrees() const
+{
+	return d->cam ? (double)d->cam->horizontalFov() * 57.2957763671875 : 0.0; // RW 0x488888: View + 0x6C * the pooled 57.295776
+}
+
 void InGameHudNode::set_edge_scroll(bool on)
 {
 	d->edgeScroll = on;
@@ -4734,7 +4770,7 @@ bool InGameHudNode::create_radar_event(const Vector2 &world_xy, int type, bool j
 	d->hud->radar().createEvent(at, type, 4.0f);
 	if (jump_to)
 	{
-		d->hud->radar().noteEvaPosition(at);
+		d->hud->noteJumpPosition(at);
 	}
 	return true;
 }

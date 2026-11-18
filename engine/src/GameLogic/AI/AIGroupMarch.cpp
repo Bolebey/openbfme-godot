@@ -76,10 +76,11 @@ float sq(float v)
 {
 	return SimMath::mulf32(v, v);
 }
+} // namespace
 
 // Object RW 0x68C933 (decomp ObjectRva0028C264.cpp, `n` seconds): the body took damage within the last n seconds; a horde asks its members (HordeContain
 // slot 36 RW 0x86EE52: INFERENCE, its own record H + 0x298 is not ported)
-bool damagedWithin(const Object &o, int seconds)
+bool AIGroup::damagedWithin(const Object &o, int seconds)
 {
 	const unsigned frames = (unsigned)(LOGICFRAMES_PER_SECOND * seconds);
 	const unsigned now = o.logic().getFrame();
@@ -105,7 +106,6 @@ bool damagedWithin(const Object &o, int seconds)
 	}
 	return body->lastDamageFrame() + frames >= now;
 }
-} // namespace
 
 AIGroup::~AIGroup() = default;
 
@@ -431,7 +431,7 @@ void AIGroup::moveFormationToPos(const Coord3D &pos, CommandSourceType source, i
 		const float required = SimMath::addf32(SimMath::subf32(0.0f, off.x),
 			SimMath::mulf32((float)world->movementInfo(*o->getTemplate()).formationDepth, rowDepth)); // template + 0x574
 		spacing = spacing > required ? spacing : required;
-		wider = damagedWithin(*o, 4) || wider; // RW 0x68C933(&info, 4)
+		wider = AIGroup::damagedWithin(*o, 4) || wider; // RW 0x68C933(&info, 4)
 	}
 	spacing = SimMath::addf32(spacing, SimMath::mulf32(rowDepth, 0.5f));
 	startDistance = startDistance > spacing ? startDistance : spacing;
@@ -618,7 +618,7 @@ void AIGroup::moveFormationToPos(const Coord3D &pos, CommandSourceType source, i
 		pf.updateGoal(adapter, &dest, pf.getLayerAt(dest.x, dest.y)); // RW 0x68B3BD (lane WALL-1: the destination's layer, as AIMoveToState::onEnter)
 		path.push_back(dest);
 		// lane PORT-13: RW 0x773D4D .. 0x773DD1: mode 1 + Object::isAbleToAttack (RW 0x691269) -> command 0x25 (RW 0x77122F -> RW 0x66BC68, state 61) when
-		// canFollowTeamPath accepts, else aiAttackMoveToPosition (RW 0x696266); mode 0 or non-attacking units keep command 0x24 / aiMoveToPosition
+		// canFollowTeamPath accepts, else aiAttackMoveToPosition (RW 0x696266); mode 0, or a unit that cannot attack, keeps command 0x24 / aiMoveToPosition
 		if (mode == 1 && unit->isAbleToAttack())
 		{
 			if (ai->canFollowTeamPath())

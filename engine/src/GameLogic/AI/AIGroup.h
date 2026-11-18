@@ -46,15 +46,15 @@ public:
 	~AIGroup();
 	// ZH AIGroup::groupMoveToPosition. `addWaypoint` appends the destination to the path the units follow. `finalAngle` (when `haveFinalAngle`) is the facing every unit
 	// takes on arrival (the BFME formation move's drag direction, S-223). lane BACKLOG-8 r2: RW 0x774897's head first offers a player's group of more than one
-	// unit to the formation march (gatherAndMoveInFormation); `attackMove` (the fallback of groupAttackMoveToPosition) does not march here (the attack march,
-	// mode 1, runs through groupAttackMoveToPosition RW 0x774E2F, lane PORT-13)
+	// unit to the formation march (gatherAndMoveInFormation); `attackMove` (the port's plain group attack-move) never marches (a formation attack-move is
+	// AIGroup::groupAttackMoveToPosition's, lane PORT-13)
 	// `goalObject`: the group command's goal object (RW command + 8, e.g. the container HordeContain slot 0x7C RW 0x875D85 passes): every member of the generic
 	// path ignores it as an obstacle (RW 0x774D0E .. 0x774D18), so a path may end inside its footprint
 	void groupMoveToPosition(const Coord3D &pos, bool addWaypoint, CommandSourceType source, bool haveFinalAngle = false, float finalAngle = 0.0f,
 		bool attackMove = false, const Object *goalObject = nullptr);
-	// lane PORT-13: RW 0x774E2F (AIGroup::groupAttackMoveToPosition): when m_members.size() > 1, AIData AttackMoveUsesFormations (+ 0xBA), source == CMD_FROM_PLAYER
-	// and AIData UseFormations (+ 0xBD), offers the group to gatherAndMoveInFormation(pos, CMD_FROM_PLAYER, /*mode=*/1, /*ground=*/true) (no tighten rectangle check);
-	// otherwise falls back to the individual attack-move
+	// lane PORT-13: RW 0x774E2F (AIGroup::groupAttackMoveToPosition): with more than one member, AIData AttackMoveUsesFormations (+ 0xBA), a player's order and
+	// AIData UseFormations (+ 0xBD), the group is offered to gatherAndMoveInFormation(pos, CMD_FROM_PLAYER, /*mode=*/1, /*ground=*/true) (no tighten rectangle
+	// check); else, and when that refuses, every unit takes the plain attack-move (groupMoveToPosition + armAttackMove, `maxShots` on the current weapon)
 	void groupAttackMoveToPosition(const Coord3D &pos, int maxShots, CommandSourceType source);
 	// ---- lane BACKLOG-8 r2: the formation march (AIGroupMarch.cpp) ----
 	// RW 0x7747DE (privateGatherAndMoveInFormationToPosition): true when the group took the order (it marched, or every member was invalid)
@@ -68,6 +68,8 @@ public:
 	const class Path *groundPath() const { return m_groundPath.get(); }
 	const Coord3D &pathStart() const { return m_pathStart; }
 	const Coord3D &pathEnd() const { return m_pathEnd; }
+	// RW 0x68C933 (AIGroupMarch.cpp): true when `o` (or any member of a horde) took damage within `seconds`
+	static bool damagedWithin(const Object &o, int seconds);
 	static const char *marchStopLine();
 	// lane MOVE-3: MSG_DO_MOVETO / MSG_DO_ATTACKMOVETO with GameData + 0x11CA (PlanningModeEnabled, set by the GameData constructor RW 0x643982 and cleared only
 	// by a command-line switch RW 0x7B9F93; retail INI never names it): the group manager's move order (RW 0x75748C -> order RW 0x94E232, vtable 0xC81430,
@@ -103,8 +105,15 @@ public:
 	// RW 0x76FB64 (decomp AIGroup::releaseWeaponLockForGroup, tier A): Object::releaseWeaponLock (RW 0x68DF11) on every member
 	void releaseWeaponLockForGroup(WeaponLockType type);
 	// RW 0x77229A (decomp AIGroupAttackTeam.cpp:AIGroup::groupAttackPosition, tier B same-shape; ZH AIGroup.cpp:2223): every member attacks the position
-	// (aiAttackPosition RW 0x6961F1)
+	// (aiAttackPosition RW 0x6961F1), the members whose container lets its passengers fire forwarding it to them (contain slot 0xB4 / 0x118, each
+	// passenger's RW 0x68B5FA) and a spawner's slaves through RW 0x863807
 	void groupAttackPosition(const Coord3D &pos, int maxShotsToFire, CommandSourceType source);
+	// PORT-208 (issue #490), RW 0x77208A AIGroup::groupAttackObject (decomp AIGroupAttackTeam.cpp:AIGroup::groupAttackObject): every member attacks
+	// `victim`; a member whose contain lets its passengers fire forwards the order to every passenger whose Object::getAbleToAttackSpecificObject (RW
+	// 0x68D6A6) answers POSSIBLE / POSSIBLE_AFTER_MOVING, and a member with an AI asks the same of itself before its aiForceAttackObject (RW 0x771380) /
+	// aiAttackObject (RW 0x66C536) — a firing container's member answers through its passengers, so the gap-filling order is not lost. True when any
+	// order was taken. The caller owns the weapon locks and the speed caps (RW 0x77AF7C / 0x76FD04)
+	bool groupAttackObject(Object *victim, bool force, CommandSourceType source);
 	// RW 0x76FD04 (RotWK only): every member's current locomotor (AI + 0x1F0) loses its temporary speed cap (+ 0x2C = -1.0, RW 0xBD19DC). The attack
 	// commands end with it (RW 0x77B00A -> 0x77A342)
 	void clearTemporarySpeedCaps();

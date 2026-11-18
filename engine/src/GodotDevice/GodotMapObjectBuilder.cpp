@@ -336,6 +336,10 @@ Node3D *MapObjectBuilder::build_objects(const Ref<RetailFileSystem> &fsRef, cons
 	const bool houseColors = optBool(options, "house_colors", true);
 	staticInst->set_house_colors_enabled(houseColors);
 	dynamicInst->set_house_colors_enabled(houseColors);
+	if (m_map->hasHeightMap)
+	{
+		W3D_Set_Floor_Height_Map(&m_map->heightMap);
+	}
 	staticInst->set_auto_update(false);
 	dynamicInst->set_playing(false); // time only enters through set_instance_pose
 
@@ -381,8 +385,12 @@ Node3D *MapObjectBuilder::build_objects(const Ref<RetailFileSystem> &fsRef, cons
 		}
 		const bool playerColored = houseColors && d.sideIndex >= 0 && m_drawables->sides[(size_t)d.sideIndex].hasColor;
 		const std::uint32_t playerColor = playerColored ? m_drawables->sides[(size_t)d.sideIndex].colorRGB : 0;
+		const bool isTree = p.kind == W3D_DRAWKIND_TREE;
+		const bool isFloor = p.kind == W3D_DRAWKIND_FLOOR;
 		const std::string key = AsciiStringUtil::lowered(modelName)
 			+ W3DInstancer::Texture_Swap_Suffix(swaps)
+			+ (isFloor ? "#floor" : "")
+			+ (isTree ? "#veg" : "")
 			+ (playerColored ? "#player&" + std::to_string(playerColor) : "");
 		auto it = cache.find(key);
 		int64_t model;
@@ -392,6 +400,8 @@ Node3D *MapObjectBuilder::build_objects(const Ref<RetailFileSystem> &fsRef, cons
 			{
 				target->Set_Build_Texture_Swaps(swaps);
 			}
+			target->Set_Build_Floor(isFloor);
+			target->Set_Build_Vegetation(isTree); // P-92 / Local 49: Vegetation.fx abs(N.L) lighting
 			if (playerColored) {
 			 PackedInt64Array colors;colors.push_back((int64_t)playerColor);
 			 model=target->add_model_colored(toGodot(modelName),1,colors);
@@ -433,9 +443,10 @@ Node3D *MapObjectBuilder::build_objects(const Ref<RetailFileSystem> &fsRef, cons
 				++poseFailures;
 			}
 			std::vector<std::string> hidden = frame.hiddenSubObjects;
+			// P-88: the draw module's set is complete (it starts from the meshes' HIDDEN flags): an empty set shows a flagged mesh too
+			target->set_instance_hidden_subobjects_exact(instance, toPacked(hidden));
 			if (!hidden.empty())
 			{
-				target->set_instance_hidden_subobjects(instance, toPacked(hidden));
 				++hiddenSets;
 			}
 			if (animatedPlay)
@@ -742,7 +753,7 @@ void MapObjectBuilder::advance(double delta)
 		applyFrame(inst, a.instance, f);
 		if (f.hiddenSubObjects != a.hidden)
 		{
-			inst->set_instance_hidden_subobjects(a.instance, toPacked(f.hiddenSubObjects));
+			inst->set_instance_hidden_subobjects_exact(a.instance, toPacked(f.hiddenSubObjects));
 			a.hidden = f.hiddenSubObjects;
 		}
 		++m_poseUpdates;

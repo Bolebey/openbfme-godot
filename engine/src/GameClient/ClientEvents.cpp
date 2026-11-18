@@ -162,6 +162,8 @@ void ClientEventRecorder::setShadowsEnabled(Object &obj, bool enabled)
 	e.shadowsOn = enabled;
 }
 
+// lane PORT-46 (RW 0x8B11F0 / 0x8B44F0, reset by RW 0x8B1219 / 0x8B125F): the ability module's opacity for this frame -> Drawable::setDrawableOpacity
+// (drawable + 0xB0). Retail writes the drawable directly from the logic frame; the port's client applies the event on its own thread (INFERENCE, S-810)
 void ClientEventRecorder::setDrawableOpacity(Object &obj, float opacity)
 {
 	ClientEvent &e = push(ClientEvent::SET_OPACITY, obj);
@@ -403,7 +405,7 @@ bool ClientEventRecorder::templateHasDrawModuleTag(const ThingTemplate &tt, cons
 {
 	for (const ThingTemplate::Nugget &n : tt.drawModules().nuggets())
 	{
-		if (n.tag == tag)
+		if (AsciiStringUtil::compareNoCase(n.tag, tag) == 0)
 		{
 			return true;
 		}
@@ -454,6 +456,23 @@ void ClientEventRecorder::upgradeTextures(Object &obj, const std::vector<std::pa
 {
 	ClientEvent &e = push(ClientEvent::UPGRADE_TEXTURES, obj);
 	e.textureSwaps = swaps;
+}
+
+void ClientEventRecorder::recolorHouse(Object &obj, const std::vector<std::string> &excludeSubobjects)
+{
+	// PORT-47: RW 0x67274A gates drawable house colour; 0x672760 / 0x672781 restrict the campaign branch to these KindOfs.
+	const auto &context = m_logic.economy().context();
+	const bool campaign = m_logic.campaignCarryover() != nullptr || (context.gameKind == 3 && context.livingWorld);
+	if (!m_logic.settings().showsHouseColor(obj) ||
+		(campaign && !obj.isKindOfName("BASE_SITE") && !obj.isKindOfName("ALWAYS_SHOW_HOUSE_COLOR")))
+	{
+		return;
+	}
+	const Player *player = obj.getControllingPlayer();
+	if (!player) return; // RW 0x4B8727: no controlling player, no recolour (no fallback colour).
+	ClientEvent &e = push(ClientEvent::HOUSE_RECOLOR, obj);
+	e.name = excludeSubobjects.empty() ? std::string() : excludeSubobjects.front(); // RW 0x4B873C..0x4B874F: first only, never a loop.
+	e.houseColor = player->getPlayerColor(); // RW 0x4B872C: player +0x2A0, even at night or with a custom palette.
 }
 
 void ClientEventRecorder::placement(Object &obj, const MapObjectDrawable &placement)
@@ -523,4 +542,11 @@ void ClientEventRecorder::createAHeroKill(Object &killer, Object &victim)
 void ClientEventRecorder::objectDied(Object &obj)
 {
 	push(ClientEvent::DIED, obj);
+}
+
+// P-87, RW 0x8A519B .. 0x8A51AE: the end of SlavedUpdate::onEnslave calls the slave drawable's RW 0x6713A8 with the slaver
+void ClientEventRecorder::objectEnslaved(Object &slave, const Object &slaver)
+{
+	ClientEvent &e = push(ClientEvent::ENSLAVED, slave);
+	e.slaver = slaver.getID();
 }

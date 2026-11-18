@@ -20,6 +20,7 @@
 #include "GameLogic/Module/CollideModule.h"
 #include "GameLogic/Module/EmotionModules.h"
 #include "GameLogic/Module/PhysicsBehavior.h"
+#include "GameLogic/Module/ProductionUpdate.h"
 #include "GameLogic/ScriptEngine/ScriptEngine.h"
 #include "GameLogic/ScriptEngine/ScriptConditions.h"
 #include "GameClient/MapChunks.h"
@@ -33,6 +34,7 @@
 #include "GameLogic/System/EmotionSystem.h"
 #include "GameLogic/System/ShroudManager.h"
 #include "GameLogic/Module/UpgradeModule.h"
+#include "GameLogic/Module/ProductionUpdate.h"
 #include "GameLogic/ObjectFilter.h"
 #include "GameLogic/ObjectFilterMatch.h"
 #include "GameLogic/SimMath.h"
@@ -390,7 +392,8 @@ void Object::buildModules()
 	}
 	if (!kindOfByName(*this, "SHRUBBERY") && !kindOfByName(*this, "ROCK") && !kindOfByName(*this, "ROCK_VENDOR"))
 	{
-		helper("DefectionHelper", "ModuleTag_DefectionHelper");
+		m_modules.push_back(std::make_unique<DefectionHelper>(this));
+		++m_helperCount;
 	}
 	helper("GuardingHelper", "ModuleTag_GuardingHelper");
 	if (info.canPossiblyHaveAnyWeapon)
@@ -961,6 +964,14 @@ void Object::setTeam(Team *team)
 		Player *newOwner = getControllingPlayer();
 		if (oldOwner != newOwner)
 		{
+			if (oldOwner && oldOwner->hasActiveBattlePlans())
+			{
+				oldOwner->removeBattlePlanBonusesForObject(*this); // RW 0x6995C0 -> 0x6AD360
+			}
+			if (newOwner && newOwner->hasActiveBattlePlans())
+			{
+				newOwner->applyBattlePlanBonusesForObject(*this); // RW 0x6995D4 -> 0x6AD2B5
+			}
 			onOwnerChanged(oldOwner, newOwner);
 			if (m_client && oldOwner && newOwner)
 			{
@@ -1217,9 +1228,17 @@ void Object::setCapturedTeam(Team *team)
 	{
 		return;
 	}
-	// RW 0x699733 .. 0x6997A7: the production module's vslot 0x40 (its queue cancelled), the score keeper's structure counts, RW 0x68B303 and the firing tracker
-	// RW 0x8E3ABB are not ported (S-1225); the selection, radar and EVA messages after the change are the client's
-	m_logic.noteStop("[S-1225] Object::setCapturedTeam: the production cancel, score counts and RW 0x68B303 / 0x8E3ABB of a capture are not ported");
+	// RW 0x69973D .. 0x69974D (DONOR BFME2 0x00298C76 in ObjectDefect.cpp:133, lane LOCAL-62): the object's production interface (RW 0x68C327(0)) takes
+	// its slot 0x40 (RW 0x8A1666) before the team changes: slot 0x3C (RW 0x8A05B2) cancels every entry the previous owner queued with its refund (the
+	// owner's P-122), the unit in the doorway leaves for the old team and releaseLastExit frees a partial horde
+	if (ProductionUpdateInterface *production = getProductionUpdate())
+	{
+		production->cancelAndReleaseAllProduction(); // RW 0x69974D -> RW 0x8A1666
+	}
+	// S-1225, still unported: RW 0x699750 .. 0x6997A7 counts the structure in the old and the new player's score keeper (RW 0x79F0E1 on Player + 0x3DC,
+	// for two active players) and tells the client (RW 0x6D9A71, a local player only); RW 0x699792 sets the undetected-defector bit (+ 0x458 bit 1,
+	// RW 0x68B303) and RW 0x8E3ABB its stealth countdown, which this port cannot set: no defection is ported (S-141)
+	m_logic.noteStop("[S-1225] Object::setCapturedTeam: the score keeper's structure count and RW 0x68B303 / 0x8E3ABB are not ported");
 	setTeam(team); // RW 0x69954A
 	if (AIUpdateInterface *ai = getAIUpdateInterface())
 	{
@@ -1327,6 +1346,20 @@ void Object::friend_onDie(const DieModuleInterface::Event &event)
 {
 	// RW 0x698F06 (the dead flag RW + 0x458 bit 0 first: from now on the object is no target and takes no more damage)
 	m_effectivelyDead = true;
+	// PORT-224 (issue #534, P-143): RW 0x698F17 .. 0x698F41 (DONOR BFME2 ObjectOnDie.cpp:204-208): when an object dies while
+	// ACTIVELY_BEING_CONSTRUCTED (model condition 0x45), set BUILD_BEING_CANCELED (status 0x56) and clear ACTIVELY_BEING_CONSTRUCTED
+	// before die modules run. RebuildHoleBehavior::update (RW 0x886BDC .. 0x886C40) reads status 0x56 on its reconstructing object to
+	// kill the masked hole with DEATH_FADED (0x16, suppressing CreateObjectDie ALL -FADED treasure) instead of letting the hole survive.
+	static const int kActivelyBeingConstructed = CombatNames::modelCondition("ACTIVELY_BEING_CONSTRUCTED"); // RW 0x45
+	static const int kBuildBeingCanceled = CombatNames::status("BUILD_BEING_CANCELED");                     // RW 0x56
+	if (kActivelyBeingConstructed >= 0 && testModelCondition(kActivelyBeingConstructed))
+	{
+		if (kBuildBeingCanceled >= 0)
+		{
+			setStatus((unsigned)kBuildBeingCanceled, true);
+		}
+		setModelConditionState(kActivelyBeingConstructed, false);
+	}
 	// WOTR2 milestone 7: RW 0x6991F3: an object with a Living World building id (+ 0x484) destroys that building of the strategic region (RW 0x6B3095 ->
 	// RW 0x60EC74 -> LivingWorldRegion::DestroyBuilding RW 0x7F32F4); the war applies it with the battle's result
 	if (m_logic.livingWorldTags().active)
@@ -1830,6 +1863,10 @@ void Object::friend_initObject()
 		{
 			setReceivingDifficultyBonus(true);
 		}
+		if (Player *owner = getControllingPlayer(); owner && owner->hasActiveBattlePlans())
+		{
+			owner->applyBattlePlanBonusesForObject(*this); // RW 0x693D74 .. 0x693D8D -> 0x6AD2B5
+		}
 	}
 	m_logic.emotions().objectInitialized(*this); // RW 0x693E79 .. 0x693E95 (lane MODULES-2): a SCARY or HERO object joins TheEmotionSystem's list
 	// lane HERO-2: RW 0x693EE8 .. 0x693F06: a CREATE_A_HERO (not while a save game loads, GameLogic + 0x6F) takes its player's Create-a-Hero record (RW 0x61B17D)
@@ -2122,7 +2159,8 @@ void Object::removeUpgrade(const UpgradeTemplate *upgrade)
 	}
 }
 
-// RW 0x68E083 / BFME2 0x0028DA28
+// RW 0x68E083 / BFME2 0x0028DA28: the whole mask clears, then every upgrade module drops its upgrade (RW 0x8D2688).
+// The citadel's zero-percent capture (S-6010) takes the entering object's team this way.
 void Object::resetUpgrades()
 {
 	m_upgradeMask.words.fill(0);
@@ -2201,11 +2239,57 @@ bool Object::hasAnyWeapon() const
 
 Relationship Object::getRelationship(const Object &other) const
 {
-	if (!m_team || !other.m_team)
+	if (!m_team || !other.m_team || m_undetectable || other.m_undetectable)
 	{
 		return NEUTRAL;
 	}
 	return m_team->getRelationship(other.m_team);
+}
+
+void Object::setTemporarilyUndetectable(bool on)
+{
+	m_undetectable = on;
+}
+
+void Object::setInvulnerableTime(UnsignedInt frames)
+{
+	// RW 0x68C6C8: sets Object + 0x458 bit 1 (RW 0x68B303) and starts/clears DefectionHelper timer (RW 0x8E3ABB)
+	if (frames == 0)
+	{
+		setTemporarilyUndetectable(false);
+		for (const std::unique_ptr<BehaviorModule> &m : m_modules)
+		{
+			if (auto *dh = dynamic_cast<DefectionHelper *>(m.get()))
+			{
+				dh->startDefectionTimer(0, false);
+				break;
+			}
+		}
+		return;
+	}
+	setTemporarilyUndetectable(true);
+	for (const std::unique_ptr<BehaviorModule> &m : m_modules)
+	{
+		if (auto *dh = dynamic_cast<DefectionHelper *>(m.get()))
+		{
+			dh->startDefectionTimer(frames, false);
+			break;
+		}
+	}
+}
+
+bool Object::isSignificantlyAboveTerrain() const
+{
+	// RW 0x70C55D -> 0x70C50C(0.0f) (same predicate as ObjectPathfindAdapter::isSignificantlyAboveTerrain)
+	static const int kClimb = ObjectTemplateInfoBuilder::kindOfIndex("CAN_CLIMB_WALLS");
+	static const int kShip = ObjectTemplateInfoBuilder::kindOfIndex("SHIP");
+	if ((kClimb >= 0 && isKindOf((unsigned)kClimb)) || (kShip >= 0 && isKindOf((unsigned)kShip)))
+	{
+		return false;
+	}
+	const Coord3D &p = *getPosition();
+	const float above = SimMath::pc24Add(SimMath::pc24Sub(p.z, m_logic.getGroundHeight(p.x, p.y)), 0.0f);
+	return above > SimMath::pc24Mul(m_logic.settings().gravity, -9.0f);
 }
 
 void Object::setArmorSetFlag(int bit, bool on)
@@ -2317,6 +2401,11 @@ void Object::attemptHealing(float amount, const Object *source)
 }
 
 // RW 0x68C234 / RW 0x68C7E9 (see Object.h; lane DECOMP-1)
+float Object::getBaseShroudClearingRange() const
+{
+	return m_hasShroudClearingRange ? m_shroudClearingRange : ShroudManager::templateVision(*static_cast<const ThingTemplate *>(m_template)->getFinalOverride()).shroudClearingRange;
+}
+
 void Object::setShroudClearingRange(float range)
 {
 	ShroudManager *sm = m_logic.shroud();
@@ -2654,10 +2743,12 @@ bool Object::addAttributeModifier(const std::string &listName, int duration)
 	{
 		return false;
 	}
-	// RW 0x68F207 .. 0x68F243: an owned object with CommandPoints (template + 0x62C) > 0 leaves its player's command point count for the add and rejoins it
-	// only when the add succeeded (a failed add leaves it out, like RW)
+	// RW 0x68F207 .. 0x68F243 (P-86): an owned object whose template has a CommandPointBonus (template + 0x62C, `cmp [eax + 0x62C], 0; jle`) > 0 takes
+	// its bonus off its player (Player::onObjectLost RW 0x6AA590 -> RW 0x6A7C51, the bonus WITH the old COMMAND_POINT_BONUS sum) before the add and puts
+	// it back (RW 0x6AA56D -> RW 0x6A7C3E, with the new sum) only when the add succeeded (a failed add leaves it out, like RW). This is the retail
+	// recount of a bonus whose modifier sum changes. + 0x628 is CommandPoints, which this path does not read
 	Player *player = getControllingPlayer();
-	const bool counted = player && Economy::templateInt(*static_cast<const ThingTemplate *>(getTemplate()), "CommandPoints") > 0;
+	const bool counted = player && Economy::templateInt(*static_cast<const ThingTemplate *>(getTemplate()), "CommandPointBonus") > 0;
 	if (counted)
 	{
 		m_logic.economy().objectLost(*player, *this);
@@ -2692,9 +2783,10 @@ void Object::removeAttributeModifier(const std::string &listName)
 	{
 		return;
 	}
-	// RW 0x68F2AE .. 0x68F2E5: an owned object with CommandPoints > 0 leaves its player's command point count around the removal (as the add)
+	// RW 0x68F2AE .. 0x68F2E5 (P-86): an owned object with a CommandPointBonus (template + 0x62C) > 0 takes its bonus off its player before the removal
+	// (RW 0x6AA590) and puts it back after it (RW 0x6AA56D), as the add
 	Player *player = getControllingPlayer();
-	const bool counted = player && Economy::templateInt(*static_cast<const ThingTemplate *>(getTemplate()), "CommandPoints") > 0;
+	const bool counted = player && Economy::templateInt(*static_cast<const ThingTemplate *>(getTemplate()), "CommandPointBonus") > 0;
 	if (counted)
 	{
 		m_logic.economy().objectLost(*player, *this);
@@ -2765,6 +2857,10 @@ void Object::crcOmittingModules(StateHasher &h, const std::function<bool(const B
 	if (m_campaignCarryover)
 	{
 		h.addU32(0x5C100000u); // lane BFME2CAMP1: only when set (a game without a campaign's carry-over keeps its hash)
+	}
+	if (m_singleUseCommandUsed)
+	{
+		h.addU32(0x5C450001u); // PORT-220: RW + 0x45B, the single-use command flag; hashed only when set (an object that never pressed one keeps its hash)
 	}
 	if (m_fireWeaponDeadline != 0)
 	{
@@ -2869,6 +2965,10 @@ void Object::crcOmittingModules(StateHasher &h, const std::function<bool(const B
 	}
 	h.addBool(m_scored);
 	h.addU32(m_experienceFlags);
+	if (m_undetectable)
+	{
+		h.addU32(0x5C300001u);
+	}
 	const Coord3D &p = *getPosition();
 	h.addFloat(p.x);
 	h.addFloat(p.y);
@@ -2965,6 +3065,47 @@ void Object::setName(const std::string &name)
 
 // lane SCRIPT-2: RW 0x69317D (see Object.h). The call RW 0x68C213 before each disabled change (the partition / drawable notification of the disabled
 // change) is what setDisabled / clearDisabled already do here
+void Object::setScriptSelectable(bool on)
+{
+	// Both editions (RotWK RW 0x68BE3C, DONOR BFME2 0x0028B76D ObjectFindModule.cpp): record Object + 0x454 and notify Drawable::setSelectable.
+	m_scriptSelectable = on;
+	m_scriptSelectableExplicit = true;
+	if (!on)
+	{
+		// RW 0x6719FA / DONOR BFME2 0x00271700 (Drawable.cpp): disabling selectability deselects the drawable on the client UI.
+		if (ObjectClientHooks *c = clientHooks())
+		{
+			c->deselectDrawable(*this);
+		}
+	}
+}
+
+int Object::scriptSelectableOverride() const
+{
+	// RW 0x4B583C / DONOR BFME2 0x4B5FE6: draw module +0x214 starts at -1 (use template SELECTABLE || WALK_ON_TOP_OF_WALL),
+	// or becomes 0/1 after Drawable::setSelectable (RW 0x4B2D5E). Also preserve explicit 0 after a snapshot reload for SELECTABLE objects.
+	const bool tmplSelectable = isKindOfName("SELECTABLE");
+	if (m_scriptSelectableExplicit || m_scriptSelectable != tmplSelectable)
+	{
+		return m_scriptSelectable ? 1 : 0;
+	}
+	return -1;
+}
+
+void Object::maskObject(bool on)
+{
+	// Both editions (RotWK RW 0x68BEB1, DONOR BFME2 0x0028B7E2 ObjectMaskObject.cpp): set + 0x459 bit 1 and deselect for other players.
+	m_masked = on;
+	if (on)
+	{
+		const Player *owner = getControllingPlayer();
+		const std::uint32_t mask = (owner && owner->getPlayerIndex() >= 0 && owner->getPlayerIndex() < 32)
+			? ~(1u << owner->getPlayerIndex())
+			: ~0u;
+		m_logic.deselectObject(*this, mask, true); // RW 0x625759
+	}
+}
+
 void Object::setScriptStatus(std::uint8_t bits, bool set)
 {
 	const std::uint8_t old = m_scriptStatus;
@@ -3003,7 +3144,7 @@ void Object::setScriptStatus(std::uint8_t bits, bool set)
 // (the Objects block's order) and the team links (the TeamFactory's post-process).
 void Object::xfer(Xfer &x)
 {
-	XferVersion version{ 1, 5 }; // v2 campaignCarryover, v3 fireWeaponDeadline, v4 PORT-5 Object + 0x251, v5 PORT-34 geometryHeights
+	XferVersion version{ 1, 7 }; // v2 campaignCarryover, v3 fireWeaponDeadline, v4 PORT-5 Object + 0x251, v5 PORT-34 geometryHeights, v6 PORT-237 m_undetectable, v7 PORT-220 Object + 0x45B
 	x.xferVersion(version);
 	// a load never reads its destination: the save-side values are built from the members only when saving (SAVES.md, rules for xfer authors)
 	const bool saving = !x.isLoading();
@@ -3095,6 +3236,15 @@ void Object::xfer(Xfer &x)
 	x.xferUnsignedByte(&scriptStatus);
 	SnapshotXfer::checkMask(scriptStatus, 0x1F, "an object's script status", "the five script status bits"); // ZH ObjectScriptStatusBit 1 .. 0x10
 	m_scriptStatus = scriptStatus;
+	if (version.current >= 7)
+	{
+		// PORT-220: RW + 0x45B (BFME2 ObjectDoXfer.cpp:556 transfers the same byte); an older snapshot keeps the constructor's clear (RW 0x699C88)
+		x.xferBool(&m_singleUseCommandUsed);
+	}
+	else if (x.isLoading())
+	{
+		m_singleUseCommandUsed = false;
+	}
 	if (version.current >= 2)
 	{
 		x.xferBool(&m_campaignCarryover);
@@ -3115,6 +3265,14 @@ void Object::xfer(Xfer &x)
 	{
 		x.xferBool(&m_hasChargeAttackAbility); // RW 0x630CCD loads into an object whose constructor has set + 0x251
 	} // older snapshots retain the value derived by the constructor
+	if (version.current >= 6)
+	{
+		x.xferBool(&m_undetectable);
+	}
+	else if (x.isLoading())
+	{
+		m_undetectable = false;
+	}
 	x.xferBool(&m_scriptSelectable);
 	x.xferBool(&m_masked); // lane MODCOMPAT-MOD1: RW + 0x459 bit 1
 	x.xferInt(&m_triggerCount);

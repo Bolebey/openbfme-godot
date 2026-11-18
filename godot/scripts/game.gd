@@ -2408,10 +2408,15 @@ func _begin_game(message: Dictionary) -> void:
 			print("GAME   slot %d: state %d faction %d colour %d start %d team %d (was faction %d colour %d start %d)" % [i, s.state, s.player_template, s.color, s.start_pos, s.team, -1, -1, -1])
 	_state = State.LOADING
 	_shell_leave_for_game()
-	var cards: Dictionary = _shell.set_load_screen_from_game(resolved)
+	var load_screen_game := resolved.duplicate()
+	load_screen_game["online_game"] = _last_game_online # lane RANKICON-1: an online game (_hub_begin above) reads no local profile stats for its rank icons
+	load_screen_game["local_slot"] = _last_local_slot # Local 56 (issue #412, P-96): GameSlot::getApparentStartPos (RW 0x801249 / 0x801190)
+	var cards: Dictionary = _shell.set_load_screen_from_game(load_screen_game)
 	if cards.has("error"):
 		_fail("load screen: " + cards.error)
 		return
+	if cards.has("rank_stats_error"):
+		print("LOADSCREEN rank icons: the profile stats file could not be read, the players' rank icons show 0 points: " + str(cards.rank_stats_error)) # lane RANKICON-1
 	_show_rules_summary(str(cards.get("rules_summary", "")))
 	var local_card: int = cards.get("local_card", -1)
 	# PORT-98: the local player's faction LoadScreenMusic is the screen's now (AptLoadScreen -> ShellServices::playLoadScreenMusic, RW 0x81CB08),
@@ -2638,6 +2643,10 @@ func _shell_load_screen_push() -> void:
 ## Called by the load with the retail percentage (RotWK updateLoadProgress): the load screen's bar and a frame, synchronously, like retail's loading loop.
 func _on_load_progress(percent: int) -> void:
 	_load_log.append(percent)
+	# PORT-158: pump the audio while the synchronous load blocks the frame loop, so the menu track's faded stop
+	# (RW 0x81D242) finishes during the load instead of hanging audible next to the loading music (issue #376)
+	if _audio != null and _audio.has_method("tick_audio"):
+		_audio.tick_audio()
 	_shell.set_load_progress(percent)
 	_shell.tick(0.033)
 	_shell.render(true)

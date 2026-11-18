@@ -29,6 +29,8 @@
 //   DONOR  Open-BFME-1 Rva0076C080 / Rva0075F0E0 (names for the above), ZH W3DModelDraw.cpp (setModelState render object reuse,
 //          bones, hide / show).
 //
+// Presentation repair requested by the owner: S-5920 reports a missing movement clip replaced by a compatible,
+// matching movement cycle from the same module. Shared by BFME2 / RotWK and BFME1 data mode; simulation is unchanged.
 // What is NOT retail knowledge (stops, docs/STOPS.md):
 //   S-090  the setModelState virtual (RW 0x4C451D) and the pieces of the retail routines that need engine objects this core does
 //          not have: the shared-model-flags / attached-model update of replaceModelConditionState, the sequential-animation flag
@@ -61,6 +63,8 @@
 #include <set>
 #include <string>
 #include <vector>
+
+class Matrix3D;
 
 // One of the three animation tracks (RW 0x4B349F fills one: slot, anim, mustCompleteBlend (+0x19), mode (+0x10), blendTime (+0xC),
 // frame (+4), prevFrame (+8), completed (+0x18), direction (+0x14); stride 0x1C from the draw object's +0x110).
@@ -130,6 +134,9 @@ struct W3DDrawPoseView
 struct W3DScriptedModelDrawOptions
 {
 	float scale = 1.0f;
+	// PORT-126: live instance scale callback (set by Drawable::addEntry so post-construction Drawable::setInstanceScale updates
+	// apply to W3DQuadrupedDraw::getFootLocations worldSpace = true queries). Unset: falls back to `scale`.
+	std::function<float()> instanceScale;
 	std::vector<std::string> standardPublicBones; ///< GameData StandardPublicBone, supplied by the caller
 	bool buildBones = true;                        ///< compute pristine bones / barrels / turrets on every model change
 	// What the object's current attack target looks like, for the scripts that ask (CurDrawableIsCurrentTargetKindof,
@@ -183,6 +190,7 @@ public:
 	// Drawable::setModelConditionState: the object's current model condition flags (RW 0x4BF2D8). Both lists are re-matched; see the
 	// header comment for the pending state rule.
 	void setModelConditionFlags(const ModelConditionFlags &flags);
+	const ModelConditionFlags &pendingFlags() const { return m_pendingFlags; } // RW +0x17C (getModelConditionFlags)
 	// RW 0x4C451D (slot 0x100; BFME2 0x4C4E23): select model state; force bypasses render object reuse (force = 1)
 	bool setModelState(const ModelConditionInfo *state, bool force = false);
 	// RW 0x8B911E -> draw module vslot 0x84: SubObjectsUpgrade's UpgradeTexture list replaces the module's upgrade textures (empty: none)
@@ -247,9 +255,9 @@ public:
 		{
 			return m_pending;
 		}
-		if (m_whichAnim >= 0 && m_whichAnim < (int)m_curAnimState->animations.size())
+		if (const W3DAnimationInfo *playing = playbackAnimationInfo())
 		{
-			const W3DAnimationInfo &info = m_curAnimState->animations[(size_t)m_whichAnim];
+			const W3DAnimationInfo &info = *playing;
 			if (info.fadeBeginFrame > 0.0f && info.fadeEndFrame > info.fadeBeginFrame)
 			{
 				return true; // RW 0x4B54D0 .. 0x4B54EB: the ramp's test
@@ -292,8 +300,23 @@ public:
 	bool adjustsHeightByConstruction() const { return m_curAnimState && m_curAnimState->testFlag(W3D_ACF_ADJUST_HEIGHT_BY_CONSTRUCTION_PERCENT); }
 
 	// lane LOCAL-29: vtable slot +0x104, called at RW 0x4B6B26 only after the AttachToBoneInAnotherModule bone was found, with the placed transform.
-	// Base RW 0x9F3A3C (`ret 4`): no-op. W3DSailModelDraw RW 0x4D00CD turns the sail with the wind: Port 63 (#173) overrides this, not ported here (S-7232).
+	// Base RW 0x9F3A3C (`ret 4`): no-op. W3DSailModelDraw RW 0x4D00CD overrides this slot to turn the attached sail (Port 63, #173).
 	virtual void adjustAttachedTransform(Matrix3D &) {}
+
+	// PORT-126 (issue #310): ObjectDrawInterface slot 47 (+0xBC; RW 0x8F8014 returns false in base W3DScriptedModelDraw).
+	// Overridden by W3DQuadrupedDraw (RW 0x4C9A39). When worldSpace is false (called from Drawable::calcPhysicsXformHugeFourLegs
+	// RW 0x67B7AA -> RW 0x67B8AE), evaluates the current animated client foot bone positions transformed by renderTransform (RW 0x4B2F19).
+	// When worldSpace is true, evaluates pristine foot bone positions for conditionFlags transformed by *objectTransform (RW 0x4C3731).
+	virtual bool getFootLocations(std::vector<Coord3D> &feet, bool worldSpace, const Matrix3D &renderTransform,
+		const Matrix3D *objectTransform = nullptr, const ModelConditionFlags *conditionFlags = nullptr) const
+	{
+		(void)feet;
+		(void)worldSpace;
+		(void)renderTransform;
+		(void)objectTransform;
+		(void)conditionFlags;
+		return false;
+	}
 
 	// Speed multiplier of every track (RW +0x9C: the movement speed sync, recomputed at the end of every advance). Exposed for tests.
 	void setSpeedMultiplier(float m) { m_speedSync = m; }
@@ -385,11 +408,19 @@ private:
 	bool isIdleLike(const AnimationStateInfo &state) const; // RW 0x4B424F
 	float currentAnimFraction() const;                      // RW 0x4B2785
 	const HAnimClass *resolveAnimation(const W3DAnimationInfo &info, std::string *resolved, std::string *error);
+	const HAnimClass *repairMissingMovementAnimation(const AnimationStateInfo &state, std::string *resolved);
+	const W3DAnimationInfo *playbackAnimationInfo() const
+	{
+		if (m_movementRepairInfo) return m_movementRepairInfo;
+		return m_curAnimState && m_whichAnim >= 0 && m_whichAnim < (int)m_curAnimState->animations.size()
+			? &m_curAnimState->animations[(size_t)m_whichAnim] : nullptr;
+	}
 	void startAnimation(const HAnimClass *anim, const std::string &clipName, const W3DAnimationInfo &info, int animationIndex, float startFrame,
 		float speedFactor);
 	void setTrack(int slot, const W3DDrawTrack &track);
 	void clearTrack(int slot);
 	void promote();
+	void activateQueuedMovementRepair();
 	void initBlend(const W3DDrawTrack &incoming);
 	bool trackComplete(const W3DDrawTrack &t, bool flag) const; // RW 0x4B271C
 	void stepTrack(W3DDrawTrack &t, float elapsedMs);
@@ -425,6 +456,10 @@ private:
 	const AnimationStateInfo *m_curAnimState = nullptr; // RW +0x18
 	int m_whichAnim = -1;                   // RW +0x44
 	int m_lastAnim = 0;                     // RW +0x88
+	const W3DAnimationInfo *m_movementRepairInfo = nullptr; // S-5920: playback metadata; requested state / index stay retail's.
+	const HAnimClass *m_movementRepairAnimation = nullptr; // Pair Distance with this cycle's duration when visible or incoming.
+	float m_queuedMovementRepairSpeedFactor = 1.0f;
+	bool m_movementRepairQueued = false; // S-5920: a waiting repair must not retime the visible blend.
 
 	const RenderObjPrototype *m_model = nullptr;
 	std::string m_modelName; // lower case, the render object identity

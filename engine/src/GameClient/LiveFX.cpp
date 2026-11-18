@@ -797,6 +797,23 @@ FXParticleSystem::ParticleAttachInfo LiveFX::attachedDrawable(std::uint32_t draw
 	return info;
 }
 
+FXParticleSystem::ParticleAttachInfo LiveFX::swirlInfluence(std::uint32_t drawableId, const Coord3D &pos)
+{
+	// P-149 (RW 0x5F2EBC -> 0x678BF2 -> 0x676C7D; DONOR BFME2 0x00276952)
+	FXParticleSystem::ParticleAttachInfo info;
+	const Drawable *d = m_game.drawables().find(drawableId);
+	if (!d)
+	{
+		return info;
+	}
+	info.found = true;
+	if (d->swirlInfluence(pos, clientFrame(), info.swirlTangent))
+	{
+		info.hasInfluence = true;
+	}
+	return info;
+}
+
 FXParticleSystem::ParticleAttachInfo LiveFX::attachedObject(std::uint32_t objectId, const std::string &boneName, int)
 {
 	FXParticleSystem::ParticleAttachInfo info;
@@ -1408,9 +1425,24 @@ LiveFX::BoneSource LiveFX::particleSysBoneSource(const RenderObjPrototype *model
 	return BoneSource::NONE;
 }
 
+static Matrix3D rigidInverse(const Matrix3D &m)
+{
+	Matrix3D inv;
+	for (int r = 0; r < 3; ++r)
+	{
+		for (int c = 0; c < 3; ++c)
+		{
+			inv.Row[r][c] = m.Row[c][r];
+		}
+		inv.Row[r][3] = -(inv.Row[r][0] * m.Row[0][3] + inv.Row[r][1] * m.Row[1][3] + inv.Row[r][2] * m.Row[2][3]);
+	}
+	return inv;
+}
+
 void LiveFX::createSystems(Drawable &d, Attached &a)
 {
 	const float scale = d.getInstanceScale();
+	const Matrix3D rootWorldInv = rigidInverse(thingMatrix(*d.getPosition(), d.getBasis()));
 	for (size_t entryIndex = 0; entryIndex < d.entries().size(); ++entryIndex)
 	{
 		const DrawEntry &e = d.entries()[entryIndex];
@@ -1423,6 +1455,8 @@ void LiveFX::createSystems(Drawable &d, Attached &a)
 		// record; the record stores it (the per-frame walk's branch, RW 0x4B6DE2)
 		const W3DModelDrawModuleData *data = e.data ? dynamic_cast<const W3DModelDrawModuleData *>(e.data) : nullptr;
 		const bool checkDrawable = data && data->m_particleBonesCheckDrawable;
+		Matrix3D entryWorld;
+		const bool attachedEntry = !e.attachToBone.empty() && d.entryTransform(e, entryWorld);
 		for (const std::vector<ParticleSysBoneInfo> *list : { f.modelState ? &f.modelState->particleSysBones : nullptr, f.animationState ? &f.animationState->particleSysBones : nullptr })
 		{
 			if (!list)
@@ -1463,7 +1497,15 @@ void LiveFX::createSystems(Drawable &d, Attached &a)
 				// stores at +4, and 0 means "no such bone" (the by-index follow skips such a record, RW 0x4B6E57)
 				Matrix3D bone;
 				int boneIndex = 0;
-				const BoneSource source = particleSysBoneSource(f.model, *e.draw, info, scale, bone, &boneIndex);
+				// Both editions (RW 0x4B6A6F..0x4B6B26): an entry with AttachToBoneInAnotherModule uses the host bone's world transform (which already includes drawable scale), so evaluate child bones at scale 1 and express the combined matrix relative to the drawable root.
+				const BoneSource source = particleSysBoneSource(f.model, *e.draw, info, attachedEntry ? 1.0f : scale, bone, &boneIndex);
+				if (attachedEntry)
+				{
+					Matrix3D localInEntry = (source != BoneSource::NONE) ? bone : Matrix3D();
+					Matrix3D combinedWorld;
+					Matrix3D::Multiply(entryWorld, localInEntry, &combinedWorld);
+					Matrix3D::Multiply(rootWorldInv, combinedWorld, &bone);
+				}
 				// PORT-121 (issue #305): the creation asks the render object and takes the pose the draw shows NOW (RW 0x4C678F /
 				// RW 0x4C69BE) - RW 0x5F4C6B then turns the particle velocity by that matrix, so the water leaves the bucket the way the
 				// builder faces. The old path read the bind pose (`modelBone`): a bucket bone whose bind transform carries no arm rotation
@@ -1481,8 +1523,12 @@ void LiveFX::createSystems(Drawable &d, Attached &a)
 				else if (!info.boneName.empty() && info.boneName != kNoneBone)
 				{
 					++m_stats.boneMisses;
+					if (f.model && m_stats.missingBones.size() < 200)
+					{
+						m_stats.missingBones.insert(f.model->Name + ":" + info.boneName);
+					}
 				}
-				if (info.followBone && source != BoneSource::NONE)
+				if (info.followBone && (source != BoneSource::NONE || attachedEntry))
 				{
 					sys->setLocalTransform(bone);
 				}
@@ -1515,7 +1561,7 @@ void LiveFX::createSystems(Drawable &d, Attached &a)
 // Retail makes this call from W3DModelDraw::doDrawModule; the port makes it here, once per client frame for every drawable with
 // live systems, which is the same point of the frame (the drawables' poses were just synced). The gate
 // (ParticlesAttachedToAnimatedBones, +0x108) is read per draw entry inside ParticleBoneFollow::followFrame.
-void LiveFX::followAnimatedBones(Drawable &d, Attached &a)
+void LiveFX::followAnimatedBones(Drawable &d, Attached &a, int callArg)
 {
 	if (a.records.empty() || d.entries().empty())
 	{
@@ -1534,13 +1580,23 @@ void LiveFX::followAnimatedBones(Drawable &d, Attached &a)
 			continue;
 		}
 		poses[i].draw = e.draw.get();
-		poses[i].scale = scale;
-		poses[i].world = world;
+		Matrix3D entryWorld;
+		if (!e.attachToBone.empty() && d.entryTransform(e, entryWorld))
+		{
+			// RW 0x4B6A6F..0x4B6B26: entryWorld already carries parent drawable scale.
+			poses[i].world = entryWorld;
+			poses[i].scale = 1.0f;
+		}
+		else
+		{
+			poses[i].world = world;
+			poses[i].scale = scale;
+		}
 		const W3DModelDrawModuleData *data = e.data ? dynamic_cast<const W3DModelDrawModuleData *>(e.data) : nullptr;
 		poses[i].follow = data && ParticleBoneFollow::wantsFollow(*data);
 	}
 	m_boneCounters = ParticleBoneFollow::Counters();
-	ParticleBoneFollow::followFrame(a.records, m_playback.particles(), poses.data(), poses.size(), &m_boneCounters, 0);
+	ParticleBoneFollow::followFrame(a.records, m_playback.particles(), poses.data(), poses.size(), &m_boneCounters, callArg);
 	m_stats.bonesFollowed += m_boneCounters.followed;
 	m_stats.bonesMissed += m_boneCounters.missed;
 	m_stats.bonesStarted += m_boneCounters.started;
@@ -1799,8 +1855,13 @@ void LiveFX::updateAttachedSystems()
 		auto it = attached;
 		if (it != m_attached.end() && it->first == id && it->second.states == states)
 		{
-			// lane PORT-50: the same states, so the systems stay; their bones still move (RW 0x4C7795 per draw)
-			followAnimatedBones(*d, it->second);
+			// lane PORT-50: the same states, so the systems stay; their bones still move. P-61: doDrawModule calls RW 0x4C6514 every draw
+			// (RW 0x4C7790); without a state change (+0x48 clear) it goes straight to its clean end RW 0x4C6D73, the walk with argument 1 for
+			// EVERY module data (RW 0x4C6D78: the FollowBone systems up to the first record without it), then RW 0x4C5CC5 (bone-attached render
+			// objects, not particles). Only then RW 0x4C7795 makes the gated per-frame walk (argument 0). A porter's bucket (no
+			// ParticlesAttachedToAnimatedBones) is followed by the first call: its water leaves the bucket where the extinguish animation tips it.
+			followAnimatedBones(*d, it->second, 1);
+			followAnimatedBones(*d, it->second, 0);
 			continue;
 		}
 		if (it == m_attached.end() || it->first != id)
@@ -1810,7 +1871,9 @@ void LiveFX::updateAttachedSystems()
 		destroySystems(it->second);
 		it->second.states = states;
 		createSystems(*d, it->second);
-		followAnimatedBones(*d, it->second); // lane PORT-50: the frame's pose right away, not one frame late
+		// lane PORT-50: the frame's pose right away, not one frame late. P-61: the dirty path of RW 0x4C6514 returns through RW 0x4C6D6D without
+		// the argument-1 walk; only the gated per-frame walk (RW 0x4C7795) follows the creation in that draw
+		followAnimatedBones(*d, it->second, 0);
 	}
 	unsigned long long live = 0;
 	for (const auto &kv : m_attached)

@@ -4,6 +4,8 @@
 #include "Common/Player.h"
 #include "GameLogic/SnapshotXfer.h"
 #include "Common/NumericState.h"
+#include "Common/Audio/AudioRequests.h"
+#include "Common/LightPointSystem.h"
 #include "GameLogic/SimMath.h"
 
 #include "Common/PlayerEconomyHost.h"
@@ -12,6 +14,9 @@
 #include "Common/Team.h"
 #include "Common/Upgrade.h"
 #include "Common/Xfer.h"
+#include "GameLogic/GameLogic.h"
+#include "GameLogic/Module/BehaviorModule.h"
+#include "GameLogic/Object/Object.h"
 #include "GameLogic/ObjectFilter.h"
 #include "GameLogic/ObjectFilterMatch.h"
 
@@ -99,6 +104,7 @@ void Player::init(const PlayerTemplate *pt, std::uint32_t defaultStartingCash)
 	m_colorExplicit = false;
 	m_unitsShouldHunt = false; // RW 0x6B0401: + 0x35D cleared by the init (lane DECOMP-2, Sol's review)
 	m_resourceGathering.reset(); // lane LUMBER1: ZH Player::init makes a new ResourceGatheringManager (RW + 0x304)
+	m_lightPoints.reset();       // PORT-113: RW 0x6B0355 (the levels), 0x6B0362 (the points)
 	m_money.init();
 	m_money.setPlayerIndex(m_index);
 	// RW 0x6B06D4 .. 0x6B0707 (the player's reset): score, cost modifier lists, command points; the upgrades are the upgrade lane's reset
@@ -208,6 +214,31 @@ void Player::crc(StateHasher &h) const
 	{
 		h.addU32(0x5C);
 		m_resourceGathering.crc(h); // lane LUMBER1: hashed only once a supply center registered (a game without one keeps its hash)
+	}
+	if (!m_lightPoints.isUntouched())
+	{
+		h.addU32(0x338);
+		m_lightPoints.crc(h); // PORT-113: hashed only while the player holds points or a level (a game without light points keeps its hash)
+	}
+	if (!m_battlePlanBonuses.isUntouched() || hasActiveBattlePlans())
+	{
+		h.addU32(0xB8000001u);
+		h.addI32(m_bombardmentBattlePlans);
+		h.addI32(m_holdTheLineBattlePlans);
+		h.addI32(m_searchAndDestroyBattlePlans);
+		h.addFloat(m_battlePlanBonuses.armorScalar);
+		h.addI32(m_battlePlanBonuses.bombardment);
+		h.addI32(m_battlePlanBonuses.searchAndDestroy);
+		h.addI32(m_battlePlanBonuses.holdTheLine);
+		h.addFloat(m_battlePlanBonuses.sightRangeScalar);
+		for (std::uint32_t w : m_battlePlanBonuses.validKindOf)
+		{
+			h.addU32(w);
+		}
+		for (std::uint32_t w : m_battlePlanBonuses.invalidKindOf)
+		{
+			h.addU32(w);
+		}
 	}
 	h.addU32((std::uint32_t)m_upgradeRecords.size()); // UPGRADE-1: the records in list order, then both masks
 	for (const UpgradeRecord &r : m_upgradeRecords)
@@ -714,7 +745,10 @@ void Player::checkLoadedIndices(int playerCount) const
 
 void Player::xfer(Xfer &x, TeamFactory &teams)
 {
-	XferVersion v{ 1, 2 }; // lane LUMBER1: version 2 adds the ResourceGatheringManager (RW + 0x304) at the end
+	// lane LUMBER1: version 2 adds the ResourceGatheringManager (RW + 0x304) at the end. PORT-113: version 3 adds the light points (RW + 0x338) after it;
+	// PORT-237: version 4 adds BattlePlanBonuses (+ 0xAC .. + 0xB8); untouched players save version 2 or 3 so existing streams stay unchanged.
+	const bool hasBattlePlans = !m_battlePlanBonuses.isUntouched() || hasActiveBattlePlans();
+	XferVersion v{ 1, (std::uint8_t)(x.isLoading() || hasBattlePlans ? 4 : (!m_lightPoints.isUntouched() ? 3 : 2)) };
 	x.xferVersion(v);
 	// the identity the START made: checked, never overwritten
 	std::int32_t index = m_index;
@@ -869,5 +903,171 @@ void Player::xfer(Xfer &x, TeamFactory &teams)
 	else if (x.isLoading())
 	{
 		m_resourceGathering.reset(); // a version 1 snapshot predates the supply centers' registration
+	}
+	if (v.current >= 3)
+	{
+		m_lightPoints.xfer(x); // PORT-113 (RW 0x6B2B54 passes the tracker to the Xfer; the layout is OpenBFME's, see LightPointTracker::xfer)
+	}
+	else if (x.isLoading())
+	{
+		m_lightPoints.reset(); // a player saved without light points
+	}
+	if (v.current >= 4)
+	{
+		x.xferInt(&m_bombardmentBattlePlans);
+		x.xferInt(&m_holdTheLineBattlePlans);
+		x.xferInt(&m_searchAndDestroyBattlePlans);
+		x.xferReal(&m_battlePlanBonuses.armorScalar);
+		x.xferInt(&m_battlePlanBonuses.bombardment);
+		x.xferInt(&m_battlePlanBonuses.searchAndDestroy);
+		x.xferInt(&m_battlePlanBonuses.holdTheLine);
+		x.xferReal(&m_battlePlanBonuses.sightRangeScalar);
+		for (std::uint32_t &w : m_battlePlanBonuses.validKindOf)
+		{
+			x.xferUnsignedInt(&w);
+		}
+		for (std::uint32_t &w : m_battlePlanBonuses.invalidKindOf)
+		{
+			x.xferUnsignedInt(&w);
+		}
+	}
+	else if (x.isLoading())
+	{
+		m_bombardmentBattlePlans = 0;
+		m_holdTheLineBattlePlans = 0;
+		m_searchAndDestroyBattlePlans = 0;
+		m_battlePlanBonuses = BattlePlanBonuses{};
+	}
+}
+
+// PORT-113 (issue #280): RW 0x6AB148
+void Player::giveLightPoints(int amount)
+{
+	m_lightPoints.addPoints(amount); // RW 0x6AB165: always, before any test
+	// RW 0x6AB171 no template, RW 0x6AB176 amount <= 0 (jle), RW 0x6AB17F no LightPointsUpSound (template + 0x1A4): no sound
+	if (!m_template || amount <= 0 || m_template->m_lightPointsUpSound.empty())
+	{
+		return;
+	}
+	// RW 0x6AB187 .. 0x6AB1B6: with TheAudio, a copy of the event (RW 0x6DA95E) gets this player's index (RW 0x66ECE1, Player + 0x54) and is added
+	// (vslot 0x64). No manager installed: the entry point counts the call (AudioApi::callsWithoutAudio)
+	AudioApi::playSoundForPlayer(m_template->m_lightPointsUpSound, m_index);
+}
+
+// RW 0x6AA8FB
+bool Player::hasLightPointsForSpecialPower(const SpecialPowerTemplate *t) const
+{
+	return !TheLightPointSystem || TheLightPointSystem->canUseSpecialPower(m_lightPoints, t);
+}
+
+// RW 0x6AA939
+void Player::giveLightPointLevel(const std::string &levelName)
+{
+	if (TheLightPointSystem)
+	{
+		TheLightPointSystem->giveLevel(m_lightPoints, levelName);
+	}
+}
+
+namespace
+{
+bool kindOfIntersects(const KindOfMaskType &a, const KindOfMaskType &b)
+{
+	for (size_t i = 0; i < a.size(); ++i)
+	{
+		if ((a[i] & b[i]) != 0)
+		{
+			return true;
+		}
+	}
+	return false;
+}
+
+void localApplyBattlePlanBonusesToObject(Object &obj, const BattlePlanBonuses &bonus)
+{
+	const bool isProjectile = obj.isKindOfName("PROJECTILE");
+	Object *objectToValidate = isProjectile ? obj.logic().findObjectByID(obj.getProducerID()) : &obj;
+	if (!objectToValidate || !kindOfIntersects(objectToValidate->getKindOf(), bonus.validKindOf))
+	{
+		return;
+	}
+	if (kindOfIntersects(objectToValidate->getKindOf(), bonus.invalidKindOf))
+	{
+		return;
+	}
+	if (!isProjectile)
+	{
+		if (bonus.armorScalar != 1.0f)
+		{
+			if (BodyModuleInterface *body = obj.getBodyModule())
+			{
+				body->applyDamageScalar(bonus.armorScalar); // RW vslot 0x6C
+			}
+		}
+		if (bonus.sightRangeScalar != 1.0f)
+		{
+			obj.setShroudClearingRange(SimMath::mulf32(obj.getBaseShroudClearingRange(), bonus.sightRangeScalar));
+		}
+	}
+	// RW Object + 0x39C/0x39D: WEAPONBONUSCONDITION_BATTLEPLAN_BOMBARDMENT=12, HOLDTHELINE=13, SEARCHANDDESTROY=14
+	obj.setWeaponBonusCondition(12, bonus.bombardment > 0);
+	obj.setWeaponBonusCondition(13, bonus.holdTheLine > 0);
+	obj.setWeaponBonusCondition(14, bonus.searchAndDestroy > 0);
+}
+} // namespace
+
+// RW 0x6AD2B5
+void Player::applyBattlePlanBonusesForObject(Object &obj) const
+{
+	localApplyBattlePlanBonusesToObject(obj, m_battlePlanBonuses);
+}
+
+// RW 0x6AD360
+void Player::removeBattlePlanBonusesForObject(Object &obj) const
+{
+	BattlePlanBonuses inv = m_battlePlanBonuses;
+	inv.armorScalar = SimMath::divf32(1.0f, std::max(inv.armorScalar, 0.01f));
+	inv.sightRangeScalar = SimMath::divf32(1.0f, std::max(inv.sightRangeScalar, 0.01f));
+	inv.bombardment = -1000000;
+	inv.searchAndDestroy = -1000000;
+	inv.holdTheLine = -1000000;
+	localApplyBattlePlanBonusesToObject(obj, inv);
+}
+
+// RW 0x6AD4AE
+void Player::applyBattlePlanBonusesForPlayerObjects(const BattlePlanBonuses &bonus, GameLogic &logic)
+{
+	if (m_battlePlanBonuses.isUntouched())
+	{
+		m_battlePlanBonuses = bonus;
+	}
+	else
+	{
+		m_battlePlanBonuses.armorScalar = SimMath::mulf32(m_battlePlanBonuses.armorScalar, bonus.armorScalar);
+		m_battlePlanBonuses.sightRangeScalar = SimMath::mulf32(m_battlePlanBonuses.sightRangeScalar, bonus.sightRangeScalar);
+		m_battlePlanBonuses.bombardment = std::max(0, m_battlePlanBonuses.bombardment + bonus.bombardment);
+		m_battlePlanBonuses.holdTheLine = std::max(0, m_battlePlanBonuses.holdTheLine + bonus.holdTheLine);
+		m_battlePlanBonuses.searchAndDestroy = std::max(0, m_battlePlanBonuses.searchAndDestroy + bonus.searchAndDestroy);
+		for (size_t i = 0; i < m_battlePlanBonuses.validKindOf.size(); ++i)
+		{
+			m_battlePlanBonuses.validKindOf[i] |= bonus.validKindOf[i];
+			m_battlePlanBonuses.invalidKindOf[i] |= bonus.invalidKindOf[i];
+		}
+	}
+	for (Object *obj = logic.getFirstObject(); obj; obj = obj->getNextObject())
+	{
+		if (obj->getControllingPlayer() == this)
+		{
+			localApplyBattlePlanBonusesToObject(*obj, bonus);
+		}
+	}
+}
+
+// RW 0x6AA957
+void Player::removeLightPointLevel(const std::string &levelName)
+{
+	if (TheLightPointSystem)
+	{
+		TheLightPointSystem->removeLevel(m_lightPoints, levelName);
 	}
 }

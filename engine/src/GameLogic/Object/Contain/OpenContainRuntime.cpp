@@ -7,6 +7,7 @@
 #include "GameLogic/Object/Contain/OpenContainRuntime.h"
 #include "GameLogic/SnapshotXfer.h"
 
+#include "Common/Audio/AudioRequests.h"
 #include "Common/NumericState.h"
 #include "Common/Player.h"
 #include "Common/StateHash.h"
@@ -64,106 +65,6 @@ void setStatusMask(Object &obj, const ObjectStatusMaskType &mask, bool on)
 
 } // namespace
 
-// RW 0x867C40 OpenContain::tryToEvacuate(Object *entering): module vslot 0x4C (the C++ name is INFERENCE)
-// Copies m_contained (RW 0x867C58..0x867C65) and walks each rider (esi) to reveal and evacuate enemy STEALTH_GARRISON occupants.
-// Every subclass keeps RW 0x867C40 in main vtable slot +0x4C (OpenContain 0xC599D8, TransportContain 0xC5A588, HordeTransportContain 0xC5C240,
-// SiegeEngineContain 0xC5D520, HordeSiegeEngineContain 0xC5D8C0, GarrisonContain 0xC5C570, etc.).
-bool OpenContain::tryToEvacuate(Object *entering)
-{
-	// RW 0x867C40: the entering object is the argument (ebx in onCollide, pushed at 0x865A0D)
-	// RW 0x867C58..0x867C65: copy m_contained (interface + 0x34) into a temporary list on the stack
-	const std::vector<Object *> copy(m_contained.begin(), m_contained.end()); // RW 0x867C58 copy, 0x867C63 list head
-	// RW 0x867C85: pEntering = entering->getControllingPlayer() (RW 0x68B678)
-	const Player *pEntering = entering ? entering->getControllingPlayer() : nullptr;
-	// RW 0x867C9A: KindOf STEALTH_GARRISON is bit 33 (template + 0x10C & 2)
-	static const int kStealthGarrison = CombatNames::kindOf("STEALTH_GARRISON");
-	for (Object *rider : copy) // esi = each rider in the copied list
-	{
-		// RW 0x867C8E: pRider = rider->getControllingPlayer() (RW 0x68B678)
-		const Player *pRider = rider ? rider->getControllingPlayer() : nullptr;
-		// RW 0x867C95: if (pRider == pEntering) continue;
-		if (pRider == pEntering)
-		{
-			continue; // RW 0x867C95..0x867C99
-		}
-		// RW 0x867C9A..0x867CA5: if (!(rider->getTemplate()->[+0x10C] & 2)) continue; // STEALTH_GARRISON
-		if (!rider || !rider->isKindOf((unsigned)kStealthGarrison))
-		{
-			continue; // RW 0x867CA2
-		}
-		// RW 0x867CAC: if (rider->getAIUpdateInterface())
-		if (AIUpdateInterface *ai = rider->getAIUpdateInterface())
-		{
-			// RW 0x867CA1..0x867CB2: StealthUpdate::of(*rider) (RW 0x68FBD3) and markAsDetected(0, 1, nullptr, true) (RW 0x7767A9)
-			if (StealthUpdate *su = StealthUpdate::of(*rider))
-			{
-				su->markAsDetected(0, 1, nullptr, true); // RW 0x867CB2..0x867CBF: frames 0 -> StealthDelay, mode 1, horde true
-			}
-			// RW 0x867CB7..0x867CC7: TheInvisibilityManager->markDetected(rider, nullptr, 0, 1) (RW 0x81C32C)
-			rider->logic().invisibility().markDetected(rider, nullptr, 0, 1); // RW 0x867CC7
-			// RW 0x867CCC..0x867CDB: rider->getAIUpdateInterface()->aiExit(getObject(), CMD_FROM_AI) (RW 0x7716C1(obj, 2))
-			ai->aiExit(getObject(), CMD_FROM_AI); // RW 0x867CDB
-		}
-		else
-		{
-			// RW 0x867CE2..0x867CEA: else removeFromContain(rider, true) (contain vslot 0xA4)
-			// In the port removeFromContain has no bool param; RW 0x865EB6 with exposeStealthUnits=true does:
-			// RW 0x865EF5..0x865EFF: rider->isKindOf(STEALTH_GARRISON) true
-			// RW 0x865F01..0x865F22: StealthUpdate::markAsDetected(0, 1, nullptr, true) + invisibility().markDetected(rider, nullptr, 0, 1)
-			// We replicate that here, then remove.
-			if (StealthUpdate *su = StealthUpdate::of(*rider))
-			{
-				su->markAsDetected(0, 1, nullptr, true); // RW 0x865F0E
-			}
-			rider->logic().invisibility().markDetected(rider, nullptr, 0, 1); // RW 0x865F1B..0x865F22
-			removeFromContain(rider); // RW 0x867CEA: contain vslot 0xA4(rider, true) -> openContainRemove
-		}
-	}
-	// RW 0x867D0F: return al = 1 (true) after destroying the temporary list
-	return true; // RW 0x867D0F
-}
-
-// RW 0x8659D8 OpenContain::onCollide(other, loc, normal): CollideModuleInterface slot + 0x00, vtable RW 0xC5D650 (module + 0x24). Installed by OpenContain
-// (RW 0x867FC1), TransportContain (RW 0x86B6CF), HordeTransportContain (RW 0x87A2CF), SiegeEngineContain (RW 0x87F525), HordeSiegeEngineContain (RW 0x88051C),
-// GarrisonContain (RW 0x87B1FA), HordeGarrisonContain (RW 0x87D30F), TunnelContain (RW 0x880EBB); HordeContain (RW 0x872800) installs RW 0xC5D250 instead
-// (the empty RW 0x46E918), so a HordeContain never runs this.
-void OpenContain::onCollide(Object *other, const Coord3D *, const Coord3D *)
-{
-	if (!other) // RW 0x8659DD .. 0x8659E2
-	{
-		return;
-	}
-	Object *container = getObject(); // RW 0x8659E5: module + 0x08
-	static const int kShip = CombatNames::kindOf("SHIP");
-	if (container->isKindOf((unsigned)kShip)) // RW 0x8659EB: template + 0x11F bit 0x80
-	{
-		return;
-	}
-	const AIUpdateInterface *otherAI = other->getAIUpdateInterface(); // RW 0x8659F4: Object + 0x260
-	if (!otherAI || otherAI->enterTarget() != container) // RW 0x8659FA .. 0x865A08: AI vslot 0x1FC (RW 0x664D12) must name this container
-	{
-		return;
-	}
-	if (!tryToEvacuate(other)) // RW 0x865A0A .. 0x865A15: module vslot 0x4C (RW 0x867C40)
-	{
-		return;
-	}
-	if (!isValidContainerFor(*other, true, false)) // RW 0x865A17 .. 0x865A2B: contain vslot 0x98 (other, 1, 0)
-	{
-		return;
-	}
-	if (other->getContainedBy() == container) // RW 0x865A2D .. 0x865A33: Object + 0x27C
-	{
-		return;
-	}
-	if (!m_open->m_collidePickup) // RW 0x865A38 .. 0x865A3F: module data + 0x81 (default 1, RW 0x867ECF)
-	{
-		return;
-	}
-	addToContain(other); // RW 0x865A41 .. 0x865A48: contain vslot 0x9C
-}
-
-
 // RW 0x68C5AF Object::getSingleLogicalBonePosition through the launch bone provider, then RW 0x70BCE7 (the object's transform, retail's SSE order); false
 // without a provider or without exactly one such bone (the caller keeps the object's own position)
 bool OpenContain::boneWorldPosition(Object &obj, const std::string &bone, Coord3D &out)
@@ -196,6 +97,19 @@ OpenContain::OpenContain(Thing *thing, const ModuleData *data, const OpenContain
 }
 
 OpenContain::~OpenContain() = default;
+
+void OpenContain::playContainSound(Object &container, const OpenContainModuleData &data, SoundState &state, bool entering)
+{
+	// RW 0x8658B6 / 0x8658C8 / 0x86594E: the enabled gate and independent frame comparisons.
+	if (entering && !state.loadEnabled) return;
+	const unsigned frame = container.logic().getFrame();
+	unsigned &last = entering ? state.lastLoadFrame : state.lastUnloadFrame;
+	if (frame == last) return;
+	const std::string &event = entering ? data.m_enterSound.name : data.m_exitSound.name;
+	// RW 0x8658D9 / 0x86595C: module data, then 0x8658EB / 0x86596E: container ID.
+	if (!event.empty()) AudioApi::playSoundForObject(event, container.getID());
+	last = frame; // RW 0x86591E / 0x8659A1, even when no sound is configured
+}
 
 const ObjectStatusMaskType *OpenContain::getObjectStatusOfContained() const
 {
@@ -350,6 +264,39 @@ bool OpenContain::openContainAllows(const Object &obj) const
 	return true;
 }
 
+// RW 0x865CE3 (contain slot 0x114): without a filter the contained count (+ 0x38); with one, the contained objects whose rider ObjectFilterMatch
+// (RW 0x7640C1) allows for the container's controlling player (RW 0x68B678) are counted over the list (+ 0x34)
+unsigned OpenContain::countContainedMatching(const ObjectFilter &filter) const
+{
+	unsigned count = 0;
+	const Player *owner = getObject()->getControllingPlayer(); // RW 0x865D15
+	for (const Object *rider : m_contained)
+	{
+		if (ObjectFilterMatch::allows(getObject()->logic(), filter, *rider, owner)) // RW 0x865D21
+		{
+			++count; // RW 0x865D2A
+		}
+	}
+	return count;
+}
+
+// RW 0x866367 (contain slot 0x13C): the first contained object (list order, + 0x34) whose rider ObjectFilterMatch (RW 0x7640C1) allows for the
+// container's controlling player (RW 0x68B678) leaves the container through slot 0xA4 (RW 0x8663AC, removeFromContain with the false flag) and is the
+// answer; none matched: null
+Object *OpenContain::takeContainedMatching(const ObjectFilter &filter)
+{
+	const Player *owner = getObject()->getControllingPlayer(); // RW 0x865D12
+	for (Object *rider : m_contained)
+	{
+		if (ObjectFilterMatch::allows(getObject()->logic(), filter, *rider, owner)) // RW 0x865D21
+		{
+			removeFromContain(rider); // RW 0x8663AC
+			return rider;
+		}
+	}
+	return nullptr; // RW 0x86639B
+}
+
 bool OpenContain::isValidContainerFor(const Object &obj, bool checkCapacity, bool checkPath) const
 {
 	(void)checkCapacity;
@@ -372,12 +319,12 @@ bool OpenContain::addToContain(Object *obj)
 }
 
 // RW 0x8674C2 OpenContain::addToContain
-void OpenContain::openContainAdd(Object *obj)
+bool OpenContain::openContainAdd(Object *obj)
 {
 	// RW 0x8674D3: wasSelected (the drawable's selection, client side: false in the logic)
 	if (obj->getContainedBy())
 	{
-		return;
+		return false;
 	}
 	addToContainList(obj);
 	if (const Player *p = obj->getControllingPlayer())
@@ -385,15 +332,34 @@ void OpenContain::openContainAdd(Object *obj)
 		m_playerEnteredMask = 1u << ((unsigned)p->getPlayerIndex() & 31u); // RW 0x8674FA: interface + 0x58
 	}
 	onContaining(obj, false); // the container's contain slot 0x58
+	// onContaining can kill: TransportContain's GrabWeapon fire (RW 0x86AA8A) may destroy the rider, the container, or both. RotWK links the rider only
+	// below (RW 0x867543 -> Object::onContainedBy RW 0x6901AE sets + 0x27C), but GameLogic::destroyObject (RW 0x62BBAB) runs Object::onDestroy
+	// (RW 0x62BC1E -> RW 0x6902FA) at once, and its leave-the-container step reads + 0x27C, still null here. In retail the destroyed rider therefore stays in
+	// the list and the next frame reads freed memory (the game's pool allocator hides it); the port cannot read a freed object, so it finishes the entry
+	// and then runs the exit that Object::onDestroy would have run:
+	// - the rider is no longer listed: the container's own death path took it out (OpenContain::onDie with EjectPassengersOnDeath -> removeAllContained)
+	//   and ran the exit already; linking it now would point it at a dead container;
+	// - the rider or the container is destroyed: link it, then the container's own removal (contain slot 0xA4), as onDestroy's step would with + 0x27C set.
+	if (!isContainedHere(*obj))
+	{
+		return false;
+	}
+	if (obj->isDestroyed() || getObject()->isDestroyed())
+	{
+		objectOnContainedBy(obj);
+		removeFromContain(obj);
+		return false;
+	}
 	redeployOccupants();      // main slot 0x48
 	objectOnContainedBy(obj); // RW 0x6901AE
-	recalcApparentControllingPlayer(); // main slot 0x54 (OpenContain RW 0x8658A3: the sound once per frame, client side)
+	playContainSound(*getObject(), openData(), m_soundState, true); // RW 0x86754C: main slot 0x54
 	// RW 0x86753D: with ModifierToGiveOnExit the {id, frame} pair the exit reads is recorded: not ported (S-1100)
 	if (isEnclosingContainerFor(*obj))
 	{
 		addOrRemoveObjFromWorld(obj, false); // RW 0x867566: main slot 0x60(obj, false)
 	}
 	++m_openStats.entered;
+	return true;
 }
 
 // RW 0x866987
@@ -435,12 +401,12 @@ void OpenContain::objectOnRemovedFrom(Object *rider)
 void OpenContain::onContaining(Object *obj, bool wasSelected)
 {
 	(void)obj;
-	(void)wasSelected; // RW 0x865F9A: the EnterSound (client side)
+	(void)wasSelected; // RW 0x865F9A: object SoundEnter (client side)
 }
 
 void OpenContain::onRemoving(Object *obj)
 {
-	// RW 0x8680F4: the ExitSound (client side), the rider's bone records leave (RW 0x867663 / 0x866E08), ModifierToGiveOnExit (S-1100)
+	// RW 0x8680F4: object SoundExit (client side), the rider's bone records leave (RW 0x867663 / 0x866E08), ModifierToGiveOnExit (S-1100)
 	m_riderBoneIndex.erase(obj->getID());
 	m_riderBoneName.erase(obj->getID());
 }
@@ -714,7 +680,7 @@ void OpenContain::onDelete()
 	const std::vector<Object *> riders(m_contained.begin(), m_contained.end());
 	for (Object *r : riders)
 	{
-		removeFromContain(r);
+		removeFromContain(r, true); // RW 0x8670C7: contain slot 0xA4(rider, true)
 		r->friend_setContainedBy(nullptr);
 		if (r->isKindOf((unsigned)hero))
 		{
@@ -731,16 +697,16 @@ void OpenContain::onDelete()
 // leaving
 // ---------------------------------------------------------------------------------------------------------------------------------
 
-void OpenContain::removeFromContain(Object *obj)
+void OpenContain::removeFromContain(Object *obj, bool exposeStealthUnits)
 {
 	if (obj)
 	{
-		openContainRemove(obj);
+		openContainRemove(obj, exposeStealthUnits);
 	}
 }
 
 // RW 0x8665BE -> RW 0x865EB6
-void OpenContain::openContainRemove(Object *obj)
+void OpenContain::openContainRemove(Object *obj, bool exposeStealthUnits)
 {
 	if (!isContainedHere(*obj))
 	{
@@ -764,9 +730,20 @@ void OpenContain::openContainRemove(Object *obj)
 		obj->setStatus((unsigned)porterTagged, false);
 	}
 	removeFromContainList(obj); // main slot 0x34 (RW 0x865E78)
-	if (obj->isKindOf((unsigned)stealthGarrison) && m_stealthUnitsContained > 0)
+	if (obj->isKindOf((unsigned)stealthGarrison))
 	{
-		--m_stealthUnitsContained; // the exposed stealth units' detection (RW 0x865EE7 .. 0x865EFB) is not ported (S-1100)
+		if (m_stealthUnitsContained > 0)
+		{
+			--m_stealthUnitsContained;
+		}
+		if (exposeStealthUnits) // RW 0x865EF5 .. 0x865F22: expose STEALTH_GARRISON on removal when requested
+		{
+			if (StealthUpdate *su = StealthUpdate::of(*obj))
+			{
+				su->markAsDetected(0, 1, nullptr, true);
+			}
+			obj->logic().invisibility().markDetected(obj, nullptr, 0, 1);
+		}
 	}
 	obj->setStatus((unsigned)tagged, false); // RW 0x865F05
 	if (isEnclosingContainerFor(*obj))
@@ -774,22 +751,22 @@ void OpenContain::openContainRemove(Object *obj)
 		addOrRemoveObjFromWorld(obj, true); // RW 0x865F23
 	}
 	// RW 0x865F28 .. 0x865F37: an object that is not effectively dead gets its owner's team again (RW 0x68BBE0 / 0x68BB9D: its own team, unchanged in the port)
-	recalcApparentControllingPlayer(); // main slot 0x58 (OpenContain RW 0x865932: the exit sound once per frame, client side)
+	playContainSound(*getObject(), openData(), m_soundState, false); // RW 0x865F73: main slot 0x58
 	onRemoving(obj);                   // the container's contain slot 0x5C
 	objectOnRemovedFrom(obj);          // RW 0x69024C
 	++m_openStats.left;
 }
 
 // RW 0x866675
-void OpenContain::removeAllContained()
+void OpenContain::removeAllContained(bool exposeStealthUnits)
 {
 	while (!m_contained.empty())
 	{
 		Object *r = m_contained.front();
-		removeFromContain(r);
+		removeFromContain(r, exposeStealthUnits);
 		if (!m_contained.empty() && m_contained.front() == r)
 		{
-			openContainRemove(r); // a derived removal that took another path: the list still holds it
+			openContainRemove(r, exposeStealthUnits); // a derived removal that took another path: the list still holds it
 		}
 		++m_openStats.ejectedOnDeath;
 	}
@@ -856,7 +833,7 @@ void OpenContain::onDie(const DieModuleInterface::Event &event)
 			processDamageToContained(); // RW 0x867182: contain slot 0x148
 		}
 		killRidersWhoAreNotFreeToExit(); // main slot 0x64 (OpenContain RW 0x63F3BF: nothing)
-		removeAllContained();            // slot 0xA8(false)
+		removeAllContained(false);       // RW 0x867120: slot 0xA8(false)
 		return;
 	}
 	// RW 0x86718A .. 0x8671D9: every rider is hidden and destroyed
@@ -955,7 +932,7 @@ void OpenContain::orderAllPassengersToExit(int source)
 	}
 }
 
-// RW 0x86561F (contain vslot 0x64, the sale's call at RW 0x796806; the same body in every contain table of 2.01, so no class overrides it):
+// RW 0x86561F (contain vslot 0x64, the sale's call at RW 0x796806; the same body in every contain table of 2.01 but TunnelContain's RW 0x8812A8):
 //   mov eax, [ecx]              ; the contain's vtable
 //   push 2                      ; CMD_FROM_AI
 //   mov byte ptr [ecx + 0xC1], 0 ; module + 0xE1, the kill-on-death byte (set to 1 by the constructor, RW 0x86806C; read by RW 0x86588C)
@@ -1052,6 +1029,81 @@ void OpenContain::eatPassengerAfter(const Object &victim, int frames, const Obje
 	m_eatKiller = eater.getID();
 }
 
+// lane PORT-9, RW 0x867C40 (module vslot 0x4C, the C++ name is INFERENCE): the STEALTH_GARRISON occupants that belong to another player than the object
+// that collided into this container are revealed and ordered out. RW copies m_contained first (RW 0x867C58 .. 0x867C65) because the walk removes from it.
+bool OpenContain::tryToEvacuate(Object *entering)
+{
+	const std::vector<Object *> copy(m_contained.begin(), m_contained.end()); // RW 0x867C58 the copy, RW 0x867C63 its head
+	const Player *pEntering = entering ? entering->getControllingPlayer() : nullptr; // RW 0x867C85 (RW 0x68B678)
+	static const int stealthGarrison = CombatNames::kindOf("STEALTH_GARRISON"); // RW 0x867C9A: template + 0x10C bit 0x02
+	for (Object *rider : copy)
+	{
+		if (rider && rider->getControllingPlayer() == pEntering) // RW 0x867C8E .. 0x867C99
+		{
+			continue;
+		}
+		if (!rider || !rider->isKindOf((unsigned)stealthGarrison)) // RW 0x867C9A .. 0x867CA5
+		{
+			continue;
+		}
+		if (AIUpdateInterface *ai = rider->getAIUpdateInterface()) // RW 0x867CAC
+		{
+			// RW 0x867CA6 .. 0x867CB2: StealthUpdate::of (RW 0x68FBD3) and markAsDetected(0, 1, null, horde) (RW 0x7767A9);
+			// RW 0x867CB7 .. 0x867CC7: then TheInvisibilityManager->markDetected(rider, null, 0, 1) (RW 0x81C32C)
+			if (StealthUpdate *su = StealthUpdate::of(*rider))
+			{
+				su->markAsDetected(0, 1, nullptr, true);
+			}
+			rider->logic().invisibility().markDetected(rider, nullptr, 0, 1);
+			ai->aiExit(getObject(), CMD_FROM_AI); // RW 0x867CCC .. 0x867CDB (RW 0x7716C1(obj, 2))
+			continue;
+		}
+		// RW 0x867CE2 .. 0x867CEA: no AI: removeFromContain(rider, true), whose own exposure (RW 0x865EF5 .. 0x865F22) reveals the STEALTH_GARRISON
+		// rider before the removal
+		removeFromContain(rider, true); // RW 0x867CEA (contain vslot 0xA4)
+	}
+	return true; // RW 0x867D0F
+}
+
+// lane PORT-9, RW 0x8659D8 (CollideModuleInterface slot 0x00, vtable RW 0xC5D650): the gates in RW's order. A container that is a SHIP never picks up; the
+// touching object's AI must be entering THIS container (AI vslot 0x1FC, RW 0x664D12); the enemy stealth occupants are evacuated first; the container must
+// accept the object; an object already inside is left alone; and CollidePickup No (data + 0x81, default 1 at RW 0x867ECF) refuses the pickup itself
+void OpenContain::onCollide(Object *other, const Coord3D *, const Coord3D *)
+{
+	if (!other) // RW 0x8659DD .. 0x8659E2
+	{
+		return;
+	}
+	Object *container = getObject(); // RW 0x8659E5 (module + 0x08)
+	static const int ship = CombatNames::kindOf("SHIP"); // RW 0x8659EB: template + 0x11F bit 0x80
+	if (container->isKindOf((unsigned)ship))
+	{
+		return;
+	}
+	const AIUpdateInterface *otherAI = other->getAIUpdateInterface(); // RW 0x8659F4 (Object + 0x260)
+	if (!otherAI || otherAI->enterTarget() != container) // RW 0x8659FA .. 0x865A08
+	{
+		return;
+	}
+	if (!tryToEvacuate(other)) // RW 0x865A0A .. 0x865A16 (module vslot 0x4C)
+	{
+		return;
+	}
+	if (!isValidContainerFor(*other, true, false)) // RW 0x865A18 .. 0x865A2B (contain vslot 0x98)
+	{
+		return;
+	}
+	if (other->getContainedBy() == container) // RW 0x865A2D .. 0x865A33 (Object + 0x27C)
+	{
+		return;
+	}
+	if (!m_open->m_collidePickup) // RW 0x865A38 .. 0x865A3F (module data + 0x81)
+	{
+		return;
+	}
+	addToContain(other); // RW 0x865A41 .. 0x865A48 (contain vslot 0x9C)
+}
+
 // RW 0x8682D9 OpenContain::exitObjectViaDoor
 void OpenContain::exitObjectViaDoor(Object *obj, int door)
 {
@@ -1113,10 +1165,78 @@ void OpenContain::exitObjectViaDoor(Object *obj, int door)
 	}
 }
 
+// RW 0x868759 OpenContain::exitObjectInAHurry (exit interface slot 5 / +0x14; inherited by TunnelContain_ExitIface RW 0xC5DCAC)
+void OpenContain::exitObjectInAHurry(Object *obj)
+{
+	if (!obj)
+	{
+		return;
+	}
+	Object *container = getObject();
+	removeFromContain(obj, false); // RW 0x86876B .. 0x868775: contain slot 0xA4(obj, false)
+	// RW 0x86877E .. 0x8687AC: DoorOpenTime arms the door timer and raises DOOR_1_OPENING (clearing DOOR_1_CLOSING)
+	m_doorOpenFrames = openData().m_doorOpenTime;
+	if (m_doorOpenFrames != 0)
+	{
+		static const int opening = CombatNames::modelCondition("DOOR_1_OPENING");
+		static const int closing = CombatNames::modelCondition("DOOR_1_CLOSING");
+		if (container->testModelCondition(closing) || !container->testModelCondition(opening))
+		{
+			container->setModelConditionState(closing, false);
+			container->setModelConditionState(opening, true);
+		}
+	}
+	const int paths = openData().m_numberOfExitPaths; // RW 0x8687B4: data + 0x74
+	if (paths > 0)
+	{
+		std::string startBone = "ExitStart", endBone = "ExitEnd";
+		if (paths > 1)
+		{
+			char n[8];
+			std::snprintf(n, sizeof n, "%02d", m_nextExitPath);
+			startBone += n;
+			endBone += n;
+			m_nextExitPath = m_nextExitPath % paths + 1;
+		}
+		Coord3D start = *container->getPosition(), end = *container->getPosition();
+		boneWorldPosition(*container, startBone, start);
+		boneWorldPosition(*container, endBone, end);
+		obj->setPosition(&start);                         // RW 0x868890: RW 0x70C201
+		obj->setOrientation(container->getOrientation()); // RW 0x86889E: RW 0x70C31E
+		if (AIWorld *world = obj->logic().aiWorld())
+		{
+			world->addObjectToPathfindMap(*obj); // RW 0x8688E8: RW 0x6E85E9
+		}
+		if (AIUpdateInterface *ai = obj->getAIUpdateInterface())
+		{
+			ai->mover().ignoreObstacle(PATHFIND_INVALID_ID); // RW 0x868924: RW 0x66831A(0)
+			if (ai->world().mapReady())
+			{
+				ai->world().pathfinder().adjustToPossibleDestination(ai->adapter(), ai->locomotorInfo(), &end); // RW 0x868957: RW 0x6F3C87
+			}
+			std::vector<Coord3D> path;
+			path.push_back(end);
+			if (m_rallyPointExists) // RW 0x868968
+			{
+				path.push_back(m_rallyPoint);
+			}
+			ai->aiFollowPath(path, container, CMD_FROM_AI, true); // RW 0x86898C
+		}
+		return;
+	}
+	if (AIWorld *world = obj->logic().aiWorld())
+	{
+		world->addObjectToPathfindMap(*obj); // RW 0x8689D6: RW 0x6E85E9
+	}
+}
+
 // ---------------------------------------------------------------------------------------------------------------------------------
 void OpenContain::crc(StateHasher &h) const
 {
 	UpdateModule::crc(h);
+	h.addU32(m_soundState.lastUnloadFrame);
+	h.addU32(m_soundState.lastLoadFrame);
+	h.addBool(m_soundState.loadEnabled);
 	h.addU32((std::uint32_t)m_contained.size());
 	for (const Object *o : m_contained)
 	{
@@ -1330,9 +1450,16 @@ bool OpenContain::getExitOffset(Coord3D &out) const
 // The riders in insertion order as ids (the Objects block has made them), then the crc's fields with the maps in key order, then the statistics.
 void OpenContain::xfer(Xfer &x)
 {
-	XferVersion v{ 1, 2 }; // 2: lane MODCOMPAT-MOD1's eat (RW interface + 0xC4 / 0xC8 / 0xCC); a version 1 snapshot loads as not eating
+	XferVersion v{ 1, 3 }; // 3: PORT-90 sound frames and enable flag
 	x.xferVersion(v);
 	xferUpdateModule(x);
+	if (v.current >= 3)
+	{
+		x.xferUnsignedInt(&m_soundState.lastUnloadFrame); // RW 0x869265
+		x.xferUnsignedInt(&m_soundState.lastLoadFrame);   // RW 0x869270
+		x.xferBool(&m_soundState.loadEnabled);             // RW 0x869476
+	}
+	else if (x.isLoading()) m_soundState = SoundState{};
 	GameLogic &logic = getObject()->logic();
 	SnapshotXfer::objectPointers(x, logic, m_contained, "a contain's rider", getObject()->getID());
 	x.xferUnsignedInt(&m_stealthUnitsContained);

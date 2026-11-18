@@ -72,7 +72,8 @@
 //   * unpack RW 0x79BE6A (both forms): the castle's footprint leaves the pathfinder, + 0x9C / + 0x44 reset, the layout (or the explicit object of + 0x98) is made, every member
 //     learns the keep (member + 0x14 = the keep's id, RW 0x7990D9: BUILD-1's "occupant" reading of that field is wrong, S-952), + 0x48 = the frame, the castle gets UNPACKING
 //     instead of PACKING and UNSELECTABLE, the walk-on-wall members' footprints are added (RW 0x799E3F), and the keep takes the castle's price (truncated) and script name
-//     (ScriptEngine RW 0x759467) while the castle is renamed "No Name". RW 0x683955 (when RW 0xDE4690 is set) was not read.
+//     (ScriptEngine RW 0x759467) while the castle is renamed "No Name". With TheTerrainLogic (RW 0xDE4690) set, RW 0x683955 (lane TAINTAREA-1: the TAINT
+//     objects within MaxCastleRadius and their taint are cleared, TerrainTaintClear::clearForCastle).
 // Lane CASTLEAREA-1 (TARGET FACTS, RotWK game.dat; BFME2 decomp CastleBehaviorRegisterOwnedObject_Unresolved.cpp:622 / CastleBehaviorRegisterOwnedObject.cpp:725,
 // Rva00396E4ARemove.cpp:186 / :206, SidesListCastleBuildLists.cpp):
 //   * the castle's areas RW 0x79B881, after the layout of the template form of the unpack (RW 0x79BE6A, after RW 0x79B903) and in the module's xfer on a load
@@ -234,6 +235,9 @@ public:
 	void initiateUnpack(bool instant, const ThingTemplate *explicitTemplate);
 	// RW 0x79CB47 (abandon): what a player's pack starts (MSG_CASTLE_PACK, RW 0x77C2B7)
 	void abandonByPlayer() { abandon(); }
+	// RW 0x799440 (the camp-destroyed EVA, called by RW 0x79CB5C at the start of the abandon): the owner / ally / attacker event of the
+	// castle's CastleMemberBehavior data, chosen against the local player and reported at the castle (RW 0x79951F / 0x799560 / 0x7995C2 -> RW 0x7995DB)
+	void reportCampDestroyedEva();
 	// RW + 0x4C: the price the last player's unpack paid (0 for the starting fortress and a summoned castle)
 	float storedPrice() const { return m_storedPrice; }
 	const std::string &evaEnemyCastleSightedEvent() const { return m_data->m_evaEnemyCastleSightedEvent; }

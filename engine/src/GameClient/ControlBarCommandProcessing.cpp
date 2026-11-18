@@ -29,6 +29,8 @@
 // integer (RW 0x7111E5); the logic applies it to the sender's selection (RW 0x77BC59)
 bool ControlBar::sendChangeStance(int stance, const char *site)
 {
+	// RW 0x96F54B .. 0x96F567 comes first: the button's own picture moves, then the message goes out
+	applyToggleStance(stance);
 	for (ObjectID id : m_ctx.ui.selected())
 	{
 		Object *obj = m_ctx.logic.findObjectByID(id);
@@ -40,6 +42,36 @@ bool ControlBar::sendChangeStance(int stance, const char *site)
 	ClientMessage &m = m_ctx.stream.append(MSG_CHANGE_STANCE);
 	m.appendInteger(stance);
 	return true;
+}
+
+// lane PORT-143 (the owner's P-25): RW 0x96F53C .. 0x96F567 (InGameToggleStanceCommandButton::Impl::SetStance). Before the message the order also moves the
+// stance toggle's own picture: StanceToButtonSlot (RW 0x96F2DA) over the raw stance, CommandButton::setCurrentIndex (RW 0x75D082, whose own bounds test keeps
+// the old index for a slot outside the ButtonImage list) and GadgetButtonSetEnabledImage (RW 0x6C106C) with getButtonImage (RW 0x75CDFC); the help text
+// follows the same index (getTextLabel RW 0x75CE47, getDescriptLabel RW 0x75CECD). The retail widget does this whatever the window's state (its hotkey action
+// RW 0x96F880 and its radial item RW 0x96F863 both call SetStance on a disabled window), so an object without a StancesBehavior — Ennorath's RohanBatteringRam
+// — shows the tactic it was told even though the logic drops the order (AIGroup::setStance RW 0x76FF27 and ChangeStanceGroupOrder RW 0x949DF0 both return when
+// findModule("StancesBehavior") gives 0). The voice and the logic's stance are untouched (the owner's option 2: S-7335).
+void ControlBar::applyToggleStance(int stance)
+{
+	for (std::vector<ControlBarButton> *list : { &m_palantir, &m_side, &m_offBar })
+	{
+		for (ControlBarButton &cb : *list)
+		{
+			const CommandButton *b = cb.button;
+			if (!b || b->m_command != GUI_COMMAND_TOGGLE_STANCE)
+			{
+				continue;
+			}
+			b->setCurrentIndex(stanceSlotOf(*b, stance)); // RW 0x96F54C .. 0x96F556
+			if (const std::string *img = b->getButtonImage())
+			{
+				cb.image = *img; // RW 0x96F55B .. 0x96F567
+			}
+			cb.textLabel = b->getTextLabel();
+			cb.descriptLabel = b->getDescriptLabel();
+		}
+	}
+	emitStateKey(); // the Palantir redraws the arc on the bar's version (AptPalantir keeps drawing the gray of a button that is not enabled)
 }
 
 void ControlBar::playStanceVoice(int stance)
@@ -82,7 +114,7 @@ void ControlBar::playStanceVoice(int stance)
 	}
 }
 
-bool ControlBar::pressButton(int slot, bool inPalantir)
+bool ControlBar::pressButton(int slot, bool inPalantir, bool shift)
 {
 	const ControlBarButton *cb = find(slot, inPalantir);
 	Object *obj = m_ctx.logic.findObjectByID(m_source);
@@ -128,20 +160,20 @@ bool ControlBar::pressButton(int slot, bool inPalantir)
 		m_ctx.ui.message("GUI:NotEnoughMoneyToBuild"); // processCommandUI: CANMAKE_NO_MONEY
 		return false;
 	}
-	// RW 0x9407D9, BFME2 0x00539DCB: unit voice response for the pressed command button (pickAndPlayUnitVoiceResponse 0x7E3)
-	if (m_commandVoice && !b.m_unitSpecificSound.empty() && b.m_command != GUI_COMMAND_SET_STANCE)
+	// PORT-220 (issue #529): processCommandUI re-asks getCommandAvailability (RW 0x940625 -> RW 0x942733) and, for its results 1 (enabled) and 2 (active),
+	// clears the button's + 0xF8 (RW 0x940656) and then sets the source object's single-use flag when the button's Options (+ 0x1C) hold bit 17
+	// SINGLE_USE_COMMAND: RW 0x940665 `test byte ptr [esi + 0x1E], 2` / RW 0x94066B `mov byte ptr [ebx + 0x45B], 1`, skipped for a null object (RW 0x94065D).
+	// Results 6 and 7 leave through their own paths (RW 0x9406DA / 0x9405F1) and write nothing. The port reads the bar's last evaluation instead of re-asking,
+	// so only its Enabled and Active states write; the button's + 0xF8 is client state this port does not carry (S-290).
+	if (b.hasOption(COMMAND_OPTION_SINGLE_USE_COMMAND) && (cb->state == ButtonState::Enabled || cb->state == ButtonState::Active))
 	{
-		size_t soundIndex = 0;
-		if (b.m_command == GUI_COMMAND_HORDE_TOGGLE_FORMATION)
-		{
-			const ContainModuleInterface *c = obj->getContain();
-			const ContainModuleInterface::ContainedItemsList *members = c ? c->getContainedItemsList() : nullptr;
-			if (members && !members->empty() && (*members->begin())->testModelCondition(CombatNames::modelCondition("ALTERNATE_FORMATION")))
-			{
-				soundIndex = 1;
-			}
-		}
-		const std::string &sound = soundIndex < b.m_unitSpecificSound.size() ? b.m_unitSpecificSound[soundIndex] : b.m_unitSpecificSound.front();
+		obj->markSingleUseCommandUsed();
+	}
+	// RW 0x9407D9 -> 0x8DEDBB(0x7E3) -> CommandButton::getUnitSpecificSound (RW 0x75D0B9):
+	// play UnitSpecificSound[m_toggleIndex] BEFORE the command switch updates +0xFC; out-of-range stays silent ("").
+	if (m_commandVoice && b.m_command != GUI_COMMAND_SET_STANCE)
+	{
+		const std::string &sound = b.getUnitSpecificSound();
 		if (!sound.empty())
 		{
 			m_commandVoice(sound);
@@ -167,20 +199,24 @@ bool ControlBar::pressButton(int slot, bool inPalantir)
 			{
 				return false;
 			}
-			// MSG_QUEUE_UNIT_CREATE, RotWK layout (RW 0x77A764): { byte fromBuildIndex, int templateId, int value30, byte batch, byte secondary }
+			// MSG_QUEUE_UNIT_CREATE, RotWK layout (RW 0x77A764): { byte fromBuildIndex, int templateId, int value30, byte batch, byte secondary }.
+			// PORT-426: the fourth argument is processCommandUI's `multiple` (RW 0x940C3E). RW 0x940BB3 calls Keyboard::isShift (RW 0x63F122),
+			// RW 0x940BC2 excludes a REVIVE, RW 0x940BCF reads ThingTemplate + 0x5F0 (MaxSimultaneousOfType, field table offset 1520) and
+			// RW 0x940BD9 sets the flag only when all three hold. The logic's batch loop is RW 0x8A1260 (`lea eax,[eax*4+1]`: 5 or 1).
+			// REVIVE has its own case below (RW 0x940B1B) and always sends one, as RW 0x940BC2 requires.
+			const bool multiple = shift && BuildAssistant::maxSimultaneousOfType(*tt) == 0;
 			ClientMessage &m = m_ctx.stream.append(MSG_QUEUE_UNIT_CREATE);
 			m.appendBoolean(false);
 			m.appendInteger((int)tt->getTemplateID());
 			m.appendInteger(-1);
-			m.appendBoolean(false);
+			m.appendBoolean(multiple);
 			m.appendBoolean(false);
 			return true;
 		}
 		case GUI_COMMAND_DOZER_CONSTRUCT:
-		case GUI_COMMAND_FOUNDATION_CONSTRUCT:
 		{
 			// ZH processCommandUI: a build button asks the user interface for a site (placeBuildAvailable); the PlaceEventTranslator sends the construct message when the
-			// player clicks a legal one. A plot's button (FOUNDATION_CONSTRUCT) builds on the plot itself: the message goes out at once with the plot's own place
+			// player clicks a legal one
 			const ThingTemplate *tt = b.getThingTemplate();
 			const CanMakeType make = BuildAssistant::canMakeUnit(*obj, tt, -1);
 			if (make == CANMAKE_MAXED_OUT_FOR_PLAYER)
@@ -192,15 +228,25 @@ bool ControlBar::pressButton(int slot, bool inPalantir)
 			{
 				return false;
 			}
-			if (b.m_command == GUI_COMMAND_FOUNDATION_CONSTRUCT)
-			{
-				ClientMessage &m = m_ctx.stream.append(MSG_FOUNDATION_CONSTRUCT);
-				m.appendInteger((int)tt->getTemplateID());
-				m.appendLocation(*obj->getPosition());
-				m.appendReal(0.0f);
-				return true;
-			}
 			m_ctx.ui.placeBuildAvailable(tt->getName(), obj->getID(), &b); // RW 0x940AA1, then the button as the GUI command (RW 0x94089B; see InGameUI.h)
+			return true;
+		}
+		case GUI_COMMAND_FOUNDATION_CONSTRUCT:
+		{
+			// PORT-212 (fork issue 502): a plot's button builds on the plot itself: the message goes out at once with the plot's own place, so
+			// no per-click canMakeUnit runs (that query belongs to the placement translator, RW 0x83E771) and the production limits the arm
+			// used to apply here (maximum / queue / command points) are not this command's in RotWK (RW 0x942733 arm 1, see ControlBar.cpp).
+			// The gates that do stand are the ones before the switch (the button's availability: Buildable, Player::canBuild RW 0x6AAA2E,
+			// the price) and the message's own case in the logic (RW 0x77A91B).
+			const ThingTemplate *tt = b.getThingTemplate();
+			if (!tt)
+			{
+				return false;
+			}
+			ClientMessage &m = m_ctx.stream.append(MSG_FOUNDATION_CONSTRUCT);
+			m.appendInteger((int)tt->getTemplateID());
+			m.appendLocation(*obj->getPosition());
+			m.appendReal(0.0f);
 			return true;
 		}
 		case GUI_COMMAND_SET_STANCE:
@@ -262,12 +308,21 @@ bool ControlBar::pressButton(int slot, bool inPalantir)
 			m.appendObjectID(m_source);
 			return true;
 		}
+		case GUI_COMMAND_WAKE_AUTO_PICKUP:
+		{
+			// RW 0x9412F8..0x941330: ONE takes precedence over TWO and THREE; absent options use zero.
+			const int number = b.hasOption(COMMAND_OPTION_ONE) ? 1 : b.hasOption(COMMAND_OPTION_TWO) ? 2 : b.hasOption(COMMAND_OPTION_THREE) ? 3 : 0;
+			ClientMessage &m = m_ctx.stream.append(MSG_WAKE_AUTO_PICKUP);
+			m.appendInteger(number);
+			return true;
+		}
 		case GUI_COMMAND_TOGGLE_WEAPONSET:
 		{
-			// lane HUD-4: RW 0x9412C8: MSG_WEAPONSET_TOGGLE with the context object's id (the logic case RW 0x77B529, GameLogic/WeaponSetToggle.cpp); the
-			// button's client side (RW 0x75D22E: the image index update) is not ported (S-1672)
+			// lane HUD-4 / PORT-169 / PORT-189: RW 0x9412C8 sends MSG_WEAPONSET_TOGGLE with the context object's id (logic case RW 0x77B529, GameLogic/WeaponSetToggle.cpp),
+			// then RW 0x9412F3 -> 0x941A22 calls updateToggleImage(obj, true) (RW 0x75D22E) and RW 0x941C16 refreshes the button image.
 			ClientMessage &m = m_ctx.stream.append(MSG_WEAPONSET_TOGGLE);
 			m.appendObjectID(m_source);
+			applyPredictedToggle(b, obj);
 			return true;
 		}
 		case GUI_COMMAND_TOGGLE_GATE:
@@ -329,11 +384,13 @@ bool ControlBar::pressButton(int slot, bool inPalantir)
 						m.appendInteger(target);
 					}
 				}
+				applyPredictedToggle(b, obj); // PORT-189: RW 0x941A22 -> 0x75D22E(obj, 1), RW 0x941C16 image refresh
 				return true;
 			}
 			// lane HORDE-2: the logic case (RW 0x77BE83) reads argument 0 as the horde's object id: the control bar's source object
 			ClientMessage &m = m_ctx.stream.append(MSG_HORDE_TOGGLE_FORMATION);
 			m.appendObjectID(m_source);
+			applyPredictedToggle(b, obj); // PORT-189: RW 0x941A22 -> 0x75D22E(obj, 1), RW 0x941C16 image refresh
 			return true;
 		}
 		case GUI_COMMAND_ATTACK_MOVE:
@@ -429,9 +486,11 @@ bool ControlBar::pressButton(int slot, bool inPalantir)
 		}
 		case GUI_COMMAND_TOGGLE_NO_AUTO_ACQUIRE:
 		{
-			// lane FACT-A: RW 0x940435 case 0x30: MSG_TOGGLE_NO_AUTO_ACQUIRE { objectID the context object } (the button's image toggle RW 0x75D366 is the client's)
+			// lane FACT-A / PORT-169 / PORT-189: RW 0x940435 case 0x30: MSG_TOGGLE_NO_AUTO_ACQUIRE { objectID the context object },
+			// then RW 0x941367 -> 0x75D366(id, 1) -> RW 0x75D22E(obj, 1) and RW 0x941C16 refreshes the button image.
 			ClientMessage &m = m_ctx.stream.append(MSG_TOGGLE_NO_AUTO_ACQUIRE);
 			m.appendObjectID(obj->getID());
+			applyPredictedToggle(b, obj);
 			return true;
 		}
 		case GUI_COMMAND_FIRE_WEAPON:
@@ -456,8 +515,11 @@ bool ControlBar::pressButton(int slot, bool inPalantir)
 			return true;
 		case GUI_COMMAND_SPECIAL_POWER:
 		{
-			// lane HERO-1 (S-850): a hero ability. A button that needs a target waits for it (GUICommandTranslator), the others go out at once:
-			// MSG_DO_SPECIAL_POWER { int id, int options, objectID source }
+			// lane HERO-1 (S-850) / PORT-221 (issue #531, P-140): RW 0x9414E7..0x941618. A button that needs a target waits for it
+			// (GUICommandTranslator -> CommandTranslator::issueSpecialPowerCommand RW 0x81E147); targetless buttons append
+			// MSG_DO_SPECIAL_POWER (0x410) { int id, int options, ObjectID 0 (RW 0x94156B), ObjectID 0 (RW 0x941574) } so
+			// SpellCommands::doSpecialPower (RW 0x77A42C..0x77A4F7 -> AIGroup::groupDoSpecialPower RW 0x76F5DB) casts across the
+			// issuer's selection rather than a single source object.
 			const SpecialPowerTemplate *t = specialPowerOf(b);
 			if (!t)
 			{
@@ -475,8 +537,9 @@ bool ControlBar::pressButton(int slot, bool inPalantir)
 			ClientMessage &m = m_ctx.stream.append(MSG_DO_SPECIAL_POWER);
 			m.appendInteger((int)t->getID());
 			m.appendInteger((int)b.m_options);
-			m.appendObjectID(obj->getID());
-			// RW 0x94157D..0x9415FF: chained CommandTrigger buttons
+			m.appendObjectID(INVALID_ID);
+			m.appendObjectID(INVALID_ID);
+			// RW 0x94157D..0x94160F: chained CommandTrigger buttons (+0x188) with m_command == GUI_COMMAND_SPECIAL_POWER
 			for (const std::string &triggerName : b.m_commandTrigger)
 			{
 				const CommandButton *tb = TheCommandStore ? TheCommandStore->findCommandButton(triggerName) : nullptr;
@@ -487,9 +550,11 @@ bool ControlBar::pressButton(int slot, bool inPalantir)
 					ClientMessage &tm = m_ctx.stream.append(MSG_DO_SPECIAL_POWER);
 					tm.appendInteger((int)tt->getID());
 					tm.appendInteger((int)tb->m_options);
-					tm.appendObjectID(obj->getID());
+					tm.appendObjectID(INVALID_ID);
+					tm.appendObjectID(INVALID_ID);
 				}
 			}
+			applyPredictedToggle(b, obj); // PORT-189: RW 0x9414E7 -> 0x75D22E(obj, 1), RW 0x941C16 image refresh
 			return true;
 		}
 		case GUI_COMMAND_CASTLE_UNPACK:
@@ -620,13 +685,13 @@ bool ControlBar::rightPressButton(int slot, bool inPalantir, bool shift)
 		}
 		return false;
 	}
-	// RW 0x940848 .. 0x940857, BFME2 0x00539DEC: AutoAbility toggle voice (0x7E4 / 0x7E5)
+	// RW 0x940848 .. 0x940857 -> 0x8DEDBB(0x7E4 / 0x7E5) -> CommandButton::getSetAutoAbilityUnitSound (RW 0x75D0F8) / getUnsetAutoAbilityUnitSound (RW 0x75D137)
 	if (m_commandVoice && b.m_autoAbility)
 	{
-		const std::vector<std::string> &list = !cb->autoAbility ? b.m_setAutoAbilityUnitSound : b.m_unsetAutoAbilityUnitSound;
-		if (!list.empty() && !list.front().empty())
+		const std::string &sound = !cb->autoAbility ? b.getSetAutoAbilityUnitSound() : b.getUnsetAutoAbilityUnitSound();
+		if (!sound.empty())
 		{
-			m_commandVoice(list.front());
+			m_commandVoice(sound);
 		}
 	}
 	switch (b.m_command)

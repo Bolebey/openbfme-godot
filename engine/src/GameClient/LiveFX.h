@@ -18,7 +18,7 @@
 //     of damaged buildings and projectile trails are this path.
 //   * WadingParticleSys (PORT-48): the W3DModelDraw reader at RW 0x4C72BE (vtable slot +0x2C) tests WADING (bit 239), reads base data +0x14, and updates a
 //     per-(drawable, draw entry) FXParticleSystem at the queried water surface (RW 0x67DAE6) each client frame; it stops on dry terrain or when WADING clears.
-//     It consumes the condition only: the terrain-driven WADING/cliff producer remains S-084; no water rendering or locomotor behavior is changed.
+//     It consumes the condition only: the terrain-driven WADING producer is the locomotor's wading updater (RW 0x5E5785, Port 202); no water rendering or locomotor behavior is changed.
 //   * sounds of Sound nuggets through AudioApi::playSoundAtPosition.
 //   * TransitionDamageFX's attached particle systems (lane FX-4: ATTACH / DESTROY_PARTICLE_SYSTEM events, kept per (object, slot) as the module keeps them).
 //   * the FXEvent entries of the current ANIMATION state of every model draw (RW 0x4BCE68, called from W3DModelDraw::doDrawModule RW 0x4C72BE): per entry
@@ -162,6 +162,7 @@ public:
 	int maxCellsBurning() const override;
 	FXParticleSystem::ParticleAttachInfo attachedDrawable(std::uint32_t drawableId, const std::string &boneName) override;
 	FXParticleSystem::ParticleAttachInfo attachedObject(std::uint32_t objectId, const std::string &boneName, int localPlayerIndex) override;
+	FXParticleSystem::ParticleAttachInfo swirlInfluence(std::uint32_t drawableId, const Coord3D &pos) override;
 	bool boneWorldMatrix(const FXObject &obj, const std::string &boneName, Matrix3D &out) override;
 	std::vector<FXBoneTransform> boneWorldTransforms(const FXObject &obj, const std::string &boneName, int startIndex, int maxBones) override;
 	bool playSound(const std::string &eventName, const Coord3D *pos, int playerIndex) override;
@@ -305,7 +306,7 @@ private:
 	void createSystems(Drawable &d, Attached &a);
 	// lane PORT-50: RW 0x4C7795's gated call (RW 0x4B6D5F with 0) for one drawable: every ParticleSysBone system it created
 	// follows the animated bone of the pose it was created for
-	void followAnimatedBones(Drawable &d, Attached &a);
+	void followAnimatedBones(Drawable &d, Attached &a, int callArg); // callArg: 1 = RW 0x4C6D78 (no gate), 0 = RW 0x4C77A3 (gated, P-61)
 	struct FrameEventState
 	{
 		const void *animState = nullptr; ///< the animation state the frames belong to

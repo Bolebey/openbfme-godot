@@ -218,6 +218,13 @@ void GarrisonContain::transformPoint(const Coord3D &local, Coord3D &out) const
 
 // slots 0x158 / 0x15C / 0x160: the horde garrison's data positions through the transform (RW 0x87D1A7 / 0x87D1E0 / 0x87D219); OpenContain's answer is the container's
 // position (RW 0x8657D1 / 0x867ACD, the SHIP branch aside)
+// RW 0x87B308 (contain slot 0x1C, the garrison tables RW 0xC5C698 / 0xC5C9F0 / 0xC5F0D0 / 0xC5F2E8): the module data's ImmuneToClearBuildingAttacks byte
+// (+ 0xA1; its field row is RW 0xC09630). DamageContainedNugget asks it (RW 0x9110E4 / 0x9111F3) and skips the garrison when it answers true.
+bool GarrisonContain::isImmuneToClearBuildingAttacks() const
+{
+	return m_garrison->m_immuneToClearBuildingAttacks;
+}
+
 bool GarrisonContain::getEntryPosition(Coord3D &out) const
 {
 	if (!m_horde)
@@ -432,7 +439,7 @@ bool GarrisonContain::addToContain(Object *obj)
 // RW 0x87BEC8 GarrisonContain::onContaining
 void GarrisonContain::onContaining(Object *obj, bool wasSelected)
 {
-	(void)wasSelected; // RW 0x865F9A OpenContain::onContaining: the EnterSound (client side)
+	(void)wasSelected; // RW 0x865F9A OpenContain::onContaining: object SoundEnter (client side)
 	static const CombatNames::Status &st = CombatNames::statuses();
 	Object *container = getObject();
 	obj->setDisabled(3, (UnsignedInt)UPDATE_SLEEP_FOREVER);       // RW 0x87BEE6: DISABLED_HELD (RW 0x692432)
@@ -488,7 +495,7 @@ void GarrisonContain::setContainedOnHordeMembers(Object &rider)
 // ---------------------------------------------------------------------------------------------------------------------------------
 
 // RW 0x87D04B (HordeGarrisonContain) / RW 0x8665BE (OpenContain)
-void GarrisonContain::removeFromContain(Object *obj)
+void GarrisonContain::removeFromContain(Object *obj, bool exposeStealthUnits)
 {
 	if (!obj)
 	{
@@ -496,12 +503,13 @@ void GarrisonContain::removeFromContain(Object *obj)
 	}
 	if (!m_horde)
 	{
-		openContainRemove(obj);
+		openContainRemove(obj, exposeStealthUnits);
 		return;
 	}
+	(void)exposeStealthUnits; // RW 0x87D04B -> 0x87CE3D / 0x87CDD6 passes false (push 0) to OpenContain::removeFromContain
 	if (HordeContainInterface *h = hordeOf(*obj))
 	{
-		openContainRemove(obj);           // RW 0x87CE3D: OpenContain's removal ...
+		openContainRemove(obj, false);    // RW 0x87CE3D: OpenContain's removal ...
 		Object *rider = obj;              // ... and RW 0x990EE6: back into the world, not UNSELECTABLE
 		if (!rider->isInWorld())
 		{
@@ -526,7 +534,7 @@ void GarrisonContain::removeFromContain(Object *obj)
 		}
 		else
 		{
-			openContainRemove(obj);
+			openContainRemove(obj, false);
 			obj->setDrawableHidden(false); // RW 0x87D0A5 .. 0x87D0BF: a hidden drawable is shown
 		}
 	}
@@ -539,7 +547,7 @@ void GarrisonContain::onRemoving(Object *obj)
 {
 	static const CombatNames::Status &st = CombatNames::statuses();
 	Object *container = getObject();
-	// RW 0x8680F4 OpenContain::onRemoving: the ExitSound, the door conditions, ModifierToGiveOnExit (S-1100)
+	// RW 0x8680F4 OpenContain::onRemoving: object SoundExit, the door conditions, ModifierToGiveOnExit (S-1100)
 	removeObjectFromGarrisonPoint(obj, -1);                  // RW 0x87BFCC
 	obj->setWeaponBonusCondition(0, false);                  // RW 0x87BFD1
 	obj->clearDisabled(3);                                   // RW 0x87BFDE: DISABLED_HELD
@@ -589,6 +597,18 @@ void GarrisonContain::onRemoving(Object *obj)
 // not-stealthed garrison: the logic sets it whatever the viewer, S-1100) and the points are loaded once (RW 0x87C895).
 // Not ported: the hidden byte + 0x9BD's set (RW 0x87C75B .. 0x87C797: the first rider neither RW 0x693BF2 nor status 0x11 and every rider stealthed,
 // slot 0x124; the port only clears it), the indicator colour of the apparent controller (RW 0x87C881 .. 0x87C8B4, client side)
+Team *GarrisonContain::originalTeam() const
+{
+	if (m_originalTeam == 0)
+		return nullptr; // RW 0x87B6A4
+	return getObject()->logic().players().teams().findTeamByID(m_originalTeam); // RW 0x87B6AC
+}
+
+void GarrisonContain::setOriginalTeam(const Team *team)
+{
+	m_originalTeam = team ? team->getID() : 0; // RW 0x87B682 .. 0x87B691
+}
+
 void GarrisonContain::recalcApparentControllingPlayer()
 {
 	Object *container = getObject();
@@ -817,6 +837,27 @@ void GarrisonContain::removeObjectFromGarrisonPoint(Object *obj, int index)
 	--m_pointsInUse;
 }
 
+// RW 0x87B7E3 GarrisonContain::calcBestGarrisonPosition (contain slot 0x130 in GarrisonContain RW 0xC5C698 and HordeGarrisonContain RW 0xC5C9F0)
+bool GarrisonContain::calcBestGarrisonPosition(Coord3D *sourcePos, const Coord3D *targetPos)
+{
+	if (!sourcePos || !targetPos)
+	{
+		return false;
+	}
+	if (!m_pointsLoaded)
+	{
+		loadGarrisonPoints();
+	}
+	const int condition = findConditionIndex();
+	const int best = findClosestFreeGarrisonPointIndex(condition, targetPos);
+	if (best == -1)
+	{
+		return false;
+	}
+	*sourcePos = m_pointPositions[(size_t)condition][(size_t)best];
+	return true;
+}
+
 // RW 0x87B83E
 void GarrisonContain::putObjectAtBestGarrisonPoint(Object *obj, Object *target, const Coord3D *targetPos)
 {
@@ -869,7 +910,8 @@ void GarrisonContain::removeInvalidObjectsFromGarrisonPoints()
 
 namespace
 {
-// the victim / victim position pair of RW 0x668303 / 0x664CB3 (AI getCurrentVictim / the attack position)
+// the victim / victim position pair of RW 0x668303 / 0x664CB3 (AI getCurrentVictim / getCurrentVictimPos): when the unit has no victim object but is
+// IS_ATTACKING (status bit 18), RW 0x664CE0 answers its state machine's goalPosition (+ 0x24) so an ENCLOSED rider attacking the ground takes a fire point
 void victimOf(Object &obj, Object *&victim, const Coord3D *&victimPos)
 {
 	victim = nullptr;
@@ -877,6 +919,14 @@ void victimOf(Object &obj, Object *&victim, const Coord3D *&victimPos)
 	if (AIUpdateInterface *ai = obj.getAIUpdateInterface())
 	{
 		victim = ai->currentVictim();
+		if (victim)
+		{
+			victimPos = victim->getPosition();
+		}
+		else if (obj.testStatus((unsigned)CombatNames::statuses().isAttacking))
+		{
+			victimPos = &ai->stateMachine().goalPosition();
+		}
 	}
 }
 } // namespace
@@ -1106,7 +1156,7 @@ void GarrisonContain::validateRallyPoint()
 
 // RW 0x87B4DC GarrisonContain::removeAllContained: with riders (slot 0x114(0)) the exit position search (RW 0x87B3EC), OpenContain's RW 0x866675 (each rider
 // through RW 0x865EB6 until the list is empty), slot 0x50
-void GarrisonContain::removeAllContained()
+void GarrisonContain::removeAllContained(bool exposeStealthUnits)
 {
 	if (getContainCount() == 0)
 	{
@@ -1116,10 +1166,10 @@ void GarrisonContain::removeAllContained()
 	while (!m_contained.empty())
 	{
 		Object *r = m_contained.front();
-		removeFromContain(r);
+		removeFromContain(r, exposeStealthUnits);
 		if (!m_contained.empty() && m_contained.front() == r)
 		{
-			openContainRemove(r); // the horde garrison's removal of a member took another path: the list still holds it
+			openContainRemove(r, exposeStealthUnits); // the horde garrison's removal of a member took another path: the list still holds it
 		}
 		++m_openStats.ejectedOnDeath;
 	}
@@ -1459,7 +1509,7 @@ void SlaughterHordeContain::payFor(Object &obj, Player &player)
 	Economy &econ = logic.economy();
 	// RW 0x883B95 -> 0x68DDF1: BountyValue, NOT BuildCost or BuildCostPaid.
 	int value = (int)Economy::templateInt(*obj.getTemplate(), "BountyValue");
-	if (obj.isKindOfName("HERO"))
+	if (obj.isKindOfName("HERO")) // RW 0x68DE33..0x68DE49 (inside 0x68DDF1): a hero's bounty scaled by rank over its last level's rank
 	{
 		const ExperienceTracker *tracker = obj.getExperienceTracker();
 		if (tracker && TheExperienceLevelSystem)
@@ -1480,7 +1530,7 @@ void SlaughterHordeContain::payFor(Object &obj, Player &player)
 		amount = NumericState::fstpDword(NumericState::pc24MulW((double)econ.multiPlayMoneyMult(econ.livePlayableCount(false)), (double)amount));
 	// RW 0x883C44..0x883C92: PRODUCTION of the container; slaughter=true
 	// cost modifier also tests the CONTAINER template, not the victim template.
-	amount = SimMath::mulf32(amount, econ.attributeModifierProduct(*getObject(), Economy::ATTRIBUTE_MODIFIER_PRODUCTION));
+	amount = SimMath::mulf32(amount, econ.productionMoneyProduct(*getObject())); // lane MODS-3: RW 0x883C4E is an Edain Unchained production-split hook
 	const float costChange = player.getProductionCostChangeBasedOnKindOf(*getObject()->getTemplate(), true);
 	const int scaled = player.applyHandicapMoney(ceilInt(NumericState::pc24MulW((double)costChange, (double)amount)));
 	amount = SimMath::sseFromInt32(scaled);
@@ -1525,10 +1575,13 @@ void SlaughterHordeContain::addHordeMember(Object &obj)
 		recordTransferLosses(obj); // RW 0x883E4B, before changing the team's owner
 		Object &container = *getObject();
 		bool changed = false;
-		if (container.getTeam() != obj.getTeam())
+		// RW 0x883E50..0x883E80: the CONTAIN's stored original team (RW 0x87B69A) is compared with the entrant's team and,
+		// when they differ, the container's upgrades are reset (RW 0x68E083) and the original team is set (slot + 0x54 =
+		// RW 0x87B682). The container's own team follows through recalcApparentControllingPlayer (RW 0x87C7D8) when it empties.
+		if (originalTeam() != obj.getTeam())
 		{
 			container.resetUpgrades();
-			container.setTeam(obj.getTeam());
+			setOriginalTeam(obj.getTeam());
 			changed = true;
 		}
 		const UpgradeMaskType before = container.getUpgradeMask();
@@ -1633,8 +1686,8 @@ void SlaughterHordeContain::xfer(Xfer &x)
 
 const char *CitadelSlaughterHordeContain::stopLine()
 {
-	return "[S-6010] CitadelSlaughterHordeContain: ordinary troop entry, slaughter, cashback and CanAlwaysEnter use the shared RotWK SlaughterHordeContain path; "
-		   "ring delivery is retained; inherited contain presentation stops S-1100 and the cash text random offset/colour (S-283) remain";
+	return "[S-6010] CitadelSlaughterHordeContain: ordinary entry, slaughter, cashback and CanAlwaysEnter follow the shared RotWK SlaughterHordeContain path (RW 0x883B4A); "
+		   "ring delivery is retained; the inherited contain presentation stops (S-1100) and the cash text's random offset, colour and scale (S-283) remain";
 }
 
 CitadelSlaughterHordeContain::CitadelSlaughterHordeContain(Thing *thing, const CitadelSlaughterHordeContainBehaviorData *data)

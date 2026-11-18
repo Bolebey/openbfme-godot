@@ -4,7 +4,9 @@
 #include "GameLogic/Module/AIUpdate.h"
 #include "GameLogic/Object/ObjectGeometry.h"
 
+#include "Common/Audio/AudioRequests.h"
 #include "Common/GameCommon.h"
+#include "GameClient/UnitVoiceResponse.h"
 #include "Common/Player.h"
 #include "GameLogic/Module/ActiveBody.h"
 #include "Common/NumericState.h"
@@ -227,7 +229,7 @@ bool AIUpdateInterface::findNearestLabeledContactPointOnTarget(const Object &tar
 	// RW 0x667C76: the labels of module data + 0x58 in order, the first success wins
 	for (const std::string &label : m_combat.specialContactPoints)
 	{
-		if (ObjectGeometry::worldspaceBestContactPoint(target, callerPos, label, preferred, out))
+		if (ObjectGeometry::worldspaceBestContactPoint(target, callerPos, label, 0, 0, preferred, out))
 		{
 			return true;
 		}
@@ -308,6 +310,16 @@ Object *AIUpdateInterface::replacementVictim()
 	return nearestMemberOf(*horde, *obj);
 }
 
+// PORT-151: the enter-state attack voice of an attack on an object (RW 0x66B1D0, the message 0x7E6): the owner is the speaker, the victim is the target and
+// its airborne locomotor (RW 0x68BEED) is the voice's air flag
+void AIUpdateInterface::postEnterStateAttackVoice(Object &obj, const Object &victim)
+{
+	const AIUpdateInterface *victimAi = victim.getAIUpdateInterface();
+	const Locomotor *victimLoco = victimAi ? victimAi->curLocomotor() : nullptr;
+	const bool air = victimLoco && (victimLoco->getTemplate().m_surfaces & LOCOMOTORSURFACE_AIR) != 0; // RW 0x68BEED: surfaces + 0x14 bit 8
+	AudioApi::postUnitVoice(UnitVoiceResponse::VOICE_EVENT_ENTER_STATE_ATTACK, obj.getID(), 0, victim.getID(), &air);
+}
+
 // B1 AIUpdate.cpp privateAttackObject: the unit must be able to attack, then the machine restarts in the attack state
 bool AIUpdateInterface::aiAttackObject(Object *victim, CommandSourceType source, int maxShotsToFire)
 {
@@ -362,6 +374,12 @@ bool AIUpdateInterface::aiAttackObject(Object *victim, CommandSourceType source,
 			m_orderedMeleeTarget = victim->getID();
 		}
 	}
+	// PORT-151, RW 0x66BE9F .. 0x66BEB0 (helper RW 0x66B1D0, message 0x7E6): a PLAYER or SCRIPT attack order asks the unit voice for the enter-state
+	// attack with the victim; the voice's air flag is the victim's airborne locomotor (RW 0x68BEED: AI + 0x260, current locomotor + 0x1F0, surfaces + 0x14 bit 8)
+	if (source == CMD_FROM_PLAYER || source == CMD_FROM_SCRIPT)
+	{
+		postEnterStateAttackVoice(*obj, *victim);
+	}
 	wakeUpNow();
 	return true;
 }
@@ -412,6 +430,11 @@ bool AIUpdateInterface::aiForceAttackObject(Object *victim, CommandSourceType so
 		cur->clearWhenFiringEnds();
 		cur->setMaxShotCount(maxShotsToFire);
 	}
+	// PORT-151, RW 0x66C021 .. 0x66C02F (helper RW 0x66B1D0, message 0x7E6): the force-attack order answers the unit voice for a PLAYER or SCRIPT order
+	if (source == CMD_FROM_PLAYER || source == CMD_FROM_SCRIPT)
+	{
+		postEnterStateAttackVoice(*obj, *victim);
+	}
 	wakeUpNow();
 	return true;
 }
@@ -440,8 +463,8 @@ bool AIUpdateInterface::aiAttackPosition(const Coord3D &pos, int maxShotsToFire,
 	{
 		return false;
 	}
-	// RW 0x66DE32 .. 0x66DE3C: a unit outside the playable area (Object + 0x458 bit 3) ignores it; the port never sets that bit (S-920, S-2480)
-	if (m_mover->isAiDead() || !CombatQueries::isAlive(*obj))
+	// RW 0x66DE32 .. 0x66DE3C: a unit outside the playable area (Object + 0x458 bit 3, Object::isOffMap) ignores it
+	if (obj->isOffMap() || m_mover->isAiDead() || !CombatQueries::isAlive(*obj))
 	{
 		return false;
 	}
@@ -457,9 +480,11 @@ bool AIUpdateInterface::aiAttackPosition(const Coord3D &pos, int maxShotsToFire,
 	{
 		static const int kIgnoringStealth = CombatNames::status("IGNORING_STEALTH");
 		obj->setStatus((unsigned)kIgnoringStealth, true);
-		// INFERENCE (S-2480): PartitionFilterPossibleToAttack(ATTACK_NEW_TARGET) is the non-forced canAttackObject; the off-map filter keeps everything (the bit is never set)
+		// RW 0x660E93 PartitionFilterSameMapStatus (vtable RW 0xC0F374): candidate's off-map bit (Object + 0x458 bit 3) matches the attacker's;
+		// INFERENCE (S-2480): PartitionFilterPossibleToAttack(ATTACK_NEW_TARGET, RW 0x660CA4 -> 0x68D6A6) is the non-forced canAttackObject
+		PartitionFilterFn sameMapStatus([&](Object &o) { return o.isOffMap() == obj->isOffMap(); });
 		PartitionFilterFn possible([&](Object &o) { return w->canAttackObject(o, source, false); });
-		Object *victim = obj->logic().partition().getClosestObject(localPos, continueRange, FROM_CENTER_2D, { &possible });
+		Object *victim = obj->logic().partition().getClosestObject(localPos, continueRange, FROM_CENTER_2D, { &sameMapStatus, &possible });
 		obj->setStatus((unsigned)kIgnoringStealth, false);
 		if (victim)
 		{
@@ -495,7 +520,12 @@ bool AIUpdateInterface::aiAttackPosition(const Coord3D &pos, int maxShotsToFire,
 		cur->setMaxShotCount(maxShotsToFire);
 		cur->clearWhenFiringEnds();
 	}
-	// RW 0x66E051 .. 0x66E060: the attack voice for a PLAYER or SCRIPT order (RW 0x66B271) is the client's (UnitVoiceResponse on the message)
+	// PORT-151, RW 0x66E051 .. 0x66E060 (helper RW 0x66B271, message 0x7E6): the attack on the ground answers the unit voice with the spot, for a PLAYER
+	// or SCRIPT order. The position variant carries no target, so the air flag stays clear (RW 0x66B271's info holds the position alone)
+	if (source == CMD_FROM_PLAYER || source == CMD_FROM_SCRIPT)
+	{
+		AudioApi::postUnitVoice(UnitVoiceResponse::VOICE_EVENT_ENTER_STATE_ATTACK, obj->getID(), 0, INVALID_ID, &pos);
+	}
 	wakeUpNow();
 	return true;
 }
@@ -982,7 +1012,9 @@ Object *AIUpdateInterface::getNextMoodTarget(bool calledByAI, bool calledDuringI
 // lane LOGIC-BUTTONS: RW 0x696266 (BFME2 decomp Object.cpp:2261, AIUpdate.cpp:1511): attack-move to position (AICMD 0xF)
 void AIUpdateInterface::aiAttackMoveToPosition(const Coord3D &pos, int maxShots, CommandSourceType source)
 {
-	aiMoveToPosition(pos, source);
+	// PORT-151: the inner move is silent: RW 0x696266 lands in the attack-move body (RW 0x66C0B9) only, which posts 0x7E8 (armAttackMove below) and never
+	// the move body's 0x7E7 (RW 0x66B4D2)
+	aiMoveToPosition(pos, source, false);
 	armAttackMove(pos, source);
 	if (ObjectWeapons *w = getObject()->getWeapons())
 	{
@@ -1015,7 +1047,21 @@ bool AIUpdateInterface::armAttackMove(const Coord3D &goal, CommandSourceType sou
 	// lane TARGET-1: the attack-move machine starts in its idle state (ZH AIAttackMoveToState::onEnter setState(AI_IDLE); RotWK's state 0x21 runs its sub
 	// machine at + 0x54, RW 0x755798), whose entry pushes the mood check back (RW 0x7489B6 -> 0x662DD9); the earlier stand-in zeroed its own clock here
 	resetNextMoodCheckTime();
+	// PORT-151, RW 0x66C128 .. 0x66C136 (helper RW 0x66B2F5): the attack-move body asks the unit voice for the enter-state attack-move message 0x7E8 with
+	// its goal, for a PLAYER or SCRIPT order only
+	postEnterStateAttackMoveVoice(*getObject(), goal, source);
 	return true;
+}
+
+// PORT-151: the command-0xF body's voice (RW 0x66B2F5, message 0x7E8): the owner speaks, the goal is the position the picker fills in
+void AIUpdateInterface::postEnterStateAttackMoveVoice(Object &obj, const Coord3D &pos, CommandSourceType source)
+{
+	// RW 0x66C128 .. 0x66C12F: the source test (`== 0 || == 1`), then the helper at RW 0x66C136; the AI's own attack-move is silent
+	if (source != CMD_FROM_PLAYER && source != CMD_FROM_SCRIPT)
+	{
+		return;
+	}
+	AudioApi::postUnitVoice(UnitVoiceResponse::VOICE_EVENT_ENTER_STATE_ATTACKMOVE, obj.getID(), 0, INVALID_ID, &pos);
 }
 
 // the attack-move's scan: RotWK's AIAttackMoveToState (RW 0x755798) asks getNextMoodTarget(calledByAI unless its attack just ended, not during idle) while its

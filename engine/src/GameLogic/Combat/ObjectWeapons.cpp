@@ -2,6 +2,8 @@
 // See GameLogic/Combat/ObjectWeapons.h.
 
 #include "GameLogic/Combat/ObjectWeapons.h"
+
+#include "Common/Thing/ThingFactory.h"
 #include "GameLogic/Module/SquishCollide.h"
 
 #include "Common/Audio/AudioRequests.h"
@@ -18,16 +20,19 @@
 #include "GameLogic/Combat/CombatState.h"
 #include "GameLogic/Combat/WeaponDelivery.h"
 #include "GameLogic/GameLogic.h"
+#include "GameLogic/Locomotor.h"
 #include "GameLogic/Module/AIUpdate.h"
 #include "GameLogic/Module/BehaviorModule.h"
 #include "GameLogic/Module/InvisibilityModules.h"
 #include "GameLogic/Object/Contain/HordeContainRuntime.h"
 #include "GameLogic/Object/Object.h"
+#include "GameLogic/ObjectFilterMatch.h"
 #include "GameLogic/System/InvisibilityManager.h"
 #include "GameLogic/SimMath.h"
 #include "GameLogic/System/ShroudManager.h"
 #include "GameLogic/Weapon.h"
 #include "GameLogic/WeaponNugget.h"
+#include "GameLogic/ObjectFilterMatch.h"
 #include "GameLogic/WeaponSet.h"
 #include "GameLogic/Module/SiegeModules.h"
 
@@ -131,12 +136,37 @@ public:
 	float rateOfFireAttributeProduct() override { return 1.0f; }              // the attribute modifiers (S-320)
 	// lane PERF-WS: the two reads below run on the logic job pool (computeWeaponStatusConditions through Weapon::getStatus): keep them reads when
 	// S-320 is ported
-	bool containedAmmo(const ObjectFilter &, unsigned &count) override
+	// ProjectileFilterInContainer (Weapon template + 0x120), RW 0x6CD298: the owner (RW 0x449681 of [weapon + 8]) whose template's filter is set
+	// (RW 0x762977) is asked its contain ([object + 0x258]) with the filter through contain slot 0x114 (OpenContain RW 0x865CE3: the contained count
+	// whose rider the filter allows, ObjectFilterMatch RW 0x7640C1 with the container's player). Without a container, or with an unset filter, the
+	// weapon's clip answers instead, at the caller
+	bool containedAmmo(const ObjectFilter &filter, unsigned &count) override
 	{
 		count = 0;
-		return false;
+		if (!ObjectFilterMatch::isValid(&filter)) // RW 0x762977
+		{
+			return false;
+		}
+		ContainModuleInterface *contain = m_w.owner().getContain(); // RW 0x6CD2BF
+		if (!contain)
+		{
+			return false; // RW 0x6CD2C9 -> RW 0x6CD2E1: no container, the clip's status
+		}
+		count = contain->countContainedMatching(filter); // RW 0x6CD2D9, slot 0x114
+		return true;
 	}
-	bool ownerHasContainAmmo(const ObjectFilter &) override { return false; }
+	// RW 0x6CD11F (the third gate of Weapon::getStatus, its caller RW 0x6CD1BF): `push [weapon + 8]`, findObjectByID (RW 0x449681), then RW 0x68B634 =
+	// Object::isCurWeaponLocked: `add ecx, 0x34C` (the object's WeaponSet) and RW 0x8F1149 `mov eax, [ecx + 0x24]` = WeaponSet::m_curWeaponLockedStatus
+	// (DONOR BFME2: Weapon::isAmmoReady, Weapon_getRemainingAmmo.cpp, `owner->isCurWeaponLocked()`; Object::isCurWeaponLocked 0x0028AF65, WeaponSet at
+	// +0x330 there, the lock status at its + 0x24). The filter is not read: an owner whose current weapon is locked (a thrown passenger, a grabbed
+	// object) is ready to fire it; an unlocked owner is not. Port 140 read it as "the container holds an item the filter accepts" and Port 168 as "a weapon
+	// with a filter is in a slot"; the second answered yes for every creep troll (MordorCaveTrollRockThrow has IdleAfterFiringDelay 2167, so its empty
+	// rock reached this gate and was chosen again: P-104 back on 2026-11-15)
+	bool ownerHasContainAmmo(const ObjectFilter &) override
+	{
+		const ObjectWeapons *weapons = m_w.owner().getWeapons();
+		return weapons && weapons->isCurWeaponLocked(); // RW 0x68B634 -> RW 0x8F1149
+	}
 	int barrelCount(int) override { return 1; } // the drawable's barrel count (S-320)
 	int firingTrackerShotsAtTarget(bool hasVictim, unsigned victimID, const Coord3D &pos) override { return m_w.m_tracker.getShotsAtTarget(hasVictim, victimID, pos); }
 	bool ownerPositionMatchesLastShot() override
@@ -160,6 +190,35 @@ public:
 		p.z = m_w.owner().logic().getGroundHeight(p.x, p.y);
 		return p;
 	}
+
+	// ---- ProjectileStreamName (see WeaponState.h; RW 0x6CD1FD and its fire path RW 0x90FB7A .. 0x90FC5A) ----
+	Object *streamObjectByID(ObjectID id)
+	{
+		// RW 0x6CD23D -> RW 0x449681, and RW 0x6CD244 `jne`: retail tests the POINTER only. A stream that is dying but still in the object list is
+		// therefore reused by the very next shot, exactly as the binary does. id 0 is the "the weapon holds none" case, and the port's object 0 does
+		// not exist, but the guard keeps the answer explicit rather than depending on that.
+		return id == INVALID_ID ? nullptr : m_w.owner().logic().findObjectByID(id);
+	}
+	Object *createProjectileStream(const std::string &streamName, Object &owner) override
+	{
+		// RW 0x6CD252: TheThingFactory->findTemplate(name); a name that is not a template answers null and nothing is made.
+		const ThingTemplate *tt = m_w.owner().logic().things().findTemplate(streamName);
+		if (!tt)
+		{
+			return nullptr;
+		}
+		Player *player = owner.getControllingPlayer(); // RW 0x6CD26C -> RW 0x68B678
+		Team *team = player ? player->getDefaultTeam() : nullptr; // [player + 0x30C] (RW 0x79FD6F reads team + 0x30 upwards)
+		Object *stream = m_w.owner().logic().newObject(tt, team, ObjectStatusMaskType{}); // RW 0x6CD285
+		if (!stream)
+		{
+			return nullptr;
+		}
+		// RW 0x6CD25B .. RW 0x6CD271: the creation position RW 0xA3CF28 leaves zero and newObject is not told otherwise, so the stream object is made
+		// at (0, 0, 0) and stands there until a shot positions it (RW 0x74094C) or its ProjectileStreamUpdate collects it.
+		return stream;
+	}
+	Object *weaponOwner() override { return &m_w.owner(); }
 
 private:
 	ObjectWeapons &m_w;
@@ -465,24 +524,25 @@ std::unique_ptr<Weapon> ObjectWeapons::makeExtraWeapon(const WeaponTemplate *t)
 	return w;
 }
 
+// Both editions: RW 0x691014 (DONOR BFME2 0x0029091E Object::rva0029091E) builds a WeaponSetFlags with `bit` and queries
+// ThingTemplate::findWeaponTemplateSet (RW 0x73F6B9 -> 0x73EE52 -> 0x73D89F). Because FindWeaponTemplateSet returns the
+// default Conditions = None set (bestUnmatched < 0x3E7) whenever any WeaponSet is defined on the template, templates such as
+// ImladrisZwillingeEdain and ImladrisGwaihir still receive WEAPONSET_HERO_MODE (0x1B) in HeroModeSpecialAbilityUpdate.
 bool ObjectWeapons::hasWeaponSetFor(int bit) const
 {
-	for (const WeaponTemplateSet &s : m_owner->getTemplate()->weaponTemplateSets())
+	if (bit < 0 || bit >= 128)
 	{
-		if (s.testWeaponSetFlag(bit))
-		{
-			return true;
-		}
+		return false;
 	}
-	return false;
+	WeaponSetFlags flags{};
+	flags[(size_t)bit >> 5] |= 1u << (bit & 31);
+	return FindWeaponTemplateSet(m_owner->getTemplate()->weaponTemplateSets(), flags) != nullptr;
 }
 
 int ObjectWeapons::extraWeaponStatus(Weapon &w)
 {
 	return w.getStatusWriteBack(host());
 }
-
-ObjectWeapons::~ObjectWeapons() = default;
 
 WeaponHost &ObjectWeapons::host()
 {
@@ -590,6 +650,12 @@ void ObjectWeapons::rebuildWeapons(const WeaponTemplateSet *set)
 	clearSlotConditions();
 	for (std::unique_ptr<Weapon> &w : m_weapons)
 	{
+		// RW 0x6CA178 frees each old Weapon through its deleting pointer (vtable slot 0, RW 0x6CDB57): the Weapon destructor destroys the
+		// ProjectileStreamName object the weapon made (issue #99 / PORT-27, RW 0x6CD0BE -> RW 0x6CD0F4)
+		if (w)
+		{
+			w->destroyProjectileStream(m_owner->logic());
+		}
 		w.reset();
 	}
 	m_set = set;
@@ -636,6 +702,29 @@ void ObjectWeapons::rebuildWeapons(const WeaponTemplateSet *set)
 			}
 		}
 		m_weapons[(size_t)i] = std::move(w);
+	}
+}
+
+// RW 0x6CD0BE: every Weapon this set owns is destroyed with the set, and a Weapon destroys the ProjectileStreamName object it made (issue #99 / PORT-27,
+// RW 0x6CD0F4). Retail does exactly this: the DeletingObjectPointer in ObjectWeapons (Object + 0x320) frees each Weapon through its vtable slot 0
+// (RW 0x6CDB57 -> RW 0x6CD0BE), and the Weapon destructor destroys the stream it holds. m_set's template weapons have no stream of their own (the id
+// lives in the instance), so the two extra weapons are covered too.
+ObjectWeapons::~ObjectWeapons()
+{
+	GameLogic &logic = m_owner->logic();
+	for (std::unique_ptr<Weapon> &w : m_weapons)
+	{
+		if (w)
+		{
+			w->destroyProjectileStream(logic);
+		}
+	}
+	for (std::unique_ptr<Weapon> *w : { &m_crushWeapon, &m_crushRevengeWeapon })
+	{
+		if (*w)
+		{
+			(*w)->destroyProjectileStream(logic);
+		}
 	}
 }
 
@@ -928,7 +1017,7 @@ const char *ObjectWeapons::choiceStopLine()
 	return "[S-1582] weapon choice: RW 0x6C8A4E is ported (lane DECOMP-1: criteria 0 .. 5, ReadyStatusSharedWithinSet, the victimless pick, the 1 / 0 score of canDamage RW 0x6CDBF3 "
 	       "through each nugget's isApplicable, the range error, OnlyAgainst / PreferredAgainst / OnlyInCondition, the turret aim gate RW 0x662398 on GARRISON-2's TurretAI); "
 	       "NOT ported: calcPitches RW 0xAD2620 for a pitch-limited weapon (taken as within; no retail weapon limits its pitch), CannotTargetCastleVictims' test (no retail weapon "
-	       "sets it), DamageContainedNugget's contain slot 0x1C (taken as false); INFERENCE: HordeAttackNugget's member (RW 0x9119CB, horde slots 0x50 / 0x114) is the first living one";
+	       "sets it)";
 }
 
 // RW 0x6CDBF3 Weapon::canDamage (lane DECOMP-1, tier A): no template, or OUT_OF_AMMO with AutoReloadsClip set: false; CannotTargetCastleVictims (+ 0x168: a victim
@@ -1274,6 +1363,152 @@ bool ObjectWeapons::canAttackObjectNoShroud(const Object &victim, CommandSourceT
 	return false;
 }
 
+// PORT-208 (issue #490): RW 0x68B5FA Object::getAbleToUseWeaponAgainstTarget -> RW 0x6C8652 WeaponSet::getAbleToUseWeaponAgainstTarget
+CanAttackResult ObjectWeapons::getAbleToUseWeaponAgainstTarget(int attackType, const Object *victim, const Coord3D *pos, CommandSourceType source) const
+{
+	if (victim)
+	{
+		pos = victim->getPosition();
+	}
+	if (!pos)
+	{
+		return ATTACKRESULT_NOT_POSSIBLE; // RW 0x68B613
+	}
+	const unsigned targetAntiMask = victim ? victimAntiMask(*victim) : (unsigned)WEAPON_ANTI_GROUND; // RW 0x6C8672: 2
+	Object *containedBy = m_owner->getContainedBy();
+	ContainModuleInterface *contain = containedBy ? containedBy->getContain() : nullptr;
+	static const int kContesting = CombatNames::status("CONTESTING_BUILDING");
+	const bool contesting = kContesting >= 0 && m_owner->testStatus((unsigned)kContesting);
+	if (contesting && (attackType & ATTACK_CONTINUED) == 0 && !containedBy)
+	{
+		return ATTACKRESULT_INVALID_SHOT; // RW 0x6C86B6 .. 0x6C86C2 (getFiringOwner RW 0x6C86CF .. 0x6C86FB is S-2480 / S-1103)
+	}
+
+	unsigned setAntiMask = 0;
+	for (const std::unique_ptr<Weapon> &w : m_weapons)
+	{
+		if (w && w->getTemplate())
+		{
+			setAntiMask |= w->getTemplate()->m_antiMask; // WeaponSet + 0x2C
+		}
+	}
+
+	bool hasAWeapon = false;
+	bool hasAWeaponInRange = false;
+	bool withinAttackRange = false;
+	const CombatNames::Kind &kinds = CombatNames::kinds();
+	for (int slot = 0; slot < WEAPONSLOT_COUNT; ++slot)
+	{
+		const Weapon *weapon = weaponInSlot(slot);
+		if (!weapon || !weapon->getTemplate())
+		{
+			continue;
+		}
+		const WeaponTemplate &wt = *weapon->getTemplate();
+		hasAWeapon = true;
+		if ((wt.m_antiMask & targetAntiMask) == 0)
+		{
+			continue; // RW 0x6C8728 .. 0x6C8735
+		}
+		if (victim && wt.m_bombardType)
+		{
+			continue; // RW 0x6C8737 .. 0x6C8742: WeaponTemplate + 0x170
+		}
+		withinAttackRange = false;
+		if (contesting)
+		{
+			withinAttackRange = true; // RW 0x6C8744 .. 0x6C8755
+		}
+		else if (contain && contain->isGarrisonable())
+		{
+			// RW 0x6C8757 .. 0x6C87D5: non-HORDE riders ask calcBestGarrisonPosition (contain slot 0x130, RW 0x87B7E3) +
+			// isSourceWithGoalPositionWithinAttackRange (RW 0x6CBFF1)
+			Coord3D targetPos = *pos;
+			Coord3D goalPos{ 0.0f, 0.0f, 0.0f };
+			if (!m_owner->isKindOf((unsigned)kinds.horde) && contain->calcBestGarrisonPosition(&goalPos, &targetPos))
+			{
+				withinAttackRange = isSlotSourceWithGoalWithinAttackRange(slot, goalPos, victim, targetPos);
+			}
+			else if (victim)
+			{
+				withinAttackRange = isSlotWithinAttackRange(slot, *victim, 0.0f, true);
+			}
+			else
+			{
+				// NOT RETAIL (stop S-1675): retail RW 0x6C87C5 .. 0x6C87C9 tests `if (victim)` only because Ctrl force-attack is disabled in retail 2.01
+				// (S-1675, CommandXlat.cpp:960) and RW 0x77232F / 0x81DA80 are the only two callers in game.dat that pass victim == nullptr. With Ctrl
+				// force-attack enabled (S-1675), a HORDE inside HordeGarrisonContain checks its rangefinder against *pos via RW 0x6CC622 so its
+				// HordeAttackNugget orders the archer members to fire from the garrison points
+				withinAttackRange = isSlotWithinAttackRange(slot, *pos);
+			}
+		}
+		else
+		{
+			// RW 0x6C87D7 .. 0x6C87FB
+			withinAttackRange = victim ? isSlotWithinAttackRange(slot, *victim, 0.0f, true) : isSlotWithinAttackRange(slot, *pos);
+		}
+		if (withinAttackRange)
+		{
+			// RW 0x6C8804 .. 0x6C8859: an IMMOBILE owner without a locomotor must already face within AcceptableAimDelta (+ 0xDC)
+			AIUpdateInterface *ai = m_owner->getAIUpdateInterface();
+			if (m_owner->isKindOf((unsigned)kinds.immobile) && (!ai || !ai->curLocomotor()))
+			{
+				constexpr float kPi = 3.14159274f;
+				constexpr float kTwoPi = 6.28318548f;
+				const float bearing = (float)SimMath::atan2d(SimMath::subf32(pos->y, m_owner->getPosition()->y),
+				                                            SimMath::subf32(pos->x, m_owner->getPosition()->x));
+				float rel = SimMath::subf32(bearing, m_owner->getOrientation());
+				while (rel > kPi)
+				{
+					rel = SimMath::subf32(rel, kTwoPi);
+				}
+				while (rel <= -kPi)
+				{
+					rel = SimMath::addf32(rel, kTwoPi);
+				}
+				const float absRel = rel < 0.0f ? SimMath::subf32(0.0f, rel) : rel;
+				if (absRel > wt.m_aimDelta)
+				{
+					withinAttackRange = false;
+				}
+			}
+			if (withinAttackRange)
+			{
+				hasAWeaponInRange = true;
+				break;
+			}
+		}
+	}
+
+	// RW 0x6C8880 .. 0x6C88DE: an owner that cannot move (IMMOBILE, SPAWNS_ARE_THE_WEAPONS, contained in a non-HORDE container, or 0-speed locomotor)
+	// with a weapon but none in range answers INVALID_SHOT unless this is a tunnel-network guard check (attackType == 4)
+	static const int kSpawnsAreWeapons = CombatNames::kindOf("SPAWNS_ARE_THE_WEAPONS");
+	AIUpdateInterface *ai = m_owner->getAIUpdateInterface();
+	const bool cannotMove = m_owner->isKindOf((unsigned)kinds.immobile) ||
+	                        (kSpawnsAreWeapons >= 0 && m_owner->isKindOf((unsigned)kSpawnsAreWeapons)) ||
+	                        (containedBy && !containedBy->isKindOf((unsigned)kinds.horde)) ||
+	                        (ai && ai->curLocomotor() && ai->curLocomotorSpeed() <= 0.0f);
+	if (cannotMove && hasAWeapon && !hasAWeaponInRange && attackType != ATTACK_TUNNEL_NETWORK_GUARD)
+	{
+		return ATTACKRESULT_INVALID_SHOT;
+	}
+
+	const CanAttackResult okResult = withinAttackRange ? ATTACKRESULT_POSSIBLE : ATTACKRESULT_POSSIBLE_AFTER_MOVING;
+	if ((setAntiMask & targetAntiMask) == 0)
+	{
+		return ATTACKRESULT_INVALID_SHOT; // RW 0x6C88EE .. 0x6C88FF
+	}
+	if (!victim)
+	{
+		return okResult; // RW 0x6C8901 .. 0x6C8907
+	}
+	if (!canAttackObject(*victim, source, (attackType & 1) != 0))
+	{
+		return ATTACKRESULT_NOT_POSSIBLE;
+	}
+	return okResult;
+}
+
 // ---------------------------------------------------------------------------------------------------------------------------------
 // range
 // ---------------------------------------------------------------------------------------------------------------------------------
@@ -1405,7 +1640,12 @@ bool ObjectWeapons::isWithinAttackRangeWithBonus(const Object &victim, const Wea
 
 bool ObjectWeapons::isWithinAttackRange(const Coord3D &pos) const
 {
-	const Weapon *w = weaponInSlot(m_curSlot);
+	return isSlotWithinAttackRange(m_curSlot, pos);
+}
+
+bool ObjectWeapons::isSlotWithinAttackRange(int slot, const Coord3D &pos) const
+{
+	const Weapon *w = weaponInSlot(slot);
 	if (!w || !w->getTemplate())
 	{
 		return false;
@@ -1415,6 +1655,28 @@ bool ObjectWeapons::isWithinAttackRange(const Coord3D &pos) const
 	w->computeBonus(*self->m_host, 0, bonus);
 	const RangeSubject src = subjectOf(*m_owner);
 	return WeaponIsWithinAttackRange(*w->getTemplate(), bonus, *self->m_rangeHost, src, src.position, nullptr, pos, 0.0f, true);
+}
+
+bool ObjectWeapons::isSlotSourceWithGoalWithinAttackRange(int slot, const Coord3D &goalPos, const Object *victim, const Coord3D &targetPos) const
+{
+	const Weapon *w = weaponInSlot(slot);
+	if (!w || !w->getTemplate())
+	{
+		return false;
+	}
+	const WeaponTemplate &t = *w->getTemplate();
+	ObjectWeapons *self = const_cast<ObjectWeapons *>(this);
+	WeaponBonus bonus;
+	w->computeBonus(*self->m_host, 0, bonus);
+	const RangeSubject src = subjectOf(*m_owner);
+	if (victim)
+	{
+		const RangeSubject vic = subjectOf(*victim);
+		const float dz = SimMath::subf32(vic.position.z, src.position.z);
+		self->m_rangeHost->m_meleeReach = WeaponGetAttackRange(t, bonus, *self->m_rangeHost, src, dz);
+		return WeaponIsSourceWithGoalPositionWithinAttackRange(t, bonus, *self->m_rangeHost, src, goalPos, &vic, targetPos);
+	}
+	return WeaponIsSourceWithGoalPositionWithinAttackRange(t, bonus, *self->m_rangeHost, src, goalPos, nullptr, targetPos);
 }
 
 bool ObjectWeapons::isWithinAttackRangeFrom(const Coord3D &sourcePos, const Object *victim, const Coord3D &victimPos, float extra, bool checkMin) const
@@ -1668,9 +1930,15 @@ bool ObjectWeapons::fireCurrentWeapon(Object *victim, const Coord3D *pos)
 	}
 	ObjectWeaponDelivery delivery(*m_owner, *this, t, *w);
 	const bool reloaded = w->privateFireWeapon(host(), delivery, args);
-	if (reloaded || t.m_idleAfterFiringDelay == 0xFFFFFFFFu)
+	// RW 0x6920AD .. 0x69212B (disassembled): after 0x6CF34B -> 0x6CEF6D (privateFireWeapon) the release (0x68DF11(1) at RW 0x69212B) is gated
+	// only by that call's reloaded answer (`cmp [ebp-1], bl; je` at RW 0x692122). The ZH-era `|| IdleAfterFiringDelay == -1` clause is not in
+	// RW's function: it released the ordered FIRE_WEAPON lock at the strike's shot, the next chooseBestWeaponForTarget re-picked the SECONDARY
+	// (a ready weapon while the fired one reloads), and the attack left at RW 0x751482's weapon-changed gate before the run-through could run
+	// (fork issue 395 Q2: "the charge does not happen"). ClipSize 0 is unlimited (0x7FFFFFFF at reloadWithBonus), so a clipless weapon never
+	// answers reloaded and keeps its lock until the state releases it (RW 0x74D8D2 at the charge exit).
+	if (reloaded)
 	{
-		releaseWeaponLock(LOCKED_TEMPORARILY); // ZH: unlock when loaded; RW: IdleAfterFiringDelay == -1 releases it after every shot
+		releaseWeaponLock(LOCKED_TEMPORARILY);
 	}
 	m_tracker.shotFired(*m_trackerHost, *w, victim ? victim->getID() : 0u, args.target.victimPosition, false);
 	// RW 0x8E3411 .. 0x8E34DD (inside FiringTracker::shotFired): the weapon's FireSound (template + 0xC8) attached to the shooter, looped while it keeps

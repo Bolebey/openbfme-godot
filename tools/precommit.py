@@ -382,6 +382,32 @@ def added_lines() -> dict[str, set[int]]:
     return result
 
 
+FWD = re.compile(r"^\+\s*(class|struct)\s+(\w+)\s*;")
+DEF = r"^\s*(template\s*<[^>]*>\s*)?(class|struct)\s+(\w+\s+)?{name}\s*(final\s*)?(:[^;{{]*)?\{{?\s*(//.*)?$"
+
+
+def fwd_decl_problems() -> list[str]:
+    """A new `class X;` for a `struct X` (or the reverse): GCC accepts it, MSVC mangles class and struct apart and the Windows link fails
+    with LNK2019 (Port 168 #452, BehaviorModule.h, 2026-11-15). Only forward declarations the commit adds are checked."""
+    out = git("-c", "core.quotepath=false", "diff", "--cached", "-U0", "--no-color", "--diff-filter=ACMR", "--", "engine/src", "engine/tests",
+              "tools").stdout.decode("utf-8", "replace")
+    problems, path = [], ""
+    for line in out.splitlines():
+        if line.startswith("+++ "):
+            path = diff_new_path(line)
+            continue
+        m = FWD.match(line)
+        if not m or not path.endswith((".h", ".hpp", ".cpp", ".inl")):
+            continue
+        kind, name = m.groups()
+        found = git("grep", "--cached", "-h", "-E", DEF.format(name=name), "--", "engine/src").stdout.decode("utf-8", "replace")
+        kinds = {re.search(r"\b(class|struct)\b", l).group(1) for l in found.splitlines() if l.strip()}
+        if len(kinds) == 1 and kind not in kinds:
+            problems.append(f"{path}: `{kind} {name};` but {name} is defined as `{kinds.pop()}`: MSVC mangles class and struct apart "
+                            f"(LNK2019 in the Windows build, GCC does not see it); write `{'struct' if kind == 'class' else 'class'} {name};`")
+    return problems
+
+
 def shader_problems(files: list[tuple[str, str]]) -> list[str]:
     """Every Godot shader the index holds must fit Intel's varying budget once a shader file or a GDScript file with an inline shader is staged
     (check_shader_varyings.py)."""
@@ -407,6 +433,29 @@ def shader_problems(files: list[tuple[str, str]]) -> list[str]:
     return [f"godot/{line}" for line in check_shader_varyings.problems(shaders, load) + check_shader_varyings.inline_problems(loaded, load)]
 
 
+def citation_warnings() -> list[str]:
+    """Warnings, not failures (owner 2026-11-16): an added `RW 0x...` in engine/src inside a RotWK function whose start is cited nowhere keeps
+    that function `none` in the function map (tools/mod/citation_check.py). Needs the angr function inventory; without it, one note."""
+    diff = git("-c", "core.quotepath=false", "diff", "--cached", "-U0", "--no-color", "--diff-filter=ACMR", "--", "engine/src").stdout.decode(
+        "utf-8", "replace")
+    if not re.search(r"^\+.*\bRW\s+0x[0-9A-Fa-f]{5,8}", diff, re.M):
+        return []
+    sys.path.insert(0, str(REPO / "tools" / "mod"))
+    try:
+        import citation_check  # noqa: PLC0415 - only commits that add a citation need it
+    except ImportError:  # a copy of the gate without tools/mod (the gate's own tests)
+        return []
+
+    cites = citation_check.added_citations(diff)
+    if not cites:
+        return []
+    inv_path = citation_check.find_inventory(REPO)
+    if not inv_path:
+        return ["citation check skipped: no RotWK function inventory (workspace/rebuild/rw_function_blocks.json or $OPENBFME_RW_INVENTORY)"]
+    inv = citation_check.Inventory.load(inv_path)
+    return citation_check.interior_warnings(cites, inv, citation_check.cited(REPO / "engine" / "src"))
+
+
 def main() -> int:
     problems = []
     try:
@@ -425,8 +474,19 @@ def main() -> int:
                 problems.append(problem)
         problems += pin_problems(pins, pin_reason)
         problems += shader_problems(files)
+        problems += fwd_decl_problems()
+        if any(rel.startswith(("docs/stops.d/", "docs/ennorath/night_watch.d/")) for rel, _ in files):
+            sys.path.insert(0, str(Path(__file__).resolve().parent))
+            import fragments  # the stop / night-watch fragments (tools/fragments.py)
+            problems += fragments.check()
     except (subprocess.CalledProcessError, ValueError, OSError) as exc:
         problems.append(f"cannot check staged files: {exc}")
+    if any(rel.startswith("engine/src/") for rel, _ in (files if "files" in locals() else [])):
+        try:
+            for w in citation_warnings():
+                print("warning:", w)
+        except (OSError, ValueError, KeyError) as exc:
+            print(f"warning: citation check failed: {exc}")
     if problems:
         print("COMMIT GATE FAILED")
         for problem in problems:

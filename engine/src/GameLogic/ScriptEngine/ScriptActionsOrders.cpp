@@ -458,6 +458,20 @@ bool ScriptActions::executeOrderAction(ScriptEngine &engine, const ScriptActionR
 		}
 		return true;
 	}
+	if (name == "TEAM_GUARD_IN_TUNNEL_NETWORK")
+	{
+		if (Team *t = ScriptConditions::team(engine, param(a, 0).stringValue)) // RW 0x7CE522 -> RW 0x7CA692 -> RW 0x7C8154
+		{
+			for (Object *o : ScriptConditions::members(*t))
+			{
+				if (AIUpdateInterface *ai = o->getAIUpdateInterface())
+				{
+					ai->aiGuardTunnelNetwork(0, CMD_FROM_SCRIPT); // GUARDMODE_NORMAL
+				}
+			}
+		}
+		return true;
+	}
 	if (name == "UNIT_GUARD_POSITION" || name == "TEAM_GUARD_POSITION")
 	{
 		const Waypoint *w = terrain ? terrain->findWaypointByName(param(a, 1).stringValue) : nullptr; // RW 0x7C9400 / 0x7C01B1: the waypoint first
@@ -635,22 +649,24 @@ bool ScriptActions::executeOrderAction(ScriptEngine &engine, const ScriptActionR
 					continue;
 				}
 				Team *cur = o->getTeam(); // RW 0x7A49CC: the object + 0x31C
-				if (cur == dst || !cur->isActive() || cur->getPrototype() == nullptr) // RW 0x7A49DE (the team itself) / RW 0x7A49E7 (+ 0x5D, the retail fields read without a null test)
+				// RW 0x7A49DE (the team itself) / RW 0x7A49E7 (+ 0x5D, active). Retail reads those fields without a null test; this Object's team may be
+				// null (an object created without one), so the null case skips here where retail would not have one at all
+				if (cur == nullptr || cur == dst || !cur->isActive() || cur->getPrototype() == nullptr)
 				{
 					continue;
 				}
-				bool recruitable = cur == owner->getDefaultTeam(); // RW 0x7A49D4: player + 0x30C
 				// RW 0x7A49F1 .. 0x7A4A06: recruited only into a strictly higher teamProductionPriority (TeamTemplateInfo + 0xF0 <-> prototype + 0x21C)
 				if (cur->getPrototype()->teamProductionPriority() >= dst->getPrototype()->teamProductionPriority())
 				{
 					continue;
 				}
+				bool recruitable = cur == owner->getDefaultTeam(); // RW 0x7A49D4: player + 0x30C
 				recruitable = recruitable || cur->getPrototype()->teamIsAIRecruitable(); // RW 0x7A4A08: prototype + 0x210
 				if (cur->hasAIRecruitableOverride()) // RW 0x7A4A13 .. 0x7A4A22: team + 0x110 / + 0x111
 				{
 					recruitable = cur->aiRecruitableOverride();
 				}
-				if (!recruitable || (o->getDisabledMask() & (1u << 3)) != 0) // the override / DISABLED_HELD (+ 0x1C8 bit 3); the AI's recruitable flag (+ 0x3BE) is read as true, S-1186
+				if (!recruitable || (o->getDisabledMask() & (1u << 3)) != 0) // the override / DISABLED_HELD (+ 0x1C8 bit 3); the AI's flag (+ 0x3BE) is read as true, S-1186
 				{
 					continue;
 				}
@@ -865,6 +881,55 @@ bool ScriptActions::executeOrderAction(ScriptEngine &engine, const ScriptActionR
 		for (Player *p : ScriptConditions::players(engine, param(a, 0).stringValue))
 		{
 			sum = (std::int32_t)((std::uint32_t)sum + (std::uint32_t)p->getMoney()->countMoney());
+		}
+		engine.counter(param(a, 1).stringValue).value = sum;
+		return true;
+	}
+	// PORT-113 (issue #280, docs/ennorath/PORT113_RW_ANALYSIS.md): the light points of the War of the Ring. The ordinals are the jump table's
+	// (RW 0x7CF857): 351 .. 354 and 405. Each body walks the players of its first parameter (RW 0x758F7C the mask, RW 0x6A85EE the next player)
+	if (name == "PLAYER_GIVE_LIGHT_POINTS")
+	{
+		// case 351, RW 0x7CE5B7 -> RW 0x7BD2D0 (players, amount): Player RW 0x6AB148 (the points, then LightPointsUpSound for a positive amount)
+		for (Player *p : ScriptConditions::players(engine, param(a, 0).stringValue))
+		{
+			p->giveLightPoints(param(a, 1).intValue);
+		}
+		return true;
+	}
+	if (name == "PLAYER_RESET_LIGHT_POINTS")
+	{
+		// case 352, RW 0x7CE5DB -> RW 0x7BD311 (players): Player RW 0x6AA931 (the points become 0, the levels stay)
+		for (Player *p : ScriptConditions::players(engine, param(a, 0).stringValue))
+		{
+			p->resetLightPoints();
+		}
+		return true;
+	}
+	if (name == "PLAYER_GIVE_LIGHT_POINT_LEVEL" || name == "PLAYER_REMOVE_LIGHT_POINT_LEVEL")
+	{
+		// cases 353 / 354, RW 0x7CE5F3 -> RW 0x7BD34F and RW 0x7CE618 -> RW 0x7BD390 (players, level name): Player RW 0x6AA939 / 0x6AA957
+		const bool give = name == "PLAYER_GIVE_LIGHT_POINT_LEVEL";
+		for (Player *p : ScriptConditions::players(engine, param(a, 0).stringValue))
+		{
+			if (give)
+			{
+				p->giveLightPointLevel(param(a, 1).stringValue);
+			}
+			else
+			{
+				p->removeLightPointLevel(param(a, 1).stringValue);
+			}
+		}
+		return true;
+	}
+	if (name == "SET_PLAYER_LIGHT_POINTS_TO_COUNTER")
+	{
+		// case 405, RW 0x7CEC62 -> RW 0x7C36BD (players, counter): the points (RW 0x6AA8F4) of every player of the mask, summed (RW 0x7C36F8), into the
+		// counter (get or create, RW 0x60817A; RW 0x7C371D). No player: 0
+		std::int32_t sum = 0;
+		for (Player *p : ScriptConditions::players(engine, param(a, 0).stringValue))
+		{
+			sum = (std::int32_t)((std::uint32_t)sum + (std::uint32_t)p->getLightPoints());
 		}
 		engine.counter(param(a, 1).stringValue).value = sum;
 		return true;

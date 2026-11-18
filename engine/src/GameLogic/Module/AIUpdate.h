@@ -103,6 +103,9 @@ public:
 
 	// ---- the command interface (ZH AICommandInterface) ----
 	void aiMoveToPosition(const Coord3D &pos, CommandSourceType source);
+	// PORT-151: the same order without the enter-state move voice (0x7E7): the attack-move stand-in of the port calls its inner move with it, because
+	// RW's attack-move body (RW 0x66C0B9) never goes through the move body (RW 0x66B3FD) and a player's attack-move says only 0x7E8
+	void aiMoveToPosition(const Coord3D &pos, CommandSourceType source, bool postMoveVoice);
 	// lane LOGIC-BUTTONS: RW 0x696266 (BFME2 decomp Object.cpp:2261): attack-move to position (AICMD 0xF)
 	void aiAttackMoveToPosition(const Coord3D &pos, int maxShots, CommandSourceType source);
 	// lane BACKLOG2: RW 0x79664F AICommandInterface::aiMoveToPositionEvenIfSleeping (BFME2 decomp AICommandInterface_aiMoveToPositionEvenIfSleeping.cpp, tier A): AI command 0x36 with the position; the
@@ -159,6 +162,8 @@ public:
 	// RW 0x696266: direct command 0xF, with the unlimited shot count used by targetless tactics.
 	bool aiAttackMoveToPosition(const Coord3D &goal, CommandSourceType source);
 	bool armAttackMove(const Coord3D &goal, CommandSourceType source = CMD_FROM_PLAYER);
+	// PORT-151: the enter-state attack-move voice of the command-0xF body (RW 0x66C0B9 -> RW 0x66B2F5 at RW 0x66C136, message 0x7E8)
+	static void postEnterStateAttackMoveVoice(Object &obj, const Coord3D &pos, CommandSourceType source);
 	bool attackMoveActive() const { return m_attackMoveActive; }
 	// the march ends without an order: in RotWK the attack-move is the machine's state 0x21, which a cleared machine leaves (S-328: the port keeps it as
 	// this flag, which an idle by the AI keeps for the resume)
@@ -248,6 +253,9 @@ public:
 	// lane SCRIPT-4: AI command 0x1E (RW 0x771790 aiGuardPosition, BFME2 decomp AICommandInterfaceAttackCommands.cpp tier A) -> aiDoCommand's gate, then
 	// privateGuardPosition (RW 0x6649C6, tier A; AI/AIGuardCommands.cpp): guard `pos` in `mode`; false when nothing changed
 	bool aiGuardPosition(const Coord3D &pos, int mode, CommandSourceType source);
+	// PORT-203: AI command 0x37 (RW 0x7C8154 aiGuardTunnelNetwork) -> aiDoCommand's gate, then privateGuardTunnelNetwork RW 0x664ABF (AI vslot 0xF8):
+	// enter state 0x18 (AI_TUNNEL_NETWORK_GUARD, AITunnelNetworkGuardState)
+	bool aiGuardTunnelNetwork(int mode, CommandSourceType source);
 	int guardMode() const { return m_guardMode; }                      // AI vslot 125
 	int guardTargetType() const { return m_guardTargetType; }          // AI vslot 123
 	const Coord3D &guardLocation() const { return m_guardLocation; }   // AI vslot 118
@@ -376,6 +384,8 @@ public:
 	bool isMoving() const;                    // RW 0x664485
 	// lane AI-2: RW vslot 0x1BC (RW 0x662B3C): the current state's slot 0x24 (AIState::isActive), true without a current state
 	bool isStateActive() const { return !m_machine || !m_machine->currentState() ? true : m_machine->currentState()->isActive(); }
+	// Port 257: RW vslot 0x1D0 (RW 0x662B28): the current state's slot 0x34 (AIState::isFollowThru), true without a current state
+	bool isInFollowThruState() const { return !m_machine || !m_machine->currentState() ? true : m_machine->currentState()->isFollowThru(); }
 	bool isBlocked() const { return m_mover->isBlocked(); }
 	bool isBusy() const { return m_machine && m_machine->currentStateId() == AI_BUSY; }
 	// ---- lane EXIT-1: the horde member update (GameLogic/Module/AIUpdateHordeMember.cpp) ----
@@ -487,7 +497,7 @@ public:
 	int pathPriority() const override;
 	PathfindObjectID attackTargetOf(const PathfindObject &o) const override;
 	PathfindObjectID enterTargetOf(const PathfindObject &o) const override; // AI vslot 0x1FC, RW 0x664D12
-	// AI vslot 0x1FC itself (RW 0x664D12): the object this AI is entering, or null; enterTargetOf and OpenContain::onCollide (RW 0x865A00) both call it
+	// lane PORT-9: AI vslot 0x1FC itself (RW 0x664D12), the object this AI is entering or null; enterTargetOf and OpenContain::onCollide (RW 0x865A00) both call it
 	const Object *enterTarget() const;
 	bool crushOrSquishPolicy(const PathfindObject &other) const override; // lane ATTACK-1: RW 0x69519A(other, 2)
 	float wanderFactor() const override;
@@ -651,7 +661,12 @@ protected:
 
 private:
 	class ObjectLocomotorHost;
-	void privateMoveToPosition(const Coord3D &pos, CommandSourceType source);
+	// PORT-151: the move body (RW 0x66B3FD) asks the unit voice for the enter-state move (0x7E7) at RW 0x66B4C4 .. 0x66B4D2; the attack-move
+	// body (RW 0x66C0B9, command 0xF) never goes through it and asks for the enter-state attack-move (0x7E8) instead (RW 0x66C136), so the port's
+	// attack-move stand-in calls this with `postMoveVoice` false and posts its own message
+	void privateMoveToPosition(const Coord3D &pos, CommandSourceType source, bool postMoveVoice);
+	// PORT-151: the enter-state attack voice of aiAttackObject / aiForceAttackObject (RW 0x66B1D0, message 0x7E6) with the victim's airborne locomotor
+	static void postEnterStateAttackVoice(Object &obj, const Object &victim);
 	void goalPositionClipped(const Coord3D &pos, CommandSourceType source, Coord3D &out) const;
 	void doMovementCompleteBookkeeping();
 	void readCombatSettings(const ModuleData *data);

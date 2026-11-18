@@ -9,6 +9,7 @@
 #include <godot_cpp/classes/file_access.hpp>
 #include <godot_cpp/variant/packed_byte_array.hpp>
 #include "GodotDevice/GodotGameWorld.h"
+#include "Libraries/WWVegas/WW3D2/meshrender.h"
 #include "GodotDevice/GodotW3DModelBuilder.h"
 #include <godot_cpp/classes/decal.hpp>
 #include "GodotDevice/GodotShaderBudget.h"
@@ -599,6 +600,7 @@ GameWorld::~GameWorld()
 	releaseLocalDrivers(); // lane MP-2: the recording / replay driver too
 	m_audio.reset(); // AUDIO-2: the audio side reads the game
 	// the game before the world and the assets it points into; the effect player before the game
+	W3D_Set_Floor_Height_Map(nullptr);
 	m_weather.reset(); // lane WEATHER-1: before the effect player and the game
 	m_liveFX.reset();
 	m_spellStore.reset(); // lane SPELL-2 (review r1): the spell book screens hold the game's player and templates: they go before it
@@ -624,6 +626,7 @@ void GameWorld::_notification(int what)
 		// the effect player (m_fxPlayer) is a child node: Node's own PREDELETE (after this class's, the notification runs reversed) deletes the children
 		// before ~GameWorld, so LiveFX and the weather, which reach into its playback (LiveFX::~LiveFX destroys its terrain fire / smoke systems), go now.
 		// Without this, closing the program with a game loaded crashed in ParticleSystemManager::findParticleSystemByID (2026-11-08).
+		W3D_Set_Floor_Height_Map(nullptr);
 		m_weather.reset();
 		m_liveFX.reset();
 	}
@@ -890,6 +893,66 @@ static bool selectionDecalReceiver(const Drawable *d)
 	return d && d->isKindOfIndex(bit);
 }
 
+// LOCAL-65 / P-130: identify expansion pads / foundations and non-W3DFloorDraw flat slabs (*WallFoundation GBFoundationL,
+// GondorGBCastleFloorEdain GBCastFloor) that sit flush on terrain across all 11 Ennorath factions.
+static bool isFoundationDrawable(const Drawable *d)
+{
+	static const int bit = ObjectTemplateInfoBuilder::kindOfIndex("BASE_FOUNDATION");
+	return d && d->isKindOfIndex(bit);
+}
+
+static bool isFlatFloorCandidateDrawable(const Drawable *d)
+{
+	if (!d)
+	{
+		return false;
+	}
+	if (isFoundationDrawable(d))
+	{
+		return true;
+	}
+	static const int bitStructure = ObjectTemplateInfoBuilder::kindOfIndex("STRUCTURE");
+	static const int bitImmobile = ObjectTemplateInfoBuilder::kindOfIndex("IMMOBILE");
+	static const int bitNoCollide = ObjectTemplateInfoBuilder::kindOfIndex("NO_COLLIDE");
+	static const int bitUnattackable = ObjectTemplateInfoBuilder::kindOfIndex("UNATTACKABLE");
+	return d->isKindOfIndex(bitStructure) && d->isKindOfIndex(bitImmobile)
+		&& d->isKindOfIndex(bitNoCollide) && d->isKindOfIndex(bitUnattackable);
+}
+
+static bool isFlatFloorPrototype(const RenderObjPrototype *proto)
+{
+	if (!proto)
+	{
+		return false;
+	}
+	bool hasVisibleMesh = false;
+	for (const RenderSubObject &sub : proto->SubObjects)
+	{
+		if (sub.Type != RenderSubObject::SUB_MESH || !sub.Mesh || sub.Mesh->Is_Hidden())
+		{
+			continue;
+		}
+		if (!Is_Flat_Ground_Floor_Model(*sub.Mesh))
+		{
+			return false;
+		}
+		hasVisibleMesh = true;
+	}
+	return hasVisibleMesh;
+}
+
+static bool drawableHasFloorDraw(const std::vector<DrawEntry> &entries)
+{
+	for (const DrawEntry &de : entries)
+	{
+		if (de.kind == W3D_DRAWKIND_FLOOR)
+		{
+			return true;
+		}
+	}
+	return false;
+}
+
 static int staticGlowOf(const ModuleData *data)
 {
 	const W3DModelDrawModuleData *md = dynamic_cast<const W3DModelDrawModuleData *>(data);
@@ -973,13 +1036,16 @@ void GameWorld::build_static_layer(const Ref<RetailFileSystem> &fs, Dictionary &
 			// RW 0x4E8C1B / RW 0x4EC9B5: W3DShrubBuffer / W3DTreeBuffer keys tree types by (ModelName, TextureName) and applies TextureName
 			swaps.emplace_back("*", p.textureName);
 		}
-		const std::string key = AsciiStringUtil::lowered(p.modelName) + W3DInstancer::Texture_Swap_Suffix(swaps) + (p.kind == W3D_DRAWKIND_FLOOR ? "#floor" : "");
+		const bool isTree = p.kind == W3D_DRAWKIND_TREE;
+		const bool isFloor = p.kind == W3D_DRAWKIND_FLOOR;
+		const std::string key = AsciiStringUtil::lowered(p.modelName) + W3DInstancer::Texture_Swap_Suffix(swaps) + (isFloor ? "#floor" : "") + (isTree ? "#veg" : "");
 		auto it = m_staticModels.find(key);
 		int64_t model;
 		if (it == m_staticModels.end())
 		{
 			staticInst->Set_Build_Texture_Swaps(swaps);
-			staticInst->Set_Build_Floor(p.kind == W3D_DRAWKIND_FLOOR); // stop S-4974: a floor blends by its texel alpha
+			staticInst->Set_Build_Floor(isFloor); // stop S-4974: a floor blends by its texel alpha
+			staticInst->Set_Build_Vegetation(isTree); // P-92 / Local 49: Vegetation.fx abs(N.L) lighting
 			model = staticInst->add_model(toGodot(p.modelName));
 			m_staticModels[key] = model;
 		}
@@ -1321,6 +1387,10 @@ Dictionary GameWorld::load_internal(const LiveGame::Options &loIn, const String 
 	m_audio.reset(); // AUDIO-2: the audio side reads the game
 	m_cahCameraOffsetValid = false;
 	m_game.reset(new LiveGame(*m_world, *m_fs->archive_fs(), *m_assets, *m_options));
+	// Pause and playback speed belong to this node and can survive a failed Watch or an abandoned game.
+	// Start the new game independently; replay and pause controls may override these after loading.
+	m_paused = false;
+	m_timeScale = 1.0;
 	// lane WORKERFAIL-1: game.gd stops the game with this text (logic_failure); printed at once, on the worker, so the session log has it whatever happens next
 	m_game->setLogicFailureHandler([](const std::string &text) { UtilityFunctions::printerr(toGodot("GAME logic worker stopped " + text)); });
 	m_game->setRenderInterpolation(m_renderInterpolation);
@@ -1434,6 +1504,7 @@ Dictionary GameWorld::load_internal(const LiveGame::Options &loIn, const String 
 		}
 		terrain->set_name("Terrain");
 		add_child(terrain);
+		W3D_Set_Floor_Height_Map(m_game->map().hasHeightMap ? &m_game->map().heightMap : nullptr);
 		// TOP20 "Fire, scorches": the live game's scorch marks (LiveFX::scorches: the map's Scorch objects, the FXList nugget, the burning terrain)
 		// are drawn by the terrain's layer from here on (presentScorches)
 		if (TerrainScorchLayer *scorches = Object::cast_to<TerrainScorchLayer>(terrain->get_node_or_null(NodePath("Scorches"))))
@@ -1496,6 +1567,15 @@ Dictionary GameWorld::load_internal(const LiveGame::Options &loIn, const String 
 	dyn->set_playing(false); // time only enters through set_instance_pose
 	dyn->set_pose_culling(m_perf3Client); // PiP supplies an additional frustum when a second camera sees the live objects.
 	dyn->set_draw_culling(m_drawCulling); // lane GPUPERF-2: the same frusta decide what is drawn
+	if (m_fxPlayer && m_fxPlayer->playback())
+	{
+		// lane LOCAL-38: the map's objects see the scene's dynamic lights (W3DLightDraw lights, light pulses), each through its own light environment
+		dyn->set_scene_dynamic_lights(&m_fxPlayer->playback()->lightPulses());
+		if (W3DInstancer *st = instancerOf(m_staticId))
+		{
+			st->set_scene_dynamic_lights(&m_fxPlayer->playback()->lightPulses());
+		}
+	}
 	timings["static_layer_ms"] = timing::elapsedMs(t0);
 
 	t0 = nowMs();
@@ -1837,6 +1917,8 @@ bool GameWorld::view_is_local(size_t id, const W3DInstancer &dyn, const LogicSna
 	const bool fogHidden = d->presentedLook(presented, m_shroudDrawn).hidden;
 	const bool flagsChanged = d->getChangeCount() != v.seenChange || fogHidden != v.fogHidden;
 	const std::vector<DrawEntry> &entries = d->entries();
+	const bool hasFloorDraw = drawableHasFloorDraw(entries);
+	const bool flatFloorCandidate = !hasFloorDraw && !selectionDecalReceiver(d) && isFlatFloorCandidateDrawable(d);
 	for (size_t k = 0; k < entries.size() && k < v.entries.size(); ++k)
 	{
 		const DrawEntry &e = entries[k];
@@ -1860,7 +1942,8 @@ bool GameWorld::view_is_local(size_t id, const W3DInstancer &dyn, const LogicSna
 			e.draw->poseView(f);
 			const bool shown = f.model && !e.moduleHidden && !fogHidden && !e.draw->hiddenByFade(); // PORT-49: RW 0x4B544F / 0x4B542D hide the model
 			const auto palette = drawTakesHouseColor(e, *d) ? Render_House_Color_Params(d->getHouseColor(), d->customColorKind(), d->customColors()) : HouseColorParams(); // RW 0x4B4A30
-			const bool keySame = ev.animKeyValid && ev.animKeyShown == shown && ev.animKeyHouse == m_houseColors && ev.animKeyName == f.modelName
+			const bool floorNow = shown && flatFloorCandidate && isFlatFloorPrototype(f.model);
+			const bool keySame = ev.animKeyValid && ev.animKeyShown == shown && ev.animKeyFloor == floorNow && ev.animKeyHouse == m_houseColors && ev.animKeyName == f.modelName
 				&& ev.animKeySwaps == (const void *)f.textureSwaps && ev.animKeySwapsGeneration == f.textureSwapsGeneration && ev.animKeyKind == palette.kind && ev.animKeyGlow == f.glow
 				&& ev.animKeyColors[0] == (std::uint32_t)palette.colors[0] && ev.animKeyColors[1] == (std::uint32_t)palette.colors[1]
 				&& ev.animKeyColors[2] == (std::uint32_t)palette.colors[2];
@@ -1951,6 +2034,9 @@ void GameWorld::refresh_view(size_t id, W3DInstancer *dyn, const LogicSnapshot *
 	RGBColor renderTint{};
 	const bool tinted = d->evaluateRenderTint(presented ? presented->frame : 0u, renderTint);
 	std::vector<DrawEntry> &entries = d->entries();
+	const bool hasFloorDraw = drawableHasFloorDraw(entries);
+	const bool foundationWithFloor = hasFloorDraw && isFoundationDrawable(d);
+	const bool flatFloorCandidate = !hasFloorDraw && !selectionDecalReceiver(d) && isFlatFloorCandidateDrawable(d);
 	for (size_t k = 0; k < entries.size() && k < v.entries.size(); ++k)
 	{
 		DrawEntry &e = entries[k];
@@ -2015,10 +2101,15 @@ void GameWorld::refresh_view(size_t id, W3DInstancer *dyn, const LogicSnapshot *
 		}
 		else if (shadow) shadow->set_visible(false);
 		// RENDER-2: a structure being built moves along its own Z by the draw's construction offset (RW 0x4B686D)
-		// LOCAL-29 (issue #218): entry transform resolves bone attachment (RW 0x4B6A6F..0x4B6B26 / RW 0x672B5B)
+		// LOCAL-29 (issue #218): entry transform resolves bone attachment and calls +0x104 only on success;
+		// for a sail that callback also advances AboutDamping, so lastEntryXf detects a stationary ship's changed sail matrix.
 		Matrix3D entryMatrix;
 		d->entryTransform(e, entryMatrix);
-		const Transform3D entryXf = toTransform(entryMatrix);
+		Transform3D entryXf = toTransform(entryMatrix);
+		if (foundationWithFloor && e.kind == W3D_DRAWKIND_MODEL && m_game && m_game->map().hasHeightMap)
+		{
+			entryXf.origin.y = m_game->map().heightMap.getTriangleHeightAt(entryXf.origin.x, -entryXf.origin.z) + 0.15f;
+		}
 		const bool entryXfChanged = xfChanged || e.constructionOffsetZ != ev.offsetZ || !ev.haveEntryXf || ev.lastEntryXf != entryXf;
 		ev.offsetZ = e.constructionOffsetZ;
 		if (e.kind == W3D_DRAWKIND_MODEL && e.draw)
@@ -2092,7 +2183,8 @@ void GameWorld::refresh_view(size_t id, W3DInstancer *dyn, const LogicSnapshot *
 			ev.colorsRevision = d->customColorRevision();
 			// lane PERF-HD: the model key below (the lowered name, the house colour's "#..." suffix, the swap suffix) depends only on these inputs;
 			// while they hold the key is `ev.model` already, so the strings are not made and compared again (every animated troop, every frame)
-			const bool keySame = ev.animKeyValid && ev.animKeyShown == shown && ev.animKeyHouse == m_houseColors && ev.animKeyName == f.modelName
+			const bool floorNow = shown && flatFloorCandidate && isFlatFloorPrototype(f.model);
+			const bool keySame = ev.animKeyValid && ev.animKeyShown == shown && ev.animKeyFloor == floorNow && ev.animKeyHouse == m_houseColors && ev.animKeyName == f.modelName
 				&& ev.animKeySwaps == (const void *)f.textureSwaps && ev.animKeySwapsGeneration == f.textureSwapsGeneration && ev.animKeyKind == palette.kind && ev.animKeyGlow == f.glow
 				&& ev.animKeyTinted == tinted
 				&& ev.animKeyMaterialGen == f.materialStateGeneration && ev.animKeyRenderGen == f.renderObjectGeneration
@@ -2152,7 +2244,12 @@ void GameWorld::refresh_view(size_t id, W3DInstancer *dyn, const LogicSnapshot *
 			{
 				selModel = (glowModel.empty() ? plainModel : glowModel) + "|sel";
 			}
-			const std::string &baseModel = !selModel.empty() ? selModel : glowModel.empty() ? plainModel : glowModel;
+			std::string floorModel;
+			if (floorNow)
+			{
+				floorModel = (!selModel.empty() ? selModel : glowModel.empty() ? plainModel : glowModel) + "#floor";
+			}
+			const std::string &baseModel = !floorModel.empty() ? floorModel : !selModel.empty() ? selModel : glowModel.empty() ? plainModel : glowModel;
 			// LOCAL-3 (RW 0x46F4E7 .. 0x46F5A0): a drawable with an active tint or selection flash envelope gets its own model key so w3d_tint is applied
 			// to its DrawItems without tinting other drawables of the same W3D model
 			std::string tintModel;
@@ -2190,6 +2287,7 @@ void GameWorld::refresh_view(size_t id, W3DInstancer *dyn, const LogicSnapshot *
 						{
 							dyn->Set_Build_Selection_Decals(true); // lane SELWALL-1: taken by the add below
 						}
+						dyn->Set_Build_Floor(floorNow);
 						if (f.meshHouseColors && !f.meshHouseColors->empty())
 						{
 							dyn->Set_Build_Mesh_House_Colors(f.meshHouseColors);
@@ -2239,6 +2337,7 @@ void GameWorld::refresh_view(size_t id, W3DInstancer *dyn, const LogicSnapshot *
 			}
 			ev.animKeyValid = true;
 			ev.animKeyShown = shown;
+			ev.animKeyFloor = floorNow;
 			ev.animKeyHouse = m_houseColors;
 			ev.animKeyName = f.modelName;
 			ev.animKeySwaps = f.textureSwaps;
@@ -2274,7 +2373,7 @@ void GameWorld::refresh_view(size_t id, W3DInstancer *dyn, const LogicSnapshot *
 				if (ev.shadowInstance != ev.instance || ev.shadowState != shadowState || ev.shadowData != e.data || ev.shadowOn != d->shadowsEnabled() || ev.shadowUseMapping != useShadowMapping || ev.shadowSuppress != shadowSuppress) // S-3304: not every frame, updates when settings change
 				{
 					// TOP20 #24: a drawable whose shadows were switched off (RW 0x672D28, ShadowWhenDead No) casts none
-					dyn->set_instance_cast_shadow(ev.instance, e.kind != W3D_DRAWKIND_FLOOR && d->shadowsEnabled() && !shadowSuppress &&
+					dyn->set_instance_cast_shadow(ev.instance, e.kind != W3D_DRAWKIND_FLOOR && !floorNow && d->shadowsEnabled() && !shadowSuppress &&
 						ObjectShadow::castsMap(d->getTemplate(), dynamic_cast<const W3DModelDrawModuleData *>(e.data), shadowState, useShadowMapping));
 					ev.shadowOn = d->shadowsEnabled();
 					ev.shadowState = shadowState;
@@ -2293,6 +2392,7 @@ void GameWorld::refresh_view(size_t id, W3DInstancer *dyn, const LogicSnapshot *
 				// the names frame() gives (the model's sub objects at the hidden indices, in index order), made when the draw's hidden set or the model changed
 				if (f.model != ev.hiddenModel || f.hiddenGeneration != ev.hiddenGeneration)
 				{
+					const bool firstSet = f.model != ev.hiddenModel; // P-88: a new instance starts with the meshes' HIDDEN flags, not with ev.hidden
 					ev.hiddenModel = f.model;
 					ev.hiddenGeneration = f.hiddenGeneration;
 					std::vector<std::string> names;
@@ -2303,9 +2403,9 @@ void GameWorld::refresh_view(size_t id, W3DInstancer *dyn, const LogicSnapshot *
 							names.push_back(f.model->SubObjects[(size_t)i].Name);
 						}
 					}
-					if (names != ev.hidden)
+					if (firstSet || names != ev.hidden)
 					{
-						dyn->set_instance_hidden_subobjects(ev.instance, toPacked(names));
+						dyn->set_instance_hidden_subobjects_exact(ev.instance, toPacked(names));
 						ev.hidden = std::move(names);
 					}
 				}
@@ -2996,6 +3096,10 @@ void GameWorld::heldClientWork()
 		m_liveFX->updateAttachedSystems();
 		m_fxPlayer->advance(m_fxPendingDt);
 		syncBuffs(m_fxPendingDt); // lane SPELL-4
+		if (W3DInstancer *st = instancerOf(m_staticId))
+		{
+			st->refresh_object_lights(); // lane LOCAL-38: the static layer updates by hand; its objects' light environments follow the lights every frame
+		}
 	}
 	m_fxPendingDt = 0.0;
 	{
@@ -3154,13 +3258,14 @@ int64_t GameWorld::addTreeModelInstance(const std::string &model, const std::str
 		// RW 0x4E8C1B / RW 0x4EC9B5: W3DShrubBuffer / W3DTreeBuffer keys tree types by (ModelName, TextureName) and applies TextureName
 		swaps.emplace_back("*", texture);
 	}
-	const std::string key = AsciiStringUtil::lowered(model) + W3DInstancer::Texture_Swap_Suffix(swaps);
+	const std::string key = AsciiStringUtil::lowered(model) + W3DInstancer::Texture_Swap_Suffix(swaps) + "#veg";
 	auto it = m_staticModels.find(key);
 	int64_t m;
 	if (it == m_staticModels.end())
 	{
 		st->Set_Build_Texture_Swaps(swaps);
 		st->Set_Build_Floor(false);
+		st->Set_Build_Vegetation(true); // P-92 / Local 49: Vegetation.fx abs(N.L) lighting
 		m = st->add_model(toGodot(model));
 		m_staticModels[key] = m;
 	}

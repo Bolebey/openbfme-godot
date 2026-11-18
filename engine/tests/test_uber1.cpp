@@ -191,6 +191,26 @@ void storeUberHashes(const char *name, const std::vector<std::uint32_t> &hashes)
 // pin: the fork's merge of upstream 6b178a66 (2026-11-11) re-measured it once on the merged tree with main 167bf1ee (OPENBFME_UBER1_REGEN=1, Windows
 // MSVC, station-3; perf1 x3 with OPENBFME_PERF1_REGEN=1): upstream's q47 (#261 the wait of an owner that cannot move, #263 the group's speed matching, #254) on
 // top of the fork's P-69 and PORT-114 vectors
+// pin: Port 27 (fork PR 355, ProjectileStreamName: a weapon with a stream creates its stream object) re-measured it once on station-2 (OPENBFME_UBER1_REGEN=1,
+// Windows MSVC) after the 13 fork PRs landed on main 70a363e3; it moves from frame 15; the switch-off run without PR 355 keeps the old vector (7/7)
+// pin: the fork's merge of upstream 1d505ac3 (2026-11-13) re-measured it once on the merged tree (OPENBFME_UBER1_REGEN=1, Windows MSVC, station-2): REQTHROTTLE-1,
+// ENTERADJUST-1 and upstream's shipped ports of PRs #289-#298 on top of the fork
+// pin: P-77 (2026-11-13) re-measured it once on station-0 (OPENBFME_UBER1_REGEN=1, Windows MSVC): a BASE_SITE castle's unpack no longer refuses its own
+// members, the castle or a DOZER (thunk RW 0x797A96 bit 8, RW 0x796E9A .. 0x796EE3), so the battle's fortresses place members the port used to drop
+// pin: the fork's merge of upstream 234f5742 (2026-11-13) re-measured it once on the merged tree (OPENBFME_UBER1_REGEN=1, Linux GCC on Colab, whose hashes
+// match the MSVC pins on main df5f0b41): PORT-13's GameLogicSettings::crc hashes AttackMoveUsesFormations only when it is false, so every frame's settings hash
+// moves; with the old condition put back the old pins pass
+// pin: the arena PR batch of 2026-11-14 (fork PRs 217, 359 .. 424: 20 ports) re-measured it once on the merged tree (OPENBFME_UBER1_REGEN=1, Linux GCC on Colab,
+// whose hashes match the MSVC pins): with the batch only perf1 and uber1 move against main bc66c72f on the same machine (every other suite of the
+// batch run fails or passes as on main); the batch's logic changes are Port 138 (a rubble rebuild), Port 145 (SHIP enter legs), Port 148 (GIANT_BIRD
+// separation), Port 164 (the giant bird's contact point, mode 1) and Port 29 (BuildingBehavior's fire lists); not bisected between them
+// pin: the arena PR batch of 2026-11-14 (2) (fork PRs 440 .. 476) re-measured it once on the merged tree (OPENBFME_UBER1_REGEN=1, Linux GCC on Colab, whose
+// hashes match the MSVC pins): PORT-437 (#476, the generic attack machine's object conditions RW 0x7457DF / RW 0x745901) moves it from frame 0; the
+// merged tree with #476 reverted passes the previous vector
+// pin: batch 3 of 2026-11-15 (fork PRs 484 .. 501, 10 merged) re-measured it once on the merged tree (REGEN=1, Linux GCC on Colab, whose hashes
+// match the MSVC pins). The per-PR checks (each PR alone on main 157b917f) name the movers: Local 59 (#500, WeaponFireSpecialAbilityUpdate makes and
+// loads its weapon in the constructor and crc() hashes it, RW 0x895DE1: from frame 0), Local 61 (#501, stunned units skip the AI update, RW 0x669652),
+// Port 464 (#487, a summoned helper's AI steering) and Port 201 (#496, the captured building's production cancel and upgrade reset)
 TEST_CASE("uber1: the Uber battle hashes as its pin vector in every frame with 1, 4 and 16 logic threads and in a repeated run; the hash's own jobs run on "
 		  "workers; Faithful hashes differently and serially")
 {

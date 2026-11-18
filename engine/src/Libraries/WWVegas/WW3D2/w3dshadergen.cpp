@@ -1,6 +1,7 @@
 // OpenBFME. GPL-3.0. See w3dshadergen.h.
 
 #include "Libraries/WWVegas/WW3D2/w3dshadergen.h"
+#include "GameClient/ParticleDraw.h"
 #include "GameEngineDevice/W3DDevice/GameClient/W3DHardwareFog.h"
 
 #include <algorithm>
@@ -128,6 +129,8 @@ std::string W3DShaderKey::Id() const
 	if (OcclusionPass) id += "_occl" + std::to_string(OcclusionPass); // lane OCCLUDE-1
 	if (ParticleColor) id += "_pcol";
 	if (SelectionDecals) id += "_sel"; // lane SELWALL-1
+	if (Floor) id += "_flr"; // P-103
+	if (Vegetation) id += "_veg"; // P-92
 	return id;
 }
 
@@ -177,6 +180,13 @@ std::string Generate_W3D_Shader_Code(const W3DShaderKey &k, W3DSamplerPolicy sam
 	const bool shadowReceiver = !k.OcclusionPass && k.Blend == W3D_GODOT_BLEND_OPAQUE && !alphaOverride;
 	// lane SELWALL-1: only an opaque surface of its own (an occlusion pass or a translucent drawable's surface draws no decal)
 	const bool selectionDecals = k.SelectionDecals && shadowReceiver;
+	// LOCAL-65 (#510): RotWK RTS3DScene::Flush (RW 0x470F44) renders W3DFloorBuffer::RenderFloors (RW 0x4E2F3A -> 0x4E53D3,
+	// donor BFME2 W3DFloorBuffer::drawFloors) inside SceneClass::Render BEFORE W3DProjectedShadowManager::Render_Shadows
+	// (RW 0x471025 -> 0x50D92C), so decal shadows (IsenFloorEffect / IsenFloorEffectBig SHADOW_ALPHA_DECAL_DYNAMIC)
+	// draw OVER building foundations. Mirror that order by compositing projected ground decals onto non-additive/mul Floor shaders.
+	const bool floorDecals = k.Floor && !k.OcclusionPass && !selectionDecals
+		&& k.Blend != W3D_GODOT_BLEND_ADD && k.Blend != W3D_GODOT_BLEND_APPROX_ADD
+		&& k.Blend != W3D_GODOT_BLEND_ADD_ALPHA && k.Blend != W3D_GODOT_BLEND_MUL;
 	if (k.OcclusionPass)
 	{
 		// lane OCCLUDE-1: drawn in the transparent pass after the opaque scene; writes no depth
@@ -208,7 +218,7 @@ std::string Generate_W3D_Shader_Code(const W3DShaderKey &k, W3DSamplerPolicy sam
 	}
 	if (shadowReceiver) line("#include \"res://shaders/object_shadow.gdshaderinc\"");
 	if (shadowReceiver) line("instance uniform bool w3d_receive_shadows : instance_index(1) = false;");
-	if (selectionDecals) line("#include \"res://shaders/selection_decals.gdshaderinc\""); // lane SELWALL-1
+	if (selectionDecals || floorDecals) line("#include \"res://shaders/selection_decals.gdshaderinc\""); // lane SELWALL-1 / LOCAL-65
 	if (selectionDecals && shadowReceiver) line("varying vec3 v_shadow_over;"); // lane HERORING-1: the alpha decals over the shadowed surface (light())
 
 	// ---- uniforms ----
@@ -234,18 +244,9 @@ std::string Generate_W3D_Shader_Code(const W3DShaderKey &k, W3DSamplerPolicy sam
 	line("global uniform mat3 w3d_lcol_inf;");
 	line("global uniform mat3 w3d_ldir_inf;");
 	line("global uniform float w3d_fogged_frac;"); // lane VISUAL-2: RW 0x46DFD0 FogAlpha / ClearAlpha
-	// lane FEAT-BLDFX-1: the dynamic light pool's contribution to the object lighting (TARGET RW 0x5DFAA3; DONOR BFME2 0x4423C / 0x6DE3D; the retail dynamic lights light
-	// objects, not terrain). xyz = the light's position in VIEW space (the device passes it there), w = its current far attenuation end (0 = off);
-	// the second vec4 is its current colour (the On_Frame_Update scale already applied). Four lights: the retail pool grows, but no retail FXList
-	// keeps more than a few pulses alive at once (the rest are reported, stop S-687).
-	line("global uniform vec4 w3d_pulse0;");
-	line("global uniform vec4 w3d_pulse0_col;");
-	line("global uniform vec4 w3d_pulse1;");
-	line("global uniform vec4 w3d_pulse1_col;");
-	line("global uniform vec4 w3d_pulse2;");
-	line("global uniform vec4 w3d_pulse2_col;");
-	line("global uniform vec4 w3d_pulse3;");
-	line("global uniform vec4 w3d_pulse3_col;");
+	// lane LOCAL-38 (stop S-687): the dynamic lights (W3DLightDraw, LightPulse) reach a render object through its own light environment
+	// (RTS3DScene::renderOneObject RW 0x46F48E, LightEnvironmentClass RW 0x540250): the instancer writes it per instance in front of the instance's
+	// pivots (W3D_PALETTE_LIGHT_TEXELS); see w3d_object_light below
 	if (k.OcclusionPass == W3D_OCCLUSION_PASS_COLOR)
 	{
 		// lane OCCLUDE-1: the players' occluded colours by slot (0xAARRGGBB as RGBA8 texels, RTS3DSceneOcclusion::occludedColor) and the switch
@@ -282,6 +283,11 @@ std::string Generate_W3D_Shader_Code(const W3DShaderKey &k, W3DSamplerPolicy sam
 	{
 		line("uniform sampler2D w3d_hc_tex : " + repeatMipFilter + ", repeat_enable; // housecolor.ini texture: the team colour mask is its alpha");
 	}
+	if (k.Floor && !k.OcclusionPass)
+	{
+		line("global uniform sampler2D w3d_floor_hm : filter_linear, repeat_disable;");
+		line("global uniform vec4 w3d_floor_hm_rect; // xy: origin (-border*10), zw: extent in cells; z <= 0 disables");
+	}
 	// Varyings each take a location; Intel Arc (Mesa ANV) offers Forward+ 29 for normal-mapped buildings, Metal 31. The two UV sets
 	// share one vec4 (the same interpolation), and the world position stays a vertex() local: only the vertex lighting reads it.
 	// The smooth varyings are packed into vec4s (every varying takes one location whatever its width, as on the terrain): v_fade
@@ -291,9 +297,14 @@ std::string Generate_W3D_Shader_Code(const W3DShaderKey &k, W3DSamplerPolicy sam
 	line("varying vec4 v_pack_pos; // xyz: the view-space position (v_vpos), w: the instance fade (v_fade)");
 	line("#define v_vpos v_pack_pos.xyz");
 	line("#define v_fade v_pack_pos.w");
-	line("varying vec3 v_vnrm;");
-	line("varying vec3 v_wnrm;");
-	line("varying vec3 v_wview;");
+	// lane LOCAL-38: w of the three normal varyings carries normalmapped.fxo's per-vertex PointLight[0] + per-object ambient term (oD0, blob 22)
+	// to the pixel stage: no extra location (every varying takes one whatever its width)
+	line("varying vec4 v_vnrm4;");
+	line("varying vec4 v_wnrm4;");
+	line("varying vec4 v_wview4;");
+	line("#define v_vnrm v_vnrm4.xyz");
+	line("#define v_wnrm v_wnrm4.xyz");
+	line("#define v_wview v_wview4.xyz");
 	// One flat varying carries per-instance lighting and team colour (separate scalars exceed the location budget).
 	line("varying flat vec3 v_instance;"); // x infantry light, y fog fraction, z packed house colour
 	if (k.Fx)
@@ -335,15 +346,25 @@ std::string Generate_W3D_Shader_Code(const W3DShaderKey &k, W3DSamplerPolicy sam
 	line("}");
 	line("vec3 w3d_to_godot(vec3 v) { return vec3(v.x, v.z, -v.y); }");
 	line("vec3 w3d_to_linear(vec3 c) { return mix(c / 12.92, pow((c + 0.055) / 1.055, vec3(2.4)), step(0.04045, c)); }");
-	// lane FEAT-BLDFX-1: one dynamic light, in view space: the retail W3DDynamicLight with FarAttenStart 1 and FarAttenEnd w (DONOR BFME2 0x4423C /
-	// 0x6DE3D). Linear far attenuation (INFERENCE, S-687) and a Lambert term against the surface normal; the caller adds it to its light sum.
-	line("vec3 w3d_dynamic_light(vec4 pulse, vec4 col, vec3 vpos, vec3 vnrm) {");
-	line("\tif (pulse.w <= 0.0) return vec3(0.0);");
-	line("\tvec3 d = pulse.xyz - vpos;");
+	// lane LOCAL-38: the render object's light environment, three texels in front of its pivots (W3DInstancer::update_object_lights):
+	// [0] = PointLight[0] position (Godot world) and Range (0: none), [1] = its Color (diffuse * intensity, unattenuated, SAS-scaled) and the
+	// global lights that lost their slot (bit i: light i), [2] = what the dynamic lights add to the AmbientLight (SAS-scaled). Zero = no
+	// dynamic light reaches the object (a base below the light texels, the shader probe's, reads none).
+	line("vec4 w3d_object_light(int base, int k) {");
+	line("\tint idx = base - " + std::to_string(W3D_PALETTE_LIGHT_TEXELS) + " + k;");
+	line("\tif (idx < 0) return vec4(0.0);");
+	line("\treturn texelFetch(w3d_palette, ivec2(idx & " + std::to_string(W3D_PALETTE_WIDTH - 1) + ", idx >> " + std::to_string(W3D_PALETTE_WIDTH_LOG2) + "), 0);");
+	line("}");
+	// normalmapped.fxo blob 22 / defaultw3d.fxo blob 151 / vegetation.fxo blob 6: d = |P - world position|, att = max(1 - d / Range, 0)^2,
+	// Color * att^2 * (abs(N.L) for Vegetation.fx or max(N.L, 0) otherwise) with N the world normal of the vertex (not the normal map) and L toward the light
+	line("vec3 w3d_point_light(vec4 pl, vec3 col, vec3 wpos, vec3 wn) {");
+	line("\tif (pl.w <= 0.0) return vec3(0.0);");
+	line("\tvec3 d = pl.xyz - wpos;");
 	line("\tfloat dl = length(d);");
-	line("\tfloat att = max(1.0 - dl / pulse.w, 0.0);");
-	line("\tif (att <= 0.0) return vec3(0.0);");
-	line("\treturn col.rgb * (att * max(dot(vnrm, d / max(dl, 1e-4)), 0.0));");
+	line("\tfloat att = max(1.0 - dl / pl.w, 0.0);");
+	line(k.Vegetation
+		? "\treturn col * (att * att) * abs(dot(wn, d / max(dl, 1e-4)));"
+		: "\treturn col * (att * att) * max(dot(wn, d / max(dl, 1e-4)), 0.0);");
 	line("}");
 	if (k.Fog != W3DHardwareFog::FOG_DISABLE)
 	{
@@ -429,6 +450,28 @@ std::string Generate_W3D_Shader_Code(const W3DShaderKey &k, W3DSamplerPolicy sam
 		}
 	}
 	line("\tVERTEX = w3d_to_godot(p);");
+	if (k.Floor && !k.OcclusionPass)
+	{
+		line("\tif (w3d_floor_hm_rect.z > 0.0) {");
+		line("\t\tvec3 fw = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;");
+		line("\t\tvec2 fgrid = (vec2(fw.x, -fw.z) - w3d_floor_hm_rect.xy) / 10.0;");
+		line("\t\tivec2 fm = ivec2(w3d_floor_hm_rect.zw);");
+		line("\t\tivec2 fc = clamp(ivec2(floor(fgrid)), ivec2(0), fm - ivec2(2));");
+		line("\t\tvec2 ff = clamp(fgrid - vec2(fc), vec2(0.0), vec2(1.0));");
+		line("\t\tvec2 fc00 = texelFetch(w3d_floor_hm, fc, 0).rg;");
+		line("\t\tfloat fh10 = texelFetch(w3d_floor_hm, fc + ivec2(1, 0), 0).r;");
+		line("\t\tfloat fh01 = texelFetch(w3d_floor_hm, fc + ivec2(0, 1), 0).r;");
+		line("\t\tfloat fh11 = texelFetch(w3d_floor_hm, fc + ivec2(1, 1), 0).r;");
+		line("\t\tfloat fhm;");
+		line("\t\tif (fc00.g > 0.5) {");
+		line("\t\t\tfhm = (ff.x + ff.y <= 1.0) ? (fc00.r + ff.x * (fh10 - fc00.r) + ff.y * (fh01 - fc00.r)) : (fh11 + (1.0 - ff.x) * (fh01 - fh11) + (1.0 - ff.y) * (fh10 - fh11));");
+		line("\t\t} else {");
+		line("\t\t\tfhm = (ff.x <= ff.y) ? (fc00.r + ff.x * (fh11 - fh01) + ff.y * (fh01 - fc00.r)) : (fc00.r + ff.x * (fh10 - fc00.r) + ff.y * (fh11 - fh10));");
+		line("\t\t}");
+		line("\t\tfloat flift = max(fw.y - MODEL_MATRIX[3].y, 0.0) + 0.15;");
+		line("\t\tVERTEX += inverse(mat3(MODEL_MATRIX)) * vec3(0.0, (fhm + flift) - fw.y, 0.0);");
+		line("\t}");
+	}
 	if (!k.Skin && k.Camera == 0)
 	{
 		// lane VISUAL-2: vegetation.fxo's vertex shader (blob 5): position += (position.z - the tree's base z) * SwayOffsets[type], in world space (W3D Z up
@@ -443,6 +486,8 @@ std::string Generate_W3D_Shader_Code(const W3DShaderKey &k, W3DSamplerPolicy sam
 	line("\tNORMAL = normalize(w3d_to_godot(n));");
 	if (k.Tangents)
 	{
+		line("\tif (dot(tg, tg) < 1e-12) tg = abs(n.y) < 0.9 ? cross(vec3(0.0, 1.0, 0.0), n) : cross(vec3(1.0, 0.0, 0.0), n);");
+		line("\tif (dot(bn, bn) < 1e-12) bn = cross(n, tg);");
 		line("\tTANGENT = normalize(w3d_to_godot(tg));");
 		line("\tBINORMAL = normalize(w3d_to_godot(bn));");
 	}
@@ -461,6 +506,17 @@ std::string Generate_W3D_Shader_Code(const W3DShaderKey &k, W3DSamplerPolicy sam
 	line("\tv_wnrm = normalize(MODEL_NORMAL_MATRIX * NORMAL);");
 	line("\tv_wview = mat3(INV_VIEW_MATRIX) * normalize(v_vpos);");
 	line("\tvec3 wpos = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;");
+	// lane LOCAL-38: this render object's dynamic lights (palette texels in front of its pivots); the dropped global lights ride in v_instance.y
+	// above 2 (the fog fraction is at most 1: mod 2 gives it back)
+	line("\tvec4 w3d_ol0 = w3d_object_light(base, 0);");
+	line("\tvec4 w3d_ol1 = w3d_object_light(base, 1);");
+	line("\tvec4 w3d_ol2 = w3d_object_light(base, 2);");
+	line("\tint w3d_drop = int(w3d_ol1.w + 0.5);");
+	line("\tv_instance.y += 2.0 * float(w3d_drop);");
+	line("\tvec3 w3d_pt = w3d_point_light(w3d_ol0, w3d_ol1.rgb, wpos, normalize(mat3(MODEL_MATRIX) * NORMAL));");
+	// normalmapped.fxo blob 22: oD0 = (PointLight term + AmbientLight * AmbientColor) * 0.5; the part the dynamic lights add, for the pixel stage
+	line("\tvec3 w3d_pex = w3d_pt + w3d_ol2.rgb * w3d_ambient_mat;");
+	line("\tv_vnrm4.w = w3d_pex.x; v_wnrm4.w = w3d_pex.y; v_wview4.w = w3d_pex.z;");
 	if (k.Fx)
 	{
 		// blob 22: world normal / binormal / tangent (World * vector, normalized), frame x = -binormal, y = -tangent, z = normal;
@@ -514,40 +570,61 @@ std::string Generate_W3D_Shader_Code(const W3DShaderKey &k, W3DSamplerPolicy sam
 		// oD0.a = vertex alpha * Opacity, oD1.rgb = sum(colour * lit.z) * ColorSpecular * 0.5; the interpolators saturate both
 		line("\t{");
 		line("\t\tvec3 wn = normalize(MODEL_NORMAL_MATRIX * NORMAL);");
-		line("\t\tvec3 vv = normalize(CAMERA_POSITION_WORLD - wpos);");
+		if (!k.Vegetation) line("\t\tvec3 vv = normalize(CAMERA_POSITION_WORLD - wpos);");
 		line("\t\tbool inf = mod(v_instance.x, 2.0) > 0.5;");
 		line("\t\tmat3 lc = inf ? w3d_lcol_inf : w3d_lcol_obj;");
 		line("\t\tmat3 ld = inf ? w3d_ldir_inf : w3d_ldir_obj;");
 		line("\t\tvec3 amb = inf ? w3d_amb_inf : w3d_amb_obj;");
 		line("\t\tlc[0] += w3d_tint; lc[1] += w3d_tint; lc[2] += w3d_tint; amb += w3d_tint;");
-		line("\t\tlc *= v_instance.y; amb *= v_instance.y;"); // lane VISUAL-2: the fogged light environment (RW 0x46DFBA: the lights' diffuse and ambient times the fraction)
+		line("\t\tfloat fogk = mod(v_instance.y, 2.0);");
+		line("\t\tlc *= fogk; amb *= fogk;"); // lane VISUAL-2: the fogged light environment (RW 0x46DFBA: the lights' diffuse and ambient times the fraction)
+		// lane LOCAL-38: a global light that lost its slot to stronger point lights is black for this object (SAS DirectionalLight[] = the
+		// non-point slots, RW 0x53F170); the dynamic lights' ambient (RW 0x540394, clamped with the scene's, RW 0x54063B)
+		line("\t\tif ((w3d_drop & 1) != 0) lc[0] = vec3(0.0); if ((w3d_drop & 2) != 0) lc[1] = vec3(0.0); if ((w3d_drop & 4) != 0) lc[2] = vec3(0.0);");
+		line("\t\tamb += w3d_ol2.rgb;");
 		line("\t\tvec3 dsum = vec3(0.0);");
 		line("\t\tvec3 ssum = vec3(0.0);");
 		line("\t\tfor (int i = 0; i < 3; i++) {");
 		line("\t\t\tfloat ndl = dot(wn, ld[i]);");
-		line("\t\t\tfloat ndh = dot(wn, normalize(vv + ld[i]));");
-		line("\t\t\tdsum += lc[i] * max(ndl, 0.0);");
-		// D3D9 lit clamps the power to [-127.9961, 127.9961]
-		line("\t\t\tssum += lc[i] * ((ndl > 0.0 && ndh > 0.0) ? pow(ndh, clamp(w3d_shininess, " + fmt(-W3D_LIT_POWER_LIMIT) + ", " + fmt(W3D_LIT_POWER_LIMIT) + ")) : 0.0);");
-		line("\t\t}");
-		// lane FEAT-BLDFX-1: the dynamic light pool's contribution (DONOR BFME2 0x4423C), added to the directional sum like a retail scene light
-		line("\t\tdsum += w3d_dynamic_light(w3d_pulse0, w3d_pulse0_col, v_vpos, v_vnrm);");
-		line("\t\tdsum += w3d_dynamic_light(w3d_pulse1, w3d_pulse1_col, v_vpos, v_vnrm);");
-		line("\t\tdsum += w3d_dynamic_light(w3d_pulse2, w3d_pulse2_col, v_vpos, v_vnrm);");
-		line("\t\tdsum += w3d_dynamic_light(w3d_pulse3, w3d_pulse3_col, v_vpos, v_vnrm);");
-		line(k.HasDCG ? "\t\tvec4 vc = COLOR;" : "\t\tvec4 vc = vec4(1.0);");
-		if (k.ParticleColor)
+		if (k.Vegetation)
 		{
-			line("\t\tvec3 diff_rgb = w3d_diffuse.rgb; vec3 emis_rgb = w3d_emissive;");
-			line("\t\tif (v_instance.z > 0.5) { float hv = v_instance.z - 1.0; emis_rgb = vec3(floor(hv / 65536.0), floor(mod(hv, 65536.0) / 256.0), mod(hv, 256.0)) / 255.0; }");
-			line("\t\telse if (v_instance.z < -0.5) { float hv = -v_instance.z - 1.0; diff_rgb = vec3(floor(hv / 65536.0), floor(mod(hv, 65536.0) / 256.0), mod(hv, 256.0)) / 255.0; }");
-			line("\t\tv_lit0 = clamp(vec4((dsum * diff_rgb + amb * w3d_ambient_mat + emis_rgb) * vc.rgb * 0.5, vc.a * w3d_diffuse.a), 0.0, 1.0);");
+			// P-92 / Local 49: vegetation.fxo vs_1_1 blobs 6/7 (RW 0x4E6753 W3DVegetationBufferBase::allocateBuffers;
+			// DONOR BFME2 Rva000E6D94AllocateBuffers.cpp): abs(N.L) for directional lights 0..2, no specular
+			line("\t\t\tdsum += lc[i] * abs(ndl);");
 		}
 		else
 		{
-			line("\t\tv_lit0 = clamp(vec4((dsum * w3d_diffuse.rgb + amb * w3d_ambient_mat + w3d_emissive) * vc.rgb * 0.5, vc.a * w3d_diffuse.a), 0.0, 1.0);");
+			line("\t\t\tfloat ndh = dot(wn, normalize(vv + ld[i]));");
+			line("\t\t\tdsum += lc[i] * max(ndl, 0.0);");
+			// D3D9 lit clamps the power to [-127.9961, 127.9961]
+			line("\t\t\tssum += lc[i] * ((ndl > 0.0 && ndh > 0.0) ? pow(ndh, clamp(w3d_shininess, " + fmt(-W3D_LIT_POWER_LIMIT) + ", " + fmt(W3D_LIT_POWER_LIMIT) + ")) : 0.0);");
 		}
-		line("\t\tv_lit1 = clamp(ssum * w3d_spec_color * 0.5, 0.0, 1.0);");
+		line("\t\t}");
+		// lane LOCAL-38: defaultw3d.fxo blob 151 / vegetation.fxo blob 6 add PointLight[0] to the directional diffuse sum
+		line("\t\tdsum += w3d_pt;");
+		line(k.HasDCG ? "\t\tvec4 vc = COLOR;" : "\t\tvec4 vc = vec4(1.0);");
+		if (k.Vegetation)
+		{
+			// vegetation.fxo has no ColorDiffuse / ColorAmbient / ColorEmissive / ColorSpecular material parameters:
+			// oD0.rgb = clamp((dsum + amb) * vc.rgb * 0.5, 0, 1), oD0.a = vc.a, no specular
+			line("\t\tv_lit0 = clamp(vec4((dsum + amb) * vc.rgb * 0.5, vc.a), 0.0, 1.0);");
+			line("\t\tv_lit1 = vec3(0.0);");
+		}
+		else
+		{
+			if (k.ParticleColor)
+			{
+				line("\t\tvec3 diff_rgb = w3d_diffuse.rgb; vec3 emis_rgb = w3d_emissive;");
+				line("\t\tif (v_instance.z > 0.5) { float hv = v_instance.z - 1.0; emis_rgb = vec3(floor(hv / 65536.0), floor(mod(hv, 65536.0) / 256.0), mod(hv, 256.0)) / 255.0; }");
+				line("\t\telse if (v_instance.z < -0.5) { float hv = -v_instance.z - 1.0; diff_rgb = vec3(floor(hv / 65536.0), floor(mod(hv, 65536.0) / 256.0), mod(hv, 256.0)) / 255.0; }");
+				line("\t\tv_lit0 = clamp(vec4((dsum * diff_rgb + amb * w3d_ambient_mat + emis_rgb) * vc.rgb * 0.5, vc.a * w3d_diffuse.a), 0.0, 1.0);");
+			}
+			else
+			{
+				line("\t\tv_lit0 = clamp(vec4((dsum * w3d_diffuse.rgb + amb * w3d_ambient_mat + w3d_emissive) * vc.rgb * 0.5, vc.a * w3d_diffuse.a), 0.0, 1.0);");
+			}
+			line("\t\tv_lit1 = clamp(ssum * w3d_spec_color * 0.5, 0.0, 1.0);");
+		}
 		line("\t}");
 	}
 	if (k.OcclusionPass)
@@ -564,6 +641,10 @@ std::string Generate_W3D_Shader_Code(const W3DShaderKey &k, W3DSamplerPolicy sam
 			line("\tif (slot == 0 || w3d_occl_on < 0.5) { VERTEX = vec3(0.0); }");
 			line("\tv_instance.z = float(slot);");
 		}
+	}
+	if (k.Floor && !k.OcclusionPass)
+	{
+		line("\tPOSITION = PROJECTION_MATRIX * vec4((MODELVIEW_MATRIX * vec4(VERTEX, 1.0)).xyz * 0.999375, 1.0);");
 	}
 	line("}");
 
@@ -588,7 +669,7 @@ std::string Generate_W3D_Shader_Code(const W3DShaderKey &k, W3DSamplerPolicy sam
 			in = std::string("vec4(") + (s == 0 ? "v_uv.xy" : "v_uv.zw") + ", 1.0, 0.0)";
 			break;
 		case W3D_TEXGEN_CAMERA_NORMAL:
-			in = k.ViewDependent[s] ? "vec4(vec3(v_wnrm.x, -v_wnrm.z, v_wnrm.y), 1.0)" : "vec4(v_vnrm.x, v_vnrm.y, -v_vnrm.z, 1.0)";
+			in = k.ViewDependent[s] ? "vec4(vec3(v_wnrm4.x, -v_wnrm4.z, v_wnrm4.y), 1.0)" : "vec4(v_vnrm4.x, v_vnrm4.y, -v_vnrm4.z, 1.0)";
 			break;
 		case W3D_TEXGEN_CAMERA_REFLECTION:
 			if (k.ViewDependent[s])
@@ -662,7 +743,10 @@ std::string Generate_W3D_Shader_Code(const W3DShaderKey &k, W3DSamplerPolicy sam
 		line("\tmat3 lc = inf ? w3d_lcol_inf : w3d_lcol_obj;");
 		line("\tvec3 amb = inf ? w3d_amb_inf : w3d_amb_obj;");
 		line("\tlc[0] += w3d_tint; lc[1] += w3d_tint; lc[2] += w3d_tint; amb += w3d_tint;");
-		line("\tlc *= v_instance.y; amb *= v_instance.y;"); // lane VISUAL-2: the fogged light environment
+		line("\tfloat fogk = mod(v_instance.y, 2.0);");
+		line("\tlc *= fogk; amb *= fogk;"); // lane VISUAL-2: the fogged light environment
+		line("\tint w3d_drop = int(v_instance.y * 0.5);"); // lane LOCAL-38: the global lights that lost their slot (see the vertex stage)
+		line("\tif ((w3d_drop & 1) != 0) lc[0] = vec3(0.0); if ((w3d_drop & 2) != 0) lc[1] = vec3(0.0); if ((w3d_drop & 4) != 0) lc[2] = vec3(0.0);");
 		if (k.ParticleColor)
 		{
 			line("\tvec3 diff_rgb = w3d_diffuse.rgb;");
@@ -674,6 +758,10 @@ std::string Generate_W3D_Shader_Code(const W3DShaderKey &k, W3DSamplerPolicy sam
 			line("\tvec3 base = t0.rgb * w3d_diffuse.rgb;");
 		}
 		line("\tvec3 col = t0.rgb * clamp(amb * w3d_ambient_mat * 0.5, 0.0, 1.0) * 2.0;");
+		// lane LOCAL-38: normalmapped.fxo blob 22 saturates (PointLight term + AmbientLight * AmbientColor) * 0.5 as one sum (oD0); the line above
+		// is that without the dynamic lights, this adds the difference
+		line("\tvec3 w3d_pex = vec3(v_vnrm4.w, v_wnrm4.w, v_wview4.w);");
+		line("\tcol += t0.rgb * (clamp((amb * w3d_ambient_mat + w3d_pex) * 0.5, 0.0, 1.0) - clamp(amb * w3d_ambient_mat * 0.5, 0.0, 1.0)) * 2.0;");
 		line("\tfor (int i = 0; i < 3; i++) {");
 		line("\t\tfloat ndl = dot(nt, lts[i]);");
 		line("\t\tfloat ndh = dot(nt, hts[i]);");
@@ -681,10 +769,6 @@ std::string Generate_W3D_Shader_Code(const W3DShaderKey &k, W3DSamplerPolicy sam
 		line("\t\tfloat sp = (ndh > 0.0 && ndl > 0.0) ? pow(ndh, w3d_shininess) : 0.0;");
 		line("\t\tcol += lc[i] * (base * ndl * on + w3d_spec_color * sp);");
 		line("\t}");
-		// lane FEAT-BLDFX-1: the dynamic light pool's contribution on the normal-mapped path (DONOR BFME2 0x4423C), diffuse like the
-		// directional lights above: times the surface colour, so a black texel stays black
-		line("\tcol += base * (w3d_dynamic_light(w3d_pulse0, w3d_pulse0_col, v_vpos, v_vnrm) + w3d_dynamic_light(w3d_pulse1, w3d_pulse1_col, v_vpos, v_vnrm)");
-		line("\t\t+ w3d_dynamic_light(w3d_pulse2, w3d_pulse2_col, v_vpos, v_vnrm) + w3d_dynamic_light(w3d_pulse3, w3d_pulse3_col, v_vpos, v_vnrm));");
 		line("\tcur = vec4(col, t0.a);");
 	}
 	else if (k.SimpleFx)
@@ -834,6 +918,27 @@ std::string Generate_W3D_Shader_Code(const W3DShaderKey &k, W3DSamplerPolicy sam
 	{
 		line("\tALBEDO = clamp(cur.rgb, 0.0, 1.0);");
 	}
+	if (floorDecals)
+	{
+		line("\tvec3 sel_world = (INV_VIEW_MATRIX * vec4(v_vpos, 1.0)).xyz;");
+		line("\tvec3 sel_at = vec3(sel_world.x, -sel_world.z, sel_world.y);");
+		if (shadowReceiver)
+		{
+			line("\tvec3 floor_gamma = clamp(cur.rgb, 0.0, 1.0);");
+			line("\tvec4 sela = sel_alpha_at(sel_at, false, floor_gamma);");
+			line("\tvec4 sel = sel_merge_at(sel_at, false);");
+			line("\tif (sela.a > 0.0 || any(greaterThan(sela.rgb, vec3(0.0)))) { floor_gamma = clamp(floor_gamma * (1.0 - sela.a) + sela.rgb, 0.0, 1.0); }");
+			line("\tfloor_gamma = mix(floor_gamma, clamp(sel.rgb, 0.0, 1.0), sel.a);");
+			line("\tALBEDO = w3d_to_linear(floor_gamma);");
+		}
+		else
+		{
+			line("\tvec4 sela = sel_alpha_at(sel_at, false, ALBEDO);");
+			line("\tvec4 sel = sel_merge_at(sel_at, false);");
+			line("\tif (sela.a > 0.0 || any(greaterThan(sela.rgb, vec3(0.0)))) { ALBEDO = clamp(ALBEDO * (1.0 - sela.a) + sela.rgb, 0.0, 1.0); }");
+			line("\tALBEDO = mix(ALBEDO, clamp(sel.rgb, 0.0, 1.0), sel.a);");
+		}
+	}
 	if (selectionDecals)
 	{
 		// lane SELWALL-1 (an opaque surface only): the merge decals at the pixel's SAGE point (Godot (x, y, z) = SAGE (x, z, -y)), over the surface's
@@ -909,4 +1014,25 @@ std::string Generate_W3D_Shader_Code(const W3DShaderKey &k, W3DSamplerPolicy sam
 		line("}");
 	}
 	return c;
+}
+
+int W3D_Surface_Render_Priority(int sortLevel, int pass, bool floorBlend)
+{
+	if (floorBlend)
+	{
+		return FXParticleSystem::kFloorRenderPriority; // RW 0x4E2F3A -> 0x4E53D3 RenderFloors
+	}
+	constexpr int kMaxPasses = 3;
+	constexpr int kMaxStaticSort = 32; // RW 0x5762FC..0x576304: DefaultStaticSortListClass range 1..32
+	const int clampedPass = std::clamp(pass, 0, kMaxPasses - 1);
+	if (sortLevel <= 0)
+	{
+		// RW 0x470F5E -> 0x574406: SortLevel 0 meshes flush before StaticSortLists
+		return FXParticleSystem::kW3DRenderPriorityMin + clampedPass;
+	}
+	// RW 0x47166A -> 0x576240: StaticSortLists draw descending from SortLevel 32 down to 1
+	const int clampedSort = std::clamp(sortLevel, 1, kMaxStaticSort);
+	const int staticBase = FXParticleSystem::kW3DRenderPriorityMin + kMaxPasses;
+	const int priority = staticBase + (kMaxStaticSort - clampedSort) * kMaxPasses + clampedPass;
+	return std::clamp(priority, FXParticleSystem::kW3DRenderPriorityMin, FXParticleSystem::kW3DRenderPriorityMax);
 }

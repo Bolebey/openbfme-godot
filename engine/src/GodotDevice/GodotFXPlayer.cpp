@@ -10,6 +10,7 @@
 #include "Common/AsciiString.h"
 #include "GodotDevice/GodotW3DMaterial.h"
 #include "GameClient/ParticleTexture.h"
+#include "GameClient/ParticleDraw.h"
 #include "Libraries/WWVegas/WW3D2/fxshadergen.h"
 
 #include <godot_cpp/classes/camera3d.hpp>
@@ -361,7 +362,6 @@ void FXPlayer::clear()
 		m_playback->clearClientEffects(); // lane FEAT-BLDFX-1: scorches, decals and light pulses belong to the game that is going
 	}
 	updateClientEffects();
-	updateLightPulseUniforms(); // the shader globals outlive the game: switch the cleared pulses off now, not at the next advance
 	rebuild();
 }
 
@@ -452,6 +452,7 @@ void FXPlayer::updateClientEffects()
 							 "\tALPHA = t.a * COLOR.a;\n"
 							 "}\n");
 			m_scorchMaterial->set_shader(shader);
+			m_scorchMaterial->set_render_priority(FXParticleSystem::kScorchRenderPriority);
 			m_scorchNode = memnew(MeshInstance3D);
 			m_scorchNode->set_name("Scorches");
 			m_scorchNode->set_material_override(m_scorchMaterial);
@@ -538,6 +539,11 @@ void FXPlayer::updateClientEffects()
 		const std::string code = std::string("shader_type spatial;\nrender_mode ") + mode
 			+ ", depth_draw_never, cull_disabled, unshaded, shadows_disabled;\n"
 			  "uniform sampler2D decal_tex : filter_linear_mipmap, repeat_disable;\n"
+			  "uniform float depth_bias_scale = 1.0;\n"
+			  "void vertex() {\n"
+			  "\tvec4 eye = MODELVIEW_MATRIX * vec4(VERTEX, 1.0);\n"
+			  "\tPOSITION = PROJECTION_MATRIX * vec4(eye.xyz * depth_bias_scale, 1.0);\n"
+			  "}\n"
 			  "void fragment() {\n"
 			  "\tvec4 t = texture(decal_tex, UV);\n"
 			  "\tALBEDO = t.rgb * COLOR.rgb;\n"
@@ -562,12 +568,17 @@ void FXPlayer::updateClientEffects()
 		}
 		else
 		{
+			const DynamicDecalBatchOrder order = DynamicDecalOrder(kv.first.shader);
 			node = memnew(MeshInstance3D);
 			node->set_name(toGodot(kv.first.name));
 			Ref<ShaderMaterial> mat;
 			mat.instantiate();
 			mat->set_shader(m_decalShaders[kv.first.shader]);
+			mat->set_render_priority(FXParticleSystem::kScorchRenderPriority);
 			mat->set_shader_parameter("decal_tex", particleTexture(kv.first.name));
+			mat->set_shader_parameter("depth_bias_scale", order.depthBias);
+			mat->set_render_priority(order.priority);
+			node->set_sorting_offset(order.sortOffset);
 			node->set_material_override(mat);
 			node->set_cast_shadows_setting(GeometryInstance3D::SHADOW_CASTING_SETTING_OFF);
 			m_decalRoot->add_child(node);
@@ -587,20 +598,38 @@ void FXPlayer::updateClientEffects()
 			// the quad's corners at objPos -+ size * 0.5)
 			const float h = d->desc.size * 0.5f;
 			const float c = std::cos(d->desc.yaw), s = std::sin(d->desc.yaw);
+			// Subdivide decal quad (matching scorches' 4x4 terrain conformation) so large decals (e.g. Size=40 magma puddles) hug terrain cells.
+			constexpr int kDecalCells = 4;
 			const int32_t base = (int32_t)verts.size();
-			const float corner[4][2] = { { -h, -h }, { h, -h }, { h, h }, { -h, h } };
-			for (int k = 0; k < 4; ++k)
+			for (int iy = 0; iy <= kDecalCells; ++iy)
 			{
-				const float lx = corner[k][0], ly = corner[k][1];
-				const float x = d->desc.position.x + lx * c - ly * s;
-				const float y = d->desc.position.y + lx * s + ly * c;
-				const float z = m_playback->groundHeight(x, y) + 1.0f;
-				verts.push_back(toGodotSpace(Coord3D{ x, y, z }));
-				colors.push_back(Color(r, g, b, opacity));
-				uvs.push_back(k == 0 ? Vector2(0, 0) : k == 1 ? Vector2(1, 0) : k == 2 ? Vector2(1, 1) : Vector2(0, 1));
+				const float v = (float)iy / (float)kDecalCells;
+				const float ly = -h + 2.0f * h * v;
+				for (int ix = 0; ix <= kDecalCells; ++ix)
+				{
+					const float u = (float)ix / (float)kDecalCells;
+					const float lx = -h + 2.0f * h * u;
+					const float x = d->desc.position.x + lx * c - ly * s;
+					const float y = d->desc.position.y + lx * s + ly * c;
+					const float z = m_playback->groundHeight(x, y) + 1.0f;
+					verts.push_back(toGodotSpace(Coord3D{ x, y, z }));
+					colors.push_back(Color(r, g, b, opacity));
+					uvs.push_back(Vector2(u, v));
+				}
 			}
-			indices.push_back(base); indices.push_back(base + 1); indices.push_back(base + 2);
-			indices.push_back(base); indices.push_back(base + 2); indices.push_back(base + 3);
+			const int32_t stride = kDecalCells + 1;
+			for (int iy = 0; iy < kDecalCells; ++iy)
+			{
+				for (int ix = 0; ix < kDecalCells; ++ix)
+				{
+					const int32_t i00 = base + iy * stride + ix;
+					const int32_t i10 = i00 + 1;
+					const int32_t i01 = i00 + stride;
+					const int32_t i11 = i01 + 1;
+					indices.push_back(i00); indices.push_back(i10); indices.push_back(i11);
+					indices.push_back(i00); indices.push_back(i11); indices.push_back(i01);
+				}
+			}
 		}
 		Ref<ArrayMesh> mesh;
 		mesh.instantiate();
@@ -631,127 +660,6 @@ void FXPlayer::updateClientEffects()
 		}
 	}
 
-}
-
-void FXPlayer::updateLightPulseUniforms()
-{
-	if (!m_playback)
-	{
-		return;
-	}
-	W3D_Ensure_Light_Globals(); // the four pulse names must exist before the first set (the material factory usually registers them first)
-	RenderingServer *rs = RenderingServer::get_singleton();
-	if (!rs)
-	{
-		return;
-	}
-	// the shader's lights are view-space (the object shaders light in view space); the camera is the one the next frame draws
-	Transform3D view;
-	bool haveView = false;
-	Vector3 cameraWorldPos;
-	if (Viewport *vp = get_viewport())
-	{
-		if (Camera3D *c = vp->get_camera_3d())
-		{
-			view = c->get_global_transform().affine_inverse();
-			cameraWorldPos = c->get_global_position();
-			haveView = true;
-		}
-	}
-	const std::vector<Plane> planes = cullPlanes();
-
-	struct CandidateLight
-	{
-		const LightPulseFx *light = nullptr;
-		Vector3 viewPos;
-		float contribution = 0.0f; // RW 0x005403ED (Diffuse.Length2)
-	};
-	std::vector<CandidateLight> candidates;
-	for (const LightPulseFx &l : m_playback->lightPulses().lights())
-	{
-		if (!l.enabled)
-		{
-			continue;
-		}
-		const RGBColor c = l.colorNow();
-		// RW 0x00540261 (LightEnvironmentClass::Add_Light): black light cull (< 0.05f on all RGB channels, 0x00BDD760)
-		if (c.red < 0.05f && c.green < 0.05f && c.blue < 0.05f)
-		{
-			continue;
-		}
-		const float range = l.range();
-		if (range <= 0.0001f)
-		{
-			continue;
-		}
-		const Vector3 world = toGodotSpace(l.position);
-
-		// RW 0x0046FCF9 (RTS3DScene::renderOneObject): cull against view frustum (Spheres_Intersect)
-		bool culled = false;
-		for (const Plane &pl : planes)
-		{
-			if (pl.distance_to(world) < -range)
-			{
-				culled = true;
-				break;
-			}
-		}
-		if (culled)
-		{
-			continue;
-		}
-
-		// RW 0x0053F640: linear attenuation over range: clamp(1.0 - (dist - attenStart)/(attenEnd - attenStart))
-		// RW 0x005403ED: Contribution = effectiveDiffuse.Length2()
-		// INFERENCE (S-687): retail ranks per render object at the object's centre; the Godot uniforms are viewport-global, so the
-		// distance here is measured from the camera
-		float contribution = 0.0f;
-		if (haveView)
-		{
-			const float dist = (world - cameraWorldPos).length();
-			const float atten = std::clamp(1.0f - (dist - l.farAttenStart) / std::max(0.001f, range - l.farAttenStart), 0.0f, 1.0f);
-			const float effR = c.red * atten;
-			const float effG = c.green * atten;
-			const float effB = c.blue * atten;
-			contribution = effR * effR + effG * effG + effB * effB;
-		}
-		else
-		{
-			contribution = c.red * c.red + c.green * c.green + c.blue * c.blue;
-		}
-
-		const Vector3 pos = haveView ? view.xform(world) : world;
-		candidates.push_back({ &l, pos, contribution });
-	}
-
-	// RW 0x0054044B: sorted by Contribution descending, top 4 chosen (MAX_LIGHTS = 4)
-	if (candidates.size() > 4)
-	{
-		std::stable_sort(candidates.begin(), candidates.end(), [](const CandidateLight &a, const CandidateLight &b) {
-			return a.contribution > b.contribution;
-		});
-	}
-
-	size_t used = 0;
-	for (const CandidateLight &cand : candidates)
-	{
-		if (used >= 4)
-		{
-			break;
-		}
-		const LightPulseFx &l = *cand.light;
-		const RGBColor c = l.colorNow();
-		const String base = String("w3d_pulse") + String::num_int64((int64_t)used);
-		rs->global_shader_parameter_set(StringName(base), Vector4(cand.viewPos.x, cand.viewPos.y, cand.viewPos.z, l.range()));
-		rs->global_shader_parameter_set(StringName(base + String("_col")), Vector4(c.red, c.green, c.blue, 0.0f));
-		++used;
-	}
-	for (size_t i = used; i < 4; ++i)
-	{
-		const String base = String("w3d_pulse") + String::num_int64((int64_t)i);
-		rs->global_shader_parameter_set(StringName(base), Vector4());
-		rs->global_shader_parameter_set(StringName(base + String("_col")), Vector4());
-	}
 }
 
 void FXPlayer::advance(double delta)
@@ -798,7 +706,6 @@ void FXPlayer::advance(double delta)
 			return;
 		}
 	}
-	updateLightPulseUniforms();
 	rebuild();
 }
 

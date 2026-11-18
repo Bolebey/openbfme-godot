@@ -95,6 +95,10 @@ public:
 
 	// ---- the evaluated state ----
 	ObjectID sourceObject() const { return m_source; }
+	// PORT-213 (issue #503): the drawable passed to AptPalantir::setDrawable (RW 0x9443BD / 0x9448FC -> 0x6D4671).
+	// Single-select sets it to the selected object; multi-select sets it to the winning HERO from
+	// ControlBar::populateMultiSelect (RW 0x94475A) or INVALID_ID when no qualifying HERO is selected.
+	ObjectID contextObject() const { return m_contextSource; }
 	const std::string &commandSetName() const { return m_setName; }
 	const std::vector<ControlBarButton> &palantirButtons() const { return m_palantir; }
 	const std::vector<ControlBarButton> &sideButtons() const { return m_side; }
@@ -136,6 +140,9 @@ public:
 	// disabled, and presses are refused
 	bool foreignView() const { return m_foreignView; }
 	static bool localPlayerActive(const Player *local);
+	// PORT-130 (issue #332): RW 0x942993..0x942A1B, the NEEDS_CASTLE_KINDOF button filter. Public so the
+	// synthetic tests can drive the very predicate evaluate() uses; no second path is added.
+	static bool castleKindOfAllows(const CommandButton &b, Object &obj);
 	// RW 0x729D9A: the production count of a command window showing `b` for an object with the production interface `pu` (0: none shown)
 	static int productionCountOf(const CommandButton &b, const ProductionUpdateInterface *pu);
 	// RW 0x71EE67 .. 0x71EF1E: the object's GettingBuiltBehavior (behavior slot 0x80, RW 0x68C3E6) rebuilds it (+ 0x35, slot 14 RW 0x71C2EA) or has + 0x36 set
@@ -144,12 +151,21 @@ public:
 	// lane PLAY-4: StanceToButtonSlot (RW InGameToggleStanceCommandButton, BFME2 0x567807): the index of the object's StancesBehavior stance in the button's
 	// Stances list, -1 when it is not there (or the object has no stances)
 	static int stanceSlotOf(const CommandButton &b, Object &obj);
+	// lane PORT-143: the same StanceToButtonSlot (RW 0x96F2DA) over a stance the client ordered: SetStance (RW 0x96F54C) compares the value as it is, with no
+	// stance class in between (Uninitialized and HoldGroundMoving find no slot, and the button keeps its picture)
+	static int stanceSlotOf(const CommandButton &b, int stance);
 
 	// ---- input ----
 	// ZH ControlBar::processCommandUI: the press of the button in `slot`. Returns false when the slot has no usable button (counted, reported through ui messages).
-	bool pressButton(int slot, bool inPalantir);
+	// PORT-426: `shift` is Keyboard::isShift (RW 0x63F122, called at RW 0x940BB3). RW 0x940BC2..0x940BE2 turns it into the batch flag of
+	// MSG_QUEUE_UNIT_CREATE (RW 0x940C3E); the right press has carried the same state since lane HUD-6 (RW 0x940CD0).
+	bool pressButton(int slot, bool inPalantir, bool shift = false);
 	// lane CAMPUI-1: the stance toggle's SetStance (RW 0x96F53C): MSG_CHANGE_STANCE with `stance` (a stance item of the Palantir's radial, a SET_STANCE button)
 	bool sendChangeStance(int stance, const char *site = "ControlBar:SET_STANCE");
+	// lane PORT-143 (the owner's P-25): RW 0x96F53C .. 0x96F567, the first half of the same SetStance: the ordered stance becomes the toggle button's own
+	// picture (CommandButton::setCurrentIndex RW 0x75D082, then the image and the labels read at that index). It happens whatever the button's state, so the
+	// gray button of an object without a StancesBehavior shows the tactic too; the voice (playStanceVoice below) and the logic's stance are untouched
+	void applyToggleStance(int stance);
 	// RW 0x96F5A8 .. 0x96F5D0: SetStance's voice, the HUD plays it (VOICE_EVENT_STANCE on the selection); the argument is the button's sound of that stance.
 	// Called from the HUD's message observer for every MSG_CHANGE_STANCE. INFERENCE: the D / F / G hotkeys too: RW's meta case RW 0x8201F5 has no voice, but RW 0x96F890
 	// registers the same keys on the radial's items, whose press is SetStance; that route is not ported (S-280)
@@ -238,11 +254,29 @@ private:
 	// object's controller
 	void populateUnderConstruction(Object &obj, bool mine);
 	void foreignDisable(ControlBarButton &cb) const;
+	// PORT-169 (issue #398, RW 0x75D22E / 0x944603): sync CommandButton::m_toggleIndex (+0xFC) with object or multi-select state
+	void updateToggleIndex(const CommandButton &b, const Object *obj, bool invert) const;
+	void updateMultiSelectToggleIndex(const CommandButton &b, const Object *fallback) const;
+	// PORT-189 (issue #455): processCommandUI (RW 0x941367 / 0x941A22 / 0x9414E7 -> RW 0x75D22E(obj, 1))
+	// flips +0xFC immediately on click, processContextSensitiveButtonClick (RW 0x941C14..0x941C1D) updates the
+	// button image from +0xFC, and ControlBar::update (RW 0x71FD81) skips populateCommand (RW 0x943E91 / 0x9446A5)
+	// while m_UIDirty (+0x28) is 0. Keep the click-predicted index across HUD frames until the object state leaves
+	// preClickIndex or the bar's context/dirty state changes.
+	static bool usesToggleIndex(const CommandButton &b);
+	void applyPredictedToggle(const CommandButton &b, const Object *obj);
+	struct PendingToggle
+	{
+		int preClickIndex = 0;
+		int predictedIndex = 0;
+	};
 
 	HudContext &m_ctx;
 	ObjectID m_source = INVALID_ID;
+	ObjectID m_contextSource = INVALID_ID;
 	std::string m_setName;
 	std::vector<ControlBarButton> m_palantir, m_side, m_offBar;
+	std::map<const CommandButton *, PendingToggle> m_pendingToggles;
+	std::vector<ObjectID> m_pendingSelection;
 	std::function<void(const std::string &)> m_stanceVoice;
 	std::function<void(const std::string &)> m_commandVoice;
 	std::vector<ControlBarQueueEntry> m_queue;

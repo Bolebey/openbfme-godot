@@ -818,6 +818,26 @@ int threatOf(const ThingTemplate &tt)
 }
 '''
 
+# the same raw block also parsed typed by a port (Port 227's ThreatBreakdown AIKindOf -> initFromINI(&tt->m_threatCategory, fields)): a row with
+# no member of its own stores into what the table is parsed into, and that member is read; a row with a member of its own is followed to that
+# member only (Kept: its own m_kept, never read, stays parsed-unused although the table's target is read)
+THREAT_TYPED_CPP = r'''
+struct ThreatSlot { int m_kept = 0; };
+void readThreatBlock(INI *ini, ThingTemplate *tt, BlockSem sem)
+{
+	if (sem == S_Threat)
+	{
+		const FieldParse fields[] = {
+			{ "Typed", parseThreatTyped, nullptr, 0 },
+			{ "Kept", parseInt, nullptr, offsetof(ThreatSlot, m_kept) },
+			{ nullptr, nullptr, nullptr, 0 },
+		};
+		ini->initFromINI(&tt->m_threatTyped, fields);
+	}
+}
+int threatTyped(const ThingTemplate &tt) { return tt.m_threatTyped; }
+'''
+
 # a nugget block of an FXList-like definition (FXList.cpp): the definition's fieldParse() hands out another function's table, whose rows parse
 # each nugget with a template parser (parseNugget<TerrainScorchFXNugget>); the nugget's rows are its class's fieldParse() and the shared baseTable().
 # Both nuggets have a Type row: Scorch's is m_scorchType, not Shake's m_type
@@ -1000,6 +1020,8 @@ Object TestUnit
   Threat
     Kind = INFANTRY
     Other = 1
+    Typed = 2
+    Kept = 3
   End
   Behavior = TypedThing ModuleTag_01
     Used = 1.0
@@ -1225,7 +1247,7 @@ def result(tmp_path_factory):
                       "Common/Thing/ThingFactory.cpp": THING_CPP, "GameLogic/Module/RawRead.cpp": RAW_CPP,
                       "GameClient/PreviewReader.cpp": PREVIEW_CPP, "GameClient/PreviewUse.cpp": PREVIEW_USE_CPP, "GameLogic/Module/DieMux.cpp": DIEMUX_CPP,
                       "GameLogic/Module/Other.cpp": OTHER_CPP, "GameLogic/Module/Ambig.cpp": AMBIG_CPP, "GameLogic/Module/Copy.cpp": COPY_CPP, "GameLogic/AI/Army.cpp": ARMY_CPP, "GameClient/Voice.cpp": VOICE_CPP, "GameClient/Decal.h": DECAL_H, "Common/ADecal.h": OTHER_DECAL_H,
-                      "GameClient/Decal.cpp": DECAL_CPP, "GameLogic/AI/Threat.cpp": THREAT_CPP,
+                      "GameClient/Decal.cpp": DECAL_CPP, "GameLogic/AI/Threat.cpp": THREAT_CPP, "Common/Thing/ThreatTyped.cpp": THREAT_TYPED_CPP,
                       "GameClient/Settings.h": SETTINGS_H, "GameClient/Middle.h": MIDDLE_H, "GameLogic/Weapon.h": WEAPON_H,
                       "GameLogic/GaugeUse.cpp": GAUGE_USE_CPP, "GameLogic/Module/BaseThing.h": BASE_H, "GameLogic/Module/BaseThing.cpp": BASE_CPP,
                       "GameLogic/Module/DerivedThing.cpp": DERIVED_CPP, "Common/Audio/Misc.h": MISC_H, "Common/Audio/Misc.cpp": MISC_CPP,
@@ -1392,7 +1414,10 @@ def test_definition_fields(result):
     scorch = result[0][("fxthing", "/Scorch", "Type")]
     assert (scorch["status"], scorch["member"], scorch["how"]) == ("used", "m_scorchType", "block-parser")
     assert (status(result, "fxthing", "/Scorch", "Weather"), result[0][("fxthing", "/Scorch", "Weather")]["member"]) == ("used", "m_weather")
-    assert status(result, "bridge", "", "Width") == "stub-block"
+    # its own reader (BridgeReader.cpp names Bridge.ini) does not ask for Width: not a stub, the reader leaves it
+    width = result[0][("bridge", "", "Width")]
+    assert (width["status"], width["how"]) == ("parsed-unused", "own-reader-unasked")
+    assert width["where"] == "its own reader (GameClient/BridgeReader.cpp) does not ask for it"
     # its own reader stores Height and Depth into members (TerrainRoads.cpp): followed
     assert (status(result, "bridge", "", "Height"), result[0][("bridge", "", "Height")]["where"]) == ("used", "GameClient/BridgeReader.cpp:14")
     assert status(result, "bridge", "", "Depth") == "parsed-unused"
@@ -1503,3 +1528,29 @@ def test_object_nested_readers(result):
     assert status(result, "object", "/Award", "Shade") == "parsed-unused"  # the parser's own check that throws is no use
     assert status(result, "object", "/Threat", "Kind") == "used"
     assert status(result, "object", "/Threat", "Other") == "parsed-unused"
+    typed = result[0][("object", "/Threat", "Typed")]
+    assert typed["status"] == "used" and typed["how"] == "typed-block" and typed["where"].startswith("Common/Thing/ThreatTyped.cpp:")
+    assert status(result, "object", "/Threat", "Kept") == "parsed-unused"  # its own member, not the table's target
+
+
+def test_parsed_only_read_outside(result, tmp_path):
+    """a parsed-only class (typed data, no runtime class) whose member another file reads: an unambiguous read is used-outside (never used); an
+    AMBIGUOUS or INFERENCE read and an unread member stay parsed-only-module, the lead kept in where"""
+    _, _, mod, source = result
+    rw = tmp_path / "rw"
+    rw.mkdir()
+    rw_tables(rw)
+    cov = tmp_path / "coverage.tsv"
+    cov.write_text(COVERAGE.replace("TypedThing	Behavior	ported	1", "TypedThing	Behavior	parsed-only	1"), encoding="utf-8")
+    _, real = source.block_keywords()
+    rw_cls, rw_obj = fa.rotwk_tables(rw)
+    rows = {(r["block"], r["owner"], r["field"]): r for r in fa.audit(mod, rw_cls, rw_obj, fa.load_coverage(cov), source, real)}
+    used = rows[("object", "TypedThing", "Used")]
+    assert (used["status"], used["tool"]) == ("used-outside", "used-outside")
+    assert used["where"].startswith("GameLogic/Module/TypedThing.cpp:")
+    assert rows[("object", "TypedThing", "Unused")]["status"] == "parsed-only-module"
+    shared = rows[("object", "TypedThing", "Shared")]
+    assert shared["status"] == "parsed-only-module" and "AMBIGUOUS" in shared["where"]
+    level = rows[("object", "TypedThing", "Level")]
+    assert level["status"] == "parsed-only-module" and "INFERENCE" in level["where"]
+    assert not any(r["status"] == "used" for k, r in rows.items() if k[1] == "TypedThing")  # never folded into used

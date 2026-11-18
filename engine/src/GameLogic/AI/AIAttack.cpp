@@ -2,6 +2,9 @@
 // See GameLogic/AI/AIAttack.h for the target facts and the donors.
 
 #include "GameLogic/AI/AIAttack.h"
+#include "GameLogic/AI/AIAttackCharge.h"
+#include "GameLogic/AI/AIAttackHordePosition.h"
+#include "GameLogic/Module/GiantBirdAIUpdate.h"
 #include "GameLogic/AI/AIAttackMelee.h"
 #include "GameLogic/AI/AIEmotionStates.h"
 #include "GameLogic/AI/TurretAI.h"
@@ -23,6 +26,7 @@
 #include "GameLogic/System/InvisibilityManager.h"
 #include "GameLogic/GameLogic.h"
 #include "GameLogic/Module/AIUpdate.h"
+#include "GameLogic/Module/SquishCollide.h"
 #include "GameLogic/Locomotor.h"
 #include "GameLogic/Object/Object.h"
 #include "GameLogic/Object/ObjectGeometry.h"
@@ -144,6 +148,108 @@ bool cannotPossiblyAttackObject(const AIState &state, std::uintptr_t userData)
 	return !(w && w->canAttackObjectNoShroud(*victim, source, (userData & 1u) != 0)); // RW 0x7417FA .. 0x741807
 }
 
+// PORT-437 (issue 437, stop S-325): the generic machine's object conditions RW 0x7457DF (out of reach -> Chase 0x64) and RW 0x745901 (crush the
+// victim instead -> Chase 0x64), the records of the tables RW 0xC29DD4 (normal) and RW 0xC29E04 (forced). Both are given to Aim 0x66 and Fire 0x67
+// by the constructor RW 0x7486FD (RW 0x74879D / RW 0x7487F5 push the chosen table; the table is chosen at RW 0x74872C / RW 0x748735 between the
+// forced and the normal one, RW 0x748787 for the status-0x26 tables and RW 0x748773 for the follow = 0 chase table). The port has no separate
+// Chase state: its Approach state walks with the attack path and re-paths when the victim moves, so the records' target state 0x64 is the port's
+// Approach (see makeGenericAttackMachine).
+
+// RW 0x7457DF (donor BFME2 0x00343DD8, outOfWeaponRangeObject): true when the victim is out of the current weapon's reach and the machine has to
+// walk to it. Owner (machine + 0x14) and goal object (RW 0x8DBACE): no goal -> true (RW 0x745809 .. 0x7458E5). The owner's AI container (+ 0x27C),
+// the template's + 0x108 bit 4 / + 0x112 bit 0x10 and the aux record's + 0x94 are only gathered into "the view cannot block me" (RW 0x745812 ..
+// 0x745876): a weapon that is neither a melee/contact weapon (RW 0x441B59, RW 0x9188EB) nor has the template byte 0 (RW 0x9188EB) and a victim not
+// significantly above the terrain (RW 0x70C55D) make a blocked attack view (RW 0x744AAA -> RW 0x7458A2) count. Then: the weapon's leech-range
+// deadline (RW 0x6CA32D: Weapon + 0x50 against TheGameLogic + 0x40, i.e. the shot may ignore the ranges) true at RW 0x7458B9, or a blocked view
+// (RW 0x7458BD) -> true; else the weapon reaches the victim (RW 0x6CC653, extra 0, min range checked, RW 0x7458DC) -> false, out of reach -> true.
+// INFERENCE: the port's WeaponTemplate has one flag (m_meleeWeapon, + 0x125) for RW's two arms RW 0x441B59 (a melee weapon) and RW 0x9188EB (a contact
+// weapon; AIAttackAimState reads it as melee against RW 0x441B59, lane AIMAIM-1), so the pair is the port's one test.
+bool outOfWeaponRange(const AIState &state, std::uintptr_t)
+{
+	Object &owner = state.owner();
+	Object *victim = state.machine().goalObject();
+	if (!victim)
+	{
+		return true; // RW 0x745809: no goal object
+	}
+	ObjectWeapons *w = owner.getWeapons();
+	if (!w || !w->currentWeapon())
+	{
+		return false; // RW 0x74587E: no current weapon -> the view arm and the reach test both fall through to false
+	}
+	const Weapon *cur = w->currentWeapon();
+	const WeaponTemplate *wt = cur->getTemplate();
+	const bool melee = wt && wt->m_meleeWeapon; // RW 0x441B59 / RW 0x9188EB, the port's one flag for the pair
+	bool viewBlocked = false;
+	if (!melee)
+	{
+		AIUpdateInterface &ai = state.ai();
+		ObjectPathfindAdapter &adapter = ai.adapter();
+		// RW 0x70C55D tests the VICTIM (RW 0x745894: `ecx = ebp`, the goal object)
+		const ObjectPathfindAdapter *victimAdapter = victim->getAIUpdateInterface() ? &victim->getAIUpdateInterface()->adapter() : nullptr;
+		if (!victimAdapter || !victimAdapter->isSignificantlyAboveTerrain())
+		{
+			viewBlocked = ai.world().pathfinder().isAttackViewBlockedByObstacle(adapter, *owner.getPosition(), victimAdapter, *victim->getPosition());
+		}
+	}
+	// RW 0x6CA32D (RW 0x7458B4): Weapon + 0x50, the leech-range deadline, is still ahead of the logic clock -> the shot ignores the ranges, and
+	// RW 0x7458C5 .. 0x7458CE answers FALSE (no chase)
+	if (cur->leechRangeDeadline() > owner.logic().getFrame())
+	{
+		return false;
+	}
+	if (viewBlocked)
+	{
+		return true; // RW 0x7458C1
+	}
+	return !w->isWithinAttackRange(*victim, 0.0f, true); // RW 0x7458DC .. 0x7458E7: out of reach -> true
+}
+
+// RW 0x745901 (donor BFME2 0x00343EFA, wantToSquishTarget): the machine may crush the victim instead of shooting it. All of: the owner's template
+// + 0x60D UseCrushAttack (RW 0x74591C), the victim held by no AI container + 0x27C (RW 0x745928), the owner's turret for the current weapon is
+// TURRET_INVALID (RW 0x745931 -> RW 0x66243F, RW 0x745940), TheAI's AIData + 0x8C AICrushesInfantry (RW 0x745945), the owner's controlling player is a
+// COMPUTER player (RW 0x745956 -> RW 0x68B678 -> RW 0x79FD6F + 0x30 -> RW 0x79FD6F loads the team, the player at + 0x30, its type at + 0x5C == 1;
+// RW 0x745968 that value against 1), Object::canCrushOrSquish with policy 2 (RW 0x69519A, RW 0x745973) and the owner's template + 0x113 bit 0x10
+// (DONT_AUTO_CRUSH_INFANTRY, bit 92) clear (RW 0x74597C).
+bool wantToCrushVictim(const AIState &state, std::uintptr_t)
+{
+	Object &owner = state.owner();
+	Object *victim = state.machine().goalObject();
+	if (!victim || !victim->getPosition())
+	{
+		return false;
+	}
+	if (!CrushTemplateInfo::of(*owner.getTemplate()).useCrushAttack)
+	{
+		return false; // RW 0x74591C: template + 0x60D
+	}
+	if (victim->getContainedBy())
+	{
+		return false; // RW 0x745928: the goal's AI container + 0x27C
+	}
+	AIUpdateInterface *ai = owner.getAIUpdateInterface();
+	if (!ai || ai->turretForCurWeapon() != nullptr)
+	{
+		return false; // RW 0x745931: a turret that holds the current weapon answers a valid index
+	}
+	if (!owner.logic().settings().aiCrushesInfantry)
+	{
+		return false; // RW 0x745945: AIData + 0x8C
+	}
+	const Player *player = owner.getControllingPlayer();
+	if (!player || player->getPlayerType() != PLAYER_COMPUTER)
+	{
+		return false; // RW 0x745968: Player + 0x5C == 1
+	}
+	AIUpdateInterface *victimAi = victim->getAIUpdateInterface();
+	const PathfindObject *other = victimAi ? &victimAi->pathfindObject() : nullptr;
+	if (!other || !ai->crushOrSquishPolicy(*other))
+	{
+		return false; // RW 0x745973: RW 0x69519A(goal, 2)
+	}
+	return !owner.isKindOf((unsigned)CombatNames::kindOf("DONT_AUTO_CRUSH_INFANTRY")); // RW 0x74597C: template + 0x113 bit 0x10
+}
+
 // lane GARRISON-2: RW 0x66243F / 0x6622C7 / 0x662317: the turret that holds the current weapon aims at the attack's target; false without one
 bool aimTurret(AIUpdateInterface &a, const AIAttackState &att, Object *victim, const Coord3D &pos)
 {
@@ -225,16 +331,27 @@ std::unique_ptr<AIStateMachine> AIAttackState::createAttackMachine()
 {
 	AIUpdateInterface &a = ai();
 	std::unique_ptr<AIStateMachine> m;
-	// lane PORT136-AIRPATH (issue #338): the machine asks the AI for its own attack machine first. RW 0x769C31 (the giant
-	// bird's state machine, vslot 9) makes the swoop-then-idle machine RW 0x769335 and hands it to the attack state, so a
-	// bird attacks by swooping: the ground approach/aim/fire machine it would otherwise get never gets a path (its move is
-	// the walk machine's, RW 0x6668CA -> the pathfinder's ground search 0x6FC18E only), which is the eagle that never fires.
-	// The port keeps that factory on the AI (AIUpdateInterface::makeAttackThenIdleMachine, the same RW 0x769335 body the
-	// bird's attack move uses at GiantBirdAIUpdate.cpp:1307); every other AI answers null and the machines below stand.
+	// lane PORT136-AIRPATH (issue #338): the machine asks the AI for its own attack machine first — the giant bird's
+	// precedence of RW 0x74CFCA..0x74D019. RW 0x769C31 (the bird's state machine, vslot 9) makes the swoop-then-idle
+	// machine RW 0x769335 and hands it to the attack state, so a bird attacks by swooping: the ground approach/aim/fire
+	// machine it would otherwise get never gets a path (its move is the walk machine's, RW 0x6668CA -> the pathfinder's
+	// ground search 0x6FC18E only), which is the eagle that never fires. The port keeps that factory on the AI
+	// (AIUpdateInterface::makeAttackThenIdleMachine, the same RW 0x769335 body the bird's attack move uses at
+	// GiantBirdAIUpdate.cpp:1307); every other AI answers null and the machines below stand.
 	if (m = a.makeAttackThenIdleMachine(10))
 	{
 		m_machineMade = MADE_SWOOP;
 		return m;
+	}
+	// RW 0x74CFCA..0x74D019: giant-bird AI and CONTESTING_BUILDING
+	// take precedence; a HORDE position attack then selects kind 7, regardless
+	// of whether its current weapon itself is melee.
+	if (!m_isAttackingObject && owner().isKindOfName("HORDE") && dynamic_cast<GiantBirdAIUpdate *>(&a) == nullptr &&
+		!owner().testStatus((unsigned)CombatNames::status("CONTESTING_BUILDING")))
+	{
+		m_meleeMachine = false;
+		m_machineMade = MADE_HORDE_POSITION;
+		return makeHordePositionAttackMachine(a, *this);
 	}
 	if (a.attackMachineKind() == ATTACK_MACHINE_HORDE)
 	{
@@ -245,6 +362,14 @@ std::unique_ptr<AIStateMachine> AIAttackState::createAttackMachine()
 			m_machineMade = melee ? MADE_HORDE_MELEE : MADE_HORDE_RANGED;
 			return m;
 		}
+	}
+	// PORT-133: attack kind 8 of RW 0x74CED6 (RW 0x74D01B .. 0x74D02A: the current weapon's CanFireWhileCharging, tested before the melee / ranged kinds) makes
+	// the charge machine RW 0x74523F (AIAttackCharge.cpp)
+	if (AttackUsesChargeMachine(owner()))
+	{
+		m_meleeMachine = false;
+		m_machineMade = MADE_CHARGE;
+		return makeChargeAttackMachine(a);
 	}
 	// lane PHYS-1: attack kind 2 of RW 0x74CED6 makes the melee machine RW 0x744B71 (AIAttackMelee.cpp); the weapon is already chosen
 	m_meleeMachine = AttackUsesMeleeMachine(owner(), m_isAttackingObject ? machine().goalObject() : nullptr, m_isAttackingObject);
@@ -270,11 +395,26 @@ std::unique_ptr<AIStateMachine> AIAttackState::makeGenericAttackMachine()
 	};
 	// lane SPELL-3 (review r3): the Aim and Fire states of an attack on an object leave the machine with failure when the owner cannot possibly attack it
 	// (B1 AttackStateMachineCtor.cpp: d_0016af70 with ATTACK_CONTINUED_TARGET 2 / _FORCED 3 in both the normal and the immobile condition lists; RotWK RW
-	// 0x741798, see cannotPossiblyAttackObject). The other object conditions (to Pursue) are not ported (S-325); an attack on a position has none of these
+	// 0x741798, see cannotPossiblyAttackObject).
+	// PORT-437 (stop S-325): the two records RW's own tables put before it, RW 0x7457DF (out of reach -> Chase) and RW 0x745901 (crush instead -> Chase).
+	// RW 0x7486FD chooses the table at RW 0x74872C / 0x748735 and gives it to Aim (RW 0x74879D) and Fire (RW 0x7487F5); the port's chase is the Approach
+	// state (0x65 in RW, a pursuer/approach pair there: RW 0x744401 for follow, RW 0x744310 twice otherwise, RW 0x748887), which walks the attack path
+	// and re-paths, so both records go to ATTACK_APPROACH. The order is the table's own (RW 0xC29DD4: range, crush, cannot-attack; RW 0xC29E04: range,
+	// cannot-attack, crush) and the tests are evaluated in order (AIStateMachine::testConditions).
 	std::vector<AIStateCondition> conditions;
 	if (m_isAttackingObject)
 	{
-		conditions.push_back({ &cannotPossiblyAttackObject, MACHINE_DONE_FAILURE, (std::uintptr_t)(m_isForceAttacking ? 3 : 2) });
+		conditions.push_back({ &outOfWeaponRange, ATTACK_APPROACH, 0 }); // RW 0xC29DD4 / 0xC29E04 record 1: 0x7457DF -> 0x64
+		if (!m_isForceAttacking)
+		{
+			conditions.push_back({ &wantToCrushVictim, ATTACK_APPROACH, 0 }); // RW 0xC29DD4 record 2: 0x745901 -> 0x64
+			conditions.push_back({ &cannotPossiblyAttackObject, MACHINE_DONE_FAILURE, 2 });
+		}
+		else
+		{
+			conditions.push_back({ &cannotPossiblyAttackObject, MACHINE_DONE_FAILURE, 3 }); // RW 0xC29E04 record 2
+			conditions.push_back({ &wantToCrushVictim, ATTACK_APPROACH, 0 }); // RW 0xC29E04 record 3
+		}
 	}
 	m->defineState(ATTACK_PURSUE, std::make_unique<PursueStub>(*m), ATTACK_APPROACH, ATTACK_APPROACH);
 	m->defineState(ATTACK_APPROACH, std::make_unique<AIAttackApproachState>(*m, this, m_follow), ATTACK_AIM, MACHINE_DONE_FAILURE);
@@ -656,8 +796,11 @@ StateReturnType AIAttackApproachState::startMove(const Coord3D &goal, Object *vi
 	// weapon reach, reserved, instead of a move to the victim's centre (the destination is not adjusted). A HORDE object attacks through its horde machine (the approach
 	// state 0xC9, computePath RW 0x74A594, S-590); a HORDE that reaches this generic approach keeps the move to the victim (RW 0x749A3E's branch distinctions and the
 	// melee machine 0xE1 / 0xE9 of RW 0x744B71 are not ported: S-784 / S-786)
+	// P-60: a POSITION target takes the attack path for every owner, a HORDE too: RW 0x749AC4 .. 0x749ACB (no goal object) -> RW 0x749D0D .. 0x749D31, the goal is
+	// the machine's goal position (+ 0x24) and requestAttackPath(0, &goal) (RW 0x663802) runs with no HORDE test. The horde kept a plain move onto the spot and,
+	// inside its rangefinder's MinimumAttackRange (Ennorath GoodArcherMissileHordeRangefinderBombard: 200), walked onto the Barrage point without shooting
 	static const int kHorde = ObjectTemplateInfoBuilder::kindOfIndex("HORDE");
-	if (source.isKindOf((unsigned)kHorde))
+	if (source.isKindOf((unsigned)kHorde) && victim)
 	{
 		m_move = std::make_unique<AIMoveToState>(a.mover(), goal, true);
 		return m_move->onEnter();
@@ -796,12 +939,13 @@ StateReturnType AIAttackAimState::onEnter()
 
 StateReturnType AIAttackAimState::update()
 {
-	// the victim moved out of reach: walk again. RotWK's aim never does this itself (RW 0x75232F); the attack machine's state condition
-	// outOfWeaponRangeObject (to the chase state, BFME2 AttackStateMachine.cpp) does, and those conditions are not ported (S-325): this test stands in for it
-	// (B1 conditions of 0x66; the melee machine's 0xE1)
+	// the victim moved out of reach: walk again. RotWK's aim never does this itself (RW 0x75232F): the machine's condition RW 0x7457DF (the table
+	// RW 0xC29DD4 / 0xC29E04, PORT-437) sends Aim 0x66 back to Chase 0x64 before the aim runs. This branch is what remains for the machines that carry no
+	// table: the melee machine's Aim 0xE6 (RW 0x744B71 defines 0xE6 with no conditions, RW 0x744CB1 / RW 0x744CB9) walks back to its approach 0xE1
 	ObjectWeapons *w = weaponsOf(machine());
 	Object *victim = victimOf(machine());
-	if (w && w->hasAnyWeapon() && !(m_att->isAttackingObject() && victimGone(victim)) && !AttackVictimInRange(machine()))
+	const bool tableCarriesTheRangeTest = m_approachId == ATTACK_APPROACH;
+	if (!tableCarriesTheRangeTest && w && w->hasAnyWeapon() && !(m_att->isAttackingObject() && victimGone(victim)) && !AttackVictimInRange(machine()))
 	{
 		if (ai().isImmobile())
 		{
@@ -884,7 +1028,7 @@ StateReturnType AIAttackAimState::aim(bool firstCall)
 		bool contact = false;
 		if (wt && (victim->isKindOf((unsigned)kWallTop) || victim->isKindOf((unsigned)kBlockingGate)) && wt->m_meleeWeapon)
 		{
-			contact = ObjectGeometry::worldspaceBestContactPoint(*victim, *self.getPosition(), "Ram", false, target);
+			contact = ObjectGeometry::worldspaceBestContactPoint(*victim, *self.getPosition(), "Ram", 0, 0, false, target);
 		}
 		if (!victim->isKindOf((unsigned)kWallUpgrade) && !contact)
 		{
@@ -1007,7 +1151,7 @@ StateReturnType AIAttackFireState::update()
 {
 	Object &obj = owner();
 	Object *victim = victimOf(machine());
-	// lane PORT-1 (issue #53): the current weapon is taken before the victim is looked at, as RW 0x74C4D3 .. RW 0x74C4E5 does (RW 0x68B58C; no weapon
+	// lane ATTACK-FINISH-1: the current weapon is taken before the victim is looked at, as RW 0x74C4D3 .. RW 0x74C4E5 does (RW 0x68B58C; no weapon
 	// leaves the state at RW 0x74C72B): the decision below needs its template.
 	ObjectWeapons *w = obj.getWeapons();
 	Weapon *weapon = w ? w->currentWeapon() : nullptr;
@@ -1015,23 +1159,23 @@ StateReturnType AIAttackFireState::update()
 	{
 		return STATE_FAILURE;
 	}
-	// lane PORT-1 (issue #53): RW 0x74C6A8 .. RW 0x74C6D9: with an attack on an object (notify vslot 3, RW 0x9DBF60 = AIAttackState + 0x41) and a victim
-	// that is gone — no victim object (RW 0x74C6C3), a dead one (Object + 0x458 bit 0, RW 0x74C6C7) or one with the status FLEE_OFF_MAP (0x32, RW 0x74C6D0)
-	// — the weapon's FinishAttackOnceStarted decides the rest (WeaponTemplate + 0x161, reached through Weapon + 4 as at RW 0x74C509; parser RW 0x42E558,
-	// the constructor's default 1 at RW 0x6CE164): RW 0x74C6E5 `cmp byte ptr [eax+0x161], 0` and RW 0x74C6EC `jne` keep the shot — the state goes on into
-	// the fire path RW 0x74C530 and fires at the victim's last position — while zero goes to RW 0x74C6F2 (the machine's setGoalObject(NULL); not ported,
-	// stop S-7182) and returns STATE_FAILURE at RW 0x74C8AC: the attack ends and no shot is fired.
+	// lane ATTACK-FINISH-1: RW 0x74C6A8 .. RW 0x74C6D9: an attack on an object (notify slot 0xC, AIAttackState + 0x41) whose victim is gone — no victim
+	// object (RW 0x74C6C3), a dead one (Object + 0x458 bit 0, RW 0x74C6C7) or one with the status FLEE_OFF_MAP (0x32, RW 0x74C6D0) — is decided by the
+	// weapon's FinishAttackOnceStarted (WeaponTemplate + 0x161, reached through Weapon + 4 as at RW 0x74C509; parser RW 0x42E558, the constructor's default 1
+	// at RW 0x6CE164): RW 0x74C6E5 `cmp byte ptr [eax+0x161], 0` and RW 0x74C6EC `jne` keep the shot — the state goes on into the fire path RW 0x74C530 and
+	// fires at the victim's last position — while zero clears the machine's goal object (RW 0x74C6F2) and returns STATE_FAILURE at RW 0x74C8AC: the attack
+	// ends and no shot is fired.
 	static const int kFleeOffMap = CombatNames::status("FLEE_OFF_MAP");
 	const WeaponTemplate *tmpl = weapon->getTemplate();
-	// RW 0x74C50F .. RW 0x74C52A: before the decision, a NoVictimNeeded weapon (+ 0x16B) jumps straight into the fire path when it has no victim (RW 0x74C51C) or
-	// when the victim is not IMMOBILE (KindOf bit 2 of the victim's template, RW 0x74C523 `test byte ptr [eax+0x108], 4`): RW 0x74C52C sets the flag [ebp-0xd] and
-	// falls into RW 0x74C530, and that flag later sends the shot to the position fire RW 0x74C88B. Those shots never read the field; the port fires them at the
-	// machine's goal position (a null victim), which is the same call.
-	const bool positionShot = tmpl->m_noVictimNeeded && (!victim || !victim->isKindOf((unsigned)CombatNames::kinds().immobile));
+	// RW 0x74C50F .. RW 0x74C52A: before the decision, a NoVictimNeeded weapon (+ 0x16B) with no victim (RW 0x74C51C) or with one that is not IMMOBILE
+	// (KindOf bit 2 of the victim's template, RW 0x74C523 `test byte ptr [eax+0x108], 4`) sets the flag [ebp-0xd] and falls into RW 0x74C530, which later
+	// sends the shot to the position fire RW 0x74C88B. Those shots never read the field; the port fires them at the machine's goal position.
+	const bool positionShot = tmpl && tmpl->m_noVictimNeeded && (!victim || !victim->isKindOf((unsigned)CombatNames::kinds().immobile));
 	if (!positionShot && m_att->isAttackingObject() && (victimGone(victim) || victim->testStatus((unsigned)kFleeOffMap)))
 	{
-		if (!tmpl->m_finishAttackOnceStarted)
+		if (!tmpl || !tmpl->m_finishAttackOnceStarted)
 		{
+			machine().setGoalObject(INVALID_ID); // RW 0x74C6F2
 			return STATE_FAILURE;
 		}
 	}

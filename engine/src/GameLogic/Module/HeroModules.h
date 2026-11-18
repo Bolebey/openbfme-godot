@@ -49,7 +49,7 @@
 //     table RW 0xC67640 and the upgrade base at data + 0x28): BonusName (+0x08, a ModifierList name), RefreshDelay (+0x18, duration), Range (+0x1C),
 //     AllowPowerWhenAttacking (+0x20), TargetEnemy (+0x21), ObjectFilter (+0x24), AffectsKindOf (RW 0x89ECD7, a KindOf list written over the object filter's
 //     include mask, RW 0x89EEDA: '+' / '-' / plain names, mixing is INIException 2), StartsActive (+0x158), RequiredConditions (+0x15C, names MOUNTED TAINT
-//     ELVEN_WOOD), AntiCategory (+0x160), AntiFX (+0x164), AffectGood (+0x168), AffectEvil (+0x169), RunWhileDead (+0x16A), AllowSelf (+0x16B),
+//     ELVEN_WOOD bits 0=MOUNTED, 1=TAINT, 2=ELVEN_WOOD (matching the bits test al,2/test al,4 in RW 0x89F209/0x89F229)), AntiCategory (+0x160), AntiFX (+0x164), AffectGood (+0x168), AffectEvil (+0x169), RunWhileDead (+0x16A), AllowSelf (+0x16B),
 //     AffectContainedOnly (+0x16C), MaxActiveRank (+0x170). The constructor wakes it next frame and, with StartsActive, executes the mux at once
 //     (RW 0x855388); the mux's implementation (RW 0x8554D6) wakes it next frame.
 //     update (RW 0x89F42D): a dead object without RunWhileDead, or a mux not executed, sleeps forever; Object + 0x11C bit 1 (S-856), RequiredConditions MOUNTED
@@ -60,8 +60,8 @@
 //     owner), plus the object itself with AllowSelf, gets the per-object step; with AffectContainedOnly its contain's objects do; the next pulse is after
 //     (object id % 5) + RefreshDelay frames.
 //     per object (RW 0x89F114): KindOf IGNORED_IN_GUI or ARMY_OF_DEAD, the source itself without AllowSelf, AffectGood with an Evil owner template, AffectEvil
-//     with a non-Evil one, a rank above MaxActiveRank (when not 0), Object + 0x11C bit 1, or a TAINT / ELVEN_WOOD condition not met (the terrain areas of
-//     RW 0xAD49B0 are not ported: none is met, S-856) skip it; in the contained mode a HORDE recurses into its contain; the AntiCategory goes to its pool
+//     with a non-Evil one, a rank above MaxActiveRank (when not 0), Object + 0x11C bit 1, or a TAINT / ELVEN_WOOD condition not met (TheTaintManager's cell
+//     at the object, RW 0xAD49B0, of that kind and its painter not an enemy: lane TAINTAREA-1) skip it; in the contained mode a HORDE recurses into its contain; the AntiCategory goes to its pool
 //     (RW 0x804FCC: XP-1's S-633, counted) with AntiFX; then Object::addAttributeModifier(BonusName, -1) (RW 0x68F1A8: the list's own Duration).
 //   * AutoHealBehavior (constructor RW 0x85562D, vtables RW 0xC56504 / update RW 0xC564F8 / mux RW 0xC564B0 at +0x20 / damage RW 0xC564A4 at +0x28; data: the
 //     upgrade base then table RW 0xC09F70): StartsActive (+0x138), ButtonTriggered (+0x139), SingleBurst (+0x13A), HealingAmount (+0x13C, parseInt), HealingDelay
@@ -245,8 +245,9 @@ public:
 	AttributeModifierAuraUpdate(Thing *thing, const AttributeModifierAuraUpdateModuleData *data); ///< RW 0x89ED5C
 	UpgradeMux *getUpgrade() override { return this; }
 	UpdateSleepTime update() override; ///< RW 0x89F42D
-	// the destructor RW 0x89EE67: an object of KindOf TAINT (template + 0x11B bit 0) clears the taint within Range at its position, owned by its id
-	// (TheTerrainLogic RW 0x683393, GameLogic/Map/TerrainTaintClear.h)
+	// the destructor RW 0x89EE67: an object of KindOf TAINT clears the taint within Range at its position, owned by its id
+	// (TheTerrainLogic RW 0x683393, GameLogic/Map/TerrainTaintClear.h); a TAINT aura source (template m_kindof[1] bit 28, RW 0x89F615) skips the ally
+	// relationship filter (RW 0x89F61F .. 0x89F62A) and uses its geometry radius instead of Range (RW 0x89F63C .. 0x89F655)
 	void onDelete() override;
 	void crc(StateHasher &h) const override;
 	unsigned pulses() const { return m_pulses; }

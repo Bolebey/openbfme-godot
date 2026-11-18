@@ -5,6 +5,7 @@
 #include "GameClient/InGameHud.h"
 #include "GameClient/BeaconClientUpdate.h"
 #include "Common/Audio/AudioEntryPoints.h"
+#include "GameClient/Eva.h"
 #include "GameLogic/BeaconCommands.h"
 #include "GameLogic/Economy.h"
 #include "GameLogic/EconomySettings.h"
@@ -20,6 +21,8 @@
 #include "Common/Thing/ThingTemplate.h"
 #include "GameLogic/Object/ObjectGeometry.h"
 #include "GameLogic/ActionManager.h"
+#include "GameLogic/Combat/ObjectWeapons.h" // P-60: the weapon of a FIRE_WEAPON button's slot (the scatter radius cursor)
+#include "GameLogic/Weapon.h"
 
 #include "Common/Audio/AudioEntryPoints.h"
 
@@ -151,9 +154,13 @@ InGameHud::InGameHud(Config config)
 	m_radar = std::make_unique<Radar>(m_input->context());
 	m_input->commandTranslator().setRadar(m_radar.get()); // lane HUD-4: Space (VIEW_LAST_RADAR_EVENT)
 	// lane INPUT-1: a hotkey presses its command button as a click on it would (ControlBar::processCommandUI through pressButton)
-	m_input->hotKeyTranslator().setPress([this](int slot, bool inPalantir) { return m_bar->pressButton(slot, inPalantir); });
+	// PORT-426: the hotkey's Shift is the same Keyboard::isShift (RW 0x940BB3) the button's own press reads.
+	m_input->hotKeyTranslator().setPress([this](int slot, bool inPalantir) {
+		return m_bar->pressButton(slot, inPalantir, (m_keyState & KEY_STATE_SHIFT) != 0);
+	});
 	// AUDIO-2: ZH CommandXlat / SelectionXlat play the unit voice when a command or a selection leaves the translators (RotWK RW 0x8DEDBB)
 	m_voice = std::make_unique<UnitVoiceResponse>(m_config.game.logic(), m_voiceSink);
+	m_voice->setInGameUI(&m_input->ui()); // RW 0x8DEA51: live waypoint mode for all voice routes
 	// the crowd responses of the voices (S-700): Data\INI\CrowdResponse.ini; a missing or malformed file is an error of the HUD, the voices still work.
 	// BFME1 has no crowd responses (no CrowdResponse.ini: the second voice slot is BFME2's; docs/BFME1.md)
 	if (!isBfme1Data(m_config.fs))
@@ -192,6 +199,9 @@ InGameHud::InGameHud(Config config)
 		if (msg.getType() == MSG_CHANGE_STANCE && msg.getArgumentCount() > 0)
 		{
 			const int stance = msg.getArgument(0)->integer;
+			// lane PORT-143: the D / F / G meta route (RW 0x8201F5, CommandTranslator::changeStance) has no InGameToggleStanceCommandButton's SetStance in
+			// front of it (its hotkey action RW 0x96F880 is the radial's, S-280), so the button's picture moves here with the voice, as SetStance moves both
+			m_bar->applyToggleStance(stance);
 			m_bar->playStanceVoice(stance);
 			if (m_palantirRef)
 			{
@@ -211,6 +221,7 @@ InGameHud::InGameHud(Config config)
 		info.target = (ObjectID)p.targetId;
 		info.hasPosition = p.hasPosition;
 		info.position = Coord3D{ p.posX, p.posY, p.posZ };
+		info.air = p.air; // PORT-151: the attack helper's air flag (RW 0x66B240)
 		m_voice->pickAndPlay({ (ObjectID)p.objectId }, p.voiceEvent, &info);
 	}, this);
 }
@@ -318,9 +329,10 @@ bool InGameHud::boot(std::string *error)
 	// update) may come while the logic worker runs a frame: the press then waits, in order, for the next update the logic is held in (whenHeld)
 	m_palantirRef->setBfme1(isBfme1Data(m_config.fs));
 	m_palantirRef->setButtonHandler([this](int slot, bool inPalantir) {
-		whenHeld([this, slot, inPalantir]() {
+		const bool shift = (m_keyState & KEY_STATE_SHIFT) != 0; // PORT-426: RW 0x940BB3
+		whenHeld([this, slot, inPalantir, shift]() {
 			const auto worldContext = enterContext(); // the movie's own update and invoke_at reach this outside the scoped entry points (BuildAssistant reads TheCommandStore)
-			m_bar->pressButton(slot, inPalantir);
+			dispatchPalantirButtonPress(m_helpBox, *m_bar, slot, inPalantir, shift); // PORT-189 drops the hovered tooltip, PORT-426 passes Shift
 		});
 	});
 	// lane CAMPUI-1: a stance item of the stance toggle's radial (RW 0x96F53C: MSG_CHANGE_STANCE with the item's stance)
@@ -337,7 +349,7 @@ bool InGameHud::boot(std::string *error)
 		const bool shift = (m_keyState & KEY_STATE_SHIFT) != 0;
 		whenHeld([this, slot, inPalantir, shift]() {
 			const auto worldContext = enterContext();
-			m_bar->rightPressButton(slot, inPalantir, shift);
+			dispatchPalantirRightButtonPress(m_helpBox, *m_bar, slot, inPalantir, shift);
 		});
 	});
 	// lane SPELL-2: the spell book's press and the store button of the Palantir
@@ -696,9 +708,9 @@ void InGameHud::update(double seconds)
 	}
 	part(m_updateParts.windows);
 	if (!movieIsModAuthored(m_config.fs, "palantir")) m_palantirRef->setViewportSize(m_windowW, m_windowH);
-	// lane HUD-2: the local side and the control bar's context the Palantir's update reads (AptPalantir::syncLocal, PalantirCommandUI.h). INFERENCE: the context
-	// drawable is the selection's only object; a multiple selection hands NULL, as ZH's ControlBar does for its multi-select context (the RotWK context rules,
-	// RW 0x944390 .. 0x9450B3, were not read)
+	// lane HUD-2 / PORT-213 (issue #503): ControlBar::evaluateContextUI (RW 0x71EBDA) hands single selection's object
+	// to AptPalantir::setDrawable (RW 0x9443BD -> 0x6D4671) and routes multi-selection to populateMultiSelect
+	// (RW 0x94475A), which picks the highest-rank qualifying HERO (RW 0x944834) or passes NULL/INVALID_ID (RW 0x9448FC).
 	AptPalantir::LocalState local;
 	if (Player *p = m_config.game.players().getLocalPlayer())
 	{
@@ -732,7 +744,7 @@ void InGameHud::update(double seconds)
 	}
 	const std::vector<ObjectID> &selected = m_input->ui().selected();
 	local.context = true;
-	local.contextObject = selected.size() == 1 ? selected.front() : (ObjectID)INVALID_ID;
+	local.contextObject = m_bar->contextObject();
 	local.commandSet = m_bar->commandSetName();
 	local.portrait = PalantirCommandUI::portraitFor(m_input->context(), local.contextObject, selected);
 	{
@@ -875,8 +887,26 @@ bool InGameHud::selectionRegionOp(const InGameUI &ui, IconUIOp &out)
 // lane RADAR-1: the radar's events (Radar.h): the local player's attacked objects (RW 0x67B4B7), the events' end (RW 0x6D8E2B), then
 // W3DRadar::drawEvents (RW 0x44DE58) for the picture the device drew last (the events end in the radar's update, Radar::advanceClock) and the Palantir's pings; the window pixels go to the movie's stage units
 // (RW 0x6D5AD9: the Apt player's scale)
+void InGameHud::noteJumpPosition(const Coord3D &position)
+{
+	m_radar->noteEvaPosition(position, m_config.game.logic().getFrame());
+}
+
 void InGameHud::updateRadarEvents()
 {
+	// P-94: TheEva's jump-to positions (RW 0x5DD826 -> RW 0x5DD1F3) and its keep time (RW 0x5DD8ED). The list lives in the radar here; MiscEvaData gives
+	// the window (+ 0x90), the merge radius (+ 0x94) and the keep time (+ 0x8C)
+	if (Eva *eva = AudioApi::currentEva())
+	{
+		const MiscEvaData &misc = eva->miscEvaData();
+		m_radar->setEvaJumpData(misc.maxMillisecondsBeforeResettingLastJumpTo, misc.minDistanceBetweenJumpToEvents, misc.maxMillisecondsToKeepJumpToEventsFrames);
+		const unsigned logicFrame = m_config.game.logic().getFrame();
+		for (const Coord3D &p : eva->takePlayedJumpPositions())
+		{
+			m_radar->noteEvaPosition(p, logicFrame);
+		}
+		m_radar->expireEvaPositions(logicFrame);
+	}
 	// What a logic frame writes (an object's radar attack frame, the scripts' event notices) is read once per logic frame.
 	// noteAttacks walks every live object; that walk does not change while one logic frame stands. The client-frame ping work below stays every render frame.
 	// A write can land after this logic frame was already sampled (a hit or a script notice between the present and the next logic step, which is how
@@ -1075,7 +1105,22 @@ void InGameHud::updateRadiusCursor()
 	// RW 0x6A3B77 handles the pending command's RadiusCursorType for both
 	// spell-book and selected-object powers. Hero powers enter GUI command
 	// mode through ControlBar::processCommandUI, rather than m_spellBar.
-	if (!spell && command && (command->m_command != GUI_COMMAND_SPECIAL_POWER || !command->hasOption(COMMAND_OPTION_NEED_TARGET_POS)))
+	// P-60: createCommandHint's GUI command mode (RW 0x6A3CEC .. 0x6A3DDF) has two branches. A context command (RW 0x75CD15) or a SPECIAL_POWER (0x18) /
+	// SPELL_BOOK (0x26) / SPECIAL_POWER_FROM_COMMAND_CENTER (0x20) / PLACE_BEACON (0x1F) button goes to RW 0x6A3D7D (its hint decides valid / invalid). Every
+	// other waiting command (FIRE_WEAPON: the archers' and siege engines' Bombard, Command_ArcherBombard) is the branch RW 0x6A3D2A: with a target option
+	// (Options & 0x227) and a RadiusCursorType InGameUI.ini holds (button + 0x4C) the pointer becomes cursor 0 (RW 0x6A3D65 -> RW 0x69BD53) and
+	// setRadiusCursor(type, the button's power + 0x44, its WeaponSlot + 0x80, valid = 1) runs (RW 0x6A3D6C .. 0x6A3DD9): always valid, no location test
+	const bool nonContext = !spell && command && !command->hasOption(COMMAND_OPTION_CONTEXTMODE_COMMAND) && command->m_command != GUI_COMMAND_SPECIAL_POWER
+		&& command->m_command != GUI_COMMAND_SPELL_BOOK && command->m_command != GUI_COMMAND_SPECIAL_POWER_FROM_COMMAND_CENTER
+		&& command->m_command != GUI_COMMAND_PLACE_BEACON;
+	if (nonContext)
+	{
+		if (!(command->m_options & 0x227u) || command->m_radiusCursor.empty() || !m_radiusTemplates.find(command->m_radiusCursor))
+		{
+			command = nullptr; // RW 0x6A3D3B / 0x6A3D70: setRadiusCursorNone; the CursorName is CommandTranslator's (createCommandHint, CommandXlat.cpp)
+		}
+	}
+	else if (!spell && command && (command->m_command != GUI_COMMAND_SPECIAL_POWER || !command->hasOption(COMMAND_OPTION_NEED_TARGET_POS)))
 	{
 		command = nullptr;
 	}
@@ -1085,7 +1130,11 @@ void InGameHud::updateRadiusCursor()
 	Player *local = m_config.game.players().getLocalPlayer();
 	// OWNERFIX-1: disabling input clears the decal immediately; a pending
 	// command can show it again when input is enabled.
-	if (!command || !power || !source || !local || !m_input->ui().getInputEnabled())
+	// P-60: setRadiusCursor's radius (RW 0x6A0846 .. 0x6A0896). A type that is InGameUI.ini's RadiusCursorUseWeaponScatterRadius (InGameUI + 0x89C) takes the
+	// weapon of the button's WeaponSlot on the object the radius belongs to (RW 0x6C81B0 on Object + 0x34C): ScatterRadius (+ 0x34) + ScatterTargetScalar
+	// (+ 0x38) of its template, 0 without a weapon; any other type takes the power's RadiusCursorRadius and does nothing without a power (RW 0x6A087F)
+	const bool scatterRadius = command && m_radiusTemplates.usesWeaponScatterRadius(command->m_radiusCursor);
+	if (!command || (!power && !(nonContext && scatterRadius)) || !source || !local || !m_input->ui().getInputEnabled())
 	{
 		if (m_radiusCursor.active() || m_targetingCursor)
 		{
@@ -1098,6 +1147,10 @@ void InGameHud::updateRadiusCursor()
 	auto verdictAt = [&](const Coord3D &where) {
 		if (spell) return m_spellBar.targetVerdict(logic, where);
 		bool unported = false;
+		if (nonContext)
+		{
+			return InGameSpellBookModel::Target::VALID; // RW 0x6A3D6C: push 1
+		}
 		if (ActionManager::canDoSpecialPowerAtLocation(*source, where, power, command->m_options, &unported))
 		{
 			return InGameSpellBookModel::Target::VALID;
@@ -1152,7 +1205,21 @@ void InGameHud::updateRadiusCursor()
 	// RW 0x6A077A: the radius belongs to the command's source object: the
 	// spell book or the selected unit, and uses that object's controller.
 	Player *controller = source->getControllingPlayer();
-	m_radiusCursor.set(command->m_radiusCursor, m_radiusTemplates.find(command->m_radiusCursor), power->getFinalOverride()->getRadiusCursorRadius(), controller != nullptr,
+	float radius = 0.0f;
+	if (scatterRadius)
+	{
+		const ObjectWeapons *weapons = source->getWeapons();
+		const Weapon *weapon = weapons ? weapons->weaponInSlot(command->m_weaponSlot) : nullptr;
+		if (const WeaponTemplate *wt = weapon ? weapon->getTemplate() : nullptr)
+		{
+			radius = wt->m_scatterTargetScalar + wt->m_scatterRadius; // RW 0x6A0869 .. 0x6A086E
+		}
+	}
+	else
+	{
+		radius = power->getFinalOverride()->getRadiusCursorRadius();
+	}
+	m_radiusCursor.set(command->m_radiusCursor, m_radiusTemplates.find(command->m_radiusCursor), radius, controller != nullptr,
 		controller == local, controller ? controller->getPlayerColor() : 0u, valid);
 	if (hinted)
 	{
@@ -1366,6 +1433,22 @@ bool InGameHud::pressSpell(int buttonIndex)
 	const bool ok = m_spellBar.press(buttonIndex, local->getPlayerIndex(), out);
 	send(out);
 	return ok;
+}
+
+// lane PORT-189 (issue #455): ParasiticInGameCommandButton::Impl left/right click notifications
+// (RW 0x9D2814 -> 0x9D282D / RW 0x9D288A -> 0x9D28A3 -> RW 0x8079BB -> RW 0x8076CD; DONOR BFME2 Rva005C33DDWindowNotification.cpp).
+// Disabled/unready clicks are already rejected in AptPalantir before these callbacks (RW 0x9D285E / 0x9D28D4),
+// and TOGGLE_STANCE routes to pressToggleStance (RW 0x96FAC6) without reaching this path.
+bool InGameHud::dispatchPalantirButtonPress(InGameHelpBox &helpBox, ControlBar &bar, int slot, bool inPalantir, bool shift)
+{
+	helpBox.dropProvider();
+	return bar.pressButton(slot, inPalantir, shift);
+}
+
+bool InGameHud::dispatchPalantirRightButtonPress(InGameHelpBox &helpBox, ControlBar &bar, int slot, bool inPalantir, bool shift)
+{
+	helpBox.dropProvider();
+	return bar.rightPressButton(slot, inPalantir, shift);
 }
 
 // lane OWNERFIX-1: RW 0x7BC586 (DISABLE_INPUT) / RW 0x7BC5E9 (ENABLE_INPUT); see InGameUI::applyScriptInput

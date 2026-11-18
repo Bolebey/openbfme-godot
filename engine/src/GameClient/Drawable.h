@@ -19,7 +19,8 @@
 // (syncFromSnapshot). The drawable knows its object by id only and never reads or writes logic state; it consumes no simulation randomness (the draw
 // modules use their own client random, W3DClientRandom).
 // What the draw modules do not do yet: bones (turrets, barrels, particle bones are not built: S-095 / S-097), the Lua BeginScript bodies run
-// on LUA-1's real Lua (W3DLuaDrawScriptHost; what its api cannot answer is S-126), the draw variants' own motion (S-112), effect draws (S-113).
+// on LUA-1's real Lua (W3DLuaDrawScriptHost; what its api cannot answer is S-126), most variant motion (S-112: sail matrix and truck tires
+// are supported), effect draws (S-113).
 
 #pragma once
 
@@ -28,6 +29,7 @@
 #include "Common/Thing/Thing.h"
 #include "Common/Thing/ThingTemplate.h"
 #include "GameClient/ClientEvents.h"
+#include "GameClient/ContainedPose.h"
 #include "GameClient/DrawableShroud.h"
 #include "GameClient/LogicSnapshot.h"
 #include "GameClient/RenderInterpolation.h"
@@ -56,6 +58,7 @@ class AnimationSoundModuleManager;
 class ModelConditionAudioLoopClientBehavior;
 class LightPulsePool;
 class W3DLightDraw;
+class W3DTornadoDraw;
 
 // LOCAL-3: TintEnvelope (ZH Include/GameClient/TintEnvelope.h, RW 0x671B20 .. 0x674AD7 / BFME2 0x671800 .. 0x6747B1, both editions identical).
 // Steps a drawable's additive tint or selection flash through attack, sustain and decay at the client frame rate, with optional sine modulation by the
@@ -166,6 +169,7 @@ struct DrawEntry
 	std::string notDrawnReason;       ///< why a non-model entry draws nothing
 	std::unique_ptr<W3DScriptedModelDraw> draw; ///< MODEL kind
 	std::unique_ptr<W3DLightDraw> lightDraw;    ///< lane LOCAL-28: W3DLightDraw dynamic light module
+	std::unique_ptr<W3DTornadoDraw> tornadoDraw; ///< Local 73 (P-146): W3DTornadoDraw spiral ground decals (RW 0x4D102E)
 	std::unique_ptr<W3DSupplyDraw> supply;     ///< PORT-77: supply-pile variant status alongside the shared model runtime
 	bool animated = false;            ///< advance() would change the draw (W3DScriptedModelDraw::needsAdvance, set at creation and on every flag change, never lowered by an advance: the pose after a blend's promotion is still pushed): advance() each render frame
 	bool missingModel = false;        ///< the model is not in the mounted archives (a retail data defect): not drawn
@@ -189,6 +193,14 @@ struct DrawEntry
 	int trackId = -1;
 	// lane LOCAL-29 (issue #218): AttachToBoneInAnotherModule (RW 0x4B6A6F..0x4B6B26 / RW 0x672B5B)
 	std::string attachToBone;
+	// Both editions (RW 0x4C4EE0..0x4C5175): per-draw-module shadow state & fade curve tracking (m_shadow on each W3DScriptedModelDraw).
+	mutable bool shadowStateInitialized = false;
+	mutable UnsignedInt shadowStartFrame = 0;
+	mutable UnsignedInt shadowFadeOutStartFrame = ~0u;
+	mutable const ModelConditionInfo *lastShadowState = nullptr;
+	mutable const RenderObjPrototype *lastShadowModel = nullptr;
+	mutable std::string lastShadowModelName;
+	mutable bool lastShadowStateHasShadow = false;
 };
 
 // LOCAL-25 (issue #187): client presentation physics state (retail Drawable + 0x13C, RW 0x67BDC0 / donor 0x00270098)
@@ -249,7 +261,7 @@ public:
 	DrawableID getID() const { return m_id; }
 	ObjectID getObjectID() const { return m_objectId; }
 	// SMOOTH-1: the object's KindOf bits as the creation event carried them (Object::isKindOfName for the render side)
-	void setKindOf(const KindOfMaskType &kindOf) { m_kindOf = kindOf; }
+	void setKindOf(const KindOfMaskType &kindOf) { m_kindOf = kindOf; m_swirlMoveOnly = -1; }
 	bool isKindOfName(const char *name) const;
 	// lane SELWALL-1: the same by the bit's index (ObjectTemplateInfoBuilder::kindOfIndex; -1: false), for a per-frame test without the name lookup
 	bool isKindOfIndex(int bit) const;
@@ -339,6 +351,10 @@ public:
 	// lane LOCAL-28 / LOCAL-29: queries bone world transform across draw module models (RW 0x00672B5B / DONOR BFME2 0x00272835)
 	bool boneTransform(const std::string &boneName, Matrix3D &outTransform) const;
 	bool boneWorldPosition(const std::string &boneName, Coord3D &outPos) const;
+	// P-149 (RW 0x676BD7 -> 0x672AEE; DONOR BFME2 0x002768AC): current posed bone transforms relative to drawable
+	int currentClientBonePositions(const std::string &boneNamePrefix, int startIndex, std::vector<Matrix3D> &outTransforms, int maxBones) const;
+	// P-149 (RW 0x678BF2 -> 0x676C7D; DONOR BFME2 0x00276952): tangent vector around B_TORNADO bone/transform for Swirly particles (both editions)
+	bool swirlInfluence(const Coord3D &worldPos, UnsignedInt clientFrame, Coord3D &outTangent) const;
 	// Local 34 (issue #284): maximum geometry height above position for this drawable's template (RW 0xAD1920)
 	float geometryHeight() const;
 	// lane LOCAL-29 (issue #218): computes world transform of entry e (RW 0x004B6A6F..0x004B6B26 / slot +0x104); returns true if attached
@@ -379,6 +395,16 @@ public:
 	bool calcPhysicsXform(const ObjectSnapshot &rec, const RenderInterpolation::Pose &pose, PhysicsXformInfo &info);
 	void applyPhysicsXform(const ObjectSnapshot &rec, const RenderInterpolation::Pose &pose);
 	void getPresentationPose(float outBasis[9], Coord3D &outPos) const;
+	// PORT-146 (issue #363): an object that stands on a bone of its container (ObjectSnapshot::containedOnBone) is drawn with the pose the
+	// container's presentation gives it (ContainedPose.h): DrawableManager::syncTransforms works it out after every drawable has its own pose.
+	// `clear` puts the drawable back on its own pose (the object left the bone, or it never was on one)
+	void setContainedPose(const containedpose::Pose &pose)
+	{
+		m_containedPose = pose;
+		m_containedPoseValid = true;
+	}
+	void clearContainedPose() { m_containedPoseValid = false; }
+	bool hasContainedPose() const { return m_containedPoseValid; }
 	Coord3D getPresentationPosition() const;
 	bool hasPhysicsXform() const { return m_hasPhysicsXform; }
 	const PhysicsXformInfo &lastPhysicsInfo() const { return m_lastPhysicsInfo; }
@@ -437,6 +463,13 @@ public:
 		bool r = m_shroudRevealed;
 		m_shroudRevealed = false;
 		return r;
+	}
+	// P-87, RW 0x6713C5 .. 0x6713D7: a slave made after its slaver was announced takes the slaver drawable's + 0x445 and + 0x446, so one lair
+	// is announced once and a lair that died and came back is announced with the AfterRespawn event
+	void copyEvaSightedFrom(const Drawable &slaver)
+	{
+		m_evaEnemySighted = slaver.m_evaEnemySighted;
+		m_evaEnemySightedAfterRespawn = slaver.m_evaEnemySightedAfterRespawn;
 	}
 	// RW 0x67561E Drawable::notifyDead (called on Object death at RW 0x699077):
 	// if m_evaEnemySighted (+0x445) is set, clears it to 0 and sets m_evaEnemySightedAfterRespawn = 1 (+0x446)
@@ -647,6 +680,11 @@ private:
 	UnsignedInt m_tintStatus = 0;                      ///< +0x118
 	UnsignedInt m_prevTintStatus = 0;                  ///< +0x11C
 	bool m_hasTrackMarks = false;                      ///< lane PORT-69: any entry has non-empty TrackMarks
+	// P-149 (RW 0x676BD7): cached B_TORNADO bone/transform list refreshed at most once per client frame
+	mutable UnsignedInt m_swirlCacheFrame = 0;
+	mutable bool m_swirlCacheValid = false;
+	mutable std::vector<Matrix3D> m_swirlCacheMats;
+	mutable int m_swirlMoveOnly = -1;
 
 	// LOCAL-25: presentation physics helpers and state (RW 0x67BDC0 / RW 0x67BE90)
 	void calcPhysicsXformWheels(const LocomotorTemplate *loco, const ObjectSnapshot &rec, const RenderInterpolation::Pose &pose, PhysicsXformInfo &info);
@@ -657,6 +695,9 @@ private:
 
 	std::unique_ptr<DrawableLocoInfo> m_locoInfo; ///< +0x13C
 	bool m_hasPhysicsXform = false;
+	// PORT-146 (issue #363): the drawn pose of an object on a bone of its container (see setContainedPose)
+	containedpose::Pose m_containedPose;
+	bool m_containedPoseValid = false;
 	bool m_physicsStepped = false;      ///< a step was made for m_physicsClientFrame
 	unsigned m_physicsClientFrame = 0;  ///< retail's stamp at the locomotor info + 0xAC (RW 0x67BE04 / 0x67BE17)
 	PhysicsXformInfo m_lastPhysicsInfo;

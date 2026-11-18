@@ -180,6 +180,13 @@ The eagle therefore swoops the victim it finds in guard, dives, fires its weapon
 dead — RW's own shape for a bird (the guard machine RW 0x76A6CC only decides *whom* to attack; its inner and outer
 states are ordinary `AIAttackState`s, section 1).
 
+Where RW restarts the next swoop is not read (RW's attack state only flattens a positive sleep, RW 0x7515C8 ..
+0x7515DA), so the restart is the port's own decision and is recorded as the stop `S-7499`
+(`docs/stops.d/S-7499.md`), together with the factory's place on the AI instead of on the machine. The branch merged
+`origin/main` after this analysis was written: the attack-machine choice there also has the horde-position kind 7
+(PORT-165) and the charge kind 8 (PORT-133), and the bird's branch now stands first as RW 0x74CFCA's giant-bird
+precedence — `MADE_SWOOP` is 7.
+
 The tests are `engine/tests/test_port_136.cpp` (lane `engine/cmake/Port136.cmake`):
 
 * `PORT-136: the eagle in the guard state takes off, closes in and hits its target` — the mod's eagle shape with its

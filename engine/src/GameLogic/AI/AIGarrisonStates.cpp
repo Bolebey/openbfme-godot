@@ -31,7 +31,10 @@ const char *const kStop =
 	"0x747D04 / 0x74347D) and ActionManager::canEnterObject (RW 0x82CBD5) are ported; lane BACKLOG-1 (BFME2 decomp): the DOZER + HARVESTER health test (RW "
 	"0x82CC09), the collide-module branch (RW 0x82CD2E: every collide class a unit has answers no), AIEnterState's contained-container test (RW 0x756088) and "
 	"its attack on an enemy container (RW 0x7560FB, getCanAttackObject RW 0x82CFD4: its object part as ObjectWeapons::canAttackObject, S-325), MSG_ENTER's "
-	"weapon lock release (RW 0x76FB64), privateEnter's locomotor point and blocked fields (RW 0x5E39CE, AI + 0x16C / + 0x3B8); not ported: the SHIP branches "
+	"weapon lock release (RW 0x76FB64), privateEnter's locomotor point and blocked fields (RW 0x5E39CE, AI + 0x16C / + 0x3B8); lane ENTERADJUST-1: the "
+	"AIEnterState moves to the entry position itself (adjusted for a SHIP container only) and ignores the container as an obstacle (RW 0x751668 .. "
+	"0x751707 / 0x752B31); not ported: AIMoveToPositionAndEnterState's unadjusted goal (RW 0x751AB6) with its goal-following update RW 0x755572 (the port "
+	"adjusts the entry point), the SHIP branches "
 	"(RW 0x82CED4, privateEnter's AI command 0x4F RW 0x66C6E3), behaviour slot 0x48 of the collide branch, getCanAttackObject's STRUCTURE and "
 	"SPAWNS_ARE_THE_WEAPONS parts (reported), the container AI's slot 0x1A8 in the exit states (taken as not 2), the members' AI slot 0x1C4 of RW 0x875C93, "
 	"the group manager of MSG_ENTER (GameData + 0x11CA); AIEnterState's ignored obstacle (the container, RW 0x7516C8 / 0x752B31) and the locomotor's "
@@ -283,9 +286,18 @@ public:
 		static const int kShip = CombatNames::kindOf("SHIP");
 		if (container->isKindOf((unsigned)kShip))
 		{
-			ai().world().noteStop(OpenContain::shipStop()); // lane SHIP-1: the boarding legs of RW 0x751A8A / 0x756452 are not ported (S-4160)
+			// PORT-145 (issue #362, docs/ennorath/PROBLEMS.md P-90), RW 0x751A8A: the machine's adjust flag is cleared (RW 0x751AB6: machine + 0x48 = 0,
+			// BFME2 setAdjustsDestination(false)) and the goal — the ship's contain enter position (slot 0x15C) — is pulled toward land by
+			// Pathfinder::adjustDestination(owner, ai->getLocomotorSet(), &m_goalPosition, 0) (RW 0x751B11, call 0x6FE456; the 4th argument is the group
+			// destination, null here). The internal move state keeps adjusts off (below), so this is the only adjustment, as in RotWK.
+			ai().world().pathfinder().adjustDestination(ai().pathfindObject(), ai().locomotorInfo(), &m_goal, nullptr);
 		}
-		m_move = std::make_unique<AIMoveToState>(ai().mover(), m_goal, true);
+		// NOT PORTED (S-1101, lane ENTERADJUST-1): RW 0x751AB6 clears adjustsDestination (+ 0x48) and only a SHIP's entry point is adjusted (RW 0x751AF0 .. 0x751B11),
+		// but retail's state is an AIMoveToState whose update (RW 0x755572, BFME2 decomp AIStatesDerivedOnExit.cpp:702) moves the goal to the container's position
+		// every frame (and leads a moving one) before the internal move (RW 0x748E46). The port's state keeps a fixed goal: unadjusted, an entry offset inside the
+		// footprint (WildMineShaft: EntryOffset Y:-10, radius 36) is never reached and the horde never enters (test_hud_tunnel_retail.cpp), so the port keeps the
+		// adjustment until RW 0x755572 is ported. PORT-145: a SHIP goal is already adjusted once above (RW 0x751B11), so its internal move does not adjust again
+		m_move = std::make_unique<AIMoveToState>(ai().mover(), m_goal, !container->isKindOf((unsigned)kShip));
 		return m_move->onEnter();
 	}
 
@@ -317,6 +329,28 @@ public:
 			return STATE_FAILURE;
 		}
 		const StateReturnType r = m_move->update();
+		static const int kShipUpdate = CombatNames::kindOf("SHIP");
+		if (container->isKindOf((unsigned)kShipUpdate))
+		{
+			// PORT-145 (issue #362, docs/ennorath/PROBLEMS.md P-90), RW 0x756452: a SHIP goal is boarded only while the ship sits idle at the shore.
+			// The ship's AI state is read through its AI (RW 0x75655C: call 0x660AC1; without an AI the state is 0xF423F, AI_NO_STATE); RotWK's ship
+			// docking states 0x46 / 0x47 (RW 0x756563 .. 0x75656B) mean the ship is busy and the unit keeps waiting (STATE_CONTINUE). The port's state
+			// numbering is BFME1's (S-221), so those ids never occur here; every other non-idle state is a sailing / fighting ship. Then the ship's
+			// position is tested for land (RW 0x75657E: call 0x6EFBB8, Pathfinder::getClosestPointOnLand): a ship that is not idle, or that is not at
+			// the shore (no land point), fails the state — the unit goes idle and never boards (the P-90 symptom: a ship far from shore or sailed away).
+			AIUpdateInterface *shipAi = container->getAIUpdateInterface();
+			const unsigned shipState = shipAi ? shipAi->currentStateId() : (unsigned)AI_NO_STATE; // RW 0x660AC1
+			if (shipState == 0x46 || shipState == 0x47)
+			{
+				return STATE_CONTINUE; // RW 0x756563 .. 0x75656B
+			}
+			Coord3D landPos;
+			const bool onLand = shipAi ? OpenContain::shipShoreSpot(*container, *container->getPosition(), landPos) : false; // RW 0x6EFBB8
+			if (shipState != 0 || !onLand)
+			{
+				return STATE_FAILURE; // RW 0x756583 .. 0x756589
+			}
+		}
 		if (otherPlayer && count > 0)
 		{
 			return STATE_CONTINUE;
@@ -386,6 +420,11 @@ public:
 		if (ContainModuleInterface *contain = container->getContain())
 		{
 			contain->getEntryPosition(m_goal);                 // slot 0x158
+			static const int kShip = CombatNames::kindOf("SHIP");
+			if (container->isKindOf((unsigned)kShip))
+			{
+				ai().world().pathfinder().adjustDestination(ai().adapter(), ai().locomotorInfo(), &m_goal, nullptr); // RW 0x75168E (lane ENTERADJUST-1)
+			}
 			contain->onObjectWantsToEnterOrExit(&obj, 0);     // slot 0x44(obj, WANTS_TO_ENTER)
 			m_container = container->getID();
 		}
@@ -393,15 +432,17 @@ public:
 		{
 			m_goal = *container->getPosition();
 		}
-		// RW 0x7516B3 .. 0x7516C8: the AI ignores the goal object (the container) as an obstacle (RW 0x66831A), so the path may end inside its footprint at the
-		// EntryPosition (the owner's 2026-11-04 check: without it the members of a horde stood at the tower's wall until the horde forced them in one by one)
+		// lane ENTERADJUST-1 (RW 0x751665 .. 0x751707; BFME2 0x74FB77, decomp AIEnterStateOnEnter.cpp, both editions): only a SHIP container (template + 0x11F bit 7) has
+		// its entry position adjusted (RW 0x6FE456(obj, AI + 0x1CC, &goal, 0), before the wants-to-enter call, the answer unused); the goal object is the ignored
+		// obstacle (RW 0x7516C8: RW 0x66831A, AI + 0x164), so the path may end inside its footprint; adjustsDestination (+ 0x48) is 0: the internal move goes to the
+		// entry position itself (the port adjusted it to a nearby free cell and kept the container as an obstacle). onExit clears the ignored obstacle
 		ai().mover().ignoreObstacle(container->getID());
-		// RW 0x7516CD .. 0x7516D7: the current locomotor's flag + 0x44 bit 1 (ZH setAllowInvalidPosition); no reader of it is located (S-1101)
+		// RW 0x7516CD .. 0x7516D7: the locomotor flag + 0x44 bit 1 (ZH setAllowInvalidPosition); the port's locomotor has no reader of it (S-1101)
 		if (Locomotor *loco = ai().curLocomotor())
 		{
 			loco->setFlags(loco->flags() | LOCOMOTOR_FLAG_ALLOW_INVALID_POSITION);
 		}
-		m_move = std::make_unique<AIMoveToState>(ai().mover(), m_goal, true);
+		m_move = std::make_unique<AIMoveToState>(ai().mover(), m_goal, false);
 		return m_move->onEnter();
 	}
 
