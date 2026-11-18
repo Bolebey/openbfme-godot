@@ -514,6 +514,7 @@ include(cmake/Port209.cmake)    # PORT-209: the horde's banner carrier at build 
 include(cmake/Port462.cmake)    # PORT-462 unit voice gates
 include(cmake/Port202.cmake)    # PORT-202: the locomotor's wading updater and the disguised climber's reveal (issue #469; OPENBFME_PORT202_TESTS)
 include(cmake/Port204.cmake)    # PORT-204: crush warning path gate and horde +0x170 member list (issue #471; OPENBFME_PORT204_TESTS)
+include(cmake/Port208.cmake)    # PORT-208: force attack from garrisons and spawners, the clicked map tree as a target (issue #490; OPENBFME_PORT208_TESTS)
 include(cmake/Port250.cmake) # PORT-250: the SPECIAL_POWER availability arm and its UnitCost gate (fork issue 578; OPENBFME_PORT250_TESTS)
 include(cmake/Port464.cmake)    # PORT-464: the per-frame steering of a summoned helper (issue #464; OPENBFME_PORT464_TESTS)
 include(cmake/Port199.cmake)    # PORT-199: GiveUpgradeUpdate contained targets, producer-linked pairs, deselection and flash (issue #466; OPENBFME_PORT199_TESTS)
@@ -1268,6 +1269,7 @@ add_executable(openbfme_tests
     ${OPENBFME_PORT433_TESTS}
     ${OPENBFME_PORT202_TESTS}
     ${OPENBFME_PORT204_TESTS}
+    ${OPENBFME_PORT208_TESTS}
     ${OPENBFME_PORT250_TESTS}
     ${OPENBFME_PORT464_TESTS}
     ${OPENBFME_PORT199_TESTS}
