@@ -508,6 +508,36 @@ def repin(test: str, ps: dict | list[dict], name: str) -> str:
 
 # ---------------------------------------------------------------- 6-7. returns, report
 
+BATCH_MARK = "<!-- batch {name} {head} -->"
+LEFT_MARK = "<!-- batch-left {name} {head} -->"
+
+
+def taken_comment(name: str, p: dict, sandbox: str) -> str:
+    """The PR is in batch `name`: the dashboard shows it "в батче" until a later check, return or this batch's left mark."""
+    return (BATCH_MARK.format(name=name, head=p["headRefOid"]) + "\n"
+            f"📦 **PR #{p['number']} взят в партию `{name}`** (песочница {sandbox}): тесты всей партии идут там. Зелёная партия переносится "
+            "в main, и PR закроется сам; при поломке придёт комментарий с причиной.")
+
+
+def left_batch(take: list[dict], rows: dict, out: dict) -> list[tuple[dict, str]]:
+    """PRs that leave batch `name` without a return comment: a conflict with the PRs before them, or a batch that is not green."""
+    conflicted = {p["number"]: why for p, why in rows.get("conflicted") or []}
+    green = rows["verdict"].startswith("зелёный")
+    res = []
+    for p in take:
+        if p["number"] in out:
+            continue  # its return comment says why
+        if p["number"] in conflicted:
+            res.append((p, "конфликтует с PR, влитыми в партию раньше: пойдёт в следующую партию"))
+        elif not green:
+            res.append((p, f"партия не зелёная ({rows['verdict']}), но не из-за этого PR: снова ждёт партии"))
+    return res
+
+
+def left_comment(name: str, p: dict, why: str) -> str:
+    return LEFT_MARK.format(name=name, head=p["headRefOid"]) + f"\n↩️ PR #{p['number']} вышел из партии `{name}`: {why}."
+
+
 def return_comment(name: str, p: dict, tests: list[tuple[str, str]]) -> str:
     lines = [f"<!-- returned --> Не принят в батч {name}: бисект по точкам слияния (точка до этого PR зелёная, точка с ним красная, остальное "
              "то же) показал, что этот PR ломает то, что на main зелёное (`tools/colab/batch_bot.py`).", ""]
@@ -697,6 +727,11 @@ def cmd_run(a) -> int:
     (out_dir / "claim.json").write_text(json.dumps({"prs": [p["number"] for p in take], "sandbox": Path("/content/sandbox_id").read_text().strip()
                                                     if Path("/content/sandbox_id").exists() else "?", "started": time.time()}))
     log(f"batch {name}: {len(take)} green PRs: {' '.join('#%d' % p['number'] for p in take)}")
+    sandbox = Path("/content/sandbox_id").read_text().strip() if Path("/content/sandbox_id").exists() else "?"
+    if not a.no_comment:
+        # the dashboard learns from GitHub only: without this mark a PR in a running batch stayed "✅ можно брать в батч" (owner 2026-11-18)
+        for p in take:
+            gh("pr", "comment", str(p["number"]), "--body", taken_comment(name, p, sandbox))
     rows: dict = {"main": git("rev-parse", "origin/main").strip(), "wait": wait, "out": {}, "repinned": [], "results": {}, "main_red": set(),
                   "merged": [], "conflicted": [], "renumbered": [], "verdict": "нет PR"}
     if not take:
@@ -793,6 +828,9 @@ def cmd_run(a) -> int:
         git("push", "-q", "-f", "origin", f"HEAD:refs/heads/batch/{name}")
     path = report(name, out_dir, rows)
     log(f"{rows['verdict']}: {path}")
+    if not a.no_comment:
+        for p, why in left_batch(take, rows, out):
+            gh("pr", "comment", str(p["number"]), "--body", left_comment(name, p, why))
     (STATUS_DIR / f"{RUN_KEY}.txt").unlink(missing_ok=True)   # done: the loop's line (or nothing) says the rest
     return 0 if rows["verdict"].startswith("зелёный") else 1
 

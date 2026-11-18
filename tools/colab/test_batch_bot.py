@@ -120,3 +120,12 @@ def test_a_pr_claimed_by_a_running_batch_on_another_sandbox_waits(monkeypatch, t
     assert dict((p["number"], why) for p, why in wait) == {601: "уже в партии 2026-11-18c", 605: "уже в партии 2026-11-18c"}
     take, _ = bb.candidates(None, own="2026-11-18c")   # the batch itself does not wait for its own claim
     assert len(take) == 4
+
+
+def test_a_pr_leaves_the_batch_with_a_mark_unless_its_return_comment_says_why():
+    take = [pr(number=n) for n in (601, 605, 612)]
+    rows = {"verdict": "зелёный", "conflicted": [(take[1], "conflicts in x")]}
+    assert [p["number"] for p, _ in bb.left_batch(take, rows, {612: "ломает t"})] == [605]
+    rows = {"verdict": "красный: инструменты", "conflicted": []}
+    assert [p["number"] for p, _ in bb.left_batch(take, rows, {612: "ломает t"})] == [601, 605]
+    assert bb.taken_comment("2026-11-18e", take[0], "2").startswith(f"<!-- batch 2026-11-18e {take[0]['headRefOid']} -->")
