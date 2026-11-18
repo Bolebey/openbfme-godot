@@ -144,24 +144,28 @@ TEST_CASE("PORT-277: single firer with no HordeContain does not turn the rangefi
 	CHECK_FALSE(single->getWeapons()->isCurWeaponLocked());
 }
 
-// RW 0x911A58 / RW 0x911AC9 only lock and dispatch; RW 0x875221 /
-// RW 0x875550 themselves only dispatch. DRAFT S-7474: these functions
-// do not establish the subsequent AI weapon choice. The expectation below
-// failed on main and must be checked against that downstream RW path; it
-// is deliberately not weakened or reported as a passing protection.
+// RW 0x911A58 / 0x911AC9 read LockWeaponSlot at nugget +0x14C and call
+// 0x69121A before dispatch. The previous test defined P277Dummy AFTER its
+// reference: RW 0x73AE79 -> 0x6CC5DF binds a template immediately, not lazily.
+// Define it first and require the bound slot before checking the lock.
 TEST_CASE("PORT-277: a dummy member weapon never borrows damage from PRIMARY or the rangefinder")
 {
-	std::string ini = std::string(kHit) + kPort277;
+	std::string ini = "Weapon P277Dummy\n AttackRange = 400\n NoVictimNeeded = Yes\n End\n" + std::string(kHit) + kPort277;
 	const std::string assignment = "Weapon = SECONDARY P277Hit";
 	const auto at = ini.find(assignment);
 	REQUIRE(at != std::string::npos);
 	ini.replace(at, assignment.size(), "Weapon = SECONDARY P277Dummy");
-	ini += "Weapon P277Dummy\n AttackRange = 400\n NoVictimNeeded = Yes\n End\n";
 	CombatWorld w(ini.c_str());
 	w.combat().setAutoAcquireEnabled(false);
 	Object *source = w.unit("P277ArcherHorde", 'A', 300, 300);
 	Object *target = w.unit("Dummy", 'B', 430, 300);
 	w.frames(12);
+	for (Object *m : w.membersOf(source))
+	{
+		const Weapon *dummy = m->getWeapons()->weaponInSlot(SECONDARY_WEAPON);
+		REQUIRE(dummy != nullptr);
+		CHECK(dummy->getTemplate()->m_nuggets.empty());
+	}
 	const float health = w.health(target);
 	const auto *weapon = w.stores.weapons().findWeaponTemplate("P277Rangefinder");
 	REQUIRE(weapon != nullptr);
@@ -180,304 +184,295 @@ TEST_CASE("PORT-277: a dummy member weapon never borrows damage from PRIMARY or 
 	CHECK(w.health(target) == health);
 }
 
-// The proprietary definitions stay outside Git. Point OPENBFME_ENNORATH_INI_DIR
-// at the unmodified, extracted Ennorath 1.9.8.3 merged INI archive (data/ini
-// below that directory). The root must also contain the original
-// Data/Scripts/Scripts.ini; the INI-only ZIP lacks it (S-7473). No empty
-// replacement is supplied. With full game installs, the normal scenario mount is
-// also supported. No custom INI parser or copied retail block is used here.
-#include "EnnorathScenario.h"
-#include "SweepEffectProbe.h"
-#include "BigTestUtil.h"
-#include "GameLogic/ActionManager.h"
+// Preserve the counterexample that diagnosed S-7474: the later definition
+// exists in the store but cannot retroactively repair an earlier binding.
+TEST_CASE("PORT-277: late weapon definition leaves an unbound slot before the rangefinder fires")
+{
+	std::string ini = std::string(kHit) + kPort277;
+	const std::string assignment = "Weapon = SECONDARY P277Hit";
+	ini.replace(ini.find(assignment), assignment.size(), "Weapon = SECONDARY P277Late");
+	ini += "Weapon P277Late\n AttackRange = 400\n End\n";
+	CombatWorld w(ini.c_str());
+	w.combat().setAutoAcquireEnabled(false);
+	Object *source = w.unit("P277ArcherHorde", 'A', 300, 300);
+	REQUIRE(w.stores.weapons().findWeaponTemplate("P277Late") != nullptr);
+	for (Object *member : w.membersOf(source))
+	{
+		CHECK(member->getWeapons()->weaponInSlot(SECONDARY_WEAPON) == nullptr);
+		CHECK(member->getWeapons()->curSlot() == PRIMARY_WEAPON);
+	}
+}
+
+// Synthetic causal shapes, authored here (not extracted INI blocks). Names,
+// formation size, target armour and damage sentinels are test scaffolding.
+// Slot, power binding, projectile/warhead, paused unlock and OCL delivery
+// shapes come from the earlier INI 1.9.8.3 audit; RW dispatch is documented
+// in docs/ennorath/PORT-277.md. No install, archive or environment is read.
 #include "Common/SpecialPower.h"
+#include "GameClient/ControlBarCommands.h"
+#include "GameLogic/ActionManager.h"
+#include "GameLogic/Module/HeroModules.h"
 #include "GameLogic/Module/SpecialAbilityModules.h"
 #include "GameLogic/Module/SpecialPowerModules.h"
+#include "GameLogic/Module/SpellEffectModules.h"
 #include "GameLogic/ObjectCreationList.h"
 #include "GameLogic/WeaponNugget.h"
-#include <cstdlib>
-#include <filesystem>
-#include <fstream>
-#include <iterator>
+#include <sstream>
 
-namespace port277real
+namespace port277buttons
 {
-struct Corpus
+struct Shape
 {
-	retailtest::Mount mount;
-	hudtest::SharedWorld shared;
+	const char *name;
+	const char *slot;
+	int slotIndex;
+	bool horde;
+	bool mismatched;
+	bool paused;
+	bool dummy;
+	int ocl; // 0 none, 1 volley, 2 egg -> delayed death -> projectile
+	int range;
+	int preAttack;
+};
+const Shape shapes[] = {
+	{ "IsenfurtWchter", "TERTIARY", TERTIARY_WEAPON, false, false, false, false, 0, 420, 500 },
+	{ "IsenfurtWchterCreep", "TERTIARY", TERTIARY_WEAPON, false, false, false, false, 0, 420, 500 },
+	{ "IsenfurtWchterHorde", "TERTIARY", TERTIARY_WEAPON, true, false, false, false, 0, 420, 500 },
+	{ "IsenfurtWchterHordeHerold", "TERTIARY", TERTIARY_WEAPON, true, true, false, false, 0, 420, 500 },
+	{ "DwarvenAxtschwingerHorde", "TERTIARY", TERTIARY_WEAPON, true, false, false, false, 0, 250, 1500 },
+	{ "AngmarDarkRangerHorde", "QUINARY", QUINARY_WEAPON, true, false, true, false, 0, 450, 400 },
+	{ "GondorRangerHorde", "QUINARY", QUINARY_WEAPON, true, false, false, true, 1, 400, 0 },
+	{ "DwarvenDain_mod", "QUINARY", QUINARY_WEAPON, false, false, false, true, 2, 400, 0 },
+};
 
-	explicit Corpus(const std::filesystem::path &root)
+std::string modules(const Shape &s, bool member = false)
+{
+	const bool ocl = s.ocl && !member;
+	const std::string power = s.mismatched && !member ? "P277Undefined" : "P277Power";
+	std::ostringstream out;
+	out << "Behavior = " << (ocl ? "OCLSpecialPower" : "SpecialPowerModule") << " Starter\n"
+		<< "SpecialPowerTemplate = " << power << "\n"
+		<< "UpdateModuleStartsAttack = " << (ocl ? "No" : "Yes") << "\nStartsPaused = " << (s.paused ? "Yes" : "No") << "\n";
+	if (ocl) out << "OCL = P277Delivery\nCreateLocation = CREATE_AT_LOCATION\n";
+	out << "End\nBehavior = WeaponFireSpecialAbilityUpdate Ability\n"
+		<< "SpecialPowerTemplate = " << power << "\nSpecialWeapon = P277RF\n";
+	if (s.dummy) out << "NeedLivingTargets = No\n";
+	if (s.paused) out << "PackTime = 3100\nStartAbilityRange = 400\nApproachUntilMembersInRange = Yes\n";
+	out << "End\n";
+	if (s.paused) out << "Behavior = UnpauseSpecialPowerUpgrade Unlock\n"
+		<< "SpecialPowerTemplate = P277Power\nTriggeredBy = Upgrade_ObjectLevel1\nEnd\n";
+	return out.str();
+}
+
+std::string ini(const Shape &s)
+{
+	std::ostringstream out;
+	// All definitions precede references that bind eagerly (RW 0x73AE79).
+	out << "Upgrade Upgrade_ObjectLevel1\nType = OBJECT\nEnd\n"
+		<< "SpecialPower P277Power\nEnum = SPECIAL_AT_VISIBLE_OBJECT\nReloadTime = 0\nEnd\n"
+		<< "CommandButton P277Button\nCommand = SPECIAL_POWER\nSpecialPower = P277Power\nEnd\n"
+		<< "CommandSet P277Commands\n1 = P277Button\nEnd\n"
+		<< "Weapon P277RF\nAttackRange = " << s.range << "\nHordeAttackNugget\nLockWeaponSlot = " << s.slot << "\nEnd\nEnd\n"
+		<< "Weapon P277Warhead\nHitStoredTarget = Yes\nRadiusDamageAffects = ENEMIES\n";
+	// Causal member-weapon values recorded from rohanwestfoldwchter.ini /
+	// dwarvenaxtschwinger.ini / angmarranger.ini and their weapon includes.
+	if (!s.dummy)
 	{
-		REQUIRE(std::filesystem::is_regular_file(root / "data/ini/weapon.ini"));
-		initest::FileList files;
-		for (const auto &entry : std::filesystem::recursive_directory_iterator(root))
-		{
-			if (!entry.is_regular_file()) continue;
-			std::ifstream in(entry.path(), std::ios::binary);
-			REQUIRE_MESSAGE(in.good(), entry.path().u8string());
-			std::string bytes{ std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char>() };
-			REQUIRE_FALSE(in.bad());
-			files.emplace_back(std::filesystem::relative(entry.path(), root).generic_u8string(), std::move(bytes));
-		}
-		mount.fs = std::make_unique<Win32BIGFileSystem>();
-		std::string error;
-		auto archive = mount.fs->openArchiveFromMemory("port277-external.big",
-			std::make_shared<const std::vector<std::uint8_t>>(bigtest::makeBig("BIGF", files)), &error);
-		REQUIRE_MESSAGE(archive != nullptr, error);
-		mount.fs->mountArchive(std::move(archive), "port277-external.big", false);
-		shared.mount = &mount;
-		shared.world = std::make_unique<RetailObjectWorld>(*mount.fs);
-		REQUIRE_MESSAGE(shared.world->load(&error), error);
-		for (const auto &e : shared.world->report().errors)
-			MESSAGE(e.file << ": " << e.message);
-		REQUIRE(shared.world->report().errors.empty());
+		if (s.paused) out << "DamageNugget\nDamage = 50\nDamageType = FROST\nDeathType = NORMAL\nEnd\n"
+			<< "DamageNugget\nDamage = 150\nDamageType = PIERCE\nDeathType = NORMAL\nEnd\n";
+		else out << "DamageNugget\nDamage = 100\nDamageType = " << (s.preAttack == 1500 ? "SLASH" : "CAVALRY_RANGED")
+			<< "\nDeathType = NORMAL\nEnd\n";
+	}
+	out << "End\nWeapon P277Shot\nAttackRange = " << s.range << "\n";
+	if (!s.dummy) out << "WeaponSpeed = " << (s.paused ? 351 : 161)
+		<< "\nPreAttackDelay = " << s.preAttack << "\nFiringDuration = " << (s.paused ? 0 : 1600) << "\n"
+		<< "ProjectileNugget\nProjectileTemplateName = Arrow\nWarheadTemplateName = P277Warhead\nEnd\n";
+	out << "End\n";
+	if (s.ocl)
+	{
+		// Damage=7/radius=25 are sentinels, not a claim about mod balance.
+		// The real causal paths use FireWeaponUpdate at 4700ms (volley),
+		// or 0-lifetime egg / 4000ms slow death / 600ms projectile shot.
+		out << "Weapon P277Area\nRadiusDamageAffects = ENEMIES\nDamageNugget\n"
+			<< "Damage = 7\nRadius = 25\nDamageType = MAGIC\nDeathType = NORMAL\nEnd\nEnd\n"
+			<< "ObjectCreationList P277Delivery\nCreateObject\nObjectNames = "
+			<< (s.ocl == 1 ? "P277Volley" : "P277Egg") << "\nCount = 1\nEnd\nEnd\n"
+			<< "ObjectCreationList P277ProjectileList\nCreateObject\nObjectNames = P277Volley\nCount = 1\nEnd\nEnd\n"
+			<< "Object P277Volley\nKindOf = IMMOBILE UNATTACKABLE INERT\n"
+			<< "Body = ActiveBody Body\nMaxHealth = 99999\nEnd\n"
+			<< "Behavior = FireWeaponUpdate Fire\nFireWeaponNugget\nWeaponName = P277Area\nFireDelay = "
+			<< (s.ocl == 1 ? 4700 : 600) << "\nOneShot = Yes\nEnd\nEnd\nEnd\n"
+			<< "Object P277Egg\nKindOf = IMMOBILE UNATTACKABLE INERT\n"
+			<< "Body = ActiveBody Body\nMaxHealth = 99999\nEnd\n"
+			<< "Behavior = LifetimeUpdate Life\nMinLifetime = 0\nMaxLifetime = 0\nEnd\n"
+			<< "Behavior = SlowDeathBehavior Death\nDeathTypes = ALL\nDestructionDelay = 4000\n"
+			<< "OCL = FINAL P277ProjectileList\nEnd\nEnd\n";
+	}
+	out << "Object P277Member\nKindOf = INFANTRY SELECTABLE CAN_ATTACK\nVisionRange = 500\n"
+		<< "Geometry = CYLINDER\nGeometryMajorRadius = 8\nGeometryMinorRadius = 8\nGeometryHeight = 20\n"
+		<< "Body = ActiveBody Body\nMaxHealth = 60\nEnd\n"
+		<< "WeaponSet\nConditions = None\nWeapon = PRIMARY BowWeapon\nWeapon = " << s.slot << " P277Shot\nEnd\n"
+		<< "Behavior = AIUpdateInterface AI\nEnd\n"
+		<< "LocomotorSet\nLocomotor = WalkerLoco\nCondition = SET_NORMAL\nSpeed = 55\nEnd\n"
+		<< "CommandSet = P277Commands\n" << modules(s, s.horde) << "End\n"
+		<< "Object P277Horde\nKindOf = HORDE SELECTABLE CAN_ATTACK LARGE_RECTANGLE_PATHFIND"
+		<< (!s.dummy && !s.paused ? " MELEE_HORDE" : "") << "\nVisionRange = 500\n"
+		<< "Body = ImmortalBody Body\nMaxHealth = 1\nEnd\n"
+		<< "WeaponSet\nConditions = None\nWeapon = PRIMARY P277RF\nWeapon = " << s.slot << " P277RF\nEnd\n"
+		<< "Behavior = HordeAIUpdate AI\nEnd\n"
+		<< "LocomotorSet\nLocomotor = HordeLoco\nCondition = SET_NORMAL\nSpeed = 50\nEnd\n"
+		<< "Behavior = HordeContain Contain\nInitialPayload = P277Member 3\n"
+		<< "RankInfo = RankNumber:1 UnitType:P277Member Position:X:50 Y:0 Position:X:50 Y:20 Position:X:50 Y:-20\n"
+		<< "RanksToReleaseWhenAttacking = 1\nEnd\nCommandSet = P277Commands\n" << modules(s) << "End\n";
+	return out.str();
+}
+
+struct World : CombatWorld
+{
+	SpecialPowerStore powers;
+	SpecialPowerStore *savedPowers = TheSpecialPowerStore;
+	CommandStore buttons;
+	CommandStore *savedButtons = TheCommandStore;
+	ObjectCreationListStore ocls{ w.keys };
+	ObjectCreationListStore *savedOcls = TheObjectCreationListStore;
+	explicit World(const Shape &s)
+	{
+		combat().setAutoAcquireEnabled(false);
+		TheSpecialPowerStore = &powers;
+		TheCommandStore = &buttons;
+		TheObjectCreationListStore = &ocls;
+		buttons.setThingFactory(&w.things);
+		w.fx.env.blocks.registerBlock("SpecialPower", [](INI *i) { SpecialPowerStore::parseSpecialPowerDefinitionGlobal(i); });
+		w.fx.env.blocks.registerBlock("CommandButton", [](INI *i) { CommandStore::parseCommandButtonDefinitionGlobal(i); });
+		w.fx.env.blocks.registerBlock("CommandSet", [](INI *i) { CommandStore::parseCommandSetDefinitionGlobal(i); });
+		w.fx.env.blocks.registerBlock("ObjectCreationList", [](INI *i) { ObjectCreationListStore::parseObjectCreationListDefinitionGlobal(i); });
+		SpecialAbilityModules::registerAll(w.modules);
+		SpecialPowerModules::registerAll(w.modules);
+		HeroModules::registerAll(w.modules);
+		SpellEffectModules::registerAll(w.modules);
+		const std::string error = w.load(ini(s), INI_LOAD_OVERWRITE, "port277-synthetic.ini");
+		REQUIRE_MESSAGE(error.empty(), error);
+	}
+	~World()
+	{
+		logic->reset();
+		TheObjectCreationListStore = savedOcls;
+		TheCommandStore = savedButtons;
+		TheSpecialPowerStore = savedPowers;
 	}
 };
 
-hudtest::SharedWorld *world()
+void check(size_t index)
 {
-	if (const char *dir = std::getenv("OPENBFME_ENNORATH_INI_DIR"); dir && *dir)
-	{
-		static Corpus corpus(dir);
-		return &corpus.shared;
-	}
-	static ennorathscenario::World installed;
-	if (!installed.load("PORT-277 real definitions: or set OPENBFME_ENNORATH_INI_DIR")) return nullptr;
-	return &installed.shared;
-}
-
-struct Row
-{
-	const char *object;
-	const char *button;
-	const char *rangefinder;
-	const char *memberWeapon;
-	const char *faction;
-	int slot;
-	bool position;
-	const char *ocl;
-};
-
-// Names, not copies of the mod's definitions. The expected graph is checked
-// against the externally loaded data. RW 0x911A58 / RW 0x911AC9 dispatch;
-// RW 0x875221 / RW 0x875550 only issue AI orders. Subsequent dummy-slot
-// choice remains unverified (S-7474); these real tests are blocked by S-7473.
-const Row rows[] = {
-	{ "IsenfurtWchter", "Command_IsenfurtWchterSmite", "IsenfurtWchterSmiteRangeFinder", "", "FactionRohan", TERTIARY_WEAPON, false, "" },
-	{ "IsenfurtWchterCreep", "Command_IsenfurtWchterSmite", "IsenfurtWchterSmiteRangeFinder", "", "FactionRohan", TERTIARY_WEAPON, false, "" },
-	{ "IsenfurtWchterHorde", "Command_IsenfurtWchterSmite", "IsenfurtWchterSmiteRangeFinder", "IsenfurtWchterSpearThrown", "FactionRohan", TERTIARY_WEAPON, false, "" },
-	{ "IsenfurtWchterHordeHerold", "Command_IsenfurtWchterSmite", "IsenfurtWchterSmiteRangeFinder", "IsenfurtWchterSpearThrown", "FactionRohan", TERTIARY_WEAPON, false, "" },
-	{ "DwarvenAxtschwingerHorde", "Command_AxtschwingerAxeThrow", "DwarvenZealotBoomAxeRangeFinder", "DwarvenZealotBoomAxeThrownEdain", "FactionDwarves", TERTIARY_WEAPON, false, "" },
-	{ "AngmarDarkRangerHorde", "Command_AngmarRangersIceArrowAbility", "HaradrimBarbedArrowModRangeFinder", "AngRangerIceShotArrowMod", "FactionAngmar", QUINARY_WEAPON, false, "" },
-	{ "GondorRangerHorde", "Command_MenLongShotAbility", "MenLongShotWeapon", "MenLongShotFakeWeapon", "FactionMen", QUINARY_WEAPON, true, "OCL_LongShotAbilityGondor" },
-	{ "DwarvenDain_mod", "Command_SpecialAbilityDrarSpeerfeuer", "MenLongShotWeapon", "", "FactionDwarves", QUINARY_WEAPON, true, "OCL_SpeerfeuerAbility" },
-};
-
-Object *place(structtest::Arena &arena, hudtest::SharedWorld &data, const char *name, int side, float x, float y)
-{
-	const auto *t = data.world->things().findTemplate(name);
-	REQUIRE_MESSAGE(t != nullptr, name);
-	Object *o = arena.logic.newObject(t, arena.player(side)->getDefaultTeam(), {});
-	REQUIRE(o != nullptr);
-	const Coord3D at{ x, y, 0.0f };
-	o->setPosition(&at);
-	o->setOrientation(0.0f);
-	return testutil::completeHorde(o);
-}
-
-void frames(structtest::Arena &arena, unsigned count)
-{
-	for (unsigned i = 0; i < count; ++i) arena.logic.runLogicFrame();
-}
-
-// Observations at the ownership boundary, not assertions pinning a broken
-// updater as expected behaviour. Unresolved downstream expectations are
-// explicitly marked S-7474 rather than claimed to be established by RW.
-void diagnosePreShot(size_t index, hudtest::SharedWorld &data)
-{
-	if (index != 2 && index != 4 && index != 5) return;
-	const Row &row = rows[index];
-	structtest::Arena arena(data, row.faction, "FactionMordor", 160);
-	arena.logic.combat().setAutoAcquireEnabled(false);
-	Object *source = place(arena, data, row.object, 0, 500, 500);
-	// angmarhordes.ini: the starter is unpaused by this level-one upgrade.
-	if (index == 5) source->giveUpgrade("Upgrade_ObjectLevel1");
-	Object *target = place(arena, data, "MordorFighter", 1, 650, 500);
-	frames(arena, 30);
-	const auto *button = data.world->commands().findCommandButton(row.button);
+	const Shape &s = shapes[index];
+	INFO(s.name);
+	World w(s);
+	Object *source = w.unit(s.horde ? "P277Horde" : "P277Member", 'A', 300, 300);
+	Object *target = w.unit("Dummy", 'B', 450, 300);
+	w.frames(12);
+	const auto *button = w.buttons.findCommandButton("P277Button");
 	REQUIRE(button != nullptr);
-	const auto *power = data.world->spellStores().specialPowers().findSpecialPowerTemplate(button->m_specialPowerName);
+	const auto *power = w.powers.findSpecialPowerTemplate(button->m_specialPowerName);
 	REQUIRE(power != nullptr);
-	WeaponFireSpecialAbilityUpdate *updater = nullptr;
-	for (const auto &m : source->modules())
-	{
-		auto *wf = dynamic_cast<WeaponFireSpecialAbilityUpdate *>(m.get());
-		if (wf && wf->drivesSpecialPower(power)) updater = wf;
-	}
-	REQUIRE(updater != nullptr);
-	const auto *starter = dynamic_cast<const SpecialPowerModule *>(SpecialPowerModules::findModule(*source, power));
-	REQUIRE(starter != nullptr);
-	const int pausedBefore = starter->pauseCount();
-	bool hurt = false;
-	const ObjectID id = target->getID();
-	arena.logic.combat().setDamageTrace([&](const Object &victim, std::uint32_t, float, float taken) {
-		if (victim.getID() == id && taken > 0.0f) hurt = true;
-	});
-	const bool accepted = SpecialPowerModules::doSpecialPowerAtObject(*source, power, target, button->m_options, true);
-	frames(arena, 300);
-	auto *horde = dynamic_cast<HordeContain *>(source->getContain());
-	MESSAGE("PORT-277 pre-shot " << row.object << ": dispatchAccepted=" << accepted
-		<< " pausedBefore=" << pausedBefore << " initiates=" << starter->initiates()
-		<< " shots=" << updater->shotsFired() << " packing=" << updater->packingState()
-		<< " triggered=" << updater->triggerCount() << " damage=" << hurt
-		<< " hordeFires=" << (horde ? horde->attackStats().fires : 0));
-	arena.logic.combat().setDamageTrace({});
-}
-
-void checkRow(size_t index)
-{
-	auto *data = world();
-	if (!data) return; // explicit SKIP printed above; synthetic cases always run
-	const Row &row = rows[index];
-	diagnosePreShot(index, *data);
-	INFO(row.object << " / " << row.button);
-	structtest::Arena arena(*data, row.faction, "FactionMordor", 160);
-	arena.logic.combat().setAutoAcquireEnabled(false);
-	Object *source = place(arena, *data, row.object, 0, 500, 500);
-	Object *target = place(arena, *data, "MordorFighter", 1, 650, 500);
-	const ObjectID targetID = target->getID();
-	frames(arena, 30);
-	REQUIRE(arena.logic.findObjectByID(targetID) != nullptr);
-	const auto *button = data->world->commands().findCommandButton(row.button);
-	REQUIRE(button != nullptr);
-	const auto *power = data->world->spellStores().specialPowers().findSpecialPowerTemplate(button->m_specialPowerName);
-	REQUIRE(power != nullptr);
-	const auto *rangefinder = data->world->weaponStores().weapons().findWeaponTemplate(row.rangefinder);
-	REQUIRE(rangefinder != nullptr);
-	unsigned matchingUpdaters = 0;
-	for (const auto &m : source->modules())
-	{
-		const auto *wf = dynamic_cast<const WeaponFireSpecialAbilityUpdate *>(m.get());
-		if (!wf || !wf->ownedWeapon() || wf->ownedWeapon()->getTemplate() != rangefinder) continue;
-		++matchingUpdaters;
-		if (index != 3) CHECK(wf->drivesSpecialPower(power));
-	}
-	REQUIRE(matchingUpdaters == 1);
-	REQUIRE(rangefinder->m_nuggets.size() == 1);
-	const auto *nugget = dynamic_cast<const HordeAttackNugget *>(rangefinder->m_nuggets.front().get());
+	const auto *rf = w.stores.weapons().findWeaponTemplate("P277RF");
+	REQUIRE(rf != nullptr);
+	REQUIRE(rf->m_nuggets.size() == 1);
+	const auto *nugget = dynamic_cast<const HordeAttackNugget *>(rf->m_nuggets.front().get());
 	REQUIRE(nugget != nullptr);
-	CHECK(nugget->m_lockWeaponSlot == row.slot);
-
-	auto *horde = dynamic_cast<HordeContain *>(source->getContain());
-	std::set<ObjectID> memberIDs;
-	if (*row.memberWeapon)
+	CHECK(nugget->m_lockWeaponSlot == s.slotIndex); // RW nugget +0x14C, 0x911A58 / 0x911AC9
+	unsigned matching = 0;
+	for (const auto &m : source->modules())
 	{
-		REQUIRE(horde != nullptr);
-		for (Object *member : *horde->getContainedItemsList())
+		if (const auto *wf = dynamic_cast<const WeaponFireSpecialAbilityUpdate *>(m.get()))
 		{
-			// Banners are not shooters in these formations.
-			if (member->isKindOfName("BANNER")) continue;
-			REQUIRE(member->getWeapons() != nullptr);
-			const Weapon *weapon = member->getWeapons()->weaponInSlot(row.slot);
-			REQUIRE(weapon != nullptr);
-			CHECK(weapon->getTemplate()->getName() == row.memberWeapon);
-			if (index == 6) CHECK(weapon->getTemplate()->m_nuggets.empty());
-			memberIDs.insert(member->getID());
+			REQUIRE(wf->ownedWeapon() != nullptr);
+			CHECK(wf->ownedWeapon()->getTemplate() == rf);
+			CHECK(wf->drivesSpecialPower(power) == !s.mismatched);
+			++matching;
 		}
-		REQUIRE_FALSE(memberIDs.empty());
+	}
+	CHECK(matching == 1);
+	if (s.mismatched)
+	{
+		// RW 0x73B22F, 0x68C26D, 0x8969D1, 0x82D925: no matching interface.
+		CHECK(w.powers.findSpecialPowerTemplate("P277Undefined") == nullptr);
+		CHECK(SpecialPowerModules::findModule(*source, power) == nullptr);
+		CHECK_FALSE(ActionManager::canDoSpecialPowerAtObject(*source, target, CMD_FROM_PLAYER, power, 0, false));
 	}
 	else
 	{
-		CHECK(horde == nullptr); // RW 0x911A58 / RW 0x911AC9: no contain, no effect
-	}
-
-	if (index == 3)
-	{
-		// RW 0x73B22F resolves the module's template name; RW 0x68C26D
-		// only returns a matching interface. The button cannot reach this nugget.
-		CHECK(data->world->spellStores().specialPowers().findSpecialPowerTemplate("SpecialAbilityWestfoldWchterSpear") == nullptr);
-		CHECK(SpecialPowerModules::findModule(*source, power) == nullptr);
-		CHECK_FALSE(ActionManager::canDoSpecialPowerAtObject(*source, target, CMD_FROM_PLAYER, power, 0, true));
-		CHECK_FALSE(ActionManager::canDoSpecialPowerAtObject(*source, target, CMD_FROM_PLAYER, power, 0, false));
-	}
-
-	// Diagnose the matrix without changing or pinning its shared probe rules.
-	// It inspects both the horde and members, including member modules that
-	// could never drive a HordeAttackNugget (RW 0x911A58).
-	const auto probe = sweep_probe::EffectProbe::take(arena.logic, source, power, 0, target);
-	unsigned emptyDamageExpectations = 0;
-	for (const auto &e : probe.expects)
-		if (e.kind == sweep_probe::EffectProbe::DAMAGE && !e.weapon && e.weapons.empty())
-			++emptyDamageExpectations;
-	MESSAGE("PORT-277 matrix " << row.object << ": unfulfillable DAMAGE expectations=" << emptyDamageExpectations);
-
-	bool memberDamage = false, anyDamage = false;
-	arena.logic.combat().setDamageTrace([&](const Object &victim, std::uint32_t owner, float, float taken) {
-		if (victim.getID() == targetID && taken > 0.0f)
+		auto *starter = dynamic_cast<SpecialPowerModule *>(SpecialPowerModules::findModule(*source, power));
+		REQUIRE(starter != nullptr);
+		if (s.paused)
 		{
-			anyDamage = true;
-			memberDamage = memberDamage || memberIDs.count(owner) != 0;
+			CHECK(starter->pauseCount() == 1);
+			source->giveUpgrade("Upgrade_ObjectLevel1");
+			w.frames(2);
+			CHECK(starter->pauseCount() == 0);
 		}
+	}
+
+	std::set<ObjectID> shooters;
+	if (s.horde)
+	{
+		for (Object *member : w.membersOf(source))
+		{
+			shooters.insert(member->getID());
+			const Weapon *weapon = member->getWeapons()->weaponInSlot(s.slotIndex);
+			REQUIRE(weapon != nullptr); // references must bind before testing RW's lock
+			CHECK(weapon->getTemplate()->getName() == "P277Shot");
+			CHECK(weapon->getTemplate()->m_nuggets.empty() == s.dummy);
+		}
+		CHECK(shooters.size() == 3);
+	}
+	else CHECK(source->getContain() == nullptr);
+	bool memberDamage = false;
+	const ObjectID victim = target->getID();
+	w.combat().setDamageTrace([&](const Object &v, std::uint32_t attacker, float, float taken) {
+		if (v.getID() == victim && taken > 0 && shooters.count(attacker)) memberDamage = true;
 	});
+	const float health = w.health(target);
 	const Coord3D at = *target->getPosition();
-	// Isolate our boundary: the extra weapon has ALREADY fired. The updater's
-	// own functions are Local 76, not a second route added to the engine.
-	if (row.position) ObjectWeapons::createAndFireTempWeapon(rangefinder, source, at);
-	else ObjectWeapons::createAndFireTempWeaponAt(rangefinder, source, *target);
-	if (horde)
+	// Boundary agreed with Local 76: execute the already-fired special weapon.
+	if (s.dummy) ObjectWeapons::createAndFireTempWeapon(rf, source, at);
+	else ObjectWeapons::createAndFireTempWeaponAt(rf, source, *target);
+	CHECK(w.health(target) == health); // the rangefinder itself has no damage
+	if (s.horde)
 	{
-		if (row.position) CHECK(horde->attackStats().positionOrders == memberIDs.size());
-		else CHECK(horde->attackStats().orders == memberIDs.size());
-		for (ObjectID id : memberIDs)
+		if (s.dummy) CHECK(w.hordeOf(source)->attackStats().positionOrders == shooters.size());
+		else CHECK(w.hordeOf(source)->attackStats().orders == shooters.size());
+		for (Object *member : w.membersOf(source))
 		{
-			Object *member = arena.logic.findObjectByID(id);
-			REQUIRE(member != nullptr);
-			CHECK(member->getWeapons()->curSlot() == row.slot);
+			CHECK(member->getWeapons()->curSlot() == s.slotIndex);
+			CHECK(member->getWeapons()->isCurWeaponLocked());
 		}
 	}
-	frames(arena, 180);
-	if (index >= 2 && index <= 5) CHECK(memberDamage);
-	else CHECK_FALSE(anyDamage); // index 6: draft expectation, still needs RW selection proof (S-7474)
-	arena.logic.combat().setDamageTrace({});
-
-	if (*row.ocl)
+	w.frames(100);
+	CHECK(memberDamage == (s.horde && !s.dummy));
+	if (!s.horde || s.dummy) CHECK(w.health(target) == health);
+	w.combat().setDamageTrace({});
+	if (s.ocl)
 	{
-		// The definitions provide a separate OCLSpecialPower damage path.
-		// Whether the dummy AI path can also pick PRIMARY still needs RW
-		// verification (S-7474); this checks OCL damage independently.
-		auto *module = dynamic_cast<OCLSpecialPower *>(SpecialPowerModules::findModule(*source, power));
-		REQUIRE(module != nullptr);
-		const auto *list = TheObjectCreationListStore->findObjectCreationList(row.ocl);
-		REQUIRE(list != nullptr);
+		auto *ocl = dynamic_cast<OCLSpecialPower *>(SpecialPowerModules::findModule(*source, power));
+		REQUIRE(ocl != nullptr);
 		bool oclDamage = false;
-		std::set<std::string> damageSources;
-		arena.logic.combat().setDamageTrace([&](const Object &victim, std::uint32_t owner, float, float taken) {
-			if (victim.getControllingPlayer() != arena.player(1) || taken <= 0.0f) return;
-			const Object *attacker = arena.logic.findObjectByID(owner);
-			if (!attacker || !attacker->getTemplate()) return;
-			const std::string name = attacker->getTemplate()->getName();
-			damageSources.insert(name);
-			oclDamage = oclDamage || name == (index == 6 ? "MenLongShotObjectGondor" : "DrarSpeerfeuerProjectile");
+		w.combat().setDamageTrace([&](const Object &v, std::uint32_t attacker, float, float taken) {
+			const Object *owner = w.logic->findObjectByID(attacker);
+			if (v.getID() == victim && taken > 0 && owner && owner->getTemplate()->getName() == "P277Volley") oclDamage = true;
 		});
-		// Cover Speerfeuer's spread with actual enemies, not a changed OCL.
-		for (int x = -4; x <= 4; ++x)
-			for (int y = -4; y <= 4; ++y)
-				place(arena, *data, "MordorFighter", 1, at.x + x * 50.0f, at.y + y * 50.0f);
-		module->doSpecialPowerAtLocation(at, 0);
-		frames(arena, 600);
-		for (const auto &name : damageSources) MESSAGE("PORT-277 OCL damage source: " << name);
-		CHECK(oclDamage);
-		arena.logic.combat().setDamageTrace({});
+		ocl->doSpecialPowerAtLocation(at, 0);
+		w.frames(100);
+		CHECK(oclDamage); // independent OCL -> FireWeaponUpdate, RW 0x8C75D8 / 0x88F554
+		w.combat().setDamageTrace({});
 	}
 }
-} // namespace port277real
+} // namespace port277buttons
 
-TEST_CASE("PORT-277 real definitions: IsenfurtWchter Smite is a no-op without HordeContain") { port277real::checkRow(0); }
-TEST_CASE("PORT-277 real definitions: IsenfurtWchterCreep Smite is a no-op without HordeContain") { port277real::checkRow(1); }
-TEST_CASE("PORT-277 real definitions: IsenfurtWchterHorde Smite releases the spear slot") { port277real::checkRow(2); }
-TEST_CASE("PORT-277 real definitions: IsenfurtWchterHordeHerold has a mismatched power before its working nugget") { port277real::checkRow(3); }
-TEST_CASE("PORT-277 real definitions: DwarvenAxtschwingerHorde Axe Throw releases the axe slot") { port277real::checkRow(4); }
-TEST_CASE("PORT-277 real definitions: AngmarDarkRangerHorde Ice Arrows releases the ice slot") { port277real::checkRow(5); }
-TEST_CASE("PORT-277 real definitions: GondorRangerHorde Long Shot dummy fire and separate OCL damage") { port277real::checkRow(6); }
-TEST_CASE("PORT-277 real definitions: DwarvenDain_mod Speerfeuer no-op rangefinder and separate OCL damage") { port277real::checkRow(7); }
+TEST_CASE("PORT-277 button IsenfurtWchter Smite: no HordeContain") { port277buttons::check(0); }
+TEST_CASE("PORT-277 button IsenfurtWchterCreep Smite: no HordeContain") { port277buttons::check(1); }
+TEST_CASE("PORT-277 button IsenfurtWchterHorde Smite: TERTIARY projectile warhead") { port277buttons::check(2); }
+TEST_CASE("PORT-277 button IsenfurtWchterHordeHerold Smite: binding rejects before working nugget") { port277buttons::check(3); }
+TEST_CASE("PORT-277 button DwarvenAxtschwingerHorde Axe Throw: TERTIARY projectile warhead") { port277buttons::check(4); }
+TEST_CASE("PORT-277 button AngmarDarkRangerHorde Ice Arrows: unlock and QUINARY projectile warhead") { port277buttons::check(5); }
+TEST_CASE("PORT-277 button GondorRangerHorde Long Shot: QUINARY dummy and independent volley") { port277buttons::check(6); }
+TEST_CASE("PORT-277 button DwarvenDain_mod Speerfeuer: no horde and independent egg delivery") { port277buttons::check(7); }
