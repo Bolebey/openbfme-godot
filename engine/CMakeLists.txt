@@ -197,6 +197,7 @@ include(cmake/Port201.cmake)   # PORT-201: a captured building's upgrades reset 
 include(cmake/Port244.cmake)   # PORT-244: PreTriggerUnstealthTime in SpecialAbilityUpdate::handlePackingProcessing (fork issue 568; OPENBFME_PORT244_TESTS)
 include(cmake/Port205.cmake)   # PORT-205: a HordeAttackNugget's member pick and the contain slot 0x1C (fork issue 472; OPENBFME_PORT205_TESTS)
 include(cmake/Port217.cmake)   # PORT-217: a builder turns to face the structure it builds or repairs (fork issue 507; OPENBFME_PORT217_TESTS)
+include(cmake/Port282.cmake)   # PORT-282: the repair orders of the dozer and the worker (fork issue 649; OPENBFME_PORT282_TESTS)
 include(cmake/Port113.cmake)    # PORT-113: the light points of the War of the Ring (issue #280; appends to OPENBFME_SIM_SOURCES; OPENBFME_PORT113_TESTS)
 include(cmake/Port81.cmake)     # PORT-81: HordeContain/RanksToJustFreeWhenAttacking, parsed and never read by RotWK (issue #213; OPENBFME_PORT81_TESTS)
 include(cmake/Port84.cmake)     # PORT-84: unit voice of the combine-with-horde order (issue #232; OPENBFME_PORT84_TESTS)
@@ -982,6 +983,7 @@ add_executable(openbfme_tests
     ${OPENBFME_PORT244_TESTS}
     ${OPENBFME_PORT205_TESTS}
     ${OPENBFME_PORT217_TESTS}
+    ${OPENBFME_PORT282_TESTS}
     ${OPENBFME_PORT102_TESTS}
     ${OPENBFME_PORT113_TESTS}
     ${OPENBFME_PORT214_TESTS}
