@@ -749,6 +749,21 @@ def cmd_run(a) -> int:
         raise
 
 
+def load_main_results(path: Path) -> dict[str, str]:
+    """A test's status on one origin/main ("pass" / "fail" / "build" / "none"), from a batch that ran it before; {} when none did."""
+    try:
+        return {str(k): str(v) for k, v in json.loads(path.read_text(encoding="utf-8")).items()}
+    except (OSError, ValueError, AttributeError):
+        return {}
+
+
+def save_main_results(path: Path, results: dict[str, str]) -> None:
+    merged = {**load_main_results(path), **results}   # another sandbox may have added its tests meanwhile
+    tmp = path.with_suffix(f".{os.getpid()}.tmp")
+    tmp.write_text(json.dumps(merged, sort_keys=True), encoding="utf-8")
+    tmp.replace(path)
+
+
 def run_batch(a, name: str, take: list[dict], wait: list, out_dir: Path) -> int:
     rows: dict = {"main": git("rev-parse", "origin/main").strip(), "wait": wait, "out": {}, "repinned": [], "results": {}, "main_red": set(),
                   "merged": [], "conflicted": [], "renumbered": [], "verdict": "нет PR"}
@@ -756,7 +771,10 @@ def run_batch(a, name: str, take: list[dict], wait: list, out_dir: Path) -> int:
         report(name, out_dir, rows)
         return 0
     out: dict[int, str] = {}
-    main_cache: dict[str, str] = {}
+    # the results of origin/main's own run, shared by every batch on the same main (2026-11-18: 18a on sb2 and 18d on sb3 each spent ~50
+    # minutes building the same main 1910e252 for the same red pins)
+    main_file = RUNS / f"main-{rows['main'][:12]}.json"
+    main_cache: dict[str, str] = load_main_results(main_file)
     for rnd in range(1, a.rounds + 1):
         rows["verdict"] = ""
         merged, conflicted, renumbered = merge_batch(name, take, list(out))
@@ -785,6 +803,7 @@ def run_batch(a, name: str, take: list[dict], wait: list, out_dir: Path) -> int:
             git("checkout", "-q", "-f", "--detach", "origin/main")
             ok_main, _ = build("main", out_dir)
             main_cache.update({t: s for t, (s, _) in run_tests(unknown).items()} if ok_main else {t: "build" for t in unknown})
+            save_main_results(main_file, main_cache)
             git("checkout", "-q", "-f", f"batch/{name}")
         rows["main_red"] = {t for t in doctests if main_cache.get(t) in ("fail", "build")}
         excluded_now: dict[int, list[tuple[str, str]]] = {}

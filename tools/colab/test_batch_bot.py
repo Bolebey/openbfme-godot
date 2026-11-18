@@ -129,3 +129,13 @@ def test_a_pr_leaves_the_batch_with_a_mark_unless_its_return_comment_says_why():
     rows = {"verdict": "красный: инструменты", "conflicted": []}
     assert [p["number"] for p, _ in bb.left_batch(take, rows, {612: "ломает t"})] == [601, 605]
     assert bb.taken_comment("2026-11-18e", take[0], "2").startswith(f"<!-- batch 2026-11-18e {take[0]['headRefOid']} -->")
+
+
+def test_main_results_are_shared_between_batches_on_one_main(tmp_path):
+    f = tmp_path / "main-1910e2523abc.json"
+    assert bb.load_main_results(f) == {}
+    bb.save_main_results(f, {"perf1*": "fail"})
+    bb.save_main_results(f, {"uber1*": "pass"})
+    assert bb.load_main_results(f) == {"perf1*": "fail", "uber1*": "pass"}
+    f.write_text("not json")
+    assert bb.load_main_results(f) == {}
