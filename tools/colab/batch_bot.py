@@ -652,6 +652,10 @@ def loop_round(a, st: dict) -> str:
     if not should_start(len(take), since, a.min, a.idle_hours):
         return f"{len(take)} green PR(s): a batch starts at {a.min}, or at 1 after {a.idle_hours:g} h since the last batch"
     used = {q.name.split(".")[0] for q in RUNS.glob("2*")} if RUNS.exists() else set()
+    # the batch branches on origin too: a run folder can be gone from Drive while its branch lives (2026-11-18: the loop named its batch
+    # 2026-11-18a over the morning's batch/2026-11-18a)
+    used |= {r.rsplit("/", 1)[-1] for r in sh(["git", "ls-remote", "--heads", "origin", "refs/heads/batch/*"], cwd=REPO).stdout.split()
+             if r.startswith("refs/heads/batch/")}
     name = next_name(time.strftime("%Y-%m-%d", time.gmtime()), used)
     RUNS.mkdir(parents=True, exist_ok=True)
     say(f"batch {name}: {' '.join('#%d' % p['number'] for p in take)}")
