@@ -354,6 +354,30 @@ void unitsSweep(const std::string &faction, Results &res, bool sweep)
 		{
 			trace(e->name); // an object-level trace line: a crash before its first press names the object
 		}
+		// MATRIX_TODO 11 (tools/matrix_run.py bisect): FACTB_LIST=<file>, one exact object name per line: only those, in the run's own order
+		static const std::set<std::string> listed = [] {
+			std::set<std::string> out;
+			if (const char *path = std::getenv("FACTB_LIST"))
+			{
+				std::ifstream in(path);
+				for (std::string line; std::getline(in, line);)
+				{
+					while (!line.empty() && (line.back() == '\r' || line.back() == ' '))
+					{
+						line.pop_back();
+					}
+					if (!line.empty())
+					{
+						out.insert(line);
+					}
+				}
+			}
+			return out;
+		}();
+		if (std::getenv("FACTB_LIST") && !listed.count(e->name))
+		{
+			continue;
+		}
 		if (const char *only = std::getenv("FACTB_ONLY")) // a debugging run of some units: comma-separated parts of their names
 		{
 			bool any = false;
@@ -594,9 +618,12 @@ void unitsSweep(const std::string &faction, Results &res, bool sweep)
 					for (const std::string &nu : cb->m_neededUpgrade)
 					{
 						const UpgradeTemplate *need = s.world->upgrades().findUpgrade(nu);
-						if (need && need->getUpgradeType() == UPGRADE_TYPE_PLAYER)
+						if (need && need->getUpgradeType() == UPGRADE_TYPE_PLAYER && !g.rig.local->hasUpgradeComplete(nu))
 						{
 							g.rig.local->addCompletedUpgrade(nu);
+							// MATRIX_TODO 11 (2026-11-18, the first bisect): given for this button only, removed again by clear(): the goblin riders' clubs
+							// need Upgrade_GroBorkKrone, which stayed with the player and, through ConflictsWith, kept Azog's raven post paused later on
+							fixtureUpgrades.push_back(nu);
 						}
 					}
 					g.step(2);
@@ -863,10 +890,29 @@ void unitsSweep(const std::string &faction, Results &res, bool sweep)
 				{
 					fixtureDetail = "DISABLED: needs a StancesBehavior (RW 0x942A77: restricted without one, as in retail; a horde member's stance is its horde's)";
 				}
+				// MATRIX_TODO 11 (2026-11-18, Azog's raven post red only after the goblin riders): a module of the unit that has not run and whose
+				// ConflictsWith names an upgrade the player or the unit holds (UpgradeMux slot 2, RW 0x8097D6 testForAny) is named in a GREY-BUG line
+				std::string conflicts;
+				for (const std::unique_ptr<BehaviorModule> &bm : u->modules())
+				{
+					const UpgradeMux *mux = bm->getUpgrade();
+					if (!mux || mux->isAlreadyUpgraded() || !mux->muxData())
+					{
+						continue;
+					}
+					for (const std::string &cw : mux->muxData()->m_conflictsWith)
+					{
+						if (g.rig.local->hasUpgradeComplete(cw) || u->hasUpgrade(cw))
+						{
+							conflicts += str("; %s ConflictsWith %s, held by the %s", bm->getModuleData() ? bm->getModuleData()->getModuleTagName().c_str() : "?",
+											 cw.c_str(), g.rig.local->hasUpgradeComplete(cw) ? "player" : "unit");
+						}
+					}
+				}
 				if (b.state != ButtonState::Enabled && b.state != ButtonState::Active && !modelGated)
 				{
 					res.fail(item, !fixtureDetail.empty() ? fixtureDetail
-						: fixtureApplied && greyRow ? greyfix::bugDetail(*greyRow) + str(" (button state %d)", (int)b.state) // the state tells restricted from not ready
+						: fixtureApplied && greyRow ? greyfix::bugDetail(*greyRow) + str(" (button state %d)", (int)b.state) + conflicts // the state tells restricted from not ready
 						: str("state %d at level %d (not enabled)", (int)b.state, u->getExperienceTracker() ? u->getExperienceTracker()->getRank() : 0));
 					continue;
 				}
