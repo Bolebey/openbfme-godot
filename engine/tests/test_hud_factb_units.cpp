@@ -2250,12 +2250,12 @@ void unitsSweep(const std::string &faction, Results &res, bool sweep)
 				if (d->m_affectContainedOnly)
 				{
 					// AffectContainedOnly: the Range scan (RW 0x89F676) is skipped, the pulse reaches the holder's contained objects: a garrison check, not this scene's
-					res.fail(item, "DISABLED: the aura affects only the objects its holder contains (AffectContainedOnly); the sweep garrisons nobody");
+					res.fail(item, "DISABLED: needs a garrison: the aura affects only the objects its holder contains (AffectContainedOnly); the sweep garrisons nobody");
 					continue;
 				}
 				if (d->m_requiredConditions)
 				{
-					res.fail(item, str("DISABLED: the aura needs a state the fresh object lacks (RequiredConditions bits 0x%X: MOUNTED / TAINT / ELVEN_WOOD)", d->m_requiredConditions));
+					res.fail(item, str("DISABLED: needs a state the fresh object lacks (the aura's RequiredConditions bits 0x%X: MOUNTED / TAINT / ELVEN_WOOD)", d->m_requiredConditions));
 					continue;
 				}
 				std::string given;
@@ -2333,6 +2333,13 @@ void unitsSweep(const std::string &faction, Results &res, bool sweep)
 					{
 						const AttributeModifierPool *pool = o ? static_cast<const AttributeModifierPool *>(o->findModule("AttributeModifierPoolUpdate")) : nullptr;
 						on = on || (pool && pool->hasList(d->m_bonusName));
+					}
+					// AllowSelf: the holder is one of the aura's targets (2026-11-18: Smaug's Drachenschuppen, Range 1, reads NO-AURA on a copy beside it)
+					if (d->m_allowSelf && !on)
+					{
+						Object *hh = g.logic().findObjectByID(aura.holder);
+						const AttributeModifierPool *hp = hh ? static_cast<const AttributeModifierPool *>(hh->findModule("AttributeModifierPoolUpdate")) : nullptr;
+						on = hp && hp->hasList(d->m_bonusName);
 					}
 				}
 				const std::string what = str("%s on %s (%s) at %.0f of Range %.0f%s", d->m_bonusName.c_str(), targetName.c_str(), d->m_targetEnemy ? "enemy" : "own",

@@ -51,7 +51,7 @@ CATEGORIES = [
     ("CRASH", re.compile(r"^CRASH")),                                # the engine died at this press: the first thing to fix
     ("STANCE", re.compile(r"^S-289")),                              # the stance button opens the radial: a known stop, not a fault
     ("NO-STANCE", re.compile(r"^STANCE: ")),                          # MATRIX_TODO 3: the stance radial pressed, a stance not taken (red)
-    ("NO-AURA", re.compile(r"^NO-AURA: ")),                            # MATRIX_TODO 5: an active aura that put its modifier on no target in range (red)
+    ("NO-AURA", re.compile(r"^NO-AURA: ")),                            # MATRIX_TODO 5: an active aura that put its modifier on no target in range (unverified, see UNVERIFIED)
     ("UNPORTED", re.compile(r"^UNPORTED: ")),                          # MATRIX_TODO 4: the click refused by an unported per-type object test (red: a port gap)
     ("NO-END", re.compile(r"never expires, though its Duration")),        # MATRIX_TODO 2: a modifier applied for good though its list has a Duration (RW 0x805A8E)
     ("NO-VALUE", re.compile(r"NO-VALUE: ")),                           # MATRIX_TODO 1b: a list landed, but the value the engine reads did not move by it (red)
@@ -80,10 +80,12 @@ CATEGORIES = [
 
 # Not red: the grey verdicts and the ones found to be the scene's or the mod's own (matrix review 2026-11-17). ORDER: red in the full run,
 # fine when the object is swept alone (tools/matrix_run.py recheck): leftovers of the earlier objects, not the port.
-NOT_RED = {"PASS", "STANCE", "DISABLED", "INVENTORY", "TEMPORARY", "MEMBER", "MOD-DATA", "NO-TARGET", "BY-DESIGN", "ORDER"}
+NOT_RED = {"PASS", "STANCE", "DISABLED", "INVENTORY", "TEMPORARY", "MEMBER", "MOD-DATA", "NO-TARGET", "BY-DESIGN", "ORDER", "NO-AURA"}
 # not red, but not shown green either (owner 2026-11-18: "не прячешь ли ты реальные проблемы"): the sweep could not judge them, and the owner's checks
 # in the original found real port gaps among them (MOD-DATA: 2 of 5 work in the original; NO-TARGET hid a working repair; ORDER may be a state leak)
-UNVERIFIED = {"MOD-DATA", "NO-TARGET", "ORDER"}
+# NO-AURA (2026-11-18 recount, 37 rows): the aura check does not yet give the target its state (Eowyn disguised), the holder itself (AllowSelf) or
+# the filter's kind (structures, Nazgul): unverified until it does, not red
+UNVERIFIED = {"MOD-DATA", "NO-TARGET", "ORDER", "NO-AURA"}
 
 
 def category(verdict: str, detail: str) -> str:
