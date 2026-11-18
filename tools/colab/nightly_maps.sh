@@ -128,6 +128,13 @@ run() {
   local manual; manual=$(ls -d "$DRIVE"/openbfme-audit/field-audit-v* 2>/dev/null | sort -V | tail -1)/manual-check.tsv
   python3 tools/mod/field_audit.py --base "$ROTWK_INSTALL" --overlay "$OPENBFME_ENNORATH_INSTALL" --coverage "$AUDIT/module-coverage.tsv" \
       --manual "$manual" --out "$AUDIT" >> "$RUNS/nightly_audit.log" 2>&1 || { echo "field audit failed at $rev" >> "$LOG"; return 1; }
+  # field-audit-auto is the one place every reader takes the audit from (owner 2026-11-18: "чтобы ночной сам везде обновлял"): the hand
+  # verdicts this run applied sit next to it, and README.txt says which main and which vN they are; the numbered vN stay hand releases
+  # (Claude adds new verdicts there), so no prompt or document names a version or a date that goes stale
+  cp -f "$manual" "$AUDIT/manual-check.tsv"
+  printf 'field-audit-auto: main %s, %s UTC (tools/colab/nightly_maps.sh, sandbox %s); hand verdicts from %s
+%s
+' "$rev" "$(date -u '+%F %T')" "$SB"       "$(basename "$(dirname "$manual")")" "$(grep -m1 'fields of the mod' "$AUDIT/field-audit.md" 2>/dev/null)" > "$AUDIT/README.txt"
   audit_zip "$rev" "$manual" || echo "audit zip failed at $rev" >> "$LOG"   # never stops the run
   [ -d /content/py219/angr ] || python3 -m pip install -q --target /content/py219 angr==9.2.213 bitstring==4.4.0 pycparser==3.0 > /dev/null 2>&1
   export PYTHONPATH=/content/py219
