@@ -1487,6 +1487,7 @@ add_executable(openbfme_tests
     tests/test_local_62.cpp
     # lane LOCAL-63 (Isengard unpack buildings stay visible at 100% completion, issue #508 / P-129)
     tests/test_local_63.cpp
+    tests/test_local_64.cpp
     # lane LOCAL-73 (ability visuals: P-139/P-141/P-144/P-146/P-147/P-149, issue #535)
     tests/test_local_73.cpp
     # lane LOCAL-59 (WeaponFireSpecialAbilityUpdate makes and loads weapon in ctor, fork issue #418)
