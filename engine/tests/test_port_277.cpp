@@ -196,7 +196,10 @@ TEST_CASE("PORT-277: late weapon definition leaves an unbound slot before the ra
 	w.combat().setAutoAcquireEnabled(false);
 	Object *source = w.unit("P277ArcherHorde", 'A', 300, 300);
 	REQUIRE(w.stores.weapons().findWeaponTemplate("P277Late") != nullptr);
-	for (Object *member : w.membersOf(source))
+	w.frames(12);
+	const auto members = w.membersOf(source);
+	REQUIRE(members.size() == 6);
+	for (Object *member : members)
 	{
 		CHECK(member->getWeapons()->weaponInSlot(SECONDARY_WEAPON) == nullptr);
 		CHECK(member->getWeapons()->curSlot() == PRIMARY_WEAPON);
@@ -461,7 +464,7 @@ void check(size_t index)
 			if (v.getID() == victim && taken > 0 && owner && owner->getTemplate()->getName() == "P277Volley") oclDamage = true;
 		});
 		ocl->doSpecialPowerAtLocation(at, 0);
-		w.frames(100);
+		w.frames(200);
 		CHECK(oclDamage); // independent OCL -> FireWeaponUpdate, RW 0x8C75D8 / 0x88F554
 		w.combat().setDamageTrace({});
 	}

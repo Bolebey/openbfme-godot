@@ -1,99 +1,105 @@
-# PORT-277 / fork issue 644 — диагностика, STOP (draft)
+# PORT-277 / fork issue 644 — синтетические формы восьми кнопок
 
-## Граница
+## Область и источники
 
-Исходный HordeAttackNugget уже работает на main. Первоначальное решение
-остановиться после воспроизведения заменено ответом владельца: сохранить
-синтетические тесты, разобрать восемь реальных кнопок и открыть PR.
-Собственные функции WeaponFireSpecialAbilityUpdate (Local 76) не меняются.
-В этой ветке **нет изменений engine/src**, нового состояния симуляции,
-изменений хэшей, эталонов или сгенерированных карт. Upstream code-fix нет.
+По ответу владельца в #644 real-definition fixture удалён: тестам не нужны
+ни Scripts.ini, ни установка, ни архив INI, ни переменные окружения.
+Определения не извлекаются и не копируются в Git. Вместо них написаны
+минимальные синтетические строки той же причинной формы. Начальные два
+синтетических теста сохранены без ослабления.
 
-## Что прочитано
+Источник формы — ранее проверенный архив INI Ennorath 1.9.8.3: наличие
+HordeContain, SpecialPowerModule / WeaponFireSpecialAbilityUpdate,
+совпадение или несовпадение шаблонов, TERTIARY / QUINARY, оружие бойцов с
+ProjectileNugget и отдельным warhead, paused/unlock и независимый OCL-путь.
+Сохранены значимые для выбранных веток поля и значения. Имена P277*, три
+бойца в одном ранге, геометрия/броня мишени и одиночный OCL-сентинел —
+синтетическая оснастка, не полная копия игрового объекта. У OCL-сентинела
+свой контрольный урон: проверяется путь доставки, не баланс/разброс мода.
 
-Проверенные бинарники RW 2.01 / BFME2 1.06 и внешний INI-архив Ennorath
-1.9.8.3; контрольные суммы архивов и бинарников проверены до исследования.
-Данные игры остаются вне Git. RW прочитан непосредственно через
-`tools/mod/rw.py ... dis`, донор Open-BFME-2 использован только как помощь.
+RW 2.01 был прочитан непосредственно `tools/mod/rw.py dis` при первом
+разборе этой задачи на проверенном бинарнике. Здесь используются эти
+зафиксированные чтения; новый перенос движка не делается. Строка eager
+lookup дополнительно ссылается на существующий порт WeaponSet.cpp и его
+RW-адреса; в этом продолжении бинарник повторно не читался. Таблица ниже
+отделяет адрес функции от смещения читаемого поля.
 
-| RW FUNCTION START | Наблюдение |
+| RW FUNCTION START / поле | Что установлено |
 |---|---|
-| 0x911A58 / 0x911AC9 | object / position HordeAttackNugget: проверка источника, contain и horde interface; без них возврат. Иначе lock через 0x69121A и dispatch интерфейса. |
-| 0x875221 / 0x875550 | Приказы бойцам по объекту / позиции. Самостоятельного добавления DamageNugget здесь нет. Это ещё не доказывает, что последующий общий выбор оружия сохранит dummy-слот. |
-| 0x73B22F | Разрешение имени SpecialPower через store. |
-| 0x68C26D / 0x8969D1 | Поиск интерфейса способности и точное сравнение указателя шаблона. |
-| 0x82D925 | Проверка source-type mask в 0x82D94E..0x82D961; поиск интерфейса в 0x82D96A; отказ при null в 0x82DA81..0x82DA86. |
-| 0x8C75D8 | OCLSpecialPower в указанной точке; отдельное создание OCL, не урон range-finder. |
-| 0x88F554 | FireWeaponUpdate: оружия с задержками, огонь из координат созданного объекта. |
+| 0x91197E, таблица 0xC7BC7C; ctor 0x911B39 | ClosestMemberOnly — nugget +0x148; LockWeaponSlot — +0x14C, default 5. |
+| 0x911A58 / 0x911AC9, чтение nugget +0x14C | Object / position доставка: без source/contain/horde interface возврат; при slot != 5 вызов 0x69121A(slot, LOCKED_TEMPORARILY) до выдачи приказа. PRIMARY временного extra weapon не подменяет это поле. |
+| 0x69121A | Блокировка сначала распространяется через contain slot 0x168 на бойцов, затем на источник. |
+| 0x875221 / 0x875550 | Приказ бойцам в объект / позицию. Нет самостоятельного DamageNugget в range-finder; урон бойцов приходит через их оружие/warhead. |
+| 0x73AE79 → 0x6CC5DF; WeaponSet parser 0x6C7FB3 | Ссылка на оружие разрешается немедленно при чтении WeaponSet, не при создании бойца и не при выстреле. Позднее определение не чинит ранее сохранённый null. |
+| 0x73B22F, 0x68C26D, 0x8969D1 | Разрешение SpecialPower и поиск интерфейса по точному указателю шаблона. |
+| 0x82D925 | Поиск интерфейса 0x82D96A, отказ при null 0x82DA81..0x82DA86 (даже без проверки готовности); ранее source-type mask 0x82D94E..0x82D961. |
+| 0x8B9676 | UnpauseSpecialPowerUpgrade разблокирует соответствующую способность. |
+| 0x8C75D8 / 0x88F554 | Независимый OCL в точке → FireWeaponUpdate созданного объекта. |
 
-## Восемь кнопок: определения проверены, runtime заблокирован
+## Исправлена причина красного dummy-теста, не ожидание RW
 
-Подробности: [matrix_explain.d/PORT-277.md](matrix_explain.d/PORT-277.md).
-Это **не восемь пройденных тестов** и не новый прогон матрицы.
+Ранее P277Dummy объявлялся **после** объекта с `Weapon = SECONDARY
+P277Dummy`. В момент чтения WeaponSet магазин его ещё не содержал,
+поэтому SECONDARY был пустым ещё **до выстрела**. Полученный PRIMARY
+не доказывал переключения с существующего dummy-оружия.
 
-| Объект / кнопка | Установлено чтением определений и RW; что ещё не проверено | RW |
-|---|---|---|
-| IsenfurtWchter / Command_IsenfurtWchterSmite | Без HordeContain; no-op соответствует RW. Реальный runtime-тест не дошёл до выстрела. | 0x911A58 |
-| IsenfurtWchterCreep / Command_IsenfurtWchterSmite | То же, отдельное определение и отдельный тест. | 0x911A58 |
-| IsenfurtWchterHorde / Command_IsenfurtWchterSmite | TERTIARY, IsenfurtWchterSpearThrown, projectile/warhead. Реальный урон и pre-shot не измерены. | 0x911A58, 0x875221 |
-| IsenfurtWchterHordeHerold / Command_IsenfurtWchterSmite | Кнопка и starter/updater называют разные SpecialPower; имя из модулей не определено. Ожидаемый отказ до нагета, S-7472; HUD-клик/runtime не проверены. | 0x73B22F, 0x68C26D, 0x8969D1, 0x82D925 |
-| DwarvenAxtschwingerHorde / Command_AxtschwingerAxeThrow | TERTIARY, DwarvenZealotBoomAxeThrownEdain, projectile/warhead. Реальный урон и pre-shot не измерены. | 0x911A58, 0x875221 |
-| AngmarDarkRangerHorde / Command_AngmarRangersIceArrowAbility | QUINARY, AngRangerIceShotArrowMod, projectile/warhead; starter разблокируется Upgrade_ObjectLevel1. Реальный урон/pre-shot не измерены. | 0x911A58, 0x875221 |
-| GondorRangerHorde / Command_MenLongShotAbility | QUINARY — MenLongShotFakeWeapon без нагетов; отдельный OCL_LongShotAbilityGondor → MenLongShotObjectGondor → FireWeaponUpdate. Нельзя пока утверждать отсутствие переключения dummy → PRIMARY: новая синтетика красная. OCL-урон не измерен. | 0x911AC9, 0x875550, 0x8C75D8, 0x88F554 |
-| DwarvenDain_mod / Command_SpecialAbilityDrarSpeerfeuer | Нет HordeContain; range-finder no-op. Отдельный OCL_SpeerfeuerAbility → eggs → OCL_DrarSpeerfeuerProjectile → DrarSpeerfeuerProjectile / FireWeaponUpdate. Урон этого пути не измерен. | 0x911AC9, 0x8C75D8, 0x88F554 |
+Теперь определение предшествует ссылке. Добавлены REQUIRE непустого
+SECONDARY и проверка, что шаблон не содержит нагетов. Старые проверки
+сохранены: шесть приказов, выбран SECONDARY, урон отсутствует. Отдельный
+контрпример позднего определения проверяет, что шаблон уже есть в store,
+но ранее загруженный слот по-прежнему null и PRIMARY выбран до нагета.
+Это ошибка оснастки предыдущего теста; engine/src не менялся.
 
-## Реальная сборка и результаты
+## Что именно проверяют восемь тестов
 
-Полная цель `openbfme_tests` собрана: Release, Godot OFF, Ninja `-j1`,
-1810/1810. Затем выполнена инкрементальная сборка последней версии
-`test_port_277.cpp` (7/7). Основа измеренного бинарника — `3d017a41`,
-HEAD `f8ebbf32` плюс диагностический diff, сохранённый следующим коммитом.
-После последующего rebase на свежий main эти результаты **исторические**:
-новая основа не собрана из-за зафиксированного стопа входных данных.
+Каждый `PORT-277 button <объект> ...` имеет свою синтетическую кнопку и
+проверяет соответствующую форму. Связь кнопка → power → updater →
+range-finder проверяется явно. После этого используется штатная доставка
+**уже выстрелившего** extra weapon — согласованная граница с Local 76.
+Собственные функции WeaponFireSpecialAbilityUpdate не меняются и их
+полный pre-shot/HUD-цикл не объявляется проверенным.
 
-```text
-OPENBFME_ENNORATH_INI_DIR=<внешний корпус> engine/build/openbfme_tests -tc="PORT-277*"
-[doctest] test cases:    11 |     2 passed |  9 failed | 6887 skipped
-[doctest] assertions: 30652 | 30631 passed | 21 failed |
-[doctest] Status: FAILURE!
-```
+| Кнопка / объект | RW и ожидаемый результат синтетики |
+|---|---|
+| IsenfurtWchter / Smite | 0x911A58: нет HordeContain, выстрел нагета не наносит урона. |
+| IsenfurtWchterCreep / Smite | 0x911A58: тот же guard, отдельный сценарий. |
+| IsenfurtWchterHorde / Smite | 0x911A58, 0x69121A, 0x875221: TERTIARY у бойцов; projectile/warhead повреждает цель, damage trace подтверждает источник-бойца. |
+| IsenfurtWchterHordeHerold / Smite | 0x73B22F, 0x68C26D, 0x8969D1, 0x82D925: несовпавший/неопределённый power не даёт интерфейса кнопке; независимый forced-after-shot нагет всё равно приказывает TERTIARY и даёт урон бойцов. |
+| DwarvenAxtschwingerHorde / Axe Throw | 0x911A58, 0x875221: TERTIARY, projectile/warhead, урон бойцов. |
+| AngmarDarkRangerHorde / Ice Arrows | 0x8B9676: paused → level-one upgrade → unpaused; 0x911A58, 0x875221: QUINARY, projectile/warhead, урон бойцов. |
+| GondorRangerHorde / Long Shot | 0x911AC9, 0x875550: QUINARY dummy остаётся выбран, range-finder и dummy не дают урона; отдельный OCL → FireWeaponUpdate после задержки даёт урон (0x8C75D8, 0x88F554). |
+| DwarvenDain_mod / Speerfeuer | 0x911AC9: singleton без HordeContain — no-op; отдельный OCL → zero-lifetime egg → delayed SlowDeath OCL → FireWeaponUpdate даёт урон. |
 
-- **Исходные два теста проходят**: прямой и projectile/warhead урон
-  бойцов через SECONDARY; одиночный источник без HordeContain no-op.
-  Отдельный повтор точного фильтра `PORT-277: existing*,PORT-277: single*`:
-  2 теста, 84 проверки, 0 ошибок, 6896 исключены фильтром, SUCCESS.
-- **Новый dummy-тест красный**: оба subcase получили PRIMARY вместо
-  ожидаемого SECONDARY (12 ошибок); object-subcase также уменьшил здоровье
-  цели со 100 до 0 (1 ошибка). Это опровергает ожидание нового теста,
-  а не доказывает баг движка или поведение RW. Утверждение «не заимствует
-  PRIMARY» не принимается без чтения общего выбора/снятия lock в RW.
-  Ожидания не ослаблены, красный тест оставлен видимым в draft. S-7474.
-- **Каждый из восьми реальных тестов** завершился на проверке отчёта
-  RetailObjectWorld: отсутствует `Data/Scripts/Scripts.ini` (8 ошибок).
-  Проверены распакованный корпус и список проверенного ZIP: этого файла
-  там нет. Нет и полных установок для обычного EnnorathScenario mount.
-  До assertion по оружию, приказам, урону, OCL и pre-shot тесты **не дошли**.
-  Сообщения диагностики Local 76 не получены; назначать ему причину нельзя.
-  Не подставлялся пустой файл и не фильтровалась ошибка загрузки. S-7473.
+Это проверка механизма, **не** финальный вердикт BY-DESIGN для красных
+кнопок. Все восемь реальных кнопок, HUD-клик и сцену fall back 8p проверяет
+Claude на ПК владельца по ответу в #644. Кандидаты для этой проверки
+перечислены в matrix_explain; карты и TOP20 здесь не менялись.
 
-`test_select.py --base origin/main` на измеренной основе: `5 changed files,
-no test map, the #include rule; FULL suite: engine/CMakeLists.txt: no test
-can be traced from this file`. FULL, обязательные retail-наборы и игровой
-HUD-прогон не запускались; доступны не все исходные игровые файлы. Нет
-заявления о прохождении полного набора или готовности к переносу в main.
+## Проверки
 
-## Ожидания и оставшаяся работа
+Полная сборка `openbfme_tests` на перебазированной основе `873b75b2`:
+Release, Godot OFF, Ninja `-j1`: **PASS**, 1835 шагов плюс инкрементальная
+пересборка окончательного файла тестов.
 
-Существующие два синтетических теста не ослаблены. Добавлены восемь
-проверок внешних определений и один dummy-тест; ранее этих проверок не
-было. Источник ожидаемых графов — определения внешнего архива; источник
-веток нагета — RW из таблицы выше. **Ожидание сохранения dummy-слота
-требует дополнительного источника RW** (S-7474), runtime его не подтвердил.
+- `engine/build/openbfme_tests -tc="PORT-277*"`: **12/12 тестов,
+  463/463 проверки, SUCCESS**.
+- Исходные два теста отдельно: **2/2, 84/84, SUCCESS**.
+- `-tc="PORT-277 button*"`: **8/8 тестов, 292/292 проверки, SUCCESS** —
+  все восемь строк таблицы выше проходят.
+- `-tc="PORT-277*" --order-by=rand --rand-seed=277`: **12/12,
+  463/463, SUCCESS** (дополнительная проверка восстановления globals).
+- `python3 tools/fragments.py check`: **PASS**, 1 stop / 1 night-watch.
+- `git diff --check`: **PASS**.
 
-Статус **stop / draft**, не review. Владелец должен предоставить штатный
-`Data/Scripts/Scripts.ini` либо полный штатный mount (RotWK + BFME2 +
-Ennorath). После этого: уточнить RW-ожидание dummy-оружия, собрать свежую
-основу, пройти весь `PORT-277*`, получить фактическую восьмистрочную
-runtime-таблицу и только затем перевести PR из draft. Никаких выводов,
-что все реальные кнопки работают или что range-finder не выпускает
-Local 76, этот прогон не даёт.
+S-7473 снят: зависимости от игровых файлов больше нет. S-7474 снят:
+исправлен порядок определения dummy, первоначальные ожидания SECONDARY
+и отсутствия урона прошли. Остался S-7472 как кандидат для проверки
+реальной Herald-кнопки владельцем, не блокировка синтетического набора.
+
+`test_select.py --base origin/main`: `9 changed files, no test map, the
+#include rule; FULL suite: engine/CMakeLists.txt: no test can be traced from
+this file`. В этой задаче ответ владельца требует полный фильтр
+`PORT-277*`; полный набор всех подсистем и retail-наборы не объявляются
+пройденными. MP3-fixture tools в sandbox отсутствуют; фильтр PORT-277
+их не использует. Никаких новых simulation state, xfer/crc, пинов,
+сгенерированных карт или upstream code-fix в этой ветке нет.
