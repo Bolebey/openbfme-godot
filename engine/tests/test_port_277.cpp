@@ -145,7 +145,10 @@ TEST_CASE("PORT-277: single firer with no HordeContain does not turn the rangefi
 }
 
 // RW 0x911A58 / RW 0x911AC9 only lock and dispatch; RW 0x875221 /
-// RW 0x875550 never substitute a damaging member slot for an empty one.
+// RW 0x875550 themselves only dispatch. DRAFT S-7474: these functions
+// do not establish the subsequent AI weapon choice. The expectation below
+// failed on main and must be checked against that downstream RW path; it
+// is deliberately not weakened or reported as a passing protection.
 TEST_CASE("PORT-277: a dummy member weapon never borrows damage from PRIMARY or the rangefinder")
 {
 	std::string ini = std::string(kHit) + kPort277;
@@ -182,6 +185,7 @@ TEST_CASE("PORT-277: a dummy member weapon never borrows damage from PRIMARY or 
 // below that directory). With full game installs, the normal scenario mount is
 // also supported. No custom INI parser or copied retail block is used here.
 #include "EnnorathScenario.h"
+#include "SweepEffectProbe.h"
 #include "BigTestUtil.h"
 #include "GameLogic/ActionManager.h"
 #include "Common/SpecialPower.h"
@@ -254,8 +258,9 @@ struct Row
 };
 
 // Names, not copies of the mod's definitions. The expected graph is checked
-// against the externally loaded data. RW 0x911A58 / RW 0x911AC9 never borrow
-// damage from another slot; RW 0x875221 / RW 0x875550 only issue AI orders.
+// against the externally loaded data. RW 0x911A58 / RW 0x911AC9 dispatch;
+// RW 0x875221 / RW 0x875550 only issue AI orders. Subsequent dummy-slot
+// choice remains unverified (S-7474); these real tests are blocked by S-7473.
 const Row rows[] = {
 	{ "IsenfurtWchter", "Command_IsenfurtWchterSmite", "IsenfurtWchterSmiteRangeFinder", "", "FactionRohan", TERTIARY_WEAPON, false, "" },
 	{ "IsenfurtWchterCreep", "Command_IsenfurtWchterSmite", "IsenfurtWchterSmiteRangeFinder", "", "FactionRohan", TERTIARY_WEAPON, false, "" },
@@ -284,11 +289,55 @@ void frames(structtest::Arena &arena, unsigned count)
 	for (unsigned i = 0; i < count; ++i) arena.logic.runLogicFrame();
 }
 
+// Observations at the ownership boundary, not assertions pinning a broken
+// updater as expected behaviour. The after-shot assertions below remain RW's.
+void diagnosePreShot(size_t index, hudtest::SharedWorld &data)
+{
+	if (index != 2 && index != 4 && index != 5) return;
+	const Row &row = rows[index];
+	structtest::Arena arena(data, row.faction, "FactionMordor", 160);
+	arena.logic.combat().setAutoAcquireEnabled(false);
+	Object *source = place(arena, data, row.object, 0, 500, 500);
+	// angmarhordes.ini: the starter is unpaused by this level-one upgrade.
+	if (index == 5) source->giveUpgrade("Upgrade_ObjectLevel1");
+	Object *target = place(arena, data, "MordorFighter", 1, 650, 500);
+	frames(arena, 30);
+	const auto *button = data.world->commands().findCommandButton(row.button);
+	REQUIRE(button != nullptr);
+	const auto *power = data.world->spellStores().specialPowers().findSpecialPowerTemplate(button->m_specialPowerName);
+	REQUIRE(power != nullptr);
+	WeaponFireSpecialAbilityUpdate *updater = nullptr;
+	for (const auto &m : source->modules())
+	{
+		auto *wf = dynamic_cast<WeaponFireSpecialAbilityUpdate *>(m.get());
+		if (wf && wf->drivesSpecialPower(power)) updater = wf;
+	}
+	REQUIRE(updater != nullptr);
+	const auto *starter = dynamic_cast<const SpecialPowerModule *>(SpecialPowerModules::findModule(*source, power));
+	REQUIRE(starter != nullptr);
+	const int pausedBefore = starter->pauseCount();
+	bool hurt = false;
+	const ObjectID id = target->getID();
+	arena.logic.combat().setDamageTrace([&](const Object &victim, std::uint32_t, float, float taken) {
+		if (victim.getID() == id && taken > 0.0f) hurt = true;
+	});
+	const bool accepted = SpecialPowerModules::doSpecialPowerAtObject(*source, power, target, button->m_options, true);
+	frames(arena, 300);
+	auto *horde = dynamic_cast<HordeContain *>(source->getContain());
+	MESSAGE("PORT-277 pre-shot " << row.object << ": dispatchAccepted=" << accepted
+		<< " pausedBefore=" << pausedBefore << " initiates=" << starter->initiates()
+		<< " shots=" << updater->shotsFired() << " packing=" << updater->packingState()
+		<< " triggered=" << updater->triggerCount() << " damage=" << hurt
+		<< " hordeFires=" << (horde ? horde->attackStats().fires : 0));
+	arena.logic.combat().setDamageTrace({});
+}
+
 void checkRow(size_t index)
 {
 	auto *data = world();
 	if (!data) return; // explicit SKIP printed above; synthetic cases always run
 	const Row &row = rows[index];
+	diagnosePreShot(index, *data);
 	INFO(row.object << " / " << row.button);
 	structtest::Arena arena(*data, row.faction, "FactionMordor", 160);
 	arena.logic.combat().setAutoAcquireEnabled(false);
@@ -303,6 +352,15 @@ void checkRow(size_t index)
 	REQUIRE(power != nullptr);
 	const auto *rangefinder = data->world->weaponStores().weapons().findWeaponTemplate(row.rangefinder);
 	REQUIRE(rangefinder != nullptr);
+	unsigned matchingUpdaters = 0;
+	for (const auto &m : source->modules())
+	{
+		const auto *wf = dynamic_cast<const WeaponFireSpecialAbilityUpdate *>(m.get());
+		if (!wf || !wf->ownedWeapon() || wf->ownedWeapon()->getTemplate() != rangefinder) continue;
+		++matchingUpdaters;
+		if (index != 3) CHECK(wf->drivesSpecialPower(power));
+	}
+	REQUIRE(matchingUpdaters == 1);
 	REQUIRE(rangefinder->m_nuggets.size() == 1);
 	const auto *nugget = dynamic_cast<const HordeAttackNugget *>(rangefinder->m_nuggets.front().get());
 	REQUIRE(nugget != nullptr);
@@ -321,6 +379,7 @@ void checkRow(size_t index)
 			const Weapon *weapon = member->getWeapons()->weaponInSlot(row.slot);
 			REQUIRE(weapon != nullptr);
 			CHECK(weapon->getTemplate()->getName() == row.memberWeapon);
+			if (index == 6) CHECK(weapon->getTemplate()->m_nuggets.empty());
 			memberIDs.insert(member->getID());
 		}
 		REQUIRE_FALSE(memberIDs.empty());
@@ -337,7 +396,18 @@ void checkRow(size_t index)
 		CHECK(data->world->spellStores().specialPowers().findSpecialPowerTemplate("SpecialAbilityWestfoldWchterSpear") == nullptr);
 		CHECK(SpecialPowerModules::findModule(*source, power) == nullptr);
 		CHECK_FALSE(ActionManager::canDoSpecialPowerAtObject(*source, target, CMD_FROM_PLAYER, power, 0, true));
+		CHECK_FALSE(ActionManager::canDoSpecialPowerAtObject(*source, target, CMD_FROM_PLAYER, power, 0, false));
 	}
+
+	// Diagnose the matrix without changing or pinning its shared probe rules.
+	// It inspects both the horde and members, including member modules that
+	// could never drive a HordeAttackNugget (RW 0x911A58).
+	const auto probe = sweep_probe::EffectProbe::take(arena.logic, source, power, 0, target);
+	unsigned emptyDamageExpectations = 0;
+	for (const auto &e : probe.expects)
+		if (e.kind == sweep_probe::EffectProbe::DAMAGE && !e.weapon && e.weapons.empty())
+			++emptyDamageExpectations;
+	MESSAGE("PORT-277 matrix " << row.object << ": unfulfillable DAMAGE expectations=" << emptyDamageExpectations);
 
 	bool memberDamage = false, anyDamage = false;
 	arena.logic.combat().setDamageTrace([&](const Object &victim, std::uint32_t owner, float, float taken) {
@@ -365,7 +435,7 @@ void checkRow(size_t index)
 	}
 	frames(arena, 180);
 	if (index >= 2 && index <= 5) CHECK(memberDamage);
-	else CHECK_FALSE(anyDamage);
+	else CHECK_FALSE(anyDamage); // index 6: draft expectation, still needs RW selection proof (S-7474)
 	arena.logic.combat().setDamageTrace({});
 
 	if (*row.ocl)
@@ -377,8 +447,14 @@ void checkRow(size_t index)
 		const auto *list = TheObjectCreationListStore->findObjectCreationList(row.ocl);
 		REQUIRE(list != nullptr);
 		bool oclDamage = false;
-		arena.logic.combat().setDamageTrace([&](const Object &victim, std::uint32_t, float, float taken) {
-			if (victim.getControllingPlayer() == arena.player(1) && taken > 0.0f) oclDamage = true;
+		std::set<std::string> damageSources;
+		arena.logic.combat().setDamageTrace([&](const Object &victim, std::uint32_t owner, float, float taken) {
+			if (victim.getControllingPlayer() != arena.player(1) || taken <= 0.0f) return;
+			const Object *attacker = arena.logic.findObjectByID(owner);
+			if (!attacker || !attacker->getTemplate()) return;
+			const std::string name = attacker->getTemplate()->getName();
+			damageSources.insert(name);
+			oclDamage = oclDamage || name == (index == 6 ? "MenLongShotObjectGondor" : "DrarSpeerfeuerProjectile");
 		});
 		// Cover Speerfeuer's spread with actual enemies, not a changed OCL.
 		for (int x = -4; x <= 4; ++x)
@@ -386,6 +462,7 @@ void checkRow(size_t index)
 				place(arena, *data, "MordorFighter", 1, at.x + x * 50.0f, at.y + y * 50.0f);
 		module->doSpecialPowerAtLocation(at, 0);
 		frames(arena, 600);
+		for (const auto &name : damageSources) MESSAGE("PORT-277 OCL damage source: " << name);
 		CHECK(oclDamage);
 		arena.logic.combat().setDamageTrace({});
 	}
