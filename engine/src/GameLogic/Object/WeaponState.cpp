@@ -912,7 +912,8 @@ void FiringTracker::reset(FiringTrackerHost &host, bool hard)
 	m_victimID = 0;
 }
 
-// RW 0x8E3174 FiringTracker::speedUp (SEH prologue; the body starts at 0x8E31A4), re-read 2026-11-17 from game.dat 2.01 (md5 daed3668…).
+// RW 0x8E31A4 FiringTracker::speedUp — the start the function map knows (the SEH prologue sits at 0x8E3174, the body that reads the
+// shadow word at 0x8E31A7), re-read 2026-11-17 from game.dat 2.01 (md5 daed3668…).
 // The entry reads the shadow word [owner+0x39C]: bit 3 (0x8) set -> already FAST, nothing changes (0x8E31AD..0x8E31B8); bit 2 (0x4) clear
 // -> the MEAN arm at 0x8E3234; otherwise the MEAN -> FAST transition at 0x8E31C8.
 void FiringTracker::speedUp(FiringTrackerHost &host)
