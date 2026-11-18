@@ -38,6 +38,7 @@
 #include "GameLogic/Module/HeroModules.h"
 #include "GameLogic/Module/SpellBookPowers.h"
 #include "GameLogic/Module/StealthAbilityModules.h"
+#include "GameLogic/System/InvisibilityManager.h"
 #include "GameLogic/Module/WeaponChangeSpecialPower.h"
 #include "GameLogic/Object/AttributeModifierPool.h"
 #include "GameLogic/WallSpan.h"
@@ -223,6 +224,51 @@ const char *ownHordeOf(const std::string &faction)
 bool isPowerCommand(int c)
 {
 	return c == GUI_COMMAND_SPECIAL_POWER || c == GUI_COMMAND_SPECIAL_POWER_TOGGLE || c == GUI_COMMAND_SPECIAL_POWER_FROM_COMMAND_CENTER;
+}
+
+// Port 287's reproduction scenes, not aliases for SpecialPowerTemplate. In this overlay the old
+// button is only on the soldier. Clicking that soldier in its battalion selects the HORDE producer
+// (RW 0x7108F2), whose own command set supplies a different button, tested in its own matrix row.
+struct ChargeScene
+{
+	const char *soldier;
+	const char *oldButton;
+	const char *horde;
+	const char *hordeButton;
+};
+
+constexpr ChargeScene kChargeScenes[] = {
+	{ "AngmarSnowTroll", "Command_AngmarTrollChargeAttack", "AngmarSnowTrollHorde", "Command_SnowTrollChargeNoAimAttack" },
+	{ "AngmarDarkDunedain", "Command_AngmarChargeAttack", "AngmarDarkDunedainHorde", "Command_DDChargeNoAimAttack" },
+};
+
+bool wearsChargeScene(const ChargeScene &scene, const factb::Inventory &inventory, const GameLogic &logic, const CommandStore &commands)
+{
+	const ThingTemplate *horde = logic.things().findTemplate(scene.horde);
+	if (!horde || !inventory.find(factb::Kind::Horde, scene.horde))
+	{
+		return false;
+	}
+	horde = horde->getFinalOverride();
+	bool hasSoldier = false;
+	for (const ThingTemplate::Nugget &nug : horde->behaviorModules().nuggets())
+	{
+		if (const auto *hd = dynamic_cast<const HordeContainBehaviorData *>(nug.data.get()))
+		{
+			const auto &payload = hd->horde.m_transport.m_initialPayload;
+			hasSoldier = std::any_of(payload.begin(), payload.end(), [&](const InitialPayloadEntry &p) { return p.name == scene.soldier; });
+		}
+	}
+	const CommandSet *set = commands.findCommandSet(factb::stringFieldOf(*horde, "CommandSet"));
+	for (int i = 0; hasSoldier && set && i < CommandSet::MAX_BUTTONS; ++i)
+	{
+		const CommandButton *b = set->getCommandButton(i);
+		if (b && b->getFinalOverride()->m_name == scene.hordeButton)
+		{
+			return true;
+		}
+	}
+	return false;
 }
 
 // the modules of `o` and of its members that carry the power
@@ -523,6 +569,10 @@ void unitsSweep(const std::string &faction, Results &res, bool sweep)
 					continue;
 				}
 				const std::string item = e->name + " " + cb->m_name;
+				const bool hordeCharge = sweep && std::any_of(std::begin(kChargeScenes), std::end(kChargeScenes), [&](const ChargeScene &scene) {
+					return e->name == scene.horde && cb->m_name == scene.hordeButton;
+				});
+				const bool warriorCloak = sweep && e->name == "MirkwoodWarriorHorde" && cb->m_name == "Command_SpecialAbilityElfCloakTroopsWatcher";
 				if (sweep && sweepSkips().count(item))
 				{
 					continue; // tools/matrix_run.py's rerun after a crash: reported already, or the press that crashed
@@ -605,6 +655,11 @@ void unitsSweep(const std::string &faction, Results &res, bool sweep)
 				if (!g.select(u))
 				{
 					res.fail(item, "the unit could not be selected with a click (selection " + g.selectionText() + ")");
+					continue;
+				}
+				if ((hordeCharge || warriorCloak) && g.rig.local->selection() != std::vector<ObjectID>{ uid })
+				{
+					res.fail(item, "the member click did not select exactly its horde (RW 0x7108F2; selection " + g.selectionText() + ")");
 					continue;
 				}
 				ControlBarButton b;
@@ -1110,6 +1165,43 @@ void unitsSweep(const std::string &faction, Results &res, bool sweep)
 				collect();
 				if (mods.empty())
 				{
+					if (sweep)
+					{
+						const auto *scene = std::find_if(std::begin(kChargeScenes), std::end(kChargeScenes), [&](const ChargeScene &s) {
+							return e->name == s.soldier && cb->m_name == s.oldButton;
+						});
+						if (scene != std::end(kChargeScenes) && wearsChargeScene(*scene, inv, g.logic(), s.world->commands()))
+						{
+							res.fail(item, std::string("MEMBER: standalone soldier's old button, not an alias; the member click selects its horde. See the effect check for ")
+										   + scene->horde + " " + scene->hordeButton + " (RW 0x7108F2)");
+							continue;
+						}
+					}
+					if (warriorCloak)
+					{
+						// The report in the original is not explained by the available INI/retail path (S-7502).
+						// Press on this exact horde and report the observed port effect; do not substitute the Watchers.
+						std::vector<ObjectID> members;
+						if (u->getContain() && u->getContain()->getContainedItemsList())
+						{
+							for (const Object *m : *u->getContain()->getContainedItemsList())
+							{
+								members.push_back(m->getID());
+							}
+						}
+						auto hidden = [&]() {
+							return std::count_if(members.begin(), members.end(), [&](ObjectID id) {
+								const Object *m = g.logic().findObjectByID(id);
+								return m && InvisibilityManager::isStealthedAndUndetected(*m, enemy);
+							});
+						};
+						const auto before = hidden();
+						const bool pressed = g.press(b);
+						g.step(20);
+						res.fail(item, std::string("S-7502: original cloak route unverified; port press ") + (pressed ? "accepted" : "refused")
+									   + ", hidden live members " + std::to_string(before) + " -> " + std::to_string(hidden()) + " (20 frames)");
+						continue;
+					}
 					// 2026-11-17 (matrix review): when no template of the unit or its members (the mod's INI) lists a module for the power
 					// either, the mod gives the button no module: RotWK enables such a button too and its press does nothing (RW 0x9434F7 ..
 					// 0x943564, ControlBar.cpp) — the mod's data, not a port fault (60 of 62 NO-MODULE rows)
