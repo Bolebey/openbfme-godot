@@ -77,3 +77,15 @@ def test_the_checker_runs_the_batchs_whole_set():
     import pr_checker as pc
     assert {t for t, _ in bb.SUITE} <= set(pc.BASE)
     assert set(bb.PINS) == pc.PINS
+
+
+def test_a_batch_takes_at_most_five_green_prs_oldest_first(monkeypatch):
+    prs = [pr(number=n) for n in (612, 601, 640, 605, 633, 650, 620)]
+    monkeypatch.setattr(bb, "gh", lambda *a, **k: json.dumps(prs))
+    monkeypatch.setattr(bb, "verdict", lambda p: "green" if p["number"] != 620 else "red")
+    take, wait = bb.candidates(None)
+    assert [p["number"] for p in take] == [601, 605, 612, 633, 640]
+    assert [p["number"] for p, _ in wait] == [650, 620]
+    assert "следующая партия" in wait[0][1]
+    take, wait = bb.candidates(None, 0)
+    assert len(take) == 6

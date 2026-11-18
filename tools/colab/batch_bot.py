@@ -3,10 +3,11 @@
 result and runs tools/land.py --batch <name> on the PC.
 
     python3 tools/colab/batch_bot.py plan                       # the PRs a batch would take now, and why the others wait
-    python3 tools/colab/batch_bot.py run [--name 2026-11-18a] [--prs 601,605] [--no-comment] [--rounds 3]
+    python3 tools/colab/batch_bot.py run [--name 2026-11-18a] [--prs 601,605] [--max 5] [--no-comment] [--rounds 3]
 
 `run`:
- 1. takes every open PR whose newest checker report (tools/colab/pr_checker.py, `<!-- prcheck <head> -->`) is on its current head and
+ 1. takes at most --max (default 5, owner 2026-11-18: a small batch needs at most 3 bisect points, each a long rebuild; 0 = no
+    cap) open PRs, oldest first, whose newest checker report (tools/colab/pr_checker.py, `<!-- prcheck <head> -->`) is on its current head and
     has no ❌ (a pin whose cause the PR names is a ⚠️, not a ❌), not returned to its agent since, not a draft, not Claude's own branch;
  2. merges them in number order onto origin/main as batch/<name> in its own tree (workspace/wt/batch): the shared tables by the union of
     both sides' rows (docs/STOPS.md, engine/CMakeLists.txt, engine/cmake/*.cmake, RESERVED.tsv, the hand lists), README from main
@@ -166,7 +167,10 @@ def fork_check(head: str) -> str:
     return last.get("conclusion") or "running"
 
 
-def candidates(only: list[int] | None) -> tuple[list[dict], list[tuple[dict, str]]]:
+MAX_PRS = 5   # owner 2026-11-18: "брать по 5 пр максимум", fewer merge points for a bisect to walk
+
+
+def candidates(only: list[int] | None, cap: int = MAX_PRS) -> tuple[list[dict], list[tuple[dict, str]]]:
     prs = json.loads(gh("pr", "list", "--state", "open", "--limit", "100", "--json",
                         "number,title,body,headRefOid,headRefName,isDraft,author,isCrossRepository,headRepositoryOwner,files"))
     prs = sorted((p for p in prs if not only or p["number"] in only), key=lambda p: p["number"])
@@ -174,6 +178,9 @@ def candidates(only: list[int] | None) -> tuple[list[dict], list[tuple[dict, str
     for p in prs:
         why = verdict(p)
         (take.append(p) if why == "green" else wait.append((p, why)))
+    if cap > 0 and len(take) > cap:   # the oldest green PRs go first; the rest wait for the next batch, with no comment on them
+        wait = [(p, f"следующая партия (в партии не больше {cap} PR)") for p in take[cap:]] + wait
+        take = take[:cap]
     return take, wait
 
 
@@ -500,7 +507,7 @@ def report(name: str, out_dir: Path, rows: dict) -> Path:
 # ---------------------------------------------------------------- main
 
 def cmd_plan(a) -> int:
-    take, wait = candidates(a.prs)
+    take, wait = candidates(a.prs, a.max)
     for p in take:
         print(f"take  #{p['number']} {p['title'][:90]}")
     for p, why in wait:
@@ -513,7 +520,7 @@ def cmd_run(a) -> int:
     name = a.name or dt.datetime.utcnow().strftime("%Y-%m-%d-%H%M")
     out_dir = RUNS / name
     out_dir.mkdir(parents=True, exist_ok=True)
-    take, wait = candidates(a.prs)
+    take, wait = candidates(a.prs, a.max)
     log(f"batch {name}: {len(take)} green PRs: {' '.join('#%d' % p['number'] for p in take)}")
     rows: dict = {"main": git("rev-parse", "origin/main").strip(), "wait": wait, "out": {}, "repinned": [], "results": {}, "main_red": set(),
                   "merged": [], "conflicted": [], "renumbered": [], "verdict": "нет PR"}
@@ -620,6 +627,7 @@ def main() -> int:
     for c in ("plan", "run"):
         s = sub.add_parser(c)
         s.add_argument("--prs", type=lambda v: [int(x) for x in v.split(",") if x], default=None)
+        s.add_argument("--max", type=int, default=MAX_PRS, help=f"at most this many green PRs per batch, oldest first (default {MAX_PRS}; 0 = all)")
         if c == "run":
             s.add_argument("--name")
             s.add_argument("--rounds", type=int, default=3)
