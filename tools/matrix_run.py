@@ -54,6 +54,7 @@ CATEGORIES = [
     ("NO-AURA", re.compile(r"^NO-AURA: ")),                            # MATRIX_TODO 5: an active aura that put its modifier on no target in range (red)
     ("UNPORTED", re.compile(r"^UNPORTED: ")),                          # MATRIX_TODO 4: the click refused by an unported per-type object test (red: a port gap)
     ("NO-END", re.compile(r"never expires, though its Duration")),        # MATRIX_TODO 2: a modifier applied for good though its list has a Duration (RW 0x805A8E)
+    ("NO-VALUE", re.compile(r"NO-VALUE: ")),                           # MATRIX_TODO 1b: a list landed, but the value the engine reads did not move by it (red)
     ("UPGRADE-IDLE", re.compile(r"bought, but .* did not execute")),      # MATRIX_TODO 1: an upgrade bought whose triggered module did not run (UpgradeMux)
     ("NO-FIRE", re.compile(r"did not fire")),
     ("NO-RULE", re.compile(r"no effect of .* is asserted")),         # the test cannot judge it yet
@@ -80,6 +81,9 @@ CATEGORIES = [
 # Not red: the grey verdicts and the ones found to be the scene's or the mod's own (matrix review 2026-11-17). ORDER: red in the full run,
 # fine when the object is swept alone (tools/matrix_run.py recheck): leftovers of the earlier objects, not the port.
 NOT_RED = {"PASS", "STANCE", "DISABLED", "INVENTORY", "TEMPORARY", "MEMBER", "MOD-DATA", "NO-TARGET", "BY-DESIGN", "ORDER"}
+# not red, but not shown green either (owner 2026-11-18: "не прячешь ли ты реальные проблемы"): the sweep could not judge them, and the owner's checks
+# in the original found real port gaps among them (MOD-DATA: 2 of 5 work in the original; NO-TARGET hid a working repair; ORDER may be a state leak)
+UNVERIFIED = {"MOD-DATA", "NO-TARGET", "ORDER"}
 
 
 def category(verdict: str, detail: str) -> str:
@@ -237,6 +241,65 @@ def cmd_recheck(a) -> None:
     print(f"recheck: {sum(len(b) for b in red.values())} red buttons, {len(rows)} fine alone (ORDER)", flush=True)
 
 
+def sweep_list(a, faction: str, objects: list[str], tag: str) -> dict[tuple[str, str], list[str]]:
+    """One sweep of exactly these objects (FACTB_LIST), in the full run's order; their rows' categories by (object, button)."""
+    d = a.out / "bisect"
+    d.mkdir(parents=True, exist_ok=True)
+    (d / f"{tag}.list").write_text("".join(o + "\n" for o in objects), encoding="utf-8")
+    (d / "none.skip").write_text("", encoding="utf-8")
+    tsv = d / f"{tag}.tsv"
+    tsv.unlink(missing_ok=True)
+    env = dict(os.environ)
+    env.update(OPENBFME_SWEEP_OVERLAY=str(env_path("OPENBFME_ENNORATH_INSTALL", a.overlay)), OPENBFME_SWEEP_FACTION=faction,
+               OPENBFME_SWEEP_SEEDS=str(a.out / f"{faction}.seeds"), OPENBFME_SWEEP_REPORT=str(tsv), OPENBFME_SWEEP_MAP=a.map,
+               OPENBFME_SWEEP_SKIP=str(d / "none.skip"), OPENBFME_SWEEP_GREY=str(REPO / "docs" / "ennorath" / "MATRIX_GREY.tsv"),
+               FACTB_LIST=str(d / f"{tag}.list"))
+    with open(d / f"{tag}.log", "wb") as log:
+        subprocess.call([str(a.tests), f"-tc={TEST_CASE}"], cwd=REPO, env=env, stdout=log, stderr=subprocess.STDOUT)
+    out: dict[tuple[str, str], list[str]] = collections.defaultdict(list)
+    for line in tsv.read_text(encoding="utf-8", errors="replace").splitlines() if tsv.exists() else []:
+        parts = line.split("\t")
+        if len(parts) == 5:
+            out[(parts[1], parts[2])].append(category(parts[3], parts[4]))
+    return out
+
+
+def cmd_bisect(a) -> None:
+    """MATRIX_TODO 11 (owner 2026-11-18): an ORDER row (red in the full run, fine alone) is a scene leftover of an earlier object or an engine
+    state leak. The objects swept before it in the full run (<out>/<F>.tsv order) are halved until one earlier object alone turns it red:
+    `bisect --factions F --object O --button B`. The culprit and the pair's run are printed; whether the leak is the scene's (the culprit's own
+    objects left near the site) or the engine's is read from the pair's log."""
+    f = a.factions[0]
+    order: list[str] = []
+    for line in (a.out / f"{f}.tsv").read_text(encoding="utf-8", errors="replace").splitlines():
+        parts = line.split("\t")
+        if len(parts) == 5 and parts[1] and parts[1] != "(inventory)" and parts[1] not in order:
+            order.append(parts[1])
+    if a.object not in order:
+        raise SystemExit(f"bisect: {a.object} is not in {a.out / f'{f}.tsv'}")
+    before = order[:order.index(a.object)]
+    key = (a.object, a.button)
+
+    def red(objs: list[str], tag: str) -> bool:
+        cats = sweep_list(a, f, objs + [a.object], tag).get(key, [])
+        bad = bool(cats) and "PASS" not in cats and not all(c in NOT_RED for c in cats)
+        print(f"bisect: {len(objs)} earlier objects -> {'red' if bad else 'fine'} {cats}", flush=True)
+        return bad
+
+    if not red(before, "all"):
+        print("bisect: not red with every earlier object of the run either: the full run's red needs the later objects or is not reproducible")
+        return
+    cand, step = before, 0
+    while len(cand) > 1:
+        step += 1
+        half = cand[len(cand) // 2:]  # the nearer half first: a leftover is likelier from a recent object
+        cand = half if red(half, f"s{step}") else cand[:len(cand) // 2]
+    culprit = cand[0]
+    pair = red([culprit], "pair")
+    print(f"bisect: {f} {a.object} {a.button}: culprit {culprit} ({'confirmed alone' if pair else 'NOT red with it alone: needs more than one earlier object'})")
+    print(f"bisect: logs in {a.out / 'bisect'}")
+
+
 def cmd_run(a) -> None:
     (a.out / "recheck" / "order.tsv").unlink(missing_ok=True)  # a new run: the old recheck does not apply
     if not a.tests.exists():
@@ -310,10 +373,12 @@ def cmd_collect(a) -> None:
         total, ok = sum(cats.values()) - cats.get("STANCE", 0), cats.get("PASS", 0)
         # a greyed button is mostly a requirement the test does not meet (a forge the faction's objects do not have here): counted apart.
         # GREY-BUG (PORT-530) is a port bug, not an unmet requirement: it counts as red, and the per-faction line names it.
-        grey = sum(v for k, v in cats.items() if k in NOT_RED and k not in ("PASS", "STANCE"))  # by design / not tested: not red either
-        red = total - ok - grey
-        cells[fac] = (f"[{total} кнопок: ✓{ok} ✗{red} серых {grey}](MATRIX.tsv) ({stamp})", str(ok))
-        print(f"{fac}: {total} buttons, {ok} pass, {red} red, {grey} grey: " + ", ".join(f"{k} {v}" for k, v in cats.most_common() if k != "PASS"))
+        unverified = sum(v for k, v in cats.items() if k in UNVERIFIED)
+        grey = sum(v for k, v in cats.items() if k in NOT_RED and k not in ("PASS", "STANCE") and k not in UNVERIFIED)  # by design: not red either
+        red = total - ok - grey - unverified
+        cells[fac] = (f"[{total} кнопок: ✓{ok} ✗{red} не проверено {unverified} серых {grey}](MATRIX.tsv) ({stamp})", str(ok))
+        print(f"{fac}: {total} buttons, {ok} pass, {red} red, {unverified} unverified, {grey} grey: "
+              + ", ".join(f"{k} {v}" for k, v in cats.most_common() if k != "PASS"))
     update_readme(cells)
     print(f"wrote {MATRIX.relative_to(REPO)} ({len(rows)} lines) and the table of {README.relative_to(REPO)}")
 
@@ -385,7 +450,7 @@ def update_readme(cells: dict[str, tuple[str, str]]) -> None:
 
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("step", choices=["seeds", "run", "recheck", "collect", "all", "diff"])
+    ap.add_argument("step", choices=["seeds", "run", "recheck", "collect", "all", "diff", "bisect"])
     ap.add_argument("--against", dest="base_ref", default="origin/main", help="diff: the git ref whose MATRIX.tsv is the baseline")
     ap.add_argument("--limit", type=int, default=60, help="diff: unexplained rows printed")
     ap.add_argument("--factions", nargs="*", default=FACTIONS)
@@ -396,6 +461,8 @@ def main() -> None:
     ap.add_argument("--base", help="RotWK 2.01 install (default $ROTWK_INSTALL)")
     ap.add_argument("--overlay", help="the mod's install (default $OPENBFME_ENNORATH_INSTALL)")
     ap.add_argument("--bfme2", help="BFME2 1.06 install (default $BFME2_INSTALL)")
+    ap.add_argument("--object", help="bisect: the ORDER row's object")
+    ap.add_argument("--button", help="bisect: the ORDER row's button")
     a = ap.parse_args()
     if a.step == "diff":
         a.base = a.base_ref
@@ -404,6 +471,11 @@ def main() -> None:
     unknown = [f for f in a.factions if f not in FACTIONS]
     if unknown:
         raise SystemExit(f"unknown factions: {unknown}")
+    if a.step == "bisect":
+        if len(a.factions) != 1 or not a.object or not a.button:
+            raise SystemExit("bisect: one --factions F, --object O and --button B")
+        cmd_bisect(a)
+        return
     steps = ["seeds", "run", "recheck", "collect"] if a.step == "all" else [a.step]
     for s in steps:
         {"seeds": cmd_seeds, "run": cmd_run, "recheck": cmd_recheck, "collect": cmd_collect}[s](a)

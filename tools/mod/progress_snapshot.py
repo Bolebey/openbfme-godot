@@ -46,6 +46,8 @@ OUT = REPO / "docs" / "ennorath" / "PROGRESS.tsv"
 COLUMNS = ["date", "rev", "fields_total", "fields_open", "modules_missing", "problems_total", "problems_done", "stops_open", "audit",
            "buttons_red", "gaps_specific", "stops_new", "stops_closed", "buttons_total", "fields_proven_unread"]
 GREEN = {"PASS", "STANCE", "DISABLED", "INVENTORY", "TEMPORARY", "MEMBER", "MOD-DATA", "NO-TARGET", "BY-DESIGN", "ORDER"}  # by design, or fine when swept alone (matrix review 2026-11-17)
+# not red, but not judged either (owner 2026-11-18): the faction table counts them in a column of their own, not with the idle ones (tools/matrix_run.py)
+UNVERIFIED = {"MOD-DATA", "NO-TARGET", "ORDER"}
 OPEN_STATUSES = {"parsed-unused", "not-read", "stub-block", "missing-module", "parsed-only-module", "no-table-row"}
 
 
@@ -168,24 +170,28 @@ def write_matrix_factions() -> None:
     lines = [l for l in path.read_text(encoding="utf-8").splitlines() if l and not l.startswith("#")]
     per: dict[str, dict] = {}
     for r in csv.DictReader(lines, delimiter="\t"):
-        f = per.setdefault(r["faction"], {"pass": set(), "idle": set(), "red": {}, })
+        f = per.setdefault(r["faction"], {"pass": set(), "idle": set(), "red": {}, "unverified": set()})
         key = (r["object"], r["button"])
         if r["result"] == "PASS":
             f["pass"].add(key)
+        elif r["result"] in UNVERIFIED:
+            f["unverified"].add(key)
         elif r["result"] in GREEN:
             f["idle"].add(key)
         else:
             f["red"].setdefault(key, r["result"])
     with FACTIONS_OUT.open("w", encoding="utf-8", newline="\n") as out:
-        out.write("faction\tpass\tidle\tred\tred_top\n")
+        # the unverified column comes last: a reader of the first five columns (the dashboard before 2026-11-18) still reads them
+        out.write("faction\tpass\tidle\tred\tred_top\tunverified\n")
         for name, f in sorted(per.items()):
-            idle = f["idle"] - f["pass"]
-            red = {k: v for k, v in f["red"].items() if k not in f["pass"] and k not in idle}
+            unverified = f["unverified"] - f["pass"]
+            idle = f["idle"] - f["pass"] - unverified
+            red = {k: v for k, v in f["red"].items() if k not in f["pass"] and k not in idle and k not in unverified}
             kinds: dict[str, int] = {}
             for v in red.values():
                 kinds[v] = kinds.get(v, 0) + 1
             top = ", ".join(f"{k} {n}" for k, n in sorted(kinds.items(), key=lambda x: -x[1])[:3])
-            out.write(f"{name}\t{len(f['pass'])}\t{len(idle)}\t{len(red)}\t{top}\n")
+            out.write(f"{name}\t{len(f['pass'])}\t{len(idle)}\t{len(red)}\t{top}\t{len(unverified)}\n")
 
 
 def matrix_total(rev: str | None) -> str:
