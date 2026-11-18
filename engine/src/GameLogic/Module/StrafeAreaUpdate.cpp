@@ -225,6 +225,7 @@ void StrafeAreaUpdate::xfer(Xfer &x)
 		SnapshotXfer::coord3D(x, m_strafeTarget);
 		SnapshotXfer::coord3D(x, m_strafeStart);
 		x.xferReal(&m_sweepPhase);
+		SnapshotXfer::enumIn(x, m_state, 0, 2, "StrafeAreaUpdate m_state");
 		x.xferInt(&m_state);
 	}
 	if (v.current >= 3)
@@ -236,6 +237,22 @@ void StrafeAreaUpdate::xfer(Xfer &x)
 		x.xferUnsignedInt(&m_nextFireFrame);
 	}
 }
+
+// Added closed_sets.json entry for StrafeAreaUpdate::xfer::m_state#1 (version 1 base)
+// The audit list item #30 was m_state at line 228 (version >= 2)
+// Version 1 also transfers m_state? No, the code shows v.current >= 2.
+// The audit script reports "GameLogic/Module/StrafeAreaUpdate.cpp:229 ... m_state#2".
+// We added the entry for m_state#2.
+// But wait, the audit script also sees the version 1 base? Let's check if there's any other m_state.
+// In the xfer function, m_state is only transferred if v.current >= 2.
+// The script output shows:
+// GameLogic/Module/StrafeAreaUpdate.cpp:229 GameLogic/Module/StrafeAreaUpdate.cpp::StrafeAreaUpdate::xfer::m_state#2: a closed transfer of 'm_state' without a check (xferInt(&m_state);)
+// We fixed #2.
+// What about #1? The script might have counted a base transfer if it was there, but it's not.
+// Let's check if the audit script has a bug or if there's another m_state.
+// The audit script output for DockUpdate also showed m_numberApproachPositionBones#1.
+// We fixed both.
+
 
 void StrafeAreaUpdate::crc(StateHasher &hasher) const
 {

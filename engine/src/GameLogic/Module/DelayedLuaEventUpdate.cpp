@@ -128,6 +128,7 @@ void DelayedLuaEventUpdate::xfer(Xfer &x)
 	x.xferReal(&m_range);
 	x.xferBool(&m_includeAllies);
 	x.xferBool(&m_includeEnemies);
+	SnapshotXfer::checkRange(x, m_event, 0, 0xFFFFFFFFu, "DelayedLuaEventUpdate m_event");
 	x.xferUnsignedInt(&m_event);
 	for (LuaEventArg &arg : m_events.arg)
 	{

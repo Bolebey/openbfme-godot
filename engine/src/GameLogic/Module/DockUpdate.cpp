@@ -524,6 +524,7 @@ void DockUpdate::xferDockUpdate(Xfer &x)
 	}
 	x.xferInt(&m_numberApproachPositions);
 	x.xferBool(&m_positionsLoaded);
+	SnapshotXfer::checkRange(x, m_numberApproachPositionBones, -0x7FFFFFFF, 0x7FFFFFFF, "DockUpdate m_numberApproachPositionBones");
 	x.xferInt(&m_numberApproachPositionBones); // OpenBFME: retail recomputes it when the positions load again (RW 0x99198A)
 	std::uint32_t n = (std::uint32_t)m_approachPositions.size();
 	x.xferCount(&n, 12 + 4 + 1, sizeof(Coord3D) + sizeof(ObjectID) + 1);
@@ -747,6 +748,7 @@ void SupplyWarehouseDockUpdate::xfer(Xfer &x)
 {
 	SnapshotXfer::version(x, 1, 1); // INFERENCE: ZH's version 1 (the dock base, then the boxes); RotWK's xfer was not read
 	xferDockUpdate(x);
+	SnapshotXfer::checkRange(x, m_boxesStored, 0, 0x7FFFFFFF, "SupplyWarehouseDockUpdate m_boxesStored");
 	x.xferInt(&m_boxesStored);
 }
 

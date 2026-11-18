@@ -257,6 +257,7 @@ include(cmake/Port436.cmake) # PORT-436: the weapon aim at the victim's contact 
 include(cmake/Port133.cmake) # PORT-133: the charge attack machine of a CanFireWhileCharging weapon (issue #335; OPENBFME_PORT133_TESTS)
 include(cmake/Port166.cmake) # PORT-166: the FIRE_WEAPON charge end to end - reload at the strike, charge speed, speed restored (issue #395; OPENBFME_PORT166_TESTS)
 include(cmake/Port137.cmake) # PORT-137: auto-pickup button and selected group
+include(cmake/Port285.cmake) # PORT-285: closed-set audit fixes for xfer transfers (issue #660; OPENBFME_PORT285_TESTS)
 include(cmake/Port135.cmake) # OPENBFME_PORT135_TESTS
 include(cmake/Port426.cmake) # PORT-426: Shift on a production button queues five units (issue 426; OPENBFME_PORT426_TESTS)
 include(cmake/Port212.cmake) # PORT-212: a plot's construction applies no MaxSimultaneousOfType (fork issue 502; OPENBFME_PORT212_TESTS)
@@ -1495,7 +1496,8 @@ target_sources(openbfme_tests PRIVATE
     tests/test_coverage_in_game_hud.cpp
     tests/test_coverage_mp3.cpp
     tests/test_coverage_online_hub.cpp
-    ${OPENBFME_PORT207_TESTS})
+    ${OPENBFME_PORT207_TESTS}
+    tests/engine/tests/test_port_285.cpp) # PORT-285: closed-set audit fixes for xfer transfers (issue #660)
 target_link_libraries(openbfme_tests PRIVATE openbfme_core)
 # Build speed (docs/ennorath/PROCESS.md, section 7): the test runner's files share a precompiled standard library and doctest (its light link: add_link_options above).
 # Only here: the simulation's own sources (openbfme_core, cmake/SimFp.cmake) keep their settings.

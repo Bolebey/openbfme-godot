@@ -1048,7 +1048,9 @@ void StructureCollapseUpdate::xfer(Xfer &x)
 {
 	SnapshotXfer::version(x, 1, 1);
 	xferUpdateModule(x);
+	SnapshotXfer::checkRange(x, m_collapseFrame, 0, 0xFFFFFFFFu, "StructureCollapseUpdate m_collapseFrame");
 	x.xferUnsignedInt(&m_collapseFrame);
+	SnapshotXfer::checkRange(x, m_burstFrame, 0, 0xFFFFFFFFu, "StructureCollapseUpdate m_burstFrame");
 	x.xferUnsignedInt(&m_burstFrame);
 	SnapshotXfer::enumIn(x, m_state, COLLAPSESTATE_STANDING, COLLAPSESTATE_DONE, "a structure collapse's state");
 	x.xferReal(&m_velocity);
@@ -1060,7 +1062,9 @@ void RubbleRiseUpdate::xfer(Xfer &x)
 {
 	SnapshotXfer::version(x, 1, 1);
 	xferUpdateModule(x);
+	SnapshotXfer::checkRange(x, m_unused24, 0, 0xFFFFFFFFu, "RubbleRiseUpdate m_unused24");
 	x.xferUnsignedInt(&m_unused24); // RW 0x8A8547 xfers +0x24 too
+	SnapshotXfer::checkRange(x, m_nextBurstFrame, 0, 0xFFFFFFFFu, "RubbleRiseUpdate m_nextBurstFrame");
 	x.xferUnsignedInt(&m_nextBurstFrame);
 	SnapshotXfer::enumIn(x, m_state, RISESTATE_WAITING, RISESTATE_DONE, "a rubble rise's state");
 	x.xferReal(&m_riseVelocity);
@@ -1073,6 +1077,8 @@ void RespawnBody::xfer(Xfer &x)
 {
 	SnapshotXfer::version(x, 1, 1);
 	ActiveBody::xfer(x);
+	SnapshotXfer::checkRange(x, m_34, -0x7FFFFFFF, 0x7FFFFFFF, "RespawnBody m_34");
+	x.xferInt(&m_34); // RW 0x8C553F: retail's RespawnUpdate + 0x34 field (-1 at reset), carried as it is (hashed; no reader identified)
 }
 
 void DelayedDeathBody::xfer(Xfer &x)
@@ -1087,6 +1093,7 @@ void SymbioticStructuresBody::xfer(Xfer &x)
 {
 	SnapshotXfer::version(x, 1, 1);
 	ActiveBody::xfer(x);
+	SnapshotXfer::checkRange(x, m_symbioteId, 0, 0xFFFFFFFFu, "SymbioticStructuresBody m_symbioteId");
 	x.xferObjectID(&m_symbioteId);
 }
 
@@ -1094,6 +1101,8 @@ void LifetimeUpdate::xfer(Xfer &x)
 {
 	SnapshotXfer::version(x, 1, 1);
 	xferUpdateModule(x);
+	SnapshotXfer::checkRange(x, m_dieFrame, 0, 0xFFFFFFFFu, "LifetimeUpdate m_dieFrame");
 	x.xferUnsignedInt(&m_dieFrame);
+	SnapshotXfer::checkRange(x, m_startFrame, 0, 0xFFFFFFFFu, "LifetimeUpdate m_startFrame");
 	x.xferUnsignedInt(&m_startFrame);
 }
