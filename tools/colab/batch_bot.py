@@ -115,8 +115,26 @@ def agent_env() -> dict:
     return _ENV
 
 
+STATUS_DIR = Path(os.environ.get("OPENBFME_STATUS_DIR", "/content/status"))
+
+
+def status(key: str, text: str) -> None:
+    """What this bot does right now, one line in /content/status/<key>.txt (owner 2026-11-18: the dashboard says what each bot is busy
+    with); watchdog.py puts every such line into the sandbox's heartbeat. Never fails the bot."""
+    try:
+        STATUS_DIR.mkdir(parents=True, exist_ok=True)
+        (STATUS_DIR / f"{key}.txt").write_text(text[:300] + "\n", encoding="utf-8")
+    except OSError:
+        pass
+
+
+RUN_KEY = ""   # set by `run`: its log lines are its status
+
+
 def log(msg: str) -> None:
     print(f"[{time.strftime('%H:%M:%S')}] {msg}", flush=True)
+    if RUN_KEY:
+        status(RUN_KEY, f"партия {RUN_KEY.removeprefix('batch-')}: {msg}")
 
 
 # ---------------------------------------------------------------- 1. candidates
@@ -333,6 +351,8 @@ def merge_batch(name: str, prs: list[dict], out: list[int]) -> tuple[list[dict],
 # ---------------------------------------------------------------- 4. build and tests
 
 def build(tag: str, out_dir: Path) -> tuple[bool, str]:
+    if RUN_KEY:
+        status(RUN_KEY, f"партия {RUN_KEY.removeprefix('batch-')}: сборка {tag}")
     done = sh(["bash", "tools/colab/build_tests.sh"], timeout=4 * 3600)
     text = done.stdout + done.stderr
     (out_dir / f"build-{tag}.log").write_text(text, encoding="utf-8")
@@ -548,6 +568,7 @@ LOOP_STATE = Path(os.environ.get("BATCH_LOOP_STATE", "/content/sandbox/batch-loo
 
 def say(msg: str) -> None:
     print(f"{time.strftime('%F %T', time.gmtime())} UTC {msg}", flush=True)
+    status("batch-loop", f"цикл: {msg}")
 
 
 def is_run(argv: list[str]) -> bool:
@@ -666,8 +687,10 @@ def cmd_plan(a) -> int:
 
 
 def cmd_run(a) -> int:
+    global RUN_KEY
     ensure_tree()
     name = a.name or dt.datetime.utcnow().strftime("%Y-%m-%d-%H%M")
+    RUN_KEY = f"batch-{name}"
     out_dir = RUNS / name
     out_dir.mkdir(parents=True, exist_ok=True)
     take, wait = candidates(a.prs, a.max, own=name)
@@ -770,6 +793,7 @@ def cmd_run(a) -> int:
         git("push", "-q", "-f", "origin", f"HEAD:refs/heads/batch/{name}")
     path = report(name, out_dir, rows)
     log(f"{rows['verdict']}: {path}")
+    (STATUS_DIR / f"{RUN_KEY}.txt").unlink(missing_ok=True)   # done: the loop's line (or nothing) says the rest
     return 0 if rows["verdict"].startswith("зелёный") else 1
 
 

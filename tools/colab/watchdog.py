@@ -138,8 +138,27 @@ def round_once(state: dict) -> dict:
         loops.append({"loop": loop, "running": ok, "action": action, "activity_age_s": age(LOOPS[loop][3]),
                       "last_start": st.get("last_start"), "starts_last_hour": len(st["starts"]), "log_tail": tail(LOOPS[loop][2])})
     head = subprocess.run(["git", "-C", str(REPO), "log", "-1", "--format=%h %cI", "origin/main"], capture_output=True, text=True).stdout.strip()
-    return {"sandbox": SB, "at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), "loops": loops, "busy": busy(ps), "machine": machine(),
+    return {"sandbox": SB, "at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), "loops": loops, "busy": busy(ps), "doing": doing(), "machine": machine(),
             "origin_main": head, "watchdog_pid": os.getpid()}
+
+
+STATUS_DIR = Path("/content/status")
+STATUS_MAX_AGE = 6 * 3600
+
+
+def doing() -> list[dict]:
+    """The bots' own one-line statuses (/content/status/<key>.txt, written by pr_checker.py, batch_bot.py, nightly_maps.sh,
+    upstream_loop.sh), newest first; a line older than STATUS_MAX_AGE is dropped (its bot died or forgot it)."""
+    out = []
+    for f in STATUS_DIR.glob("*.txt") if STATUS_DIR.exists() else []:
+        try:
+            age_s = int(time.time() - f.stat().st_mtime)
+            text = f.read_text(encoding="utf-8", errors="replace").strip()
+        except OSError:
+            continue
+        if text and age_s < STATUS_MAX_AGE:
+            out.append({"who": f.stem, "text": text[:300], "age_s": age_s})
+    return sorted(out, key=lambda d: d["age_s"])
 
 
 def publish(beat: dict) -> None:

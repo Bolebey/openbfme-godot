@@ -92,6 +92,19 @@ def gh(*args: str) -> str:
     return done.stdout
 
 
+STATUS_DIR = Path(os.environ.get("OPENBFME_STATUS_DIR", "/content/status"))
+
+
+def status(key: str, text: str) -> None:
+    """What this bot does right now, one line in /content/status/<key>.txt (owner 2026-11-18: the dashboard says what each bot is busy
+    with); watchdog.py puts every such line into the sandbox's heartbeat. Never fails the bot."""
+    try:
+        STATUS_DIR.mkdir(parents=True, exist_ok=True)
+        (STATUS_DIR / f"{key}.txt").write_text(text[:300] + "\n", encoding="utf-8")
+    except OSError:
+        pass
+
+
 def load_state() -> dict:
     return json.loads(STATE.read_text()) if STATE.exists() else {"checked": {}, "main": {}}
 
@@ -165,6 +178,7 @@ def main_baseline(state: dict, main_sha: str) -> dict:
             save_state(state)
             return state["main"]["results"]
     sh(["git", "checkout", "-q", "-f", "--detach", main_sha]).check_returncode()
+    status("prcheck", f"main {main_sha[:8]}: сборка и эталонный набор ({len(BASE)} наборов), с ним сравниваются PR")
     ok, err = build()
     if not ok:
         raise RuntimeError(f"main {main_sha[:8]} does not build:\n{err}")
@@ -249,6 +263,7 @@ def check_pr(pr: dict, state: dict, main_sha: str, open_prs: list[dict], comment
     base = main_baseline(state, main_sha)
     sh(["git", "fetch", "-q", "origin", f"+pull/{n}/head:refs/prcheck/{n}"]).check_returncode()
     sh(["git", "checkout", "-q", "-f", "--detach", main_sha]).check_returncode()
+    status("prcheck", f"PR #{n} ({pr['title'][:60]}): вливаю в main {main_sha[:8]}")
     lines = [f"<!-- prcheck {sha} -->", f"**Проверка PR #{n}** на `main` {main_sha[:8]}, голова {sha[:8]} (песочница {SANDBOX}, `tools/colab/pr_checker.py`)", ""]
     merge = sh(["git", "-c", "user.name=prcheck", "-c", "user.email=prcheck@localhost", "merge", "--no-edit", "--no-verify", "-q", f"refs/prcheck/{n}"])
     if merge.returncode:
@@ -305,6 +320,7 @@ def check_pr(pr: dict, state: dict, main_sha: str, open_prs: list[dict], comment
             "(строка `` `<объект> <кнопка>`: почему ``; ошибка теста — чинить тест, а не объяснять)"
         lines += [head, "```", out[:3500], "```"]
     t_build = time.time()
+    status("prcheck", f"PR #{n} ({pr['title'][:60]}): сборка")
     ok, err = build()
     t_build = time.time() - t_build
     if not ok:
@@ -314,6 +330,8 @@ def check_pr(pr: dict, state: dict, main_sha: str, open_prs: list[dict], comment
     own = own_tests(diff, pr["title"])
     base_needed = touches_engine(changed)
     t_tests = time.time()
+    status("prcheck", f"PR #{n} ({pr['title'][:60]}): тесты, {len(own) + (len(BASE) if base_needed else 0)} наборов"
+           + (" и аудит полей" if base_needed else ""))
     with cf.ThreadPoolExecutor(1) as side:  # the field audit of the PR's tree beside its tests (about 8 minutes, one core)
         audit_job = side.submit(run_audit, HOME / "audit-pr") if base_needed else None
         res = run_set(own + (BASE if base_needed else []))
@@ -633,6 +651,7 @@ def main() -> int:
         if args.once or args.pr:
             return 0
         if not n:
+            status("prcheck", "все открытые PR проверены на своих головах: жду новых коммитов")
             time.sleep(300)
 
 
