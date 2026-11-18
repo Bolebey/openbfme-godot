@@ -951,8 +951,8 @@ TEST_CASE("save4c review r2: a path's optimised link to its own node or to an ea
 }
 
 TEST_CASE("save4c coverage (review r2): units attacking, moving, guarding, hunting and entering a garrison are saved mid-order and loaded into an identical "
-		  "game whose AI modules first held their state of 300 frames earlier (the latest frame of 1500 .. 3000 where the actors exist): each unit's state, sub machine, goal and path, and its module's hash are the "
-		  "saved ones, and both games go on equal")
+		  "game whose AI modules first held their state of 300 frames earlier (the latest frame of 600 .. 3000 where the actors exist and the third player's guard is idle): "
+		  "each unit's state, sub machine, goal and path, and its module's hash are the saved ones, and both games go on equal")
 {
 	OPENBFME_REQUIRE_START(s);
 	// lane BANNER-1 (the banner carriers refill the AIs' hordes as RotWK does): in seed 4127's game FactionMen (the attacker's and the garrison's player) has
@@ -1047,14 +1047,15 @@ TEST_CASE("save4c coverage (review r2): units attacking, moving, guarding, hunti
 			{
 				hunterFound = hunterFound || any(p, [&](Object *o) { return armed(o) && takes(o, 0x12) && GarrisonRules::isMobile(*o) && hasPrey(o); });
 			}
-			if (any(ids[0], [&](Object *o) { return armed(o) && takes(o, 0xB); }) && any(ids[2], [&](Object *o) { return takes(o, 0); }) && hunterFound &&
-				menUnits >= 2)
+			// Keep scene discovery in sync with actor selection below: guardHere must start from an idle unit, or its existing AI order may resume after the step.
+			const bool guardReady = any(ids[2], [&](Object *o) { return takes(o, 0) && o->getAIUpdateInterface()->currentStateId() == AI_IDLE; });
+			if (any(ids[0], [&](Object *o) { return armed(o) && takes(o, 0xB); }) && guardReady && hunterFound && menUnits >= 2)
 			{
 				scene = t;
 			}
 		}
 	}
-	REQUIRE_MESSAGE(scene != 0, "no frame of 600 .. 3000 (every 100) has the actors among the objects alive 300 frames before"); // tolerance: 0 is "none found"; the frame itself is the AI's play
+	REQUIRE_MESSAGE(scene != 0, "no frame of 600 .. 3000 (every 100) has the actors among the objects alive 300 frames before and an idle third-player guard"); // tolerance: 0 is "none found"; the frame itself is the AI's play
 	MESSAGE("save4c units attacking: the scene is at frame " << scene << " (its modules' earlier state from frame " << scene - 300 << ")");
 	// lane AIDATA-1: the hunter must also keep its hunt through the frame the test steps: a unit the skirmish AI is walking somewhere gets its next order from
 	// the AI in that frame (the frame-2400 scene's only candidate of the fourth player, an Isengard pike horde, was back in AI_MOVE_TO). A scratch game of its
