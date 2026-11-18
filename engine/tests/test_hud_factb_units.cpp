@@ -1754,6 +1754,8 @@ void unitsSweep(const std::string &faction, Results &res, bool sweep)
 					{
 						// nothing sent: what the pointer hits there (for the report)
 						const ICoord2D px = g.pointAt({ at.x, at.y, at.z + 5.0f });
+						target += str(" at %.0f,%.0f,%.0f%s, owner %s", at.x, at.y, at.z, on->isUnderConstruction() ? ", under construction" : "",
+									  on->getControllingPlayer() ? on->getControllingPlayer()->getPlayerName().c_str() : "-");
 						target += " (nothing sent; the pick there hits";
 						for (const HudObjects::PickHit &h : HudObjects::pickHits(g.hud->input().context(), px, HudObjects::pickTypesForContext(g.hud->input().context()) | 0x100))
 						{
@@ -1940,6 +1942,158 @@ void unitsSweep(const std::string &faction, Results &res, bool sweep)
 				res.pass(item, str("%s fired (target %s) after %u frames: %s%s", cb->m_specialPowerName.c_str(), target.c_str(), g.frame() - pressFrame, effect.c_str(),
 								   unported ? " (S-920 noted)" : ""));
 				g.hud->input().ui().setGUICommand(nullptr);
+				}
+			}
+		}
+		// MATRIX_TODO 5 (2026-11-18): not a button: each AttributeModifierAuraUpdate of the object and its members (RW 0x89F42D), active on a fresh
+		// object (StartsActive; a TriggeredBy aura after its upgrades, given as the grey fixture gives them), must put its ModifierName on a fitting
+		// object in its Range (its own side, the enemy with TargetEnemy; its ObjectFilter; RW 0x89F114) within RefreshDelay + 10 frames
+		if (sweep && wearSet.empty() && spawn())
+		{
+			struct Aura
+			{
+				ObjectID holder;
+				const AttributeModifierAuraUpdate *module;
+				std::string tag;
+			};
+			std::vector<Aura> auras;
+			Object *src = g.logic().findObjectByID(uid);
+			std::vector<Object *> holders{ src };
+			if (src && src->getContain() && src->getContain()->getContainedItemsList())
+			{
+				holders.insert(holders.end(), src->getContain()->getContainedItemsList()->begin(), src->getContain()->getContainedItemsList()->end());
+			}
+			for (Object *h : holders)
+			{
+				if (!h)
+				{
+					continue;
+				}
+				for (const std::unique_ptr<BehaviorModule> &bm : h->modules())
+				{
+					if (const AttributeModifierAuraUpdate *a = dynamic_cast<const AttributeModifierAuraUpdate *>(bm.get()))
+					{
+						const std::string tag = bm->getModuleData() ? bm->getModuleData()->getModuleTagName() : "?";
+						bool dup = false;
+						for (const Aura &x : auras)
+						{
+							dup = dup || x.tag == tag; // a horde's members carry the same module: one row per module tag
+						}
+						if (!dup)
+						{
+							auras.push_back(Aura{ h->getID(), a, tag });
+						}
+					}
+				}
+			}
+			for (const Aura &aura : auras)
+			{
+				const std::string item = e->name + " (aura) " + aura.tag;
+				trace(item);
+				const AttributeModifierAuraUpdateModuleData *d = aura.module->auraData();
+				Object *h = g.logic().findObjectByID(aura.holder);
+				if (!h || !d)
+				{
+					res.fail(item, "the aura's holder left the world");
+					continue;
+				}
+				if (d->m_affectContainedOnly)
+				{
+					// AffectContainedOnly: the Range scan (RW 0x89F676) is skipped, the pulse reaches the holder's contained objects: a garrison check, not this scene's
+					res.fail(item, "DISABLED: the aura affects only the objects its holder contains (AffectContainedOnly); the sweep garrisons nobody");
+					continue;
+				}
+				if (d->m_requiredConditions)
+				{
+					res.fail(item, str("DISABLED: the aura needs a state the fresh object lacks (RequiredConditions bits 0x%X: MOUNTED / TAINT / ELVEN_WOOD)", d->m_requiredConditions));
+					continue;
+				}
+				std::string given;
+				const UpgradeMux *mux = const_cast<AttributeModifierAuraUpdate *>(aura.module)->getUpgrade();
+				if (!d->m_startsActive && mux && !mux->isAlreadyUpgraded())
+				{
+					for (const std::string &up : mux->muxData()->m_triggeredBy)
+					{
+						const UpgradeTemplate *ut = s.world->upgrades().findUpgrade(up);
+						if (!ut)
+						{
+							continue;
+						}
+						if (ut->getUpgradeType() == UPGRADE_TYPE_PLAYER)
+						{
+							g.rig.local->addCompletedUpgrade(up);
+							fixtureUpgrades.push_back(up);
+						}
+						else
+						{
+							h->giveUpgrade(up);
+						}
+						given += (given.empty() ? "" : ", ") + up;
+					}
+					g.step(2);
+				}
+				// the target: the first template the aura's filter takes (its named ones first), else the enemy's or the own side's soldiers
+				Player *owner = d->m_targetEnemy ? enemy : g.rig.local;
+				std::string targetName = d->m_targetEnemy ? std::string("GondorFighterHorde") : std::string(ownHordeOf(faction));
+				if (d->m_objectFilter)
+				{
+					auto usable = [&](const ThingTemplate *x) {
+						return x && factb::hasKindOf(*x, "SELECTABLE") && !factb::hasKindOf(*x, "UNATTACKABLE") && !factb::hasKindOf(*x, "INERT")
+							   && ObjectFilterMatch::allows(g.logic(), *d->m_objectFilter, x, owner, g.rig.local);
+					};
+					const ThingTemplate *pick = nullptr;
+					for (const std::string &inc : d->m_objectFilter->includeNames)
+					{
+						if (!pick && usable(g.logic().things().findTemplate(inc)))
+						{
+							pick = g.logic().things().findTemplate(inc);
+						}
+					}
+					if (!pick && !usable(g.logic().things().findTemplate(targetName)))
+					{
+						for (const ThingTemplate *x : g.logic().things().templates())
+						{
+							if (!pick && usable(x) && !factb::hasKindOf(*x, "STRUCTURE"))
+							{
+								pick = x;
+							}
+						}
+					}
+					if (pick)
+					{
+						targetName = pick->getName();
+					}
+				}
+				const Coord3D at = *h->getPosition();
+				const float off = std::min(40.0f, d->m_range * 0.5f);
+				Object *t = g.rig.make(targetName, at.x + off, at.y, owner);
+				fixtureObjects.push_back(t->getID());
+				const ObjectID tid = t->getID();
+				bool on = false;
+				for (unsigned f = 0; f < d->m_refreshDelay + 10 && !on; ++f)
+				{
+					g.step(1);
+					Object *tt = g.logic().findObjectByID(tid);
+					std::vector<Object *> check{ tt };
+					if (tt && tt->getContain() && tt->getContain()->getContainedItemsList())
+					{
+						check.insert(check.end(), tt->getContain()->getContainedItemsList()->begin(), tt->getContain()->getContainedItemsList()->end());
+					}
+					for (Object *o : check)
+					{
+						const AttributeModifierPool *pool = o ? static_cast<const AttributeModifierPool *>(o->findModule("AttributeModifierPoolUpdate")) : nullptr;
+						on = on || (pool && pool->hasList(d->m_bonusName));
+					}
+				}
+				const std::string what = str("%s on %s (%s) at %.0f of Range %.0f%s", d->m_bonusName.c_str(), targetName.c_str(), d->m_targetEnemy ? "enemy" : "own",
+											off, d->m_range, given.empty() ? "" : (", after " + given).c_str());
+				if (on)
+				{
+					res.pass(item, "AURA: " + what);
+				}
+				else
+				{
+					res.fail(item, str("NO-AURA: %s never arrived in %u frames (pulses %u)", what.c_str(), d->m_refreshDelay + 10, aura.module->pulses()));
 				}
 			}
 		}
