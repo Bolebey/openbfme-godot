@@ -13,6 +13,8 @@
 #include "GameLogic/Object/Contain/HordeContainRuntime.h"
 #include "GameLogic/Object/Object.h"
 
+#include <string>
+
 namespace
 {
 const char kBaseIni[] = R"ini(
@@ -100,12 +102,13 @@ struct GateWorld : combattest::CombatWorld
 	}
 	void gate(Object &o, const char *name, const char *condition, bool set, bool enabled)
 	{
-		CAPTURE(name);
+		CAPTURE(std::string(name));
 		CHECK(o.testModelCondition(ModelCondition::indexOf(condition)) == set);
 		CHECK(state(o, name) == (enabled ? ButtonState::Enabled : ButtonState::Restricted));
 	}
 	void cast(Object &o, const char *name)
 	{
+		CAPTURE(std::string(name));
 		const CommandButton *button = commandStore.findCommandButton(name);
 		REQUIRE(button);
 		REQUIRE(state(o, name) == ButtonState::Enabled);
@@ -172,6 +175,15 @@ End
 )ini";
 
 const char kLockIni[] = R"ini(
+Weapon P286Blade
+  AttackRange = 12
+  MeleeWeapon = Yes
+  DamageNugget
+    Damage = 10
+    DamageType = SLASH
+    DeathType = NORMAL
+  End
+End
 SpecialPower P286Secondary
   Enum = SPECIAL_KNIFE_FIGHTER
   ReloadTime = 6000
@@ -206,12 +218,12 @@ ChildObject P286WeaponUser P286Unit
   CommandSet = P286LockSet
   WeaponSet
     Conditions = None
-    Weapon = PRIMARY TestSword
-    Weapon = SECONDARY TestSword
+    Weapon = PRIMARY P286Blade
+    Weapon = SECONDARY P286Blade
   End
   WeaponSet
     Conditions = WEAPONSET_TOGGLE_1
-    Weapon = PRIMARY TestSword
+    Weapon = PRIMARY P286Blade
   End
   Behavior = WeaponModeSpecialPowerUpdate SecondaryModeTag
     SpecialPowerTemplate = P286Secondary
@@ -384,7 +396,7 @@ ChildObject P286Stable P286Unit
     BonusName = P286AuraMark
     RefreshDelay = 600
     Range = 130
-    ObjectFilter = NONE +P286Horde +P286Beast ALLIES
+    ObjectFilter = NONE +P286Horde +P286Beast +P286Member ALLIES
   End
 End
 ChildObject P286Beast P286Unit
@@ -458,14 +470,18 @@ TEST_CASE("PORT-286: secondary weapon mode opens the button, a replacement lock 
 	GateWorld f(kLockIni);
 	Object *unit = f.unit("P286WeaponUser", 'A', 300, 300);
 	Object *idle = f.unit("P286WeaponUser", 'A', 365, 300);
+	ObjectWeapons *weapons = unit->getWeapons();
+	REQUIRE(weapons);
+	REQUIRE(weapons->weaponInSlot(PRIMARY_WEAPON));
+	REQUIRE(weapons->weaponInSlot(SECONDARY_WEAPON));
 	f.frames(2);
+	CHECK(f.state(*unit, "P286LockSecondary") == ButtonState::NotReady);
+	f.frames(28); // WeaponModeSpecialPowerUpdate starts its full 6000 ms recharge at creation (RW 0x991694).
 	f.gate(*unit, "P286WhenLocked", "WEAPONLOCK_SECONDARY", false, false);
 	f.cast(*unit, "P286LockSecondary");
 	f.gate(*unit, "P286WhenLocked", "WEAPONLOCK_SECONDARY", true, true);
 	f.gate(*idle, "P286WhenLocked", "WEAPONLOCK_SECONDARY", false, false);
 
-	ObjectWeapons *weapons = unit->getWeapons();
-	REQUIRE(weapons);
 	const int primary = ModelCondition::indexOf("WEAPONLOCK_PRIMARY");
 	CHECK(weapons->setWeaponLock(PRIMARY_WEAPON, LOCKED_TEMPORARILY));
 	CHECK_FALSE(unit->testModelCondition(primary)); // accepted, but cannot override permanent
@@ -488,10 +504,11 @@ TEST_CASE("PORT-286: changing to a non-shared weapon set releases the secondary 
 {
 	GateWorld f(kLockIni);
 	Object *unit = f.unit("P286WeaponUser", 'A', 300, 300);
-	f.frames(2);
+	f.frames(30); // let the mode's initial recharge finish
 	f.cast(*unit, "P286LockSecondary");
 	f.gate(*unit, "P286WhenLocked", "WEAPONLOCK_SECONDARY", true, true);
 	unit->setWeaponSetFlag(24, true); // WEAPONSET_TOGGLE_1: switches the set, not the model lock bit
+	CHECK_FALSE(unit->getWeapons()->weaponInSlot(SECONDARY_WEAPON));
 	f.gate(*unit, "P286WhenLocked", "WEAPONLOCK_SECONDARY", false, false);
 }
 
@@ -531,6 +548,11 @@ TEST_CASE("PORT-286: an upgraded aura reaches the beast and the same horde befor
 	f.gate(*beast, "P286BuyBeast", "USER_9", true, true);
 	f.gate(*far, "P286BuyBeast", "USER_9", false, false);
 	f.gate(*standalone, "P286NearStable", "USER_9", false, false);
+	REQUIRE(standalone->getContain());
+	const auto *members = standalone->getContain()->getContainedItemsList();
+	REQUIRE(members);
+	REQUIRE(members->size() == 1);
+	CHECK(members->front()->testModelCondition(ModelCondition::indexOf("USER_9"))); // a marked rider does not mark its horde
 
 	const ThingTemplate *base = horde->getTemplate();
 	auto *formation = dynamic_cast<HordeContain *>(horde->getContain());
