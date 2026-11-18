@@ -181,8 +181,8 @@ dead — RW's own shape for a bird (the guard machine RW 0x76A6CC only decides *
 states are ordinary `AIAttackState`s, section 1).
 
 Where RW restarts the next swoop is not read (RW's attack state only flattens a positive sleep, RW 0x7515C8 ..
-0x7515DA), so the restart is the port's own decision and is recorded as the stop `S-7499`
-(`docs/stops.d/S-7499.md`), together with the factory's place on the AI instead of on the machine. The branch merged
+0x7515DA), so the restart is the port's own decision and is recorded as the stop `S-7505`
+(`docs/stops.d/S-7505.md`), together with the factory's place on the AI instead of on the machine. The branch merged
 `origin/main` after this analysis was written: the attack-machine choice there also has the horde-position kind 7
 (PORT-165) and the charge kind 8 (PORT-133), and the bird's branch now stands first as RW 0x74CFCA's giant-bird
 precedence — `MADE_SWOOP` is 7.

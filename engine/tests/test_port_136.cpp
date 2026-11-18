@@ -171,13 +171,13 @@ TEST_CASE("PORT-136: the eagle in the guard state takes off, closes in and hits 
 	const int hit = w.runUntil([&] { return w.health(enemy) < startHealth; }, 1500);
 	MESSAGE("PORT-136: hit after " << hit << " frames, bird at (" << bird->getPosition()->x << "," << bird->getPosition()->y << "," << bird->getPosition()->z << ") state=" << ai->currentStateId() << " enemy hp "
 				   << startHealth << " -> " << w.health(enemy));
-	REQUIRE(hit < 1500);
+	REQUIRE(hit < 1500); // tolerance: the guard's enemy scan starts on a random frame (RW 0x949630 draws it from the logic generator), so the frame the bird engages is not fixed (13 to 21 measured); the bound is the run's own 1500-frame limit
 	// it flew there: a bird 150 units out never walks, and the guard's approach only ever had the walk machine's path
-	CHECK(bird->getPosition()->x > from.x + 50.0f);
-	CHECK(bird->getPosition()->z > 1.0f);
+	CHECK(bird->getPosition()->x > from.x + 50.0f); // tolerance: the bird stops where its swoop meets the victim — 281 at the hit frame against the spawn's 200 — so the bound only says it left the guard post
+	CHECK(bird->getPosition()->z > 1.0f); // tolerance: height above the ground (6.4 at the hit frame, 107 in a long chase); the bound only separates flying from standing
 	const int killed = w.runUntil([&] { return w.health(enemy) <= 0.0f; }, 4000);
 	MESSAGE("PORT-136: enemy dead after " << (hit + killed) << " frames");
-	CHECK(killed < 4000);
+	CHECK(killed < 4000); // tolerance: the kill frame follows the random scan; the bound is the run's own 4000-frame limit (40 frames measured)
 }
 
 // the neighbour: a foot unit of the same mod (StancesBehavior, the fresh Battle stance guards like the eagle) walks and kills as
@@ -209,8 +209,8 @@ TEST_CASE("PORT-136: a foot unit in the guard state still walks to its target an
 	const int hit = w.runUntil([&] { return w.health(enemy) < startHealth; }, 1500);
 	MESSAGE("PORT-136 foot: hit after " << hit << " frames, foot at (" << foot->getPosition()->x << "," << foot->getPosition()->y << ") state=" << ai->currentStateId() << " enemy hp " << startHealth << " -> "
 				   << w.health(enemy));
-	REQUIRE(hit < 1500);
-	CHECK(foot->getPosition()->x > 200.0f + 20.0f); // it walked
-	CHECK(foot->getPosition()->z <= 1.0f);
+	REQUIRE(hit < 1500); // tolerance: the same random scan offset makes the foot unit's engagement frame vary; the bound is the run's own 1500-frame limit
+	CHECK(foot->getPosition()->x > 200.0f + 20.0f); // it walked // tolerance: a walker of speed 55 stops inside its 20-unit weapon range of the target at 350 — 244 measured — so the bound only says it walked
+	CHECK(foot->getPosition()->z <= 1.0f); // tolerance: a walker's z stays on the ground (0 measured); the bound only says it did not fly
 }
 
