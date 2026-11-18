@@ -103,3 +103,20 @@ def test_the_loop_names_the_next_free_letter_and_sees_hand_runs_only():
     assert bb.is_run(["python3", "/content/sandbox/batch_bot.py", "run", "--name", "x"])
     assert bb.is_run(["python3", "tools/colab/batch_bot.py", "run"])
     assert not bb.is_run(["python3", "/content/sandbox/batch_bot.py", "loop"])
+
+
+def test_a_pr_claimed_by_a_running_batch_on_another_sandbox_waits(monkeypatch, tmp_path):
+    (tmp_path / "2026-11-18c").mkdir()
+    (tmp_path / "2026-11-18c" / "claim.json").write_text(json.dumps({"prs": [601, 605]}))
+    (tmp_path / "2026-11-18b").mkdir()   # a red run: its report is written and it has no branch
+    (tmp_path / "2026-11-18b" / "claim.json").write_text(json.dumps({"prs": [612]}))
+    (tmp_path / "2026-11-18b" / "report.md").write_text("red")
+    monkeypatch.setattr(bb, "RUNS", tmp_path)
+    monkeypatch.setattr(bb, "sh", lambda *a, **k: type("R", (), {"returncode": 1, "stdout": ""})())   # no batch branches on origin
+    monkeypatch.setattr(bb, "gh", lambda *a, **k: json.dumps([pr(number=n) for n in (601, 605, 612, 620)]))
+    monkeypatch.setattr(bb, "verdict", lambda p: "green")
+    take, wait = bb.candidates(None)
+    assert [p["number"] for p in take] == [612, 620]
+    assert dict((p["number"], why) for p, why in wait) == {601: "уже в партии 2026-11-18c", 605: "уже в партии 2026-11-18c"}
+    take, _ = bb.candidates(None, own="2026-11-18c")   # the batch itself does not wait for its own claim
+    assert len(take) == 4

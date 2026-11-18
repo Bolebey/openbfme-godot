@@ -180,13 +180,40 @@ def fork_check(head: str) -> str:
 MAX_PRS = 5   # owner 2026-11-18: "брать по 5 пр максимум", fewer merge points for a bisect to walk
 
 
-def candidates(only: list[int] | None, cap: int = MAX_PRS) -> tuple[list[dict], list[tuple[dict, str]]]:
+CLAIM_HOURS = 12   # a claim of a run that never wrote its report (the runtime died) stops counting after this
+
+
+def claimed(own: str = "") -> dict[int, str]:
+    """PR number -> the batch that holds it (owner 2026-11-18: batches run on two sandboxes at once). Every run writes
+    RUNS/<name>/claim.json with its PRs at its start; the claim holds while the run goes (no report.md yet, younger than CLAIM_HOURS) and
+    while its green branch origin/batch/<name> is not in origin/main. A red run (report, no branch) or a landed one frees its PRs."""
+    held: dict[int, str] = {}
+    for f in RUNS.glob("*/claim.json") if RUNS.exists() else []:
+        name = f.parent.name
+        if name == own:
+            continue
+        try:
+            prs = json.loads(f.read_text()).get("prs") or []
+        except (OSError, ValueError):
+            continue
+        branch = f"refs/remotes/origin/batch/{name}"
+        if sh(["git", "rev-parse", "-q", "--verify", branch], cwd=REPO).returncode == 0:
+            hold = sh(["git", "merge-base", "--is-ancestor", branch, "refs/remotes/origin/main"], cwd=REPO).returncode != 0
+        else:
+            hold = not (f.parent / "report.md").exists() and time.time() - f.stat().st_mtime < CLAIM_HOURS * 3600
+        if hold:
+            held.update({int(n): name for n in prs})
+    return held
+
+
+def candidates(only: list[int] | None, cap: int = MAX_PRS, own: str = "") -> tuple[list[dict], list[tuple[dict, str]]]:
     prs = json.loads(gh("pr", "list", "--state", "open", "--limit", "100", "--json",
                         "number,title,body,headRefOid,headRefName,isDraft,author,isCrossRepository,headRepositoryOwner,files"))
     prs = sorted((p for p in prs if not only or p["number"] in only), key=lambda p: p["number"])
+    held = claimed(own)
     take, wait = [], []
     for p in prs:
-        why = verdict(p)
+        why = f"уже в партии {held[p['number']]}" if p["number"] in held else verdict(p)
         (take.append(p) if why == "green" else wait.append((p, why)))
     if cap > 0 and len(take) > cap:   # the oldest green PRs go first; the rest wait for the next batch, with no comment on them
         wait = [(p, f"следующая партия (в партии не больше {cap} PR)") for p in take[cap:]] + wait
@@ -643,7 +670,9 @@ def cmd_run(a) -> int:
     name = a.name or dt.datetime.utcnow().strftime("%Y-%m-%d-%H%M")
     out_dir = RUNS / name
     out_dir.mkdir(parents=True, exist_ok=True)
-    take, wait = candidates(a.prs, a.max)
+    take, wait = candidates(a.prs, a.max, own=name)
+    (out_dir / "claim.json").write_text(json.dumps({"prs": [p["number"] for p in take], "sandbox": Path("/content/sandbox_id").read_text().strip()
+                                                    if Path("/content/sandbox_id").exists() else "?", "started": time.time()}))
     log(f"batch {name}: {len(take)} green PRs: {' '.join('#%d' % p['number'] for p in take)}")
     rows: dict = {"main": git("rev-parse", "origin/main").strip(), "wait": wait, "out": {}, "repinned": [], "results": {}, "main_red": set(),
                   "merged": [], "conflicted": [], "renumbered": [], "verdict": "нет PR"}
