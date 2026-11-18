@@ -378,6 +378,7 @@ struct EffectProbe
 		float experience = 0.0f;
 		std::set<std::string> modifiers;
 		std::map<std::string, unsigned> expires; ///< MATRIX_TODO 2: each list's expiry frame (AttributeModifierPool::expireOf)
+		std::map<int, float> values; ///< MATRIX_TODO 1b: what the engine's readers get (DAMAGE_ADD sum RW 0x804F39; DAMAGE_MULT, SPEED product RW 0x804FFF)
 		unsigned long long readySum = 0;
 		ObjectStatusMaskType status{};
 		WeaponConditionFlags weaponFlags{};
@@ -1038,6 +1039,14 @@ struct EffectProbe
 					s.modifiers.insert(n);
 					s.expires[n] = pool->expireOf(n);
 				}
+				for (int type : { ATTRIBUTE_DAMAGE_ADD, ATTRIBUTE_DAMAGE_MULT, ATTRIBUTE_SPEED })
+				{
+					float v = type == ATTRIBUTE_DAMAGE_ADD ? 0.0f : 1.0f;
+					if (type == ATTRIBUTE_DAMAGE_ADD ? o->attributeModifierSum(type, nullptr, v) : o->attributeModifierProduct(type, nullptr, true, v))
+					{
+						s.values[type] = v;
+					}
+				}
 			}
 			for (const std::unique_ptr<BehaviorModule> &m : o->modules())
 			{
@@ -1249,7 +1258,7 @@ struct EffectProbe
 				break;
 			case MODIFIER:
 			{
-				std::string neverEnds;
+				std::string neverEnds, valueOff;
 				auto checkMod = [&](const std::string &modName) {
 					for (const auto &kv : after.seen)
 					{
@@ -1268,6 +1277,45 @@ struct EffectProbe
 								return true;
 							}
 							got = str("%s on object %u", modName.c_str(), (unsigned)kv.first);
+							// MATRIX_TODO 1b (owner 2026-11-18): the value the engine's readers get must move by what the lists say: every list new on
+							// this object since the cast, its unnamed DAMAGE_ADD (summed) / DAMAGE_MULT and SPEED (multiplied) modifiers, against
+							// Object::attributeModifierSum / Product (RW 0x804F39 / 0x804FFF) before and after
+							if (b)
+							{
+								for (int type : { ATTRIBUTE_DAMAGE_ADD, ATTRIBUTE_DAMAGE_MULT, ATTRIBUTE_SPEED })
+								{
+									const bool add = type == ATTRIBUTE_DAMAGE_ADD;
+									float want = add ? 0.0f : 1.0f;
+									bool named = false, any = false;
+									for (const std::string &n : kv.second.modifiers)
+									{
+										const ModifierListTemplate *nl2 = b->modifiers.count(n) || !TheAttributeModifierStore ? nullptr : TheAttributeModifierStore->find(n);
+										for (const ModifierListTemplate::Modifier &m : nl2 ? nl2->m_modifiers : std::vector<ModifierListTemplate::Modifier>{})
+										{
+											if (m.type != type)
+											{
+												continue;
+											}
+											named = named || !m.names.empty();
+											any = true;
+											want = add ? want + m.value : want * m.value;
+										}
+									}
+									if (!any || named)
+									{
+										continue; // nothing of this type, or a damage-type-named modifier (read per damage type): not judged here
+									}
+									const auto bv = b->values.find(type), av = kv.second.values.find(type);
+									const float before = bv != b->values.end() ? bv->second : (add ? 0.0f : 1.0f);
+									const float now = av != kv.second.values.end() ? av->second : (add ? 0.0f : 1.0f);
+									const float expect = add ? before + want : before * want;
+									if (std::fabs(now - expect) > 0.001f * std::max(1.0f, std::fabs(expect)))
+									{
+										valueOff += str("%s on object %u: %s %.3f -> %.3f, the new lists say %s%.3f (RW %s); ", modName.c_str(), (unsigned)kv.first,
+														TheAttributeModifierTypeNames[type], before, now, add ? "+" : "x", want, add ? "0x804F39" : "0x804FFF");
+									}
+								}
+							}
 							return true;
 						}
 					}
@@ -1302,6 +1350,11 @@ struct EffectProbe
 				if (!neverEnds.empty())
 				{
 					missing += e.what + ": " + neverEnds + "; "; // a fault of its own, not "no result"
+					continue;
+				}
+				if (!valueOff.empty())
+				{
+					missing += e.what + ": NO-VALUE: " + valueOff; // landed, but the readers do not get its value
 					continue;
 				}
 				break;
