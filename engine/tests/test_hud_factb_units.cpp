@@ -949,6 +949,48 @@ void unitsSweep(const std::string &faction, Results &res, bool sweep)
 							}
 						}
 					}
+					// MATRIX_TODO 1 (owner 2026-11-18): the upgrade bought must also do what the data says: every upgrade module of the unit
+					// and of its members whose TriggeredBy names it and whose condition holds now (UpgradeMux slot 2 wouldUpgrade over the
+					// player's completed mask | the object's mask, as Object.cpp's RW 0x694914 builds it) has executed (slot 0,
+					// isAlreadyUpgraded); one that would but has not is an upgrade that changed nothing
+					std::string idle;
+					if (Object *uu = g.logic().findObjectByID(uid))
+					{
+						std::vector<Object *> checked{ uu };
+						if (uu->getContain() && uu->isKindOfName("HORDE"))
+						{
+							checked.insert(checked.end(), uu->getContain()->getContainedItemsList()->begin(), uu->getContain()->getContainedItemsList()->end());
+						}
+						for (Object *o : checked)
+						{
+							UpgradeMaskType mask = g.rig.local->getCompletedUpgradeMask();
+							mask.orWith(o->getUpgradeMask());
+							for (const std::unique_ptr<BehaviorModule> &bm : o->modules())
+							{
+								const UpgradeMux *mux = bm->getUpgrade();
+								const std::vector<std::string> *tb = mux ? &mux->muxData()->m_triggeredBy : nullptr;
+								if (tb && std::find(tb->begin(), tb->end(), cb->m_upgradeName) != tb->end() && !mux->isAlreadyUpgraded() && mux->wouldUpgrade(mask))
+								{
+									idle = str("%s:%s", o->getTemplate()->getName().c_str(), bm->getModuleData() ? bm->getModuleData()->getModuleTagName().c_str() : "?");
+									break;
+								}
+							}
+							if (!idle.empty())
+							{
+								break;
+							}
+						}
+					}
+					if (!idle.empty())
+					{
+						if (playerUpgrade)
+						{
+							g.rig.local->removeUpgrade(up, true); // as below: before the next spawn (RW 0x6AE60C)
+						}
+						res.fail(item, str("NO-EFFECT: %s bought, but %s (TriggeredBy it, its condition met) did not execute (UpgradeMux slot 0 / 2)",
+						                   cb->m_upgradeName.c_str(), idle.c_str()));
+						continue;
+					}
 					if (playerUpgrade)
 					{
 						// Remove the player upgrade before the next spawn so DoCommandUpgrade on ImladrisLoremaster doesn't fire at creation (RW 0x6AE60C).
