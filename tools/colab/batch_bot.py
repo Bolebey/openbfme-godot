@@ -736,6 +736,20 @@ def cmd_run(a) -> int:
         # the dashboard learns from GitHub only: without this mark a PR in a running batch stayed "✅ можно брать в батч" (owner 2026-11-18)
         for p in take:
             gh("pr", "comment", str(p["number"]), "--body", taken_comment(name, p, sandbox))
+    try:
+        return run_batch(a, name, take, wait, out_dir)
+    except Exception as e:
+        # a crash (2026-11-18a: its branch was checked out in another tree) left its PRs "в батче" and claimed for 12 hours: the report
+        # releases the claim, the left marks put the PRs back among the green ones
+        (out_dir / "report.md").write_text(f"# Партия {name}: упала\n\n```\n{e}\n```\n", encoding="utf-8")
+        if not a.no_comment:
+            for p in take:
+                gh("pr", "comment", str(p["number"]), "--body", left_comment(name, p, f"партия упала ({str(e)[:200]}), не из-за этого PR: снова ждёт партии"))
+        (STATUS_DIR / f"{RUN_KEY}.txt").unlink(missing_ok=True)
+        raise
+
+
+def run_batch(a, name: str, take: list[dict], wait: list, out_dir: Path) -> int:
     rows: dict = {"main": git("rev-parse", "origin/main").strip(), "wait": wait, "out": {}, "repinned": [], "results": {}, "main_red": set(),
                   "merged": [], "conflicted": [], "renumbered": [], "verdict": "нет PR"}
     if not take:
