@@ -31,6 +31,8 @@
 #include "GameLogic/Module/SpellBookPowers.h"
 #include "GameLogic/Module/StealthAbilityModules.h"
 #include "GameLogic/Module/WeaponChangeSpecialPower.h"
+#include "GameLogic/Module/StoreObjectsSpecialPower.h" // lane PORT-261: the stored list's size observed through the module, not the world (the objects stay in play)
+#include "GameLogic/BitFlags.h"
 #include "GameLogic/Object/AttributeModifierPool.h"
 #include "GameLogic/Object/ExperienceTracker.h"
 #include "GameLogic/Object/Object.h"
@@ -316,6 +318,7 @@ struct EffectProbe
 		HARVEST,         ///< SPECIAL_HARVEST -> caster entered AI_HARVEST / harvest model condition
 		TIMER_REFRESH,   ///< SpecialPowerTimerRefreshSpecialPower -> allied non-holder readySum decreased
 		FIRE_LOGIC,      ///< FireLogicNugget -> extinguishes / feeds fires (unported S-191 / S-1997 -> NO-EFFECT)
+		STORE,           ///< lane PORT-261: StoreObjectsSpecialPower (RW 0x8D1EA7) -> the captured list grew
 	};
 
 	struct Expect
@@ -386,6 +389,7 @@ struct EffectProbe
 		DisabledMaskType disabled = 0;
 		ObjectID containedBy = INVALID_ID;
 		bool terror = false;
+		unsigned storeCount = 0; ///< lane PORT-261: the StoreObjectsSpecialPower's captured list size (RW 0x8D1EA7)
 		std::array<bool, EMOTION_TYPE_COUNT> emotions{};
 		bool harvesting = false;
 		const ThingTemplate *tmpl = nullptr;
@@ -898,6 +902,11 @@ struct EffectProbe
 					}
 				}
 			}
+			else if (dynamic_cast<const StoreObjectsSpecialPower *>(m))
+			{
+				// lane PORT-261: RW 0x8D1EA7 -> the captured list (the objects stay in play, so the world gives no signal); the sweep's STORE rule reads the module's list
+				p.expects.push_back({ STORE, cls });
+			}
 			else if (cls == "SpecialAbilityUpdate")
 			{
 				const int type = d->m_specialPowerTemplate ? d->m_specialPowerTemplate->getFinalOverride()->m_type : 0;
@@ -1050,6 +1059,12 @@ struct EffectProbe
 			}
 			for (const std::unique_ptr<BehaviorModule> &m : o->modules())
 			{
+				// lane PORT-261: RW 0x8D1EA7 fills the module's captured list; the objects stay in the world (the teleport power releases them),
+				// so the capture is observable only through the module
+				if (const StoreObjectsSpecialPower *so = dynamic_cast<const StoreObjectsSpecialPower *>(m.get()))
+				{
+					s.storeCount = (unsigned)so->storedObjects().size();
+				}
 				if (SpecialPowerModuleInterface *sp = m->getSpecialPower())
 				{
 					s.readySum += sp->getReadyFrame();
@@ -1392,6 +1407,18 @@ struct EffectProbe
 				}
 				break;
 			}
+			case STORE:
+				// lane PORT-261: the module's captured list grew (RW 0x8D1EA7); the captured objects stay in the world
+				for (const auto &kv : after.seen)
+				{
+					const Seen *b = was(kv.first);
+					if (b && kv.second.storeCount > b->storeCount)
+					{
+						got = str("object %u stored %u unit(s)", (unsigned)kv.first, kv.second.storeCount);
+						break;
+					}
+				}
+				break;
 			case HEAL:
 				for (const auto &kv : after.seen)
 				{

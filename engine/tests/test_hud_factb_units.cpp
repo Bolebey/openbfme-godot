@@ -48,6 +48,8 @@
 #include "GameLogic/Combat/CombatState.h"
 #include "GameLogic/Combat/CombatQueries.h"
 #include "GameLogic/Module/EmotionModules.h"
+#include "GameLogic/BitFlags.h"
+#include "GameLogic/Combat/CombatNames.h"
 #include "GameLogic/Module/ExtraUpdateModules.h" // DeletionUpdate: a temporary object (the matrix's first-frames verdict)
 #include "GameLogic/Module/SlavedUpdate.h"
 #include "GameLogic/Module/StructureModules.h" // LifetimeUpdate
@@ -222,6 +224,12 @@ const std::set<std::string> &sweepSkips()
 const char *ownHordeOf(const std::string &faction)
 {
 	return faction == "FactionMordor" ? "MordorFighterHorde" : faction == "FactionWild" ? "GoblinFighterHorde" : faction == "FactionAngmar" ? "AngmarDarkDunedainHorde" : "IsengardFighterHorde";
+}
+
+// the faction's own soldier, the capturable unit for a store-list power (lane PORT-261): the same mapping as ownHordeOf, the member template
+const char *ownSoldierOf(const std::string &faction)
+{
+	return faction == "FactionMordor" ? "MordorFighter" : faction == "FactionWild" ? "GoblinFighter" : faction == "FactionAngmar" ? "AngmarDarkDunedain" : "IsengardFighter";
 }
 
 bool isPowerCommand(int c)
@@ -1258,6 +1266,24 @@ void unitsSweep(const std::string &faction, Results &res, bool sweep)
 						unportedFx.push_back(spm ? spm->unportedEffects() : 0);
 					}
 				};
+				// lane PORT-261: the abilities whose ChainedButton never starts the recharge (RW 0x853F2A) are detected by their trigger counter instead of the recharge frame
+				auto triggerSum = [&]() -> unsigned {
+					unsigned s = 0;
+					if (u && t)
+					{
+						for (const std::unique_ptr<BehaviorModule> &m : u->modules())
+						{
+							if (const SpecialAbilityUpdate *a = dynamic_cast<const SpecialAbilityUpdate *>(m.get()))
+							{
+								if (a->abilityData()->m_specialPowerTemplateName == t->getName())
+								{
+									s += a->abilitiesTriggered();
+								}
+							}
+						}
+					}
+					return s;
+				};
 				collect();
 				if (mods.empty())
 				{
@@ -1418,12 +1444,15 @@ void unitsSweep(const std::string &faction, Results &res, bool sweep)
 					}
 				} tempTarget{ g.logic() };
 				bool tempEnemyTarget = false;
+				// lane PORT-261: a second scope-guarded temp object for the sacrificial injured structure the rebuild powers need; tempTarget below may already
+				// point at a staged enemy/ally target, and overwriting it would leak that object and click on the structure instead of the intended target
+				TempTarget healTemp{ g.logic() };
 				// a position power whose result is on own units (a level grant, a heal, invisibility, timer refresh) is cast at an own horde made there;
 				// one whose result is on enemies (a dominate, a hit, a curse, a terror, a grab, replace, emotion, meta-impact, steal, paralyze) at the enemy;
 				// the others at the ground by the unit
 				const bool targetless = !cb->hasOption(COMMAND_OPTION_NEED_TARGET_ENEMY_OBJECT | COMMAND_OPTION_NEED_TARGET_NEUTRAL_OBJECT
 													   | COMMAND_OPTION_NEED_TARGET_ALLY_OBJECT | COMMAND_OPTION_NEED_TARGET_POS);
-				bool atOwn = false, stageOwn = false, atEnemy = false, closerEnemy = false, needsHeal = false, needsStealMoney = false, needsTimerRefresh = false;
+				bool atOwn = false, stageOwn = false, atEnemy = false, closerEnemy = false, needsHeal = false, needsStealMoney = false, needsTimerRefresh = false, needsStore = false;
 				for (const EffectProbe::Expect &x : EffectProbe::take(g.logic(), u, t).expects)
 				{
 					closerEnemy = closerEnemy
@@ -1438,6 +1467,7 @@ void unitsSweep(const std::string &faction, Results &res, bool sweep)
 							  || x.kind == EffectProbe::LUA_EVENT || x.kind == EffectProbe::META_IMPACT || x.kind == EffectProbe::STEAL_MONEY
 							  || x.kind == EffectProbe::PARALYZE;
 					needsHeal = needsHeal || x.kind == EffectProbe::HEAL;
+					needsStore = needsStore || x.kind == EffectProbe::STORE; // lane PORT-261: SPECIAL_STORE_LIST_2 captures only allied units in the radius
 					needsStealMoney = needsStealMoney || x.kind == EffectProbe::STEAL_MONEY;
 					needsTimerRefresh = needsTimerRefresh || x.kind == EffectProbe::TIMER_REFRESH;
 				}
@@ -1451,6 +1481,12 @@ void unitsSweep(const std::string &faction, Results &res, bool sweep)
 					enemyUnitId = g.rig.make(enemyName, c.x + 80.0f, c.y + 20.0f, enemy)->getID();
 					g.step(5);
 					toughen(g.logic(), enemyUnitId);
+				}
+				// lane PORT-261: an ability that stores units (SPECIAL_STORE_LIST_2) is pointed at the open ground; an allied unit must be in the radius to capture
+				if (needsStore)
+				{
+					g.rig.make(ownSoldierOf(faction), c.x + 115.0f, c.y + 115.0f);
+					g.rig.make(ownSoldierOf(faction), c.x + 128.0f, c.y + 122.0f);
 				}
 				if (needsStealMoney && enemy->getMoney()->countMoney() < 50000u)
 				{
@@ -1572,6 +1608,69 @@ void unitsSweep(const std::string &faction, Results &res, bool sweep)
 						}
 					}
 					injure(g.logic().findObjectByID(tempTarget.id != INVALID_ID ? tempTarget.id : allyId));
+					// lane PORT-261: a rebuild (PlayerHealSpecialPower whose HealAffects carries STRUCTURE, e.g. Theodred's Reparaturarbeiten and Balin's Baukunst) heals
+					// structures only; the cast at the horde's spot needs an injured own structure there or the power has no legal result (the outcome in RotWK too)
+					bool rebuild = false;
+					auto structureHeal = [&](const Object *h) {
+						if (!h)
+						{
+							return;
+						}
+						for (const std::unique_ptr<BehaviorModule> &m : h->modules())
+						{
+							const PlayerHealSpecialPower *ph = dynamic_cast<const PlayerHealSpecialPower *>(m.get());
+							if (ph && t && ph->getSpecialPowerTemplate() == t
+								&& BitFlagsTest(ph->data()->m_healAffects, (size_t)CombatNames::kindOf("STRUCTURE")))
+							{
+								rebuild = true;
+							}
+						}
+					};
+					structureHeal(u);
+					if (Object *oh = ownHordeId != INVALID_ID ? g.logic().findObjectByID(ownHordeId) : nullptr)
+					{
+						structureHeal(oh);
+						if (oh->getContain() && oh->getContain()->getContainedItemsList())
+						{
+							for (Object *m : *oh->getContain()->getContainedItemsList())
+							{
+								structureHeal(m);
+							}
+						}
+					}
+					if (rebuild)
+					{
+						const std::string &side = g.rig.local->getPlayerTemplate()->m_side;
+						const ThingTemplate *building = nullptr;
+						for (const ThingTemplate *tt : s.world->things().templates()) // a farm, cheapest to place, else any structure of the side
+						{
+							if (!factb::hasKindOf(*tt, "STRUCTURE") || factb::hasKindOf(*tt, "SUMMONED")
+								|| factb::stringFieldOf(*tt, "Side") != side)
+							{
+								continue;
+							}
+							if (tt->getName().find("Farm") != std::string::npos)
+							{
+								building = tt;
+								break;
+							}
+							building = building ? building : tt;
+						}
+						Coord3D spot = c;
+						if (Object *oh = ownHordeId != INVALID_ID ? g.logic().findObjectByID(ownHordeId) : nullptr)
+						{
+							spot = *oh->getPosition();
+						}
+						if (building)
+						{
+							// lane PORT-261: kept in a separate TempTarget so it cannot clobber a temp target the enemy-object branches already staged, and placed
+							// off the horde's foot (inside the HealRadius) so the placement does not stack on the horde cell
+							healTemp.id = g.rig.make(building->getName(), spot.x + 40.0f, spot.y + 40.0f)->getID();
+							g.step(3);
+							Object *built = g.logic().findObjectByID(healTemp.id);
+							injure(built);
+						}
+					}
 				}
 				if (needsTimerRefresh)
 				{
@@ -1637,6 +1736,8 @@ void unitsSweep(const std::string &faction, Results &res, bool sweep)
 					continue;
 				}
 				collect();
+				// lane PORT-261: the trigger counter for chained-button abilities (RW 0x853F2A skips their recharge), read where the press is armed
+				const unsigned triggerSumBefore = triggerSum();
 				auto resolveTarget = [&]() -> Object * {
 					Object *tgt = nullptr;
 					if (!cb->hasOption(COMMAND_OPTION_NEED_TARGET_ENEMY_OBJECT | COMMAND_OPTION_NEED_TARGET_NEUTRAL_OBJECT | COMMAND_OPTION_NEED_TARGET_ALLY_OBJECT | COMMAND_OPTION_NEED_TARGET_POS))
@@ -1969,6 +2070,8 @@ void unitsSweep(const std::string &faction, Results &res, bool sweep)
 					{
 						fired = fired || mods[k]->getReadyFrame() != readyBefore[k];
 					}
+					// lane PORT-261: chained-button abilities never start the recharge (RW 0x853F2A), so the trigger counter is the witness
+					fired = fired || triggerSum() != triggerSumBefore;
 				}
 				if (replaced)
 				{
