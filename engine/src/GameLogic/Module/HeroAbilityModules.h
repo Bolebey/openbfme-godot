@@ -447,6 +447,7 @@ private:
 	bool m_ended = false;                    // + 0x2C
 };
 
+// RW 0x008D0E82 (ctor: m_affects initialized to RULE_ALL via RW 0x0076406F / 0x00763DAA; RW 0x008D0DCB buildFieldParse)
 class DominateEnemySpecialPowerModuleData : public SpecialAbilityUpdateModuleData
 {
 public:
@@ -455,22 +456,23 @@ public:
 	std::string m_dominatedFX;                             // + 0xD8
 	bool m_permanentlyConvert = false;                     // + 0xDC
 	std::shared_ptr<const ObjectFilter> m_affects;         // + 0xE0
-	static void buildFieldParse(MultiIniFieldParse &p);
+	static void buildFieldParse(MultiIniFieldParse &p);    // RW 0x008D0DCB
 };
 
+// RW 0x008D0DE6 (ctor), RW 0x008E38D8 (loadPostProcess -> no-op RW 0x0063F3BF)
 class DominateEnemySpecialPower : public SpecialAbilityUpdate
 {
 public:
-	OBFME_MODULE_XFER(DominateEnemySpecialPower) // lane SAVE-4b
-	DominateEnemySpecialPower(Thing *thing, const DominateEnemySpecialPowerModuleData *data);
+	OBFME_MODULE_XFER(DominateEnemySpecialPower) // RW 0x008C6E67
+	DominateEnemySpecialPower(Thing *thing, const DominateEnemySpecialPowerModuleData *data); // RW 0x008D0DE6
 	unsigned dominated() const { return m_dominated; }
 	void crc(StateHasher &h) const override;
 
 protected:
-	void triggerAbilityEffect() override; // RW 0x8D103D
+	void triggerAbilityEffect() override; // RW 0x008D103D
 
 private:
-	void dominate(Object *victim, bool direct); // RW 0x8D0F6C
+	void dominate(Object *victim, bool direct); // RW 0x008D0F6C
 	const DominateEnemySpecialPowerModuleData *m_de;
 	unsigned m_dominated = 0;
 };
@@ -543,28 +545,30 @@ private:
 	bool m_done = false;                   // + 0x98
 };
 
+// RW 0x008D1192 (ctor: m_cursePercentage = 1.0f from RW 0x00BD1908; RW 0x008D11C2 buildFieldParse)
 class CurseSpecialPowerModuleData : public SpecialAbilityUpdateModuleData
 {
 public:
-	std::string m_triggerFX;       // + 0xD0
-	std::string m_cursedFX;        // + 0xD4
-	float m_cursePercentage = 0.0f; // + 0xD8
-	static void buildFieldParse(MultiIniFieldParse &p);
+	std::string m_triggerFX;        // + 0xD0
+	std::string m_cursedFX;         // + 0xD4
+	float m_cursePercentage = 1.0f; // + 0xD8 (RW 0x008D1192 -> RW 0x00BD1908)
+	static void buildFieldParse(MultiIniFieldParse &p); // RW 0x008D11C2
 };
 
+// RW 0x008D11DD (ctor), RW 0x008E38D8 (loadPostProcess -> no-op RW 0x0063F3BF)
 class CurseSpecialPower : public SpecialAbilityUpdate
 {
 public:
-	OBFME_MODULE_XFER(CurseSpecialPower) // lane SAVE-4b
-	CurseSpecialPower(Thing *thing, const CurseSpecialPowerModuleData *data);
+	OBFME_MODULE_XFER(CurseSpecialPower) // RW 0x008C6E67
+	CurseSpecialPower(Thing *thing, const CurseSpecialPowerModuleData *data); // RW 0x008D11DD
 	unsigned cursed() const { return m_cursed; }
 	void crc(StateHasher &h) const override;
 
 protected:
-	void triggerAbilityEffect() override; // RW 0x8D134C
+	void triggerAbilityEffect() override; // RW 0x008D134C
 
 private:
-	void curse(Object &victim);           // RW 0x8D12E3
+	void curse(Object &victim);           // RW 0x008D12E3
 	const CurseSpecialPowerModuleData *m_cs;
 	unsigned m_cursed = 0;
 };
@@ -659,16 +663,17 @@ private:
 	unsigned m_teleports = 0;
 };
 
+// RW 0x00654884 (create), RW 0x0065197C (ctor)
 class SpecialPowerTimerRefreshSpecialPower : public SpecialPowerModule
 {
 public:
-	OBFME_MODULE_XFER(SpecialPowerTimerRefreshSpecialPower) // lane SAVE-4b
-	SpecialPowerTimerRefreshSpecialPower(Thing *thing, const SpecialPowerModuleData *data) : SpecialPowerModule(thing, data) {}
+	OBFME_MODULE_XFER(SpecialPowerTimerRefreshSpecialPower) // RW 0x008C7B43 -> RW 0x0089679D
+	SpecialPowerTimerRefreshSpecialPower(Thing *thing, const SpecialPowerModuleData *data) : SpecialPowerModule(thing, data) {} // RW 0x0065197C
 	unsigned refreshed() const { return m_refreshed; }
 	void crc(StateHasher &h) const override;
 
 protected:
-	void applyToVictim(Object &victim, unsigned until, unsigned antiMask) override; // RW 0x8C7B26
+	void applyToVictim(Object &victim, unsigned until, unsigned antiMask) override; // RW 0x008C7B26
 
 private:
 	unsigned m_refreshed = 0;
