@@ -1483,6 +1483,7 @@ add_executable(openbfme_tests
     tests/test_local_53.cpp
     # lane LOCAL-65 (Isengard building foundations under black ground and multi-faction terrain fitting, issue #510 / P-130)
     tests/test_local_65.cpp
+    tests/test_local_66.cpp
     # lane LOCAL-62 (capturing a production building cancels its production queue, issue #483 / P-122)
     tests/test_local_62.cpp
     # lane LOCAL-63 (Isengard unpack buildings stay visible at 100% completion, issue #508 / P-129)
