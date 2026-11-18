@@ -1,5 +1,5 @@
 // PORT-277: first check the existing main path before changing the engine.
-// Synthetic INI only. RW 0x911A58: a horde locks LockWeaponSlot temporarily,
+// Initial synthetic cases. RW 0x911A58: a horde locks LockWeaponSlot temporarily,
 // then orders members through HordeContainInterface vtable +0x04 (RW 0x875221).
 // A single firer without a contain returns without an attack (RW 0x911A58, contain check at +0x1E).
 #include "doctest.h"
@@ -182,7 +182,9 @@ TEST_CASE("PORT-277: a dummy member weapon never borrows damage from PRIMARY or 
 
 // The proprietary definitions stay outside Git. Point OPENBFME_ENNORATH_INI_DIR
 // at the unmodified, extracted Ennorath 1.9.8.3 merged INI archive (data/ini
-// below that directory). With full game installs, the normal scenario mount is
+// below that directory). The root must also contain the original
+// Data/Scripts/Scripts.ini; the INI-only ZIP lacks it (S-7473). No empty
+// replacement is supplied. With full game installs, the normal scenario mount is
 // also supported. No custom INI parser or copied retail block is used here.
 #include "EnnorathScenario.h"
 #include "SweepEffectProbe.h"
@@ -290,7 +292,8 @@ void frames(structtest::Arena &arena, unsigned count)
 }
 
 // Observations at the ownership boundary, not assertions pinning a broken
-// updater as expected behaviour. The after-shot assertions below remain RW's.
+// updater as expected behaviour. Unresolved downstream expectations are
+// explicitly marked S-7474 rather than claimed to be established by RW.
 void diagnosePreShot(size_t index, hudtest::SharedWorld &data)
 {
 	if (index != 2 && index != 4 && index != 5) return;
@@ -440,8 +443,9 @@ void checkRow(size_t index)
 
 	if (*row.ocl)
 	{
-		// Long Shot's real damage is a separate OCLSpecialPower, not a
-		// fallback to PRIMARY or a hidden DamageNugget in the rangefinder.
+		// The definitions provide a separate OCLSpecialPower damage path.
+		// Whether the dummy AI path can also pick PRIMARY still needs RW
+		// verification (S-7474); this checks OCL damage independently.
 		auto *module = dynamic_cast<OCLSpecialPower *>(SpecialPowerModules::findModule(*source, power));
 		REQUIRE(module != nullptr);
 		const auto *list = TheObjectCreationListStore->findObjectCreationList(row.ocl);
