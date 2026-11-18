@@ -499,6 +499,29 @@ def finish(n: int, sha: str, lines: list[str], comment: bool, state: dict) -> st
     return body
 
 
+def last_checked_head(comments: list[dict]) -> str:
+    """The head of the newest real check among the PR's comments ('' = none): `<!-- prcheck <sha> -->` reports, without the ⏸️ notes
+    (a skip is not a check)."""
+    heads = [m.group(1) for c in comments for m in [re.match(r"<!-- prcheck ([0-9a-f]{40}) -->", c.get("body") or "")]
+             if m and "⏸️" not in (c.get("body") or "")]
+    return heads[-1] if heads else ""
+
+
+def sync_from_comments(p: dict, state: dict) -> None:
+    """Once per PR head: when the local state does not know this head as checked, read the PR's comments. A report on this head = checked
+    (no second run); a report on an older head = the PR was checked before, so a new head is a rework and goes first."""
+    n, head = str(p["number"]), p["headRefOid"]
+    synced = state.setdefault("synced", {})
+    if state["checked"].get(n) == head or synced.get(n) == head or p["isDraft"]:
+        return
+    comments = json.loads(gh("pr", "view", n, "--json", "comments")).get("comments") or []
+    last = last_checked_head(comments)
+    if last:
+        state["checked"][n] = last
+    synced[n] = head
+    save_state(state)
+
+
 def cycle(args) -> int:
     state = load_state()
     sh(["git", "fetch", "-q", "origin"], cwd=REPO).check_returncode()
@@ -521,6 +544,10 @@ def cycle(args) -> int:
         report = REPORTS / f"{n}-{p['headRefOid'][:8]}.md"
         return bodies[n] != h and report.exists() and "❌" in report.read_text(encoding="utf-8", errors="replace")
 
+    # GitHub is the record of what was checked, not the local state: a sandbox restored from an older backup (sb1 2026-11-18, a state from
+    # 2026-11-15) took every PR for new, re-checked the whole list and left reworked PR 523 behind the queue for hours.
+    for p in prs:
+        sync_from_comments(p, state)
     todo = [p for p in prs if (args.pr is None or p["number"] == args.pr) and not p["isDraft"]
             and (state["checked"].get(str(p["number"])) != p["headRefOid"] or body_changed(p))
             and state.get("errors", {}).get(str(p["number"])) != p["headRefOid"]
