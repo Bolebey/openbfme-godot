@@ -514,6 +514,7 @@ include(cmake/Port202.cmake)    # PORT-202: the locomotor's wading updater and t
 include(cmake/Port204.cmake)    # PORT-204: crush warning path gate and horde +0x170 member list (issue #471; OPENBFME_PORT204_TESTS)
 include(cmake/Port250.cmake) # PORT-250: the SPECIAL_POWER availability arm and its UnitCost gate (fork issue 578; OPENBFME_PORT250_TESTS)
 include(cmake/Port464.cmake)    # PORT-464: the per-frame steering of a summoned helper (issue #464; OPENBFME_PORT464_TESTS)
+include(cmake/Port199.cmake)    # PORT-199: GiveUpgradeUpdate contained targets, producer-linked pairs, deselection and flash (issue #466; OPENBFME_PORT199_TESTS)
 include(cmake/Port203.cmake)    # PORT-203: tunnel nemesis, removeFromContain(exposeStealthUnits), TunnelContain ExitInterface, AITNGuard (issue #470; OPENBFME_PORT203_TESTS)
 include(cmake/Port227.cmake)    # PORT-227: Ennorath backlog (WaitForOthers, ForceSkirmishAI, SUMMON_ANTI*/WALL_UPGRADE, TechBuilding, ThreatBreakdown, S-4257; issue #550; OPENBFME_PORT227_TESTS)
 include(cmake/Port249.cmake)    # PORT-249: OCLSpecialPower's location requirements, slot 0x48 (fork issue 577; OPENBFME_PORT249_TESTS)
@@ -1265,6 +1266,7 @@ add_executable(openbfme_tests
     ${OPENBFME_PORT204_TESTS}
     ${OPENBFME_PORT250_TESTS}
     ${OPENBFME_PORT464_TESTS}
+    ${OPENBFME_PORT199_TESTS}
     ${OPENBFME_PORT203_TESTS}
     ${OPENBFME_PORT227_TESTS}
     ${OPENBFME_PORT249_TESTS}
