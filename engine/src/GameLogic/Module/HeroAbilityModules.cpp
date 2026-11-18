@@ -1238,16 +1238,23 @@ void WeaponModeSpecialPowerUpdate::doSpecialPowerAtLocation(const Coord3D &, uns
 void WeaponModeSpecialPowerUpdate::initiate()
 {
 	Object *obj = getObject();
-	ObjectWeapons *weapons = obj->getWeapons();
 	if (m_data->m_lockWeaponSlot == 5)
 	{
-		if (weapons) // RW 0x68FDF7
+		// RW 0x89843E: RW 0x68FDF7 is a popcount over the data's four WeaponSetFlags words (cmp edi, 4); an empty mask skips the loop
+		bool anyFlag = false;
+		for (std::uint32_t word : m_data->m_weaponSetFlags)
+		{
+			anyFlag = anyFlag || word != 0;
+		}
+		if (anyFlag)
 		{
 			for (int bit = 0; bit < 0x68; ++bit)
 			{
 				if ((m_data->m_weaponSetFlags[(size_t)bit >> 5] >> (bit & 31)) & 1u)
 				{
-					weapons->setWeaponSetFlag(bit, true); // RW 0x691059
+					// RW 0x691059 is an OBJECT method (this + 0x38C, then the weapon set update RW 0x6C99E2 and the model condition mirror
+					// RW 0xC16958): an object without a weapon set keeps the bits in its own words and mirrors the condition just the same.
+					obj->setWeaponSetFlag(bit, true);
 				}
 			}
 		}
@@ -1272,14 +1279,11 @@ UpdateSleepTime WeaponModeSpecialPowerUpdate::update()
 	Object *obj = getObject();
 	// P-141 (RW 0x8983C1 -> 0x68DF11, Both editions): release lock through Contain/HordeContain even when a horde container itself has no weapons
 	ObjectWeapons::releaseObjectWeaponLock(*obj, LOCKED_PERMANENTLY);
-	if (ObjectWeapons *weapons = obj->getWeapons())
+	for (int bit = 0; bit < 0x68; ++bit)
 	{
-		for (int bit = 0; bit < 0x68; ++bit)
+		if ((m_data->m_weaponSetFlags[(size_t)bit >> 5] >> (bit & 31)) & 1u)
 		{
-			if ((m_data->m_weaponSetFlags[(size_t)bit >> 5] >> (bit & 31)) & 1u)
-			{
-				weapons->setWeaponSetFlag(bit, false); // RW 0x691106
-			}
+			obj->setWeaponSetFlag(bit, false); // RW 0x691106, the same OBJECT method as RW 0x691059 (Object + 0x38C), weaponless included
 		}
 	}
 	if (!m_data->m_attributeModifier.empty())
@@ -1561,19 +1565,21 @@ void TemporarilyDefectUpdate::crc(StateHasher &h) const
 // ---------------------------------------------------------------------------------------------------------------------------------
 // DominateEnemySpecialPower
 // ---------------------------------------------------------------------------------------------------------------------------------
+// RW 0x008D0DCB
 void DominateEnemySpecialPowerModuleData::buildFieldParse(MultiIniFieldParse &p)
 {
 	SpecialAbilityUpdateModuleData::buildFieldParse(p);
 	p.add(kDominateEnemy);
 }
 
+// RW 0x008D0DE6
 DominateEnemySpecialPower::DominateEnemySpecialPower(Thing *thing, const DominateEnemySpecialPowerModuleData *data)
 	: SpecialAbilityUpdate(thing, data)
 	, m_de(data)
 {
 }
 
-// RW 0x8D0F6C
+// RW 0x008D0F6C
 void DominateEnemySpecialPower::dominate(Object *victim, bool direct)
 {
 	Object *owner = getObject();
@@ -1582,17 +1588,17 @@ void DominateEnemySpecialPower::dominate(Object *victim, bool direct)
 	{
 		return;
 	}
-	if (m_de->m_affects && !ObjectFilterMatch::allows(logic, *m_de->m_affects, *victim, owner->getControllingPlayer())) // RW 0x7640C1
+	if (m_de->m_affects && !ObjectFilterMatch::allows(logic, *m_de->m_affects, *victim, owner->getControllingPlayer())) // RW 0x007640C1
 	{
 		return;
 	}
-	if (hasStatus(*victim, "UNDER_CONSTRUCTION")) // status 2
+	if (hasStatus(*victim, "UNDER_CONSTRUCTION")) // 0x008D0FB1: status 2
 	{
 		return;
 	}
-	if (Object *producer = logic.findObjectByID(victim->getProducerID())) // Object + 0x78
+	if (Object *producer = logic.findObjectByID(victim->getProducerID())) // 0x008D0FBE: Object + 0x78
 	{
-		if (isKind(*producer, "HORDE")) // template + 0x115 bit 5
+		if (isKind(*producer, "HORDE")) // 0x008D0FD3: template + 0x115 bit 5
 		{
 			if (!direct)
 			{
@@ -1601,39 +1607,44 @@ void DominateEnemySpecialPower::dominate(Object *victim, bool direct)
 			victim = producer;
 		}
 	}
-	if (hasStatus(*victim, "AIRBORNE_TARGET")) // + 0x94 bit 6
+	if (hasStatus(*victim, "AIRBORNE_TARGET")) // 0x008D0FE5: + 0x94 bit 6
 	{
 		return;
 	}
-	victim->defect(owner, m_de->m_permanentlyConvert); // RW 0x699368
+	victim->defect(owner, m_de->m_permanentlyConvert); // RW 0x00699368
 	++m_dominated;
-	objectFX(logic, "DominateEnemySpecialPower", m_de->m_dominatedFX, *victim); // the drawable's vslot 0x1EC / RW 0x4B1B5A
+	objectFX(logic, "DominateEnemySpecialPower", m_de->m_dominatedFX, *victim); // 0x008D100B: horde contain vslot 0x1EC / RW 0x004B1B5A
 }
 
-// RW 0x8D103D
+// RW 0x008D103D
 void DominateEnemySpecialPower::triggerAbilityEffect()
 {
 	SpecialAbilityUpdate::triggerAbilityEffect();
 	Object *owner = getObject();
 	GameLogic &logic = owner->logic();
-	if (Object *t = logic.findObjectByID(m_targetID)) // + 0x40
+	if (Object *t = logic.findObjectByID(m_targetID)) // + 0x40 (0x008D1057)
 	{
 		dominate(t, true);
 		return;
 	}
+	// 0x008D10B4 .. 0x008D10CE: PartitionFilterRelationship (0x00C11DC0 -> 0x00660B85 ENEMIES), PartitionFilterAlive (0x00C10E20 -> 0x00660E71),
+	// PartitionFilterSameMapStatus (0x00C0F374 -> 0x00660E93: XOR of Object+0x458 bit 3 == 0), and PartitionFilterRejectStatus (0x00C1D6A0 -> 0x00661484: HORDE_MEMBER 0x26)
 	PartitionFilterFn chain([&](Object &o) {
-		return owner->getRelationship(o) == ENEMIES && !o.isEffectivelyDead() && !hasStatus(o, "HORDE_MEMBER"); // RW 0xC11DC0, 0xC10E20, 0xC0F374, 0xC1D6A0
+		return owner->getRelationship(o) == ENEMIES && !o.isEffectivelyDead() && o.isOffMap() == owner->isOffMap() && !hasStatus(o, "HORDE_MEMBER");
 	});
-	std::vector<Object *> victims;
+	std::vector<ObjectID> victims;
 	for (const PartitionHit &h : logic.partition().iterateObjectsInRange(m_targetPos, m_de->m_dominateRadius, FROM_CENTER_2D, { &chain }, ITER_SORTED_NEAR_TO_FAR))
 	{
-		victims.push_back(h.object);
+		victims.push_back(h.object->getID());
 	}
-	for (Object *v : victims)
+	for (ObjectID id : victims)
 	{
-		dominate(v, false);
+		if (Object *v = logic.findObjectByID(id))
+		{
+			dominate(v, false);
+		}
 	}
-	positionFX(logic, "DominateEnemySpecialPower", m_de->m_triggerFX, *owner, m_targetPos); // RW 0x8D116A: RW 0x494615(TriggerFX, location)
+	positionFX(logic, "DominateEnemySpecialPower", m_de->m_triggerFX, *owner, m_targetPos); // 0x008D116A: RW 0x00494615(TriggerFX, location)
 }
 
 void DominateEnemySpecialPower::crc(StateHasher &h) const
@@ -1897,32 +1908,35 @@ void ArrowStormUpdate::crc(StateHasher &h) const
 // ---------------------------------------------------------------------------------------------------------------------------------
 // CurseSpecialPower
 // ---------------------------------------------------------------------------------------------------------------------------------
+// RW 0x008D11C2
 void CurseSpecialPowerModuleData::buildFieldParse(MultiIniFieldParse &p)
 {
 	SpecialAbilityUpdateModuleData::buildFieldParse(p);
 	p.add(kCurse);
 }
 
+// RW 0x008D11DD
 CurseSpecialPower::CurseSpecialPower(Thing *thing, const CurseSpecialPowerModuleData *data)
 	: SpecialAbilityUpdate(thing, data)
 	, m_cs(data)
 {
 }
 
-// RW 0x8D12E3
+// RW 0x008D12E3
 void CurseSpecialPower::curse(Object &victim)
 {
 	Object *owner = getObject();
-	if (&victim == owner || !isKind(victim, "HERO") || owner->getRelationship(victim) != ENEMIES) // template + 0x113 bit 2; RW 0x68D7AB
+	if (&victim == owner || !isKind(victim, "HERO") || owner->getRelationship(victim) != ENEMIES) // 0x008D12F8 template + 0x113 bit 2; RW 0x0068D7AB
 	{
 		return;
 	}
-	if (hasStatus(victim, "DESTROYED") || hasStatus(victim, "UNDER_CONSTRUCTION")) // statuses 3, 2
+	// 0x008D130B: testStatus(3) UNSELECTABLE (RW 0x00D8AFF0[3]); 0x008D1318: testStatus(2) UNDER_CONSTRUCTION (RW 0x00D8AFF0[2])
+	if (hasStatus(victim, "UNSELECTABLE") || hasStatus(victim, "UNDER_CONSTRUCTION"))
 	{
 		return;
 	}
-	// RW 0x68BDD0: every module's + 0xC slot 0xAC; a SpecialPowerModule's (RW 0x6519AF) and WeaponModeSpecialPowerUpdate's base (RW 0x898263) restart
-	// their special power interface's recharge at the percentage (vslot 0x3C); the other classes' slot is a no-op
+	// RW 0x0068BDD0: every module's + 0xC slot 0xAC; SpecialPowerModule (RW 0x006519AF) and SpecialPowerUpdateBase (RW 0x00898263) restart
+	// their special power interface's recharge at the percentage (vslot 0x3C); all other BehaviorModuleInterface classes inherit no-op
 	for (const std::unique_ptr<BehaviorModule> &m : victim.modules())
 	{
 		if (SpecialPowerModuleInterface *sp = m->getSpecialPower())
@@ -1931,16 +1945,16 @@ void CurseSpecialPower::curse(Object &victim)
 		}
 	}
 	++m_cursed;
-	objectFX(owner->logic(), "CurseSpecialPower", m_cs->m_cursedFX, victim); // RW 0x4B1B5A
+	objectFX(owner->logic(), "CurseSpecialPower", m_cs->m_cursedFX, victim); // RW 0x004B1B5A
 }
 
-// RW 0x8D134C
+// RW 0x008D134C
 void CurseSpecialPower::triggerAbilityEffect()
 {
 	SpecialAbilityUpdate::triggerAbilityEffect();
 	Object *owner = getObject();
 	GameLogic &logic = owner->logic();
-	if (m_targetID != INVALID_ID) // + 0x40
+	if (m_targetID != INVALID_ID) // + 0x40 (0x008D136F)
 	{
 		if (Object *t = logic.findObjectByID(m_targetID))
 		{
@@ -1949,20 +1963,24 @@ void CurseSpecialPower::triggerAbilityEffect()
 		}
 		return;
 	}
-	const SpecialPowerTemplate *t = m_data->m_specialPowerTemplate; // RW 0x8513D6
+	const SpecialPowerTemplate *t = m_data->m_specialPowerTemplate; // RW 0x008513D6
 	if (!t)
 	{
 		return;
 	}
-	PartitionFilterFn chain([&](Object &o) { return owner->getRelationship(o) == ENEMIES && isKind(o, "HERO") && !o.isEffectivelyDead(); }); // RW 0xC11DC0, 0x445139, 0xC10E20
-	std::vector<Object *> hits;
-	for (const PartitionHit &h : logic.partition().iterateObjectsInRange(m_targetPos, t->getRadiusCursorRadius(), FROM_CENTER_2D, { &chain }, ITER_FASTEST))
+	const float radius = t->getFinalOverride()->getRadiusCursorRadius(); // 0x008D138D -> RW 0x00688D3C, [eax + 0x54]
+	PartitionFilterFn chain([&](Object &o) { return owner->getRelationship(o) == ENEMIES && isKind(o, "HERO") && !o.isEffectivelyDead(); }); // RW 0x00C11DC0, 0x00445139, 0x00C10E20
+	std::vector<ObjectID> hits;
+	for (const PartitionHit &h : logic.partition().iterateObjectsInRange(m_targetPos, radius, FROM_CENTER_2D, { &chain }, ITER_FASTEST))
 	{
-		hits.push_back(h.object);
+		hits.push_back(h.object->getID());
 	}
-	for (Object *o : hits)
+	for (ObjectID id : hits)
 	{
-		curse(*o);
+		if (Object *o = logic.findObjectByID(id))
+		{
+			curse(*o);
+		}
 	}
 	if (!hits.empty())
 	{
@@ -1995,9 +2013,10 @@ UpdateSleepTime FellBeastSwoopPower::update()
 		return (UpdateSleepTime)1;
 	}
 	AIUpdateInterface *ai = obj->getAIUpdateInterface();
-	if (ai && ai->isIdle()) // AI vslot 0x1B8 (vslot 0x1D0 not identified: S-1223)
+	// RW 0x8CB304 .. 0x8CB331: finish once the AI idles (vslot 0x1B8, RW 0x6643FC / 0x769E8F) or enters follow-through (vslot 0x1D0, RW 0x662B28 -> State::vslot 0x34 RW 0x8BD372)
+	if (ai && (ai->isIdle() || ai->isInFollowThruState()))
 	{
-		finishAbility(false, false); // vslot 0x34
+		finishAbility(false, false); // vslot 0x34 (RW 0x8CB194)
 		return UPDATE_SLEEP_FOREVER;
 	}
 	// RW 0x8CB336 .. 0x8CB3A9: SPECIAL_WEAPON_ONE (+ 0x128 bit 20) while the height above the terrain is below the bounding sphere radius (GeometryInfo + 0x14)
@@ -2011,7 +2030,7 @@ UpdateSleepTime FellBeastSwoopPower::update()
 	return (UpdateSleepTime)1;
 }
 
-// RW 0x8CB28B: the AI command 0x3F (the target object) or 0x40 (the location), source 2
+// RW 0x8CB28B: dispatches AI command 0x3F (RW 0x8CB1BA, target object) or 0x40 (RW 0x8CB21F, location), source CMD_FROM_AI (2)
 void FellBeastSwoopPower::triggerAbilityEffect()
 {
 	Object *obj = getObject();
@@ -2276,6 +2295,28 @@ TeleportSpecialAbilityUpdate::TeleportSpecialAbilityUpdate(Thing *thing, const T
 {
 }
 
+// RW 0x896608 (slot 8 of the class's special power update table RW 0xC6490C; the base's slot is RW 0x851B6E): the place must lie within
+// MaxDistance (+ 0xDC) of the object. A null place (RW 0x89660C), no data (0x896611) or no object (0x896629) and MaxDistance 0 or below
+// (0x896618 / 0x896620 against the zero RW 0xC1B594) answer the base's; otherwise |place - position|^2 (RW 0x896630 .. 0x896675 of the
+// object's + 0x38 / + 0x3C / + 0x40) above MaxDistance^2 (RW 0x896679) answers no (0x89667E). The data and the object cannot be null in the
+// port: the constructor takes the data and the object is the module's owner.
+bool TeleportSpecialAbilityUpdate::allowsSpecialPowerUse(const Coord3D *loc) const
+{
+	if (loc && 0.0f < m_tp->m_maxDistance)
+	{
+		const Coord3D *pos = getObject()->getPosition();
+		const float dz = SimMath::subf32(loc->z, pos->z);
+		const float dy = SimMath::subf32(loc->y, pos->y);
+		const float dx = SimMath::subf32(loc->x, pos->x);
+		const float d2 = SimMath::addf32(SimMath::addf32(SimMath::mulf32(dz, dz), SimMath::mulf32(dy, dy)), SimMath::mulf32(dx, dx));
+		if (SimMath::mulf32(m_tp->m_maxDistance, m_tp->m_maxDistance) < d2)
+		{
+			return false; // RW 0x89667E
+		}
+	}
+	return SpecialAbilityUpdate::allowsSpecialPowerUse(loc); // RW 0x851B6E (RW 0x896682)
+}
+
 // TheWeaponStore->createAndFireTempWeapon(weapon, object, position) (RW 0x6CC5DF + 0x6CF530)
 void TeleportSpecialAbilityUpdate::fireTempWeapon(const std::string &name, const Coord3D &at)
 {
@@ -2360,14 +2401,14 @@ void HeroAbilityModules::registerAll(ModuleFactory &modules)
 	bindRuntime<WeaponModeSpecialPowerUpdate, WeaponModeSpecialPowerUpdateModuleData>(modules, "WeaponModeSpecialPowerUpdate");
 	bindRuntime<DualWeaponBehavior, DualWeaponBehaviorModuleData>(modules, "DualWeaponBehavior");
 	bindRuntime<TemporarilyDefectUpdate, TemporarilyDefectUpdateModuleData>(modules, "TemporarilyDefectUpdate");
-	bindRuntime<DominateEnemySpecialPower, DominateEnemySpecialPowerModuleData>(modules, "DominateEnemySpecialPower");
+	bindRuntime<DominateEnemySpecialPower, DominateEnemySpecialPowerModuleData>(modules, "DominateEnemySpecialPower"); // RW 0x00652C4B, RW 0x008D0E17, RW 0x008D0E3D
 	bindRuntime<ActivateModuleSpecialPower, ActivateModuleSpecialPowerModuleData>(modules, "ActivateModuleSpecialPower");
 	bindRuntime<ArrowStormUpdate, ArrowStormUpdateModuleData>(modules, "ArrowStormUpdate");
-	bindRuntime<CurseSpecialPower, CurseSpecialPowerModuleData>(modules, "CurseSpecialPower");
+	bindRuntime<CurseSpecialPower, CurseSpecialPowerModuleData>(modules, "CurseSpecialPower"); // RW 0x00652CDA, RW 0x008D120E, RW 0x008D1249
 	bindRuntime<FellBeastSwoopPower, SpecialAbilityUpdateModuleData>(modules, "FellBeastSwoopPower");
 	bindRuntime<RousingSpeechUpdate, RousingSpeechUpdateModuleData>(modules, "RousingSpeechUpdate");
 	bindRuntime<TeleportSpecialAbilityUpdate, TeleportSpecialAbilityUpdateModuleData>(modules, "TeleportSpecialAbilityUpdate");
-	bindRuntime<SpecialPowerTimerRefreshSpecialPower, SpecialPowerModuleData>(modules, "SpecialPowerTimerRefreshSpecialPower");
+	bindRuntime<SpecialPowerTimerRefreshSpecialPower, SpecialPowerModuleData>(modules, "SpecialPowerTimerRefreshSpecialPower"); // RW 0x00654884, RW 0x00651A13, RW 0x006519CE
 }
 
 void HeroAbilityModules::registerHandlers(GameLogicDispatch &d)
@@ -2478,9 +2519,9 @@ std::vector<std::string> HeroAbilityModules::stopLines()
 		"than HordeContain (a defecting transport's / garrison's passengers keep their side; reported when met); (6) the selected drawable's deselection (RW "
 		"0x6993B5 .. 0x6993D0) and restoreOriginalTeam's selection refresh are the client's; (7) ActivateModuleSpecialPower's tags are resolved when used "
 		"(retail makes the keys while parsing); (8) setTeam's redirect keeps a team without a controlling player (retail reads its player without a test)",
-		"[S-1223] FellBeastSwoopPower (lane HERO-2): the module runs (RW 0x8CB2CE / 0x8CB28B / 0x8CB194); the level attack itself is GiantBirdAIUpdate's swoop "
-		"(AI commands 0x3F / 0x40, AI vslots 0x90 / 0x94: GiantBirdAIUpdate runs as the base AI, S-222): the command is counted by the AI (aiUnported) and the "
-		"ability ends when the AI idles; AI vslot 0x1D0 is not identified",
+		"[S-1223] FellBeastSwoopPower (lane HERO-2, Port 257): the module runs (RW 0x8CB2CE / 0x8CB28B / 0x8CB194); AI command 0x3F (RW 0x8CB1BA) runs "
+		"GiantBirdAIUpdate's level swoop (state 0x3F3, RW 0x76A139) and command 0x40 (RW 0x8CB21F) does nothing there (RW 0x76DA5C); other AI classes count "
+		"both (aiUnported); the ability ends when the AI idles (vslot 0x1B8) or enters AIGiantBirdFollowThruState (vslot 0x1D0, RW 0x662B28 -> State::vslot 0x34 RW 0x8BD372)",
 		"[S-1227] AutoAbilityBehavior (lane HERO-2, PORT-191): the auto cast runs (RW 0x85D9D1 with RW 0x85D5EA / 0x85D4B5, RW 0x855830 DISABLED_HELD, "
 		"RW 0x68E43B vision range, RW 0x701443 flags 0x4A without Query, AI + 0x34 / + 0x48 := 2, RW 0x68E5A3 / 0x68E67A disabled exception with 0x20000000, "
 		"MSG_DO_AUTO_ABILITY RW 0x77B9BA, StartsActive); not ported: the command types other than SPECIAL_POWER / SPELL_BOOK (a FIRE_WEAPON auto button is "
@@ -2529,9 +2570,10 @@ void AutoAbilityBehavior::xfer(Xfer &x)
 	x.xferUnsignedInt(&m_castRecord.frame);
 }
 
+// RW 0x898357: RW 0x404F15 (version (1, 1)), the base's xfer (RW 0x9912DB -> RW 0x850C60), then Xfer slot 0x90 on + 0x38 (the "active" bool)
 void WeaponModeSpecialPowerUpdate::xfer(Xfer &x)
 {
-	SnapshotXfer::version(x, 1, 1);
+	SnapshotXfer::version(x, 1, 1); // RW 0x404F15
 	xferUpdateModule(x);
 	x.xferUnsignedInt(&m_readyFrame);
 	x.xferInt(&m_pauseCount);
@@ -2559,6 +2601,7 @@ void TemporarilyDefectUpdate::xfer(Xfer &x)
 	x.xferBool(&m_ended);
 }
 
+// RW 0x008C6E67 (xferVersion(1,1) + SpecialAbilityUpdate::xfer RW 0x00852782)
 void DominateEnemySpecialPower::xfer(Xfer &x)
 {
 	SnapshotXfer::version(x, 1, 1);
@@ -2584,6 +2627,7 @@ void ArrowStormUpdate::xfer(Xfer &x)
 	x.xferBool(&m_done);
 }
 
+// RW 0x008C6E67 (xferVersion(1,1) + SpecialAbilityUpdate::xfer RW 0x00852782)
 void CurseSpecialPower::xfer(Xfer &x)
 {
 	SnapshotXfer::version(x, 1, 1);
@@ -2591,6 +2635,7 @@ void CurseSpecialPower::xfer(Xfer &x)
 	x.xferUnsignedInt(&m_cursed);
 }
 
+// RW 0x008CB167
 void FellBeastSwoopPower::xfer(Xfer &x)
 {
 	SnapshotXfer::version(x, 1, 1);
@@ -2621,6 +2666,7 @@ void TeleportSpecialAbilityUpdate::xfer(Xfer &x)
 	x.xferUnsignedInt(&m_teleports);
 }
 
+// RW 0x008C7B43 (jmp SpecialPowerModule::xfer RW 0x0089679D)
 void SpecialPowerTimerRefreshSpecialPower::xfer(Xfer &x)
 {
 	SnapshotXfer::version(x, 1, 1);
