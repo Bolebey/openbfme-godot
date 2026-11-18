@@ -215,6 +215,7 @@ include(cmake/Port146.cmake)    # PORT-146: the archers on a moving siege carrie
 include(cmake/Port50.cmake)     # PORT-50: W3DModelDraw/ParticlesAttachedToAnimatedBones, particles on the animated bones (issue #154; OPENBFME_PORT50_TESTS)
 include(cmake/Port98.cmake)     # PORT-98: PlayerTemplate LoadScreenMusic, the loading screen's faction track (issue #258; OPENBFME_PORT98_TESTS)
 include(cmake/Port158.cmake)    # PORT-158: the loading screen's music stop reaches the menu track (issue #376; OPENBFME_PORT158_TESTS)
+include(cmake/Port260.cmake)    # PORT-260: the storm powers, ArrowStormUpdate and CloudBreakSpecialPower (issue #608; OPENBFME_PORT260_TESTS)
 include(cmake/Port53.cmake)     # PORT-53: Weapon/PreAttackFX (issue #157)
 include(cmake/Port63.cmake)     # PORT-63: W3DSailModelDraw attached-bone turn (issue #173)
 include(cmake/Port74.cmake)     # PORT-74: W3DLaserDraw, the lightning and beam draws (issue #206; OPENBFME_PORT74_SOURCES / _TESTS)
@@ -1129,6 +1130,7 @@ add_executable(openbfme_tests
     ${OPENBFME_PORT73_TESTS}
     ${OPENBFME_PORT98_TESTS}
     ${OPENBFME_PORT158_TESTS}
+    ${OPENBFME_PORT260_TESTS}
     ${OPENBFME_PORT91_TESTS}
     ${OPENBFME_PORT105_TESTS}
     ${OPENBFME_PORT146_TESTS}
