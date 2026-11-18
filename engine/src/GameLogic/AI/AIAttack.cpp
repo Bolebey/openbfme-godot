@@ -338,7 +338,8 @@ std::unique_ptr<AIStateMachine> AIAttackState::createAttackMachine()
 	// ground search 0x6FC18E only), which is the eagle that never fires. The port keeps that factory on the AI
 	// (AIUpdateInterface::makeAttackThenIdleMachine, the same RW 0x769335 body the bird's attack move uses at
 	// GiantBirdAIUpdate.cpp:1307); every other AI answers null and the machines below stand.
-	if (m = a.makeAttackThenIdleMachine(10))
+	m = a.makeAttackThenIdleMachine(10);
+	if (m)
 	{
 		m_machineMade = MADE_SWOOP;
 		return m;
