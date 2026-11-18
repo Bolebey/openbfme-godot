@@ -107,6 +107,7 @@
 6. **Визг Короля-чародея** (`Command_SpecialAbilityMordorWitchkingScreechEffeckt`, сила `SpecialAbilityKampfschreiEffectWK`): у Короля-чародея Мордора пешком (`MordorWitchKing`), на коне (`MordorWitchKingPferd`) и на крылатой твари (`MordorWitchKingOnFellBeast`). Есть ли у него эта кнопка, и что она делает (оглушает, пугает)? Матрица не нашла у этих объектов модуля для силы.
 7. **Клич Гваихира (Манвэ)** (`Command_SpecialAbilityGwahirScreechManve`, та же сила `SpecialAbilityKampfschreiEffectWK`): у призванного Гваихира (`ImladrisGwaihir_Summoned`). Есть ли кнопка и что она делает?
 8. **Смена оружия гномов-секироносцев Железных холмов** (`Command_ToggleEisenbergEliteWeapon`, сила `SpecialAbilityBerserkerLightTorch`): у `DwarvenAxtschwinger`. Есть ли кнопка у отряда в игре, и что она делает?
+9. **Бурдур бьёт героя издалека без урона (Local 79, #621, P-124)**: в оригинале (RotWK 2.01 + Ennorath 1.9.8.3) направить Бурдура (`WildDuhrbur`) издалека на героя с `PathfindDiameter = 40` (например Исильдур `GondorIsildur`). Он машет дубиной примерно на 60 без урона, но с отбрасыванием (так следует из game.dat 2.01: след цели 4 клетки, RW 0x6EAFD5), или наносит урон? Порт делает первое; если в оригинале урон есть — задача на отличие. С Боромиром, которого строит игрок (`GondorBoromir_mod`, `PathfindDiameter = 25`), урон проходит и в порте.
 
 ## Проверить в игре: апгрейды стен (Local 70, #526, закрыта 2026-11-18)
 
