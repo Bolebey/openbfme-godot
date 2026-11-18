@@ -1791,6 +1791,21 @@ void unitsSweep(const std::string &faction, Results &res, bool sweep)
 				// the modules belong to the unit (and its members): a power that replaces the unit (a fell beast's rider dismounting,
 				// ToggleMountedSpecialAbilityUpdate's MountedTemplate) destroys them, so the unit's presence is checked first, by id
 				bool fired = false, replaced = false;
+				// the templates the unit's replacement modules name (SummonReplacement's / ToggleMounted's MountedTemplate): such an object replaces
+				// the unit even when it is not SELECTABLE (2026-11-18, #527: the Loremaster's Manwe choice turns him into LoremasterThingObjectManveReal,
+				// KindOf SUMMONED UNATTACKABLE, which the check below did not count)
+				std::set<std::string> mountedNames;
+				for (const std::unique_ptr<BehaviorModule> &bm : u->modules())
+				{
+					if (const auto *sr = dynamic_cast<const SummonReplacementSpecialAbilityUpdateModuleData *>(bm->getModuleData()))
+					{
+						mountedNames.insert(sr->m_mountedTemplate);
+					}
+					else if (const auto *tm = dynamic_cast<const ToggleMountedSpecialAbilityUpdateModuleData *>(bm->getModuleData()))
+					{
+						mountedNames.insert(tm->m_mountedTemplate);
+					}
+				}
 				std::vector<ObjectID> holders;
 				holders.push_back(uid);
 				if (u->getContain())
@@ -1831,7 +1846,8 @@ void unitsSweep(const std::string &faction, Results &res, bool sweep)
 					for (Object *o = g.logic().getFirstObject(); o; o = o->getNextObject())
 					{
 						if (o->getID() > uid && o->getControllingPlayer() == g.rig.local && o->getTemplate() && o->getTemplate()->getName() != e->name
-							&& dist2d(*o->getPosition(), c) < 600.0f && factb::hasKindOf(*o->getTemplate(), "SELECTABLE"))
+							&& dist2d(*o->getPosition(), c) < 600.0f
+							&& (factb::hasKindOf(*o->getTemplate(), "SELECTABLE") || mountedNames.count(o->getTemplate()->getName())))
 						{
 							after = o;
 						}
