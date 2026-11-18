@@ -197,6 +197,7 @@ include(cmake/Port201.cmake)   # PORT-201: a captured building's upgrades reset 
 include(cmake/Port244.cmake)   # PORT-244: PreTriggerUnstealthTime in SpecialAbilityUpdate::handlePackingProcessing (fork issue 568; OPENBFME_PORT244_TESTS)
 include(cmake/Port253.cmake)   # PORT-253: Upgrade modules (issue #601; OPENBFME_PORT253_TESTS)
 include(cmake/Port205.cmake)   # PORT-205: a HordeAttackNugget's member pick and the contain slot 0x1C (fork issue 472; OPENBFME_PORT205_TESTS)
+include(cmake/Port265.cmake)   # PORT-265: HordeContain's own slot +0x7C, the once-every-5th-frame split check (fork issue 613; OPENBFME_PORT265_TESTS)
 include(cmake/Port217.cmake)   # PORT-217: a builder turns to face the structure it builds or repairs (fork issue 507; OPENBFME_PORT217_TESTS)
 include(cmake/Port113.cmake)    # PORT-113: the light points of the War of the Ring (issue #280; appends to OPENBFME_SIM_SOURCES; OPENBFME_PORT113_TESTS)
 include(cmake/Port81.cmake)     # PORT-81: HordeContain/RanksToJustFreeWhenAttacking, parsed and never read by RotWK (issue #213; OPENBFME_PORT81_TESTS)
@@ -996,6 +997,7 @@ add_executable(openbfme_tests
     ${OPENBFME_PORT253_TESTS}
     ${OPENBFME_PORT244_TESTS}
     ${OPENBFME_PORT205_TESTS}
+    ${OPENBFME_PORT265_TESTS}
     ${OPENBFME_PORT217_TESTS}
     ${OPENBFME_PORT102_TESTS}
     ${OPENBFME_PORT113_TESTS}
