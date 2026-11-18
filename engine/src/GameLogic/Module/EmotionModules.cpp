@@ -268,7 +268,7 @@ EmotionTrackerUpdate::EmotionTrackerUpdate(Thing *thing, const EmotionTrackerUpd
 // through whatever keeps the + 0x20 subobject, and no row of the map names one.
 // What the slot would do at the end (the stop, the ends, the releases) the destructor's members already do; on a live object its effect would be the
 // nuggets' loss (they are the module's own, made by its constructor from the data, so the next update would choose from an empty list and a request
-// would never run). Left with no caller to hang it on (S-7493); the end's work is the default one, declared in the header.
+// would never run). Left with no caller to hang it on (S-7507); the end's work is the default one, declared in the header.
 
 void EmotionTrackerUpdate::stopCurrentWithAIState()
 {
