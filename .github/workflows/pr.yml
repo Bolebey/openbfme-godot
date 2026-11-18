@@ -280,8 +280,8 @@ jobs:
     # the build contributors run on Windows (the release ships llvm-mingw, so no other job compiles with MSVC), from a fresh clone
     runs-on: windows-2025
     needs: fixtures
-    # a cold compiler cache took 37 and 64 minutes (2026-11-05), a warm one 3, and the unit tests take 2 more
-    timeout-minutes: 90
+    # a cold compiler cache took 37 and 64 minutes (2026-11-05) and over 90 (2026-11-18, cancelled: the cache is saved only by a finished main run), a warm one 3, and the unit tests take 2 more
+    timeout-minutes: 150
     env:
       CCACHE_DIR: ${{ github.workspace }}\.ccache
       CCACHE_MAXSIZE: 3G
