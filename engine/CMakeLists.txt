@@ -196,6 +196,7 @@ include(cmake/Port164.cmake)   # PORT-164: the GiantBird contact point through g
 include(cmake/Port160.cmake)   # PORT-160: the capture / loss EVA and the camp-destroyed EVA (issue #378; OPENBFME_PORT160_TESTS)
 include(cmake/Port201.cmake)   # PORT-201: a captured building's upgrades reset and production cancel (fork issue 468; OPENBFME_PORT201_TESTS)
 include(cmake/Port244.cmake)   # PORT-244: PreTriggerUnstealthTime in SpecialAbilityUpdate::handlePackingProcessing (fork issue 568; OPENBFME_PORT244_TESTS)
+include(cmake/Port288.cmake)
 include(cmake/Port253.cmake)   # PORT-253: Upgrade modules (issue #601; OPENBFME_PORT253_TESTS)
 include(cmake/Port277.cmake)   # PORT-277: rangefinder reproduction
 include(cmake/Port205.cmake)   # PORT-205: a HordeAttackNugget's member pick and the contain slot 0x1C (fork issue 472; OPENBFME_PORT205_TESTS)
@@ -1026,6 +1027,7 @@ add_executable(openbfme_tests
     ${OPENBFME_PORT253_TESTS}
     ${OPENBFME_PORT244_TESTS}
     ${OPENBFME_PORT277_TESTS}
+    ${OPENBFME_PORT288_TESTS}
     ${OPENBFME_PORT205_TESTS}
     ${OPENBFME_PORT265_TESTS}
     ${OPENBFME_PORT217_TESTS}
