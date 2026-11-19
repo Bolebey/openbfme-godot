@@ -296,6 +296,18 @@ struct GameLogicSettings
 	// (RW 0xDE4B40 + 0x18): FireSpreadUpdate's tree branch (RW 0x88EF0F) and the attack on a map tree (RW 0x77AF3B / 0x77C1E5) make a tree an object
 	// (TerrainTrees::makeTreeObject, RW 0x68449B) only with it set. Retail 2.01 and Ennorath set No (defaultidata.ini)
 	bool allowForestFires = false;
+	// Local 93: AIData ForceHordesToLowLOD (row RW 0xC1CE70, parseBool RW 0x42E558, AIData + 0xBB; ctor RW 0x6FFBEF -> RW 0x6FFDA5: true):
+	// sets OBJECT_STATUS_CREATE_DRAWABLE_WITH_LOW_DETAIL (bit 55) on produced units (RW 0x8A1B9F -> 0x8A25E4) and horde payloads / upgrade
+	// creation triggers (RW 0x86A104 -> 0x86A151, RW 0x86B169 -> 0x86B282; excluding HERO and MONSTER templates).
+	bool forceHordesToLowLOD = true;
+	// Local 93: AIData low-LOD trees (rows RW 0xC1CF50 UseLowLODTrees + 0xD8 parseBool, RW 0xC1CF70..0xC1CF90 LowLodTreeName / NoGrab /
+	// NoHarvest + 0xDC/+0xE0/+0xE4 parseAsciiString, RW 0xC1CFA0 LowLodTreeScale + 0xE8 parseReal; ctor RW 0x6FFBEF -> RW 0x6FFE0C..0x6FFE4A:
+	// false, "", "", "", 0.55f from RW 0xBDAE10). Read by RW 0x62DCE4 (MapObjectCreation::build) when staticLODLevel <= 0. Presentation only: not in crc.
+	bool useLowLODTrees = false;
+	std::string lowLodTreeName;
+	std::string lowLodTreeNameNoGrab;
+	std::string lowLodTreeNameNoHarvest;
+	float lowLodTreeScale = 0.55f;
 	// lane PORT-38 (issue #123): the AI player's team build tempo — six AIData rows of the table that starts at RW 0xC1CB20, and the constructor
 	// RW 0x6FFBEF stores 0.0f / 0 to all of them (so a data set that leaves them out divides by a zero rate, exactly as the image does; the rules
 	// and their callers are GameLogic/SkirmishAI/AITeamTempo.h, stop S-5620 for the team build that would consume them):

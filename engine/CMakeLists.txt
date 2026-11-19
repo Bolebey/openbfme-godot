@@ -1548,6 +1548,7 @@ add_executable(openbfme_tests
     # lane LOCAL-89 (issue #715, the model draw's terrain decal: RW 0x4B94BC / 0x4B95AD / 0x672B96 / 0x675C25)
     tests/test_local_89.cpp
     tests/test_local_92.cpp
+    tests/test_local_93.cpp
     tests/test_local_91.cpp
     # lane LOCAL-90 (SymbioticStructuresBody getDamageState & body delegates, body citations: RW 0x8C4FF9 / 0x8C4FB5 / 0x8C505F / 0x8C5146 / 0x8C5250 / 0x8C5284 / 0x8C52DB)
     tests/test_local_90.cpp
