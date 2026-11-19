@@ -255,6 +255,7 @@ include(cmake/Port248.cmake) # OPENBFME_PORT248_TESTS
 include(cmake/Port264.cmake) # OPENBFME_PORT264_TESTS (lane PORT-264)
 include(cmake/Port211.cmake) # PORT-211: the economy group S-250 .. S-260 swept against main (fork issue 493; OPENBFME_PORT211_TESTS)
 include(cmake/Port242.cmake) # PORT-242: SpecialPowerModule RequirementsFilterStrategic (fork issue 566; OPENBFME_PORT242_TESTS)
+include(cmake/Port305.cmake) # PORT-305: ClearanceTestingSlowDeathBehavior room for a fall (OPENBFME_PORT305_TESTS)
 include(cmake/Port207.cmake) # OPENBFME_PORT207_TESTS (lane PORT-207)
 include(cmake/Port196.cmake) # PORT-196: the AI spell book's ARMY_BREAKER decision (issue 463; OPENBFME_PORT196_TESTS)
 include(cmake/Port256.cmake) # PORT-256: the weapon-switching powers (fork issue 604; OPENBFME_PORT256_TESTS)
@@ -981,6 +982,7 @@ add_executable(openbfme_tests
     ${OPENBFME_PORT264_TESTS}
     ${OPENBFME_PORT211_TESTS}
     ${OPENBFME_PORT242_TESTS}
+    ${OPENBFME_PORT305_TESTS}
     ${OPENBFME_PORT196_TESTS}
     ${OPENBFME_PORT256_TESTS}
     ${OPENBFME_PORT427_TESTS}
