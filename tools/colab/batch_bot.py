@@ -152,6 +152,8 @@ def verdict(p: dict) -> str:
         return "draft"
     if p["headRefName"].startswith(("claude/", "agent/claude/", "up/", "batch/")):
         return "Claude's own / not an agent PR"
+    if p["headRefName"].startswith("agent/local/"):   # owner 2026-11-19: a local station's PR carries much at once; Claude lands it into main directly
+        return "Local: Claude переносит в main напрямую, без партии"
     head = p["headRefOid"]
     extra = json.loads(gh("pr", "view", str(p["number"]), "--json", "comments,commits"))
     last_commit = max((c.get("committedDate") or "" for c in extra.get("commits") or []), default="")
