@@ -129,6 +129,27 @@ struct Port198World : econtest::Fx
 		}
 		return out;
 	}
+
+	// a new spawn walks out of the exit first (RW 0x87C9B8); an order given while it is in that state can be refused by its AI,
+	// so the tests wait for the retail idle state before issuing the order (as in test_port_208.cpp)
+	void waitIdle(const std::vector<Object *> &list)
+	{
+		for (int i = 0; i < 200; ++i)
+		{
+			bool idle = true;
+			for (Object *o : list)
+			{
+				const AIUpdateInterface *ai = o ? o->getAIUpdateInterface() : nullptr;
+				idle = idle && ai && ai->currentStateId() == (unsigned)AI_IDLE;
+			}
+			if (idle)
+			{
+				return;
+			}
+			logic->runLogicFrame();
+		}
+		FAIL("the guards never left the production exit");
+	}
 };
 
 // A skirmish-AI world for Player::onUnitCreated: RW 0x8F06FF completes the first AI build request whose producer (+ 8) is the factory
@@ -190,11 +211,12 @@ TEST_CASE("PORT-198 SpawnBehavior: slot 3 gives every guard the force-attack ord
 	w.frames(2); // the first update queues the frame-0 replacement (RW 0x863455); both guards are then in the world
 	REQUIRE(spawner->spawns().size() == 2);
 
+	const std::vector<Object *> guards = w.guards(*spawner);
+	REQUIRE(guards.size() == 2);
+	w.waitIdle(guards);
 	SpawnBehaviorInterface *si = SpawnBehaviorInterface::of(*lair);
 	REQUIRE(si != nullptr);
 	si->orderSlavesToAttackTarget(victim, 7, CMD_FROM_PLAYER); // RW 0x8637BE, maxShots = 7, RW's source goes through unchanged
-	const std::vector<Object *> guards = w.guards(*spawner);
-	REQUIRE(guards.size() == 2);
 	for (Object *g : guards)
 	{
 		CHECK(g->getAIUpdateInterface()->currentVictimId() == victim->getID());
@@ -217,10 +239,12 @@ TEST_CASE("PORT-198 SpawnBehavior: slots 5 / 6 ask the guards whether the spawne
 	const SpawnBehaviorInterface *si = SpawnBehaviorInterface::of(*lair);
 	REQUIRE(si != nullptr);
 
-	CHECK(si->canAnySlavesAttackSpecificTarget(ATTACK_NEW_TARGET, victim, CMD_FROM_PLAYER) == ATTACKRESULT_POSSIBLE);
-	CHECK(si->canAnySlavesUseWeaponAgainstTarget(ATTACK_NEW_TARGET, victim, nullptr, CMD_FROM_PLAYER) == ATTACKRESULT_POSSIBLE);
-	CHECK(si->canAnySlavesAttackSpecificTarget(ATTACK_NEW_TARGET, unattackable, CMD_FROM_PLAYER) == ATTACKRESULT_NOT_POSSIBLE);
-	CHECK(si->canAnySlavesUseWeaponAgainstTarget(ATTACK_NEW_TARGET, unattackable, nullptr, CMD_FROM_PLAYER) == ATTACKRESULT_NOT_POSSIBLE);
+	// ATTACK_NEW_TARGET_FORCED (RW 0x6C9147): the synthetic world has no map relationships, and a forced attack skips the
+	// player-relationship veto; UNATTACKABLE is refused even when forced (RW 0x6C9207)
+	CHECK(si->canAnySlavesAttackSpecificTarget(ATTACK_NEW_TARGET_FORCED, victim, CMD_FROM_PLAYER) == ATTACKRESULT_POSSIBLE);
+	CHECK(si->canAnySlavesUseWeaponAgainstTarget(ATTACK_NEW_TARGET_FORCED, victim, nullptr, CMD_FROM_PLAYER) == ATTACKRESULT_POSSIBLE);
+	CHECK(si->canAnySlavesAttackSpecificTarget(ATTACK_NEW_TARGET_FORCED, unattackable, CMD_FROM_PLAYER) == ATTACKRESULT_NOT_POSSIBLE);
+	CHECK(si->canAnySlavesUseWeaponAgainstTarget(ATTACK_NEW_TARGET_FORCED, unattackable, nullptr, CMD_FROM_PLAYER) == ATTACKRESULT_NOT_POSSIBLE);
 }
 
 // Neighbour behaviour: the ground order the AIGroup already gave (RW 0x772369 -> slot 4 RW 0x863807) and the idle order
@@ -234,6 +258,7 @@ TEST_CASE("PORT-198 SpawnBehavior: a ground order through AIGroup and an idle or
 	REQUIRE(spawner->spawns().size() == 2);
 	REQUIRE(lair->getAIUpdateInterface() == nullptr); // the lair has no AI of its own, its guards are its weapons
 	const std::vector<Object *> guards = w.guards(*spawner);
+	w.waitIdle(guards);
 
 	AIGroup group(*w.logic, { lair->getID() }); // RW 0x6AAB85 -> RW 0x770917 lets an AI-less spawner into the group
 	REQUIRE(group.size() == 1);
