@@ -16,7 +16,7 @@ The other confirmed reader of slot +0x274 is AIWoTRForfeitTactic update RW 0x9B7
 
 ## Further work
 
-The other uncited functions still require classification against their callers and the other open ownership boundaries. In particular RW 0x870D4E iterates the contained list and the entering-member map, optionally filters each object, skips missing drawables, and invokes Drawable RW 0x672B96 then RW 0x67093E. Its caller and client event path still need proof; do not introduce a simulation-to-drawable direct call (the existing thread boundary is `ObjectClientHooks`).
+The other uncited functions still require classification against their callers and the other open ownership boundaries. In particular RW 0x870D4E iterates the contained list and the entering-member map, optionally filters each object, skips missing drawables, and invokes Drawable RW 0x672B96 then RW 0x67093E. The apparent slot +0x1F0 caller RW 0x48EAA3 is **not** a horde call: its function RW 0x48EA29 invokes slots on `esi` in a loop over global UI state and belongs to W3DInGameUI. Other candidates RW 0x59B124 (refcounted elements in an unrelated collection), RW 0x743B6D (object +0x260), and RW 0x83B148 (global camera interface) also do not establish a horde call. Its caller and client event path still need proof; do not introduce a simulation-to-drawable direct call (the existing thread boundary is `ObjectClientHooks`).
 
 ## Individually checked small entries
 
