@@ -1470,6 +1470,7 @@ add_executable(openbfme_tests
     tests/test_local_24.cpp
     # lane LOCAL-28 (W3DLightDraw as retail: object lights, issue #190)
     tests/test_local_28.cpp
+    tests/test_local_88.cpp
     # lane LOCAL-38 (object lights as retail: LightEnvironmentClass per render object, issue #294)
     tests/test_local_38.cpp
     # lane LOCAL-25 (locomotor ground motion presentation and unread simulation stops S-7221, issue #187)
