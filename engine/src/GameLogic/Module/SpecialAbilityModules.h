@@ -216,17 +216,21 @@ public:
 	virtual bool allowsSpecialPowerUse(const Coord3D *loc = nullptr) const = 0;
 };
 
+// RW vtable 0x00C61844; name/key RW 0x00851E7D / 0x00851E38
 class SpecialAbilityUpdate : public UpdateModule, public SpecialPowerUpdateInterface
 {
 public:
 	OBFME_MODULE_XFER(SpecialAbilityUpdate) // lane SAVE-4b
 	SpecialAbilityUpdate(Thing *thing, const SpecialAbilityUpdateModuleData *data); // RW 0x851D42
+	~SpecialAbilityUpdate() override; // RW 0x0085536C -> 0x00854D9A (chained by subclass dtors 0x008958A1, 0x0089453F, 0x00896484, 0x0089873E)
 	UpdateSleepTime update() override;                                              // RW 0x854DF7
 	DisabledMaskType getDisabledTypesToProcess() const override { return (DisabledMaskType)(1u << 3); } // RW 0x855830: DISABLED_HELD
 
+	// RW 0x00851E83 (interface +0x20 slot 7)
 	bool drivesSpecialPower(const SpecialPowerTemplate *t) const override { return t && t == m_data->m_specialPowerTemplate; }
 	// RW 0x852E8F
 	void initiateIntentToDoSpecialPower(const SpecialPowerTemplate *t, Object *target, const Coord3D *loc, unsigned options, int extra) override;
+	// RW 0x009D4099 (interface +0x20 slot 2)
 	bool isActive() const override { return m_active; }
 	// lane BACKLOG4 (S-1222) / PORT-188: the special power update interface's slot 0x18 (RW 0x851C92) asked without a command button, as Object RW 0x693919
 	// and SpecialAbilityUpdate::initiateIntentToDoSpecialPower RW 0x85307F ask it: false with the packing state (+ 0x30) 0; else true for the template types
@@ -241,6 +245,7 @@ public:
 	const SpecialAbilityUpdateModuleData *abilityData() const { return m_data; }
 	int packingState() const { return m_packingState; }
 	unsigned prepFrames() const { return m_prepFrames; }
+	unsigned effectExpiry() const { return m_effectExpiry; }
 	int triggerCount() const { return m_triggerCount; }
 	unsigned abilitiesTriggered() const { return m_abilitiesTriggered; } // effects run (a test counter, hashed)
 	unsigned long long unported() const { return m_unported; }
@@ -264,7 +269,7 @@ protected:
 	virtual void startPreparation();               // slot 0x3C, RW 0x853BEC
 	virtual bool continuePreparation();            // slot 0x40, RW 0x852A3E
 	virtual void triggerAbilityEffect();           // slot 0x44, RW 0x853EDF
-	virtual void onEffectExpired() {}              // slot 0x48, RW 0x851E9A
+	virtual void onEffectExpired() { m_effectExpiry = 0; } // slot 0x48, RW 0x00851E9A: clears +0x2C
 	virtual void finishAfterPacking();             // slot 0x4C, RW 0x8549E7
 	void clearAbilityModelConditions();             // RW 0x851BCF: shared by initiate and finish
 	virtual bool handlePackingProcessing();        // slot 0x50, RW 0x851E9F
@@ -387,6 +392,7 @@ private:
 	ObjectID m_replacement = INVALID_ID; // the MountedTemplate object of the last replacement (tests; hashed)
 };
 
+// RW vtable 0x00C64D14; name/key RW 0x00895836 / 0x0089585C; s1 no-op RW 0x008E38D8
 class HeroModeSpecialAbilityUpdate : public SpecialAbilityUpdate
 {
 public:
@@ -425,6 +431,7 @@ private:
 	unsigned m_granted = 0;
 };
 
+// RW vtable 0x00C64C54; name/key RW 0x008943FC / 0x00894422; s1 no-op RW 0x008E38D8
 class ModelConditionSpecialAbilityUpdate : public SpecialAbilityUpdate
 {
 public:
