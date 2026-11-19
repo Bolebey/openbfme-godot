@@ -947,7 +947,7 @@ int GarrisonContain::findClosestFreeGarrisonPointIndex(int condition, const Coor
 	return best;
 }
 
-// RW 0x87B042
+// RW 0x87B042 (GarrisonContain::putObjectAtGarrisonPoint) / RW 0x0087CEA8 (HordeGarrisonContain contain slot 0x6C -> 0x00990C6E)
 void GarrisonContain::putObjectAtGarrisonPoint(Object *obj, ObjectID target, int condition, int index)
 {
 	if (!obj || index < 0 || index >= MAX_GARRISON_POINTS || condition < 0 || condition >= GARRISON_POINT_CONDITIONS)
