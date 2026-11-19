@@ -72,3 +72,8 @@ def test_a_computed_attribute_gives_every_value_it_can_take():
     assert mm.argument_at(run(code), 0) == ("imm", {4, 5})
     # a register written by a call is not guessed
     assert mm.argument_at(run(b"\xE8\x00\x00\x00\x00\x8B\xF8\x57"), 0)[0] == "?"
+
+
+def test_inc_after_xor_gives_one():
+    # RW 0x5D8AE4 .. 0x5D8AEB (AdjustDamage, ARMOR): xor eax, eax; push ecx; inc eax; push ecx; push eax; call
+    assert mm.argument_at(run(b"\x33\xC0\x51\x40\x51\x50"), 0) == ("imm", 1)

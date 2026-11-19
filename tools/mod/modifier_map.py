@@ -203,6 +203,11 @@ def register_values(instrs, idx: int, reg: str, depth: int = 0):
         src = re.fullmatch(rf"{reg}, (e[a-d]x|e[sd]i|ebp)", ops)
         if m == "mov" and src:
             return register_values(instrs, j, src.group(1), depth + 1)
+        if m in ("inc", "dec") and ops == reg:
+            base, why = register_values(instrs, j, reg, depth + 1)
+            if base is None:
+                return None, why
+            return {v + 1 if m == "inc" else v - 1 for v in base}, ""
         if m in ("add", "sub") and mm_:
             base, why = register_values(instrs, j, reg, depth + 1)
             if base is None:
@@ -287,7 +292,12 @@ BASE_QUERIES = {("attributeModifierSum", 3): 0, ("attributeModifierProduct", 4):
                 # around Object::attributeModifierProduct / Sum (setAttributeModifierProvider / setAttributeModifierSumProvider), so the type passes on
                 ("attributeModifierProduct", 2): 1, ("attributeModifierSum", 2): 1,
                 # the seams themselves, called directly (Economy.cpp: m_attributeSums(obj, COMMAND_POINT_BONUS, sum))
-                ("m_attributeModifiers", 3): 1, ("m_attributeSums", 3): 1}
+                ("m_attributeModifiers", 3): 1, ("m_attributeSums", 3): 1,
+                # the pool's own queries and the list's value query (AttributeModifierPool.cpp: list->value(ATTRIBUTE_HEALTH, ...) = RW 0x6144BF,
+                # product(ATTRIBUTE_HEALTH_MULT, ...) = RW 0x804FFF in the apply on add RW 0x8052FB); their names are common words, so a call
+                # of them counts only with a named attribute constant (STRICT)
+                ("value", 3): 0, ("sum", 3): 0, ("product", 4): 0}
+STRICT = {"value", "sum", "product"}
 CONST = re.compile(r"\b(?:constexpr|const)\s+(?:int|unsigned|std::uint32_t|std::int32_t|UnsignedInt|Int)\s+(\w+)\s*=\s*(0x[0-9A-Fa-f]+|\d+)\s*;")
 LAMBDA = re.compile(r"\]\s*\(([^()]*)\)\s*(?:->\s*\w+\s*)?\{[^{}]*$")
 
@@ -410,13 +420,15 @@ def port_scan(src: Path):
                 # a conditional picks one of two constants: both are read
                 arms = re.fullmatch(r".*\?\s*([\w:x]+)\s*:\s*([\w:x]+)\s*", a)
                 for arg in ([arms.group(1), arms.group(2)] if arms else [a]):
-                    val = None
+                    val, named = None, False
                     if re.fullmatch(r"(0x[0-9A-Fa-f]+|\d+)u?", arg):
                         val = int(arg.rstrip("u"), 0)
                     else:
                         tok = re.sub(r"^\(?\s*(?:\(\s*int\s*\)|static_cast<int>\()?\s*", "", arg).rstrip(")").split("::")[-1].strip()
                         if tok in enums:
-                            val = enums[tok]
+                            val, named = enums[tok], True
+                    if q in STRICT and not named:
+                        continue  # a common name (value / sum / product) counts only with a named attribute constant
                     reads.append(PortRead(f, ln, q, val, a, owner))
     return reads, cites, queries
 
