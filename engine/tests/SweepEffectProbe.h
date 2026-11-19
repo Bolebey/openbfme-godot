@@ -34,6 +34,7 @@
 #include "GameLogic/Module/StoreObjectsSpecialPower.h" // lane PORT-261: the stored list's size observed through the module, not the world (the objects stay in play)
 #include "GameLogic/BitFlags.h"
 #include "GameLogic/Object/AttributeModifierPool.h"
+#include "GameLogic/System/ShroudManager.h" // MATRIX_TODO 15: the vision range a VISION modifier must move
 #include "GameLogic/Object/ExperienceTracker.h"
 #include "GameLogic/Object/Object.h"
 #include "GameLogic/ObjectCreationList.h"
@@ -394,6 +395,12 @@ struct EffectProbe
 		bool harvesting = false;
 		const ThingTemplate *tmpl = nullptr;
 		Coord3D pos{}; ///< lane FACT-C
+		// MATRIX_TODO 15 (2026-11-19): what the consumers make of the modifiers, not what the pool answers: the current weapon's attack range
+		// (RANGE through RW 0x6CA61F), the vision range (VISION through RW 0x68E43B), the body's maximum health (HEALTH / HEALTH_MULT on add,
+		// RW 0x805D3A / 0x805DB5); -1 when the object has none
+		float attackRange = -1.0f;
+		float vision = -1.0f;
+		float maxHealth = -1.0f;
 	};
 
 	UnsignedInt frame = 0;
@@ -1048,14 +1055,27 @@ struct EffectProbe
 					s.modifiers.insert(n);
 					s.expires[n] = pool->expireOf(n);
 				}
-				for (int type : { ATTRIBUTE_DAMAGE_ADD, ATTRIBUTE_DAMAGE_MULT, ATTRIBUTE_SPEED })
+				for (int type : { (int)ATTRIBUTE_DAMAGE_ADD, (int)ATTRIBUTE_DAMAGE_MULT, (int)ATTRIBUTE_SPEED, 7 /* RANGE, sum */, 16 /* VISION, sum */, (int)ATTRIBUTE_HEALTH_MULT })
 				{
-					float v = type == ATTRIBUTE_DAMAGE_ADD ? 0.0f : 1.0f;
-					if (type == ATTRIBUTE_DAMAGE_ADD ? o->attributeModifierSum(type, nullptr, v) : o->attributeModifierProduct(type, nullptr, true, v))
+					const bool summed = type == ATTRIBUTE_DAMAGE_ADD || type == 7 || type == 16;
+					float v = summed ? 0.0f : 1.0f;
+					if (summed ? o->attributeModifierSum(type, nullptr, v) : o->attributeModifierProduct(type, nullptr, true, v))
 					{
 						s.values[type] = v;
 					}
 				}
+			}
+			if (o->getBodyModule())
+			{
+				s.maxHealth = o->getBodyModule()->getMaxHealth();
+			}
+			if (const ObjectWeapons *w = o->getWeapons())
+			{
+				s.attackRange = w->currentAttackRangeNoTarget();
+			}
+			if (logic.shroud())
+			{
+				s.vision = ShroudManager::objectVisionRange(*o, ShroudManager::templateVision(*static_cast<const ThingTemplate *>(o->getTemplate())->getFinalOverride()));
 			}
 			for (const std::unique_ptr<BehaviorModule> &m : o->modules())
 			{
@@ -1328,6 +1348,78 @@ struct EffectProbe
 									{
 										valueOff += str("%s on object %u: %s %.3f -> %.3f, the new lists say %s%.3f (RW %s); ", modName.c_str(), (unsigned)kv.first,
 														TheAttributeModifierTypeNames[type], before, now, add ? "+" : "x", want, add ? "0x804F39" : "0x804FFF");
+									}
+								}
+								// MATRIX_TODO 15 (2026-11-19): the consumers. The pool's answer above can be right while nothing reads it (S-320: the port's weapon
+								// range and rate of fire readers answer neutral). The lists new on this object since the cast say what the object must become:
+								// RANGE (sum) scales the current weapon's attack range by (1 + sum) (RW 0x6CA61F), VISION (sum) the vision range (RW 0x68E43B),
+								// HEALTH adds to the maximum health scaled by the HEALTH_MULT product already there, HEALTH_MULT multiplies it (RW 0x805D3A / 0x805DB5)
+								{
+									float range = 0.0f, vision = 0.0f, health = 0.0f, healthMult = 1.0f;
+									bool anyRange = false, anyVision = false, anyHealth = false;
+									int healthLists = 0;
+									for (const std::string &n : kv.second.modifiers)
+									{
+										const ModifierListTemplate *nl2 = b->modifiers.count(n) || !TheAttributeModifierStore ? nullptr : TheAttributeModifierStore->find(n);
+										bool counted = false;
+										for (const ModifierListTemplate::Modifier &m : nl2 ? nl2->m_modifiers : std::vector<ModifierListTemplate::Modifier>{})
+										{
+											if (!m.names.empty())
+											{
+												continue;
+											}
+											if (m.type == 7)
+											{
+												range += m.value;
+												anyRange = true;
+											}
+											else if (m.type == 16)
+											{
+												vision += m.value;
+												anyVision = true;
+											}
+											else if (m.type == ATTRIBUTE_HEALTH || m.type == ATTRIBUTE_HEALTH_MULT)
+											{
+												health += m.type == ATTRIBUTE_HEALTH ? m.value : 0.0f;
+												healthMult *= m.type == ATTRIBUTE_HEALTH_MULT ? m.value : 1.0f;
+												anyHealth = true;
+												healthLists += counted ? 0 : 1;
+												counted = true;
+											}
+										}
+									}
+									auto off = [](float now, float expect) { return std::fabs(now - expect) > 0.01f * std::max(1.0f, std::fabs(expect)); };
+									auto sumBefore = [&](int type) {
+										const auto it = b->values.find(type);
+										return it != b->values.end() ? it->second : 0.0f;
+									};
+									if (anyRange && range != 0.0f && b->attackRange > 0.0f && kv.second.attackRange > 0.0f)
+									{
+										const float s0 = sumBefore(7), expect = b->attackRange * (1.0f + s0 + range) / (1.0f + s0);
+										if (off(kv.second.attackRange, expect))
+										{
+											valueOff += str("%s on object %u: the weapon's attack range %.1f -> %.1f, its RANGE %+.2f makes %.1f (RW 0x6CA61F); ", modName.c_str(),
+															(unsigned)kv.first, b->attackRange, kv.second.attackRange, range, expect);
+										}
+									}
+									if (anyVision && vision != 0.0f && b->vision > 0.0f && kv.second.vision > 0.0f)
+									{
+										const float s0 = sumBefore(16), expect = b->vision * (1.0f + s0 + vision) / (1.0f + s0);
+										if (off(kv.second.vision, expect))
+										{
+											valueOff += str("%s on object %u: the vision range %.1f -> %.1f, its VISION %+.2f makes %.1f (RW 0x68E43B); ", modName.c_str(), (unsigned)kv.first,
+															b->vision, kv.second.vision, vision, expect);
+										}
+									}
+									if (anyHealth && healthLists == 1 && b->maxHealth > 0.0f && kv.second.maxHealth > 0.0f)
+									{
+										const auto m0 = b->values.find((int)ATTRIBUTE_HEALTH_MULT);
+										const float expect = (b->maxHealth + (m0 != b->values.end() ? m0->second : 1.0f) * health) * healthMult;
+										if (off(kv.second.maxHealth, expect))
+										{
+											valueOff += str("%s on object %u: the maximum health %.1f -> %.1f, its HEALTH %+.1f / HEALTH_MULT x%.2f make %.1f (RW 0x805D3A / 0x805DB5); ",
+															modName.c_str(), (unsigned)kv.first, b->maxHealth, kv.second.maxHealth, health, healthMult, expect);
+										}
 									}
 								}
 							}

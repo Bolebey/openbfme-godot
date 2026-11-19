@@ -325,6 +325,30 @@ def renumber(n: int, old: int, content: str, why: str, renumbered: list[str]) ->
     renumbered.append(f"#{n}: S-{old} -> S-{new} ({why})")
 
 
+STOP_ROW = re.compile(r"^\| S-(\d+) \|")
+
+
+def dedupe_rows(merged: str, base: str) -> str | None:
+    """A union merge keeps both versions of a stop row one side edited (2026-11-19e: Port 271 narrowed S-705, main's old row stayed beside it
+    and tools/fragments.py collect refused the landing). Of two rows with one id, the one equal to the base's is the old one and goes; when
+    neither equals it (both sides edited the row) it is a real conflict: None."""
+    old = {m.group(1): line for line in base.splitlines() if (m := STOP_ROW.match(line))}
+    lines = merged.splitlines(keepends=True)
+    seen: dict[str, list[int]] = {}
+    for i, line in enumerate(lines):
+        if m := STOP_ROW.match(line):
+            seen.setdefault(m.group(1), []).append(i)
+    drop = set()
+    for sid, idx in seen.items():
+        if len(idx) < 2:
+            continue
+        stale = [i for i in idx if lines[i].rstrip("\r\n") == old.get(sid)]
+        if len(idx) != 2 or len(stale) != 1:
+            return None
+        drop.add(stale[0])
+    return "".join(line for i, line in enumerate(lines) if i not in drop)
+
+
 def resolve(n: int, pending: list[tuple[int, str]]) -> list[str]:
     """Resolves a merge's conflicts in shared tables; returns the files it could not resolve (code)."""
     left = []
@@ -341,7 +365,15 @@ def resolve(n: int, pending: list[tuple[int, str]]) -> list[str]:
             for t, text in zip(tmp, parts):
                 t.write_text(text, encoding="utf-8")
             sh(["git", "merge-file", "--union", *map(str, tmp)])
-            (WT / f).write_text(tmp[0].read_text(encoding="utf-8"), encoding="utf-8")
+            merged = tmp[0].read_text(encoding="utf-8")
+            if f == "docs/STOPS.md":
+                merged = dedupe_rows(merged, parts[1])
+            if merged is None:  # both sides edited one stop row: a real conflict
+                for t in tmp:
+                    t.unlink()
+                left.append(f)
+                continue
+            (WT / f).write_text(merged, encoding="utf-8")
             for t in tmp:
                 t.unlink()
         else:
