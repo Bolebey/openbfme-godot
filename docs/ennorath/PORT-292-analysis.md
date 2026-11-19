@@ -58,3 +58,32 @@ The table is deliberately partial: the other rows in the function map still need
 | 0x870AEE | Returns false if a contained member not in interface +0x54 is more than 10 units away in 2D; otherwise true. | Member / entering map owned by #552; full equivalence unverified. |
 | 0x8710A8 | For each contained member not in interface +0x54, calls its AI slot +0x218 with both arguments if it has AI. | Member hand-off #552; full equivalence unverified. |
 | 0x871110 | Calls `FXList::doFXObj` RW 0x4B1B5A for contained members and live objects resolved from interface +0x54 ids. | Member / entering map and client event boundary; full equivalence unverified, S-7505 / #552. |
+
+## Additional first-instruction checks
+
+These entries are not a blanket claim that the entire #552 member mechanism is ported; where the comparison is unfinished that is stated explicitly.
+
+| RW start | Body / status | Scope or port |
+|---|---|---|
+| 0x86BD7D | Stores three coordinate floats at interface +0x1DC and marks +0x1E8 valid. Missing hand-off. | S-7519, factory exit and #650. |
+| 0x86BD98 | If valid, clears +0x1E8 and copies the saved coordinates to the output, returning true; otherwise false. Missing hand-off. | S-7519, factory exit and #650. |
+| 0x86BDC0 | Reads argument +0x38 and forwards it to receiver vslot +0xB0. | Wrapper; receiver/caller identity and port comparison unresolved. |
+| 0x86BE2E | Delegates to the owner's AI vslot +0x1C8, false if no AI. | Query; caller/port comparison unresolved. |
+| 0x86BE49 | Delegates to the owner's AI vslot +0x1CC, false if no AI. | Query; caller/port comparison unresolved. |
+| 0x86BE64 | Requires three non-null arguments then calls RW 0x6CC653 with 0.0 and 1. | Weapon helper; precise caller and equivalence unresolved. |
+| 0x86C192 | Sets owner orientation using RW 0x70C31E, marks interface +4 dirty, wakes update RW 0x850C32. | Port comparison and caller unresolved. |
+| 0x86C758 | Rejects argument with template +0x115 bit 0x20; otherwise forwards three arguments to RW 0x86A002. | Contain acceptance, S-7505 / #552; exact equivalence unresolved. |
+| 0x86C8B9 | Null-guarded delegation from owner +0x27C to that container's +0x258 vslot +0x68. | Containment hand-off S-7505 / #552; exact equivalence unresolved. |
+| 0x86C9E7 | Returns address of module-data +0x1A4, no mutation. | Getter; field and callers still require confirmation. |
+| 0x86C9F3 | Returns address of module-data +0x18C, no mutation. | Getter; field and callers still require confirmation. |
+| 0x86D1FE | If the horde AI is moving RW 0x664485, calls RW 0x662A0E for each contained member's AI, then the horde AI. | Member-AI mechanism #552 / #650; exact equivalence unresolved. |
+| 0x86F6E1 | Calls RW 0x690B11 on contained and entering members, then if drawable and locally controlled flushes model conditions RW 0x67449C(0). | Selection/presentation and member list S-7505 / #552; exact equivalence unresolved. |
+| 0x86FEAD | Uses callback RW 0x86C79A over members and resolves the chosen id: callback selects greatest experience excluding template bit +0x11C / 0x10. | Member selection S-7505 / #552; exact equivalence unresolved. |
+| 0x86FFD2 | Requires at least one member, the requested template to equal the alternate, and non-main alternate's MinimumHordeSize. | Existing `HordeFormation.cpp::registerHandlers` checks `alternateFormationTemplate` and `canToggleFormation`; formation swap remains S-589. |
+| 0x870D4E | Traverses contained objects and entering ids, optional filter RW 0x7640C1; calls Drawable RW 0x672B96 and RW 0x67093E. | S-7505 / #552 lists this function; caller and ordered presentation path unresolved, no simulation-to-client shortcut. |
+| 0x87104A | With argument flags bit 0x10, visits interface +0x150 ids through callback; otherwise delegates to RW 0x8666A1. | Member-list traversal #552; exact equivalence unresolved. |
+| 0x87159F | Sets interface +0x1CC then clears tree at +0x1C0 through RW 0x8664EA. | State/ownership and callers unresolved. |
+| 0x871844 | Calls interface +0xE0, frees each +0x270 vector entry, clears vector and tail-calls RW 0x86708F. | Lifecycle/contain cleanup S-7505 / #552; exact equivalence unresolved. |
+| 0x8762DD | If member has AI, busy vslot +0x1C4 causes idle command RW 0x5E821A and true; otherwise returns AI idle vslot +0x1B8. | Callback within formation/member mechanism S-7505 / #552; exact port equivalence unresolved. |
+| 0x87737A | Contain-interface this-adjusting thunk to RW 0x87566B, upgrade propagation to horde members. | `Object.cpp::giveUpgradeSelf`, `HordeGarrisonLink.cpp`; second member list remains noted in `UpgradeModuleClasses.cpp`, S-7505 / #552. |
+| 0x8780E4 | Snapshot transfer, including saved formation identity module +0x2C5. | `HordeContain::xfer` handles existing state, but identity and recovery are missing, S-7520; remainder requires comparison. |
