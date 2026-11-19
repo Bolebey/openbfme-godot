@@ -39,7 +39,7 @@ The table is deliberately partial: the other rows in the function map still need
 | 0x8736EF | Scalar deleting destructor (map tier A); not gameplay behaviour. | Lifecycle. |
 | 0x86C77D | Initialises module +0x2C5 to the inverse of module-data `ThisFormationIsTheMainFormation` +0x1D8. | Missing: `HordeContain::onCreate` is empty; snapshot / mismatch recovery is S-7520. |
 | 0x86C8F2 | Compares saved module +0x2C5 with inverse module-data +0x1D8; mismatch calls horde interface +0x60 (`toggleFormation` RW 0x86C7F6). | Missing formation restoration; S-7520. |
-| 0x86D056 | This-adjusting thunk to RW 0x86C997, which passes each module-data +0x22C vector element and -1 to RW 0x68F1A8 when the argument is non-null. | Caller semantics and port comparison still need verification. |
+| 0x86D056 | Interface slot +0x30: this-adjusting thunk to RW 0x86C997, which passes each `AttributeModifiers` entry (module-data +0x22C) and -1 to the argument's `Object::addAttributeModifier` RW 0x68F1A8. | Missing joining-member path S-1600; the separately implemented `HordeFormation.cpp::applyFormationModifiers` is the distinct slot +0x1E4. The hand-off is within #552's membership area. |
 | 0x8713F6 | Horde mean position; both contained and entering-member lists. | Partially ported in `AttachUpdate.cpp`; entering-member list is owned by #552, S-1361. |
 | 0x86D6FD | Copies module-data +0x280 as a string. | Ported here: `HordeContain::livingWorldOverloadTemplate`; remaining forfeit caller S-7518. |
 | 0x86DF44 | Last-member death / periodic split check. | Already ported: `HordeContainRuntime.cpp`, Port 265. |
