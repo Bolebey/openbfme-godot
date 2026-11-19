@@ -214,6 +214,7 @@ UpdateSleepTime StrafeAreaUpdate::update()
 	return UPDATE_SLEEP_NONE;
 }
 
+// RW 0x007A814E (slot 3): versions 1..4, UpdateModule::xfer (RW 0x00850C60), m_strafeTarget (+0x20), m_strafeStart (+0x2C), m_sweepPhase (+0x38), m_state (+0x3C), m_started (+0x40), m_nextFireFrame (+0x44).
 void StrafeAreaUpdate::xfer(Xfer &x)
 {
 	XferVersion v{ 1, 4 };

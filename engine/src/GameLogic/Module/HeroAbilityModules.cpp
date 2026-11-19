@@ -2718,6 +2718,7 @@ void ActivateModuleSpecialPower::xfer(Xfer &x)
 	x.xferUnsignedInt(&m_activations);
 }
 
+// RW 0x00894327 (slot 3): SpecialAbilityUpdate::xfer (RW 0x00852782), version 1, m_targets (+0x88), m_current (+0x8C), m_shotsAtCurrent (+0x90), m_done (+0x98), m_shots (+0x94).
 void ArrowStormUpdate::xfer(Xfer &x)
 {
 	SnapshotXfer::version(x, 1, 1);
@@ -2746,6 +2747,7 @@ void FellBeastSwoopPower::xfer(Xfer &x)
 	x.xferUnsignedInt(&m_commands);
 }
 
+// RW 0x008B0923 (slot 3): SpecialAbilityUpdate::xfer (RW 0x00852782), version 2, m_followers (+0x88), m_started (+0x90), m_endFrame (+0x8C), m_inner (+0x94), m_outer (+0x98).
 void RousingSpeechUpdate::xfer(Xfer &x)
 {
 	SnapshotXfer::version(x, 1, 1);

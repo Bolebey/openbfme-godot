@@ -3407,6 +3407,7 @@ void ModelConditionSpecialAbilityUpdate::xfer(Xfer &x)
 	x.xferUnsignedInt(&m_emotions);
 }
 
+// RW 0x008B1EE7 (slot 3): version 1, SpecialAbilityUpdate::xfer (RW 0x00852782), m_replaceAfterPacking (+0x8C).
 void SummonReplacementSpecialAbilityUpdate::xfer(Xfer &x)
 {
 	SnapshotXfer::version(x, 1, 1); // lane SUMMON-1
@@ -3417,6 +3418,7 @@ void SummonReplacementSpecialAbilityUpdate::xfer(Xfer &x)
 	x.xferUnsignedInt(&m_emotions);
 }
 
+// RW 0x008B4301 (slot 3): UpdateModule::xfer (RW 0x00850C60), version 2, m_isDisguised (+0x90, kept on Object status here), m_opacity (+0x8C), SpecialAbilityUpdate::xfer (RW 0x00852782).
 void SpecialDisguiseUpdate::xfer(Xfer &x)
 {
 	SnapshotXfer::version(x, 1, 1);
