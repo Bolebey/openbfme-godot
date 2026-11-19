@@ -184,7 +184,7 @@ bool moduleAllows(Object &obj, SpecialPowerModuleInterface &m, const SpecialPowe
 	{
 		return false;
 	}
-	if (locOrNull && spm && spm->spData()->m_useDistanceFromCommandCenter)
+	if (locOrNull && spm && spm->spData()->m_useDistanceFromCommandCenter) // RW 0x00896A70 (called at RW 0x897E1E)
 	{
 		const Coord3D &loc = *locOrNull;
 		// RW 0x897D2D: no controlling player -> passes; else the player's COMMANDCENTER objects (RW 0x6B00F3: template + 0x10A bit 1) in the player's object
