@@ -155,6 +155,8 @@ public:
 	void applyDamageScalar(float scalar) override; // RW 0x8C329F (vt[0x6C])
 	// the last frame the body took a damaging hit and from whom (RW + 0xAC, the last damage record); 0xFFFFFFFF / INVALID_ID when never
 	UnsignedInt lastDamageFrame() const override { return m_lastDamageFrame; }
+	// lane PORT-296: the record's + 0x20 (see BodyModuleInterface::lastDamageAmount)
+	float lastDamageAmount() const override { return m_lastDamageAmount; }
 	ObjectID lastDamager() const { return m_lastDamager; }
 	// lane PLAY-4: body interface vslot 0x4C (RW 0x8C3A33): the last damage record's source once per record (+ 0xB6 set by the first call, cleared by the
 	// next damaging hit, RW 0x8C42FA); INVALID_ID when already taken (ZH getClearableLastAttacker + clearLastAttacker in one call). The guard machine's
@@ -226,6 +228,7 @@ private:
 	BodyDamageType m_curDamageState = BODY_PRISTINE; // RW + 0x30
 	DamageInfo *m_currentInfo = nullptr;
 	UnsignedInt m_lastDamageFrame = 0xFFFFFFFFu; // RW + 0xAC (RW 0x8C3841: -1 = never; BUILD-2)
+	float m_lastDamageAmount = 0.0f;             // lane PORT-296: the record's + 0x20 (the hit's input amount)
 	ObjectID m_lastDamager = INVALID_ID;
 	bool m_lastAttackerTaken = false; // RW + 0xB6 of the body interface (lane PLAY-4)
 	std::uint32_t m_lastDamagerPlayerMask = 0; // lane CAMP-1: the record's + 0xC
