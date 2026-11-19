@@ -128,6 +128,21 @@ class CommandButton;
 //     The value is NOT restored per candidate: each one shares the previous one's share (retail's register reuse, [ebp + 8]);
 //   * the drop off (RW 0x88325B): DropOff == 1.0: max(0, 1 - |candidate - position| / Radius) with the length RW 0x4054F5 (x87 z*z + y*y + x*x, CRT sqrt,
 //     fstp) and SSE subtract / divide; any other DropOff: 1.0.
+// Port 301 (fork issue 693): the class's own map rows that carried no citation, classified by reading them (RW_FUNCTION_MAP depth 0):
+//   0x4B612F     the ModuleData vtable RW 0xC5EEA0 slot + 0x38: the base ModuleData's empty tag name (an AsciiString built from the empty literal
+//                RW 0xDC62B8 through RW 0x435F30) -- the port's ModuleData::getModuleTagName, the shared module plumbing, ported once for every module;
+//   0x8830A2     the class name (mov eax, 0xC0B55C: "ShareExperienceBehavior") -- the port's name in bindRuntime<> / getModuleClassName();
+//   0x8830A8     getModuleNameKey: the one-shot registration (the flag in RW 0xDE91A0, the name key RW 0xDE919C built by RW 0x5487EC from the class
+//                name RW 0xC0B55C) -- the port's bindRuntime<> registration and the factory's name key (Module::getModuleNameKey);
+//   0x8831AC     the scalar deleting destructor (the destructor RW 0x883082, then operator delete RW 0x42F6A0 for argument bit 0) -- the port's implicit
+//                destructor;
+//   0x8831C8     the update: a debug trace and then UPDATE_SLEEP_FOREVER (mov eax, 0x3FFFFFFF) -- no state change; the port sleeps forever too (the
+//                constructor's friend_setNextCallFrame, RW 0x883196 -> RW 0x850C32, and update() answers UPDATE_SLEEP_FOREVER). Only the retail's debug
+//                trace is not ported (it needs the general Debug singleton the port has not got): S-7545;
+//   0x88320F     the ModuleData's scalar deleting destructor (the destructor RW 0x88322B, then operator delete RW 0x42F6A0 for argument bit 0) -- the port's
+//                implicit destructor;
+//   0x8E3BB1     the xfer override: version (1, 1) RW 0x404F15 and the base xfer RW 0x850C60, nothing else -- the port's xfer() (the share counter is
+//                the port's own diagnostics, not state, so it is not written).
 class ShareExperienceBehaviorModuleData : public ModuleData
 {
 public:
