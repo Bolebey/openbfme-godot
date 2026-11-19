@@ -378,6 +378,19 @@ def merge_batch(name: str, prs: list[dict], out: list[int]) -> tuple[list[dict],
             renumber(n, old, content, "the id an earlier PR of the batch took", renumbered)
         if pending:
             git(*AUTHOR, "commit", "-q", "--no-verify", "-m", f"Batch {name}: #{n}'s stop renumbered (the id an earlier PR took)")
+    # A PR that conflicts with the base itself, not with an earlier PR of the batch, would be taken by every next batch and leave again
+    # (2026-11-19a .. d: #579 #615 #629 #658, checked on an old main, filled the slots for 8 hours and the green PRs behind them waited):
+    # it is marked BASE and goes back to its agent (left_batch).
+    if conflicted:
+        here = git("rev-parse", "HEAD").strip()
+        for i, (p, why) in enumerate(conflicted):
+            git("checkout", "-q", "-f", "--detach", BASE)
+            tried = sh(["git", *AUTHOR, "merge", "-q", "--no-ff", "--no-commit", "--no-verify", f"refs/batch/{p['number']}"])
+            if tried.returncode and resolve(p["number"], []):
+                conflicted[i] = (p, BASE_CONFLICT + why)
+            git("merge", "--abort", check=False)
+        git("checkout", "-q", "-f", f"batch/{name}")
+        git("reset", "-q", "--hard", here)
     # a fragment whose id main's table already has (taken since the PR started)
     owner = {f: p["number"] for p in merged for f in pr_files(p["number"]) if FRAGMENT.match(f)}
     taken = set(int(i) for i in re.findall(r"^\| S-(\d+) \|", (WT / "docs/STOPS.md").read_text(encoding="utf-8"), re.M))
@@ -559,6 +572,7 @@ def repin(test: str, ps: dict | list[dict], name: str) -> str:
 
 BATCH_MARK = "<!-- batch {name} {head} -->"
 LEFT_MARK = "<!-- batch-left {name} {head} -->"
+BASE_CONFLICT = "BASE: "   # merge_batch's mark of a conflict with the batch's base (main), not with an earlier PR
 
 
 def taken_comment(name: str, p: dict, sandbox: str) -> str:
@@ -576,7 +590,12 @@ def left_batch(take: list[dict], rows: dict, out: dict) -> list[tuple[dict, str]
     for p in take:
         if p["number"] in out:
             continue  # its return comment says why
-        if p["number"] in conflicted:
+        if p["number"] in conflicted and conflicted[p["number"]].startswith(BASE_CONFLICT):
+            files = conflicted[p["number"]].split("conflicts in ", 1)[-1].split(" with ")[0]
+            res.append((p, f"конфликтует с самим `main` ({files}), не с другими PR партии.\n\n<!-- returned --> Возвращён агенту: влей свежий "
+                           "`origin/main` в ветку, разреши конфликт, прогони свои тесты и запушь — проверяльщик перепроверит, и PR снова "
+                           "пойдёт в партию. Пока нового коммита нет, бот партии его не берёт"))
+        elif p["number"] in conflicted:
             res.append((p, "конфликтует с PR, влитыми в партию раньше: пойдёт в следующую партию"))
         elif not green:
             res.append((p, f"партия не зелёная ({rows['verdict']}), но не из-за этого PR: снова ждёт партии"))
