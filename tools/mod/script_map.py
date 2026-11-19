@@ -67,6 +67,46 @@ def ini_names(m: bigfs.Mount) -> dict[str, str]:
     return kinds
 
 
+# The INI fields that give a player or an object an upgrade / a science (MATRIX_TODO 13, 2026-11-19): a button's Upgrade / Science, an
+# ExperienceLevel's Upgrades, a ModifierList's Upgrade, GrantUpgradeCreate's UpgradeToGrant, ObjectCreationUpgrade's / an OCL's GrantUpgrade,
+# a PlayerTemplate's starting upgrades and sciences, a science's BonusScience, the Create-a-Hero blings. Fields that only test or remove one
+# (TriggeredBy, ConflictsWith, NeededUpgrade, Required*, Forbidden*, RemoveUpgrade, UpgradeToRemove) are not grants.
+GRANT_KEYS = {"Upgrade", "Upgrades", "UpgradeToGrant", "GrantUpgrade", "Science", "IntrinsicSciences", "IntrinsicSciencesMP", "InitialUpgrades",
+              "BonusScience", "BlingUpgradeName", "BlingUpgrades", "UpgradeForRingEntry", "UpgradeName"}
+TOP = re.compile(r"^(\w+)(?:[ \t]+(\S+))?")
+FIELD = re.compile(r"^[ \t]*(\w+)[ \t]*=[ \t]*(.*)$")
+BEHAVIOR = re.compile(r"^[ \t]*(?:Behavior|Body|Draw|ClientUpdate)[ \t]*=[ \t]*(\w+)")
+
+
+def ini_grants(m: bigfs.Mount, kinds: dict[str, str]) -> list[tuple[str, str, str, str, str, str]]:
+    """(kind, name, field, block, module, file) for every upgrade / science an INI field of GRANT_KEYS gives (names only)."""
+    out = []
+    for n in m.list("data\\ini\\"):
+        if not n.endswith((".ini", ".inc")):
+            continue
+        block, module = "", ""
+        for raw in m.read(n).decode("latin-1").splitlines():
+            line = raw.split(";", 1)[0].split("//", 1)[0].rstrip()
+            if not line.strip():
+                continue
+            if not line[0].isspace():
+                t = TOP.match(line)
+                if t and t.group(1) not in ("End", "END", "#include", "#define"):
+                    block, module = (t.group(1) + " " + (t.group(2) or "")).strip(), ""
+                continue
+            b = BEHAVIOR.match(line)
+            if b:
+                module = b.group(1)
+                continue
+            f = FIELD.match(line)
+            if not f or f.group(1) not in GRANT_KEYS:
+                continue
+            for tok in f.group(2).split():
+                if kinds.get(tok) in ("upgrade", "science"):
+                    out.append((kinds[tok], tok, f.group(1), block, module, n))
+    return out
+
+
 def port_cases() -> tuple[set[str], set[str]]:
     """Condition / action names the port's script engine handles: `case NAME:` in the conditions, `"NAME"` in the actions."""
     conds, acts = set(), set()
@@ -75,6 +115,12 @@ def port_cases() -> tuple[set[str], set[str]]:
         conds |= set(re.findall(r"\bcase\s+([A-Z][A-Z0-9_]+)\s*:", t))
         acts |= set(re.findall(r'"([A-Z][A-Z0-9_]{3,})"', t))
     return conds, acts
+
+
+def music_cases() -> set[str]:
+    """The music library runs on the client (engine/src/GameClient/MusicScripts.cpp: `case C_<condition>:` / `case A_<action>:`)."""
+    t = (ROOT / "engine" / "src" / "GameClient" / "MusicScripts.cpp").read_text(encoding="utf-8", errors="replace")
+    return set(re.findall(r"\bcase\s+[CA]_([A-Z][A-Z0-9_]+)\s*:", t))
 
 
 def scripts_of(body: bytes, reg) -> list[dict]:
@@ -150,11 +196,13 @@ def main() -> int:
     reg = sc.load_registry()
     kinds = ini_names(m)
     pconds, pacts = port_cases()
+    music = music_cases()
     # the ordinals the ScriptEngine runs itself (script_census.ENGINE_OWN: never reach the conditions / actions switch)
     own = {reg[k][i][0] for k, ks in (("condition", "condition"), ("action", "action")) for i in sc.ENGINE_OWN[ks] if i in reg[k]}
     files = [n for n in m.files if (n.startswith("libraries\\") and n.endswith(".map")) or n.endswith(".scb")]
     rows, grants = [], []
     unported = collections.Counter()
+    lib_total = lib_open = 0  # the progress share (owner 2026-11-19): scripts of the sides' libraries, and those with a type the port lacks
     unported_where = collections.defaultdict(set)
     for path in sorted(files):
         blob = m.read(path)
@@ -162,14 +210,18 @@ def main() -> int:
             continue
         body, _ = census.decode(blob)
         src = "mod" if str(m.files[path][0]).startswith(str(a.overlay)) else "rotwk"
+        is_music = path.startswith("libraries\\music_")
         for s in scripts_of(body, reg):
             missing = []
             for it in s["cond"]:
-                if it != "OR" and it["name"] not in pconds and it["name"] not in own:
+                if it != "OR" and it["name"] not in own and it["name"] not in (music if is_music else pconds):
                     missing.append(it["name"])
             for it in s["act"] + s["else"]:
-                if it["name"] not in pacts and it["name"] not in own:
+                if it["name"] not in own and it["name"] not in (music if is_music else pacts):
                     missing.append(it["name"])
+            if path.startswith("libraries\\"):
+                lib_total += 1
+                lib_open += 1 if missing else 0
             for n in missing:
                 unported[n] += 1
                 unported_where[n].add(path)
@@ -197,6 +249,19 @@ def main() -> int:
         f.write("kind\tname\taction\tfile\tscript\tactive\ttrigger (INI names its conditions read)\tport runs the action\n")
         for g in sorted(set(grants), key=lambda g: (g[0], g[1].lower(), g[3], g[4])):
             f.write("\t".join(clean(v) for v in g) + "\n")
+    # MATRIX_TODO 13: the INI half of "who gives it"; with SCRIPT_GRANTS.tsv, a name in neither is given by nothing in the game
+    ini = sorted(set(ini_grants(m, kinds)), key=lambda g: (g[0], g[1].lower(), g[3], g[2]))
+    with open(a.out / "GRANTS_INI.tsv", "w", encoding="utf-8", newline="\n") as f:
+        f.write("# What the mod's INI gives (tools/mod/script_map.py): the field (a button's Upgrade, an ExperienceLevel's Upgrades, GrantUpgradeCreate's\n")
+        f.write("# UpgradeToGrant, ...), its block and module. With SCRIPT_GRANTS.tsv: an upgrade / science in neither is given by nothing in the game.\n")
+        f.write("kind\tname\tfield\tblock\tmodule\tfile\n")
+        for g in ini:
+            f.write("\t".join(clean(v) for v in g) + "\n")
+    given = {g[1] for g in ini} | {g[1] for g in grants}
+    never = sorted(n for n, k in kinds.items() if k in ("upgrade", "science") and n not in given)
+    with open(a.out / "GRANTS_INI.tsv", "a", encoding="utf-8", newline="\n") as f:
+        for n in never:  # tools/matrix_run.py reads these rows: a matrix row waiting for one of them is MOD-DATA
+            f.write("\t".join((kinds[n], n, "(given by nothing)", "-", "-", "-")) + "\n")
     lines = ["# Ennorath script map", "",
              "Generated by `tools/mod/script_map.py` (re-run with the nightly maps). Part of the mod's mechanics is not in INI modules but in the",
              "script libraries the game runs for every side (`Libraries\\<name>\\<name>.map`, RefPack-compressed: a text search of the archives does",
@@ -208,6 +273,13 @@ def main() -> int:
              "  case for. It transcribes the mod's scripts, so it is not in the repository: `script-map/SCRIPT_MAP.tsv` of the field audit",
              "  (Drive `field-audit-auto`, `ennorath-audit.zip` of the arena archive).", "",
              "Files: %d, scripts: %d, grants: %d." % (len({r[0] for r in rows}), len(rows), len(set(grants))), "",
+             # read by tools/mod/progress_snapshot.py (columns scripts_total / scripts_open): keep the wording
+             "Library scripts: %d; with a condition or action the port has no case for: %d." % (lib_total, lib_open),
+             "(A script whose every type has a case is counted as executed: the case may still differ from RotWK, as a matrix PASS is checked",
+             "behaviour and this is not.)", "",
+             "`GRANTS_INI.tsv` is the INI half of «who gives it» (%d rows). Upgrades / sciences the mod defines that neither the INI nor a script"
+             " gives: %d (a module or button waiting for one of them never runs in the original either; the matrix calls such a row MOD-DATA)."
+             % (len(ini), len(never)), "",
              "## Condition / action types the mod's scripts use that the port does not execute", "",
              "| type | uses | files |", "|---|---|---|"]
     for n, c in unported.most_common():

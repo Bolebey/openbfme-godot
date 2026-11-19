@@ -13,23 +13,24 @@ not find them). Example: `Multiplayer_Human` / `ImladrisTechManve` grants `SCIEN
 
 Files: 10, scripts: 2483, grants: 1613.
 
+Library scripts: 2468; with a condition or action the port has no case for: 97.
+(A script whose every type has a case is counted as executed: the case may still differ from RotWK, as a matrix PASS is checked
+behaviour and this is not.)
+
+`GRANTS_INI.tsv` is the INI half of «who gives it» (4891 rows). Upgrades / sciences the mod defines that neither the INI nor a script gives: 82 (a module or button waiting for one of them never runs in the original either; the matrix calls such a row MOD-DATA).
+
 ## Condition / action types the mod's scripts use that the port does not execute
 
 | type | uses | files |
 |---|---|---|
 | `CREATE_NAMED_ON_TEAM_AT_OBJECTTYPE` | 56 | libraries\ai_men of the west\ai_men of the west.map |
 | `TEAM_ENTER_NAMED` | 56 | libraries\ai_men of the west\ai_men of the west.map |
-| `MUSIC_SCRIPT_PLAY_TRACK_FINITE_TIMES_AND_NOTIFY` | 21 | libraries\music_musicscripts_single\music_musicscripts_single.map |
 | `PLAYER_COMPARE_RANK` | 16 | libraries\multiplayer_human\multiplayer_human.map |
 | `PLAYER_ADD_RANKLEVEL` | 7 | libraries\multiplayer_human\multiplayer_human.map |
 | `PLAYER_ENABLE_FACTORIES` | 6 | libraries\ai_men of the west\ai_men of the west.map |
 | `PLAYER_SELL_EVERYTHING` | 5 | libraries\ai_men of the west\ai_men of the west.map, libraries\multiplayer_human\multiplayer_human.map |
-| `MUSIC_SCRIPT_PUSH_TRACK_FINITE_TIMES_AND_NOTIFY` | 4 | libraries\music_musicscripts_single\music_musicscripts_single.map |
 | `IS_NUM_OF_UNITS_BELONGING_TO_PLAYER_NEAR_EVA_EVENT_LAST_PLAYED_LOCATION_COMPARISON_INT` | 4 | libraries\music_musicscripts_single\music_musicscripts_single.map |
-| `PLAYER_HAS_NUMBER_UNITS_DISTANCE_FROM_OBJECT` | 3 | libraries\music_musicscripts_single\music_musicscripts_single.map |
-| `MUSIC_SCRIPT_POP_MUSIC` | 3 | libraries\music_musicscripts_single\music_musicscripts_single.map |
 | `SKIRMISH_SPECIAL_POWER_READY` | 2 | libraries\ai_men of the west\ai_men of the west.map, libraries\multiplayer_human\multiplayer_human.map |
-| `HAS_EVA_EVENT_PLAYED_IN_LAST_N_SECONDS` | 2 | libraries\music_musicscripts_single\music_musicscripts_single.map |
 | `RESIZE_VIEW_GUARDBAND` | 2 | maps\camera_demo\1shotcinematicstripts.scb, maps\camera_demo\defaultcinematicscripts.scb |
 | `OPTIONS_SET_PARTICLE_CAP_MODE` | 2 | maps\camera_demo\1shotcinematicstripts.scb, maps\camera_demo\defaultcinematicscripts.scb |
 | `OPTIONS_SET_DRAWICON_UI_MODE` | 2 | maps\camera_demo\1shotcinematicstripts.scb, maps\camera_demo\defaultcinematicscripts.scb |
@@ -41,5 +42,3 @@ Files: 10, scripts: 2483, grants: 1613.
 | `PLAYER_LOST_OBJECT_TYPE` | 1 | libraries\multiplayer_human\multiplayer_human.map |
 | `PLAYER_SET_RANKLEVEL` | 1 | libraries\multiplayer_human\multiplayer_human.map |
 | `DEBUG_MESSAGE_BOX` | 1 | libraries\multiplayer_human\multiplayer_human.map |
-| `MUSIC_SCRIPT_SET_TRACK` | 1 | libraries\music_musicscripts_single\music_musicscripts_single.map |
-| `FIND_HOME_BASE_OF_PLAYER` | 1 | libraries\music_musicscripts_single\music_musicscripts_single.map |

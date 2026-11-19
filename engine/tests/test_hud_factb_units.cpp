@@ -2320,6 +2320,8 @@ void unitsSweep(const std::string &faction, Results &res, bool sweep)
 				fixtureObjects.push_back(t->getID());
 				const ObjectID tid = t->getID();
 				bool on = false;
+				// MATRIX_TODO 12: whether the scene's target (or a member it contains: a horde's soldiers) is one the aura's filter takes at all
+				bool eligible = !d->m_objectFilter;
 				for (unsigned f = 0; f < d->m_refreshDelay + 10 && !on; ++f)
 				{
 					g.step(1);
@@ -2333,6 +2335,7 @@ void unitsSweep(const std::string &faction, Results &res, bool sweep)
 					{
 						const AttributeModifierPool *pool = o ? static_cast<const AttributeModifierPool *>(o->findModule("AttributeModifierPoolUpdate")) : nullptr;
 						on = on || (pool && pool->hasList(d->m_bonusName));
+						eligible = eligible || (o && ObjectFilterMatch::allows(g.logic(), *d->m_objectFilter, *o, g.rig.local));
 					}
 					// AllowSelf: the holder is one of the aura's targets (2026-11-18: Smaug's Drachenschuppen, Range 1, reads NO-AURA on a copy beside it)
 					if (d->m_allowSelf && !on)
@@ -2347,6 +2350,12 @@ void unitsSweep(const std::string &faction, Results &res, bool sweep)
 				if (on)
 				{
 					res.pass(item, "AURA: " + what);
+				}
+				else if (!eligible)
+				{
+					// the scene could not make a target the filter takes (a non-selectable crew, a horde soldier the filter wants apart from its horde,
+					// a structure add-on): the aura is not judged here, it is no port finding
+					res.fail(item, "DISABLED: needs a target the scene does not make: " + what + " (neither the target nor a member it contains passes the aura's ObjectFilter)");
 				}
 				else
 				{
@@ -2375,8 +2384,12 @@ TEST_CASE("factb units: every Isengard unit, horde and hero ability and upgrade 
 	Results r;
 	unitsOf("FactionIsengard", r);
 	r.print("units FactionIsengard");
-	r.check({ { "* Command_ToggleStance", "S-289" }, { "IsengardPorter Command_PorterExtinguishFire", "S-1997" },
-		{ "IsengardBallista Command_BombardEvil", "S-1990" }, { "IsengardSaruman Command_SarumanThunderBolt", "S-180 (the bolt's damage lands; its WeaponOCLNugget makes nothing)" } });
+	// the stance radial is pressed now (MATRIX_TODO 3): only the ram, which has no StancesBehavior, keeps a greyed stance button
+	r.check({ { "IsengardBatteringRam Command_ToggleStance", "S-289" }, { "IsengardPorter Command_PorterExtinguishFire", "S-1997" },
+		{ "IsengardBallista Command_BombardEvil", "S-1990" }, { "IsengardSaruman Command_SarumanThunderBolt", "S-180 (the bolt's damage lands; its WeaponOCLNugget makes nothing)" },
+		// ORDER (MATRIX_TODO 11 / 19, 2026-11-19): the blast hits nobody only after the whole Isengard sweep; alone, after either half of the
+		// objects before it, or after the first half plus any one of the second, it passes: a state the run accumulates, no single object's leak
+		{ "IsengardSaruman Command_SpecialAbilityIsengardWizardBlast", "ORDER: fails only after the whole sweep|SarumanWizardBlast" } });
 }
 
 TEST_CASE("factb units: every Mordor unit, horde and hero ability and upgrade button")
@@ -2389,7 +2402,7 @@ TEST_CASE("factb units: every Mordor unit, horde and hero ability and upgrade bu
 	unitsOf("FactionMordor", r);
 	r.print("units FactionMordor");
 	// lane FLY-1: the fell beasts' dismounts land and fire (GiantBirdAIUpdate, MOVING_TO_DISMOUNT): S-1994's pins went
-	r.check({ { "* Command_ToggleStance", "S-289" }, { "MordorPorter Command_PorterExtinguishFire", "S-1997" } });
+	r.check({ { "MordorBatteringRam Command_ToggleStance", "S-289" }, { "MordorPorter Command_PorterExtinguishFire", "S-1997" } });
 }
 
 // The button sweep, its first slice (docs/ennorath/BUTTON_SWEEP.md): the same sweep on a mod's data, one faction per process. A report: it prints what each
@@ -4442,11 +4455,9 @@ TEST_CASE("factc units: every Goblin and Angmar unit, horde and hero ability and
 		return;
 	}
 	factcCase("units", "FactionWild", unitsOf,
-			  { { "* Command_ToggleStance", "S-289" },
-				{ "WildPorter Command_PorterExtinguishFire", "S-1997|PorterFireExtinguisher: no result" } });
+			  { { "WildPorter Command_PorterExtinguishFire", "S-1997|PorterFireExtinguisher: no result" } }); // every stance button works (MATRIX_TODO 3)
 	factcCase("units", "FactionAngmar", unitsOf,
-			  { { "* Command_ToggleStance", "S-289" },
-				{ "AngmarDarkRangerHorde Command_AngmarLongShotAbility", "S-1997|HordeAttackNugget" }, { "AngmarKarsh Command_WhisperofDeath", "S-2006|AngmarWhisperofDeath: no result" },
+			  { { "AngmarDarkRangerHorde Command_AngmarLongShotAbility", "S-1997|HordeAttackNugget" }, { "AngmarKarsh Command_WhisperofDeath", "S-2006|AngmarWhisperofDeath: no result" },
 				{ "AngmarPorter Command_PorterExtinguishFire", "S-1997|PorterFireExtinguisher: no result" } });
 }
 

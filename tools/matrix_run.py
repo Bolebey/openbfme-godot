@@ -343,6 +343,29 @@ def script_grants() -> dict[str, list[str]]:
     return out
 
 
+GRANTS_INI = REPO / "docs" / "ennorath" / "GRANTS_INI.tsv"
+
+
+def never_given() -> set[str]:
+    """Upgrades / sciences nothing in the game gives (GRANTS_INI.tsv rows "(given by nothing)": neither an INI field nor a script, MATRIX_TODO 13)."""
+    if not GRANTS_INI.exists():
+        return set()
+    out = set()
+    for line in GRANTS_INI.read_text(encoding="utf-8", errors="replace").splitlines():
+        f = line.split("\t")
+        if len(f) >= 3 and f[2] == "(given by nothing)":
+            out.add(f[1])
+    return out
+
+
+def aura_dead(detail: str, never: set[str]) -> str:
+    """A NO-AURA row whose aura the sweep switched on with upgrades nothing in the game gives: the aura never runs in the original either."""
+    m = re.search(r", after ([A-Za-z0-9_, ]+?) never arrived", detail)
+    ups = [u.strip() for u in m.group(1).split(",")] if m else []
+    dead = [u for u in ups if u in never]
+    return ", ".join(dead) if ups and len(dead) == len(ups) else ""
+
+
 def script_note(detail: str, grants: dict[str, list[str]]) -> str:
     hits = [f"{n} <- {', '.join(v[:2])}" for n, v in grants.items() if re.search(rf"\b{re.escape(n)}\b", detail)]
     return f" [script: {'; '.join(hits[:3])}]" if hits else ""
@@ -350,6 +373,7 @@ def script_note(detail: str, grants: dict[str, list[str]]) -> str:
 
 def cmd_collect(a) -> None:
     grants = script_grants()
+    never = never_given()
     order = {}
     if (a.out / "recheck" / "order.tsv").exists():
         for line in (a.out / "recheck" / "order.tsv").read_text(encoding="utf-8").splitlines():
@@ -372,6 +396,9 @@ def cmd_collect(a) -> None:
                 why = BY_DESIGN.get((obj, button))
                 if cat != "PASS" and why:  # the owner's word on the mod's own design (docs/ennorath/matrix_bydesign.tsv)
                     cat, detail = "BY-DESIGN", f"BY-DESIGN: {why} (was: {detail})"
+                dead = aura_dead(detail, never) if cat == "NO-AURA" else ""
+                if dead:  # MATRIX_TODO 12a: e.g. Eowyn's disguise aura, switched on by Upgrade_EowynConditionDisguised, which nothing gives
+                    cat, detail = "MOD-DATA", f"MOD-DATA: the aura waits for {dead}, which nothing in the mod's INI or scripts gives (GRANTS_INI.tsv) (was: {detail})"
                 if cat != "PASS":
                     detail += script_note(detail, grants)
                 rows.append((fac, obj, button, cat, detail))
