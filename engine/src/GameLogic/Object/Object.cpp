@@ -2029,11 +2029,11 @@ void Object::giveUpgrade(const UpgradeTemplate *upgrade)
 	}
 	giveUpgradeSelf(upgrade);
 	ContainModuleInterface *contain = getContain();
-	if (!contain || !contain->getHordeContainInterface())
+	if (!contain)
 	{
-		return; // INFERENCE: only HordeContain's slot 0x174 (RW 0x87566B) was read; the other contain classes' slot is not ported (S-483)
+		return;
 	}
-	// RW 0x87566B: the templates of the set bits in bit order, then every member in list order (the second list at HordeContain + 0x150 is S-486)
+	// RW 0x006938B3 (contain slot 0x174): HordeContain RW 0x87566B and HordeTransportContain / HordeSiegeEngineContain RW 0x0087A988
 	std::vector<const UpgradeTemplate *> granted;
 	for (unsigned bit = 0; bit < UpgradeMaskType::BITS; ++bit)
 	{
@@ -2044,6 +2044,11 @@ void Object::giveUpgrade(const UpgradeTemplate *upgrade)
 				granted.push_back(t);
 			}
 		}
+	}
+	if (!contain->getHordeContainInterface())
+	{
+		contain->onContainerUpgrade(granted);
+		return;
 	}
 	if (const ContainModuleInterface::ContainedItemsList *items = contain->getContainedItemsList())
 	{
