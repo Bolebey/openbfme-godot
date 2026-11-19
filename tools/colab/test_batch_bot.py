@@ -131,6 +131,19 @@ def test_a_pr_leaves_the_batch_with_a_mark_unless_its_return_comment_says_why():
     assert bb.taken_comment("2026-11-18e", take[0], "2").startswith(f"<!-- batch 2026-11-18e {take[0]['headRefOid']} -->")
 
 
+def test_a_pr_that_conflicts_with_main_itself_goes_back_to_its_agent():
+    # 2026-11-19a .. d: four PRs checked on an old main conflicted with main, left every batch and were taken by the next one
+    take = [pr(number=n) for n in (579, 615)]
+    rows = {"verdict": "пустой: все PR исключены",
+            "conflicted": [(take[0], bb.BASE_CONFLICT + "conflicts in engine/src/a.cpp with the PRs merged before it"),
+                           (take[1], "conflicts in docs/b.md with the PRs merged before it")]}
+    left = dict((p["number"], why) for p, why in bb.left_batch(take, rows, {}))
+    body = bb.left_comment("2026-11-19e", take[0], left[579])
+    assert "engine/src/a.cpp" in body and bb.RETURNED.search(body) and not body.startswith("<!-- prcheck")
+    assert not bb.RETURNED.search(bb.left_comment("2026-11-19e", take[1], left[615]))   # a conflict with an earlier PR waits
+    assert bb.EMPTY_RC not in (0, 1)   # an empty batch is neither green nor red: the loop does not hold the next one for it
+
+
 def test_main_results_are_shared_between_batches_on_one_main(tmp_path):
     f = tmp_path / "main-1910e2523abc.json"
     assert bb.load_main_results(f) == {}
