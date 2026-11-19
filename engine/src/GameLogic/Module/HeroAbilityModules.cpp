@@ -907,7 +907,7 @@ void AutoAbilityBehavior::doCommand(const CommandButton &b, Object *target, cons
 		}
 		return;
 	}
-	// RW 0x0085DDEC / 0x0085DDFB / 0x0085DE06 / 0x0085DAC2: all other command types (FIRE_WEAPON, upgrades, etc.)
+	// RW 0x0085D9D1 (RW 0x0085DBF8 tail): all other command types (FIRE_WEAPON, upgrades, etc.)
 	// dispatch through Object::doCommandButton* (RW 0x00696FD2 / 0x00697890 / 0x006979D9) with CMD_FROM_AI.
 	const unsigned long long pressedBefore = ObjectDoCommandButton::stats().pressed;
 	if (pos)
