@@ -188,10 +188,10 @@ private:
 //     one, hears StartingBoxes and the boxes left (RW 0x671948, W3DSupplyDraw). The port records the same call as the SUPPLY_STATUS client event when the
 //     object is created and when it is loaded (ClientEventRecorder::recordSupplyStatus), and after every box taken (action).
 //   * dock interface slot 17 setDockCrippled RW 0x8AB6E3: see setDockCrippled below. Its only retail caller is SupplyWarehouseCripplingBehavior
-//     (RW 0x886E38 with true, RW 0x886E4A with false, its vtable RW 0xC603B0), which no RotWK or Ennorath object uses and the port does not have (S-7533).
+//     (RW 0x886E38 with true, RW 0x886E4A with false, its vtable RW 0xC603A8), which no RotWK or Ennorath object uses and the port does not have (S-7533).
 //   * RW 0x8AB64E setCashValue (the boxes = ceil(value / ValuePerSupplyBox), then the drawable as above) is called only by the script action
 //     WAREHOUSE_SET_VALUE (RW 0x7C191A, found by the object's script name), which the port's script engine does not execute and no Ennorath library script
-//     uses (S-7533).
+//     uses (S-7534).
 class SupplyWarehouseDockUpdateModuleData : public DockUpdateModuleData
 {
 public:
