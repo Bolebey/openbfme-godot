@@ -559,6 +559,7 @@ include(cmake/Port275.cmake)    # PORT-275: the command set swap re-evaluates th
 include(cmake/Port280.cmake)    # PORT-280: ProductionSpeedBonus consumer on Player, calcTimeToBuild and ProductionUpdate (fork issue 647; OPENBFME_PORT280_TESTS)
 include(cmake/Threatlevel1.cmake) # THREATLEVEL-1: the map scripts' threat conditions and counters (appends to OPENBFME_SIM_SOURCES; OPENBFME_THREATLEVEL1_TESTS)
 include(cmake/Buildclear1.cmake) # BUILDCLEAR-1: the placement's clear-of-objects test RW 0x796D37 (OPENBFME_BUILDCLEAR1_TESTS)
+include(cmake/Port309.cmake)    # PORT-309: ExperienceLevel level-up tint verdict re-check (issue #701, S-7196 / PORT-44; OPENBFME_PORT309_TESTS)
 add_library(openbfme_core STATIC
     ${OPENBFME_PLAY2_SOURCES}
     ${OPENBFME_APT_SOURCES}
@@ -1346,6 +1347,7 @@ add_executable(openbfme_tests
     ${OPENBFME_PORT280_TESTS}
     ${OPENBFME_THREATLEVEL1_TESTS}
     ${OPENBFME_BUILDCLEAR1_TESTS}
+    ${OPENBFME_PORT309_TESTS}
     tests/test_main.cpp
     tests/test_big_archive.cpp
     tests/test_parser_fuzz_regressions.cpp
