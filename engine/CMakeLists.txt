@@ -230,6 +230,7 @@ include(cmake/Port169.cmake)    # PORT-169: CommandButton toggle index (+0xFC) f
 include(cmake/Port188.cmake)    # PORT-188: SpecialAbilityUpdate::initiateIntentToDoSpecialPower checks isPowerCurrentlyInUse() before aborting sibling (issue #454; OPENBFME_PORT188_TESTS)
 include(cmake/Port189.cmake)    # PORT-189: Palantir button click drops help provider so hovered toggle buttons refresh tooltip (issue #455; OPENBFME_PORT189_TESTS)
 include(cmake/Port213.cmake)    # PORT-213: Multi-select Palantir context picks highest-rank qualifying HERO (issue #503; OPENBFME_PORT213_TESTS)
+include(cmake/Port272.cmake)    # PORT-272: update the text of the visible command help on a toggle
 include(cmake/Port221.cmake)    # PORT-221: multi-selected horde abilities, weapon toggles, and mixed-selection HUD/dispatch (issue #531, P-140; OPENBFME_PORT221_TESTS)
 include(cmake/Port270.cmake)    # PORT-270: several units selected, a bought upgrade they all have greys at once (issue #637, P-152; OPENBFME_PORT270_TESTS)
 include(cmake/Port159.cmake)    # PORT-159: SHADOW_VOLUME_NON_SELF_1/2/3 cast a shadow (the mumak, the dwarven battle wagon; issue #377; OPENBFME_PORT159_TESTS)
@@ -1170,6 +1171,7 @@ add_executable(openbfme_tests
     ${OPENBFME_PORT188_TESTS}
     ${OPENBFME_PORT189_TESTS}
     ${OPENBFME_PORT213_TESTS}
+    ${OPENBFME_PORT272_TESTS}
     ${OPENBFME_PORT221_TESTS}
     ${OPENBFME_PORT270_TESTS}
     ${OPENBFME_RENDER_TESTS}
