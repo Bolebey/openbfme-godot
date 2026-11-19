@@ -130,3 +130,18 @@ this report is a stop, not a review submission. Existing S-248 already tracks
 the unported shared runtime; no unrelated stop row or hash pin was changed.
 
 After establishing the scope stop, the background full-target build was deliberately stopped (204/1717); no test executable or doctest result was produced.
+
+## Dependency hand-off: Local 60 became Port 290
+
+The owner's comment on fork issue 457
+(https://github.com/Gleb302596555/openbfme-godot/issues/457#issuecomment-6987908004)
+closes the local task because its work moved to Arena as Port 290, fork issue
+678. This is a task hand-off, not evidence of the runtime landing in main.
+
+On this resumption, `origin/main` at c239a326 still has the ObjectID-only
+`LargeGroupAudioEvent` and the S-248 INFERENCE grid in
+`LiveGameAudio::largeGroupUpdate`; fork issue 678 is open. Port 161 therefore
+continues to wait for Port 290's runtime to land. The existing owner restriction
+remains: do not implement the shared runtime on this branch. After that landing,
+connect the burning-cell register/unregister/delayed-update calls and run the
+PORT-161 tests. No engine behaviour or test expectation changed in this update.
