@@ -761,7 +761,7 @@ def stack_base(last: str | None, pending: bool, waited_s: float) -> tuple[str | 
 
 def helper_due(st: dict, now: float) -> bool:
     """No green PR and no batch for HELP_AFTER_S: time to check a PR instead (the round marks ready_at whenever it sees a green PR)."""
-    return now - max(st.get("finished", 0), st.get("ready_at", 0), st.get("loop_started", 0)) >= HELP_AFTER_S
+    return now - max(st.get("finished", 0), st.get("ready_at", 0)) >= HELP_AFTER_S   # shared state: a restart does not reset the wait
 
 
 def install(name: str) -> Path:
@@ -854,7 +854,6 @@ def self_update() -> None:
 
 
 def cmd_loop(a) -> int:
-    started = time.time()
     while True:
         st = load_loop_state()
         try:
@@ -866,7 +865,7 @@ def cmd_loop(a) -> int:
         say(line)
         if a.once:
             return 0
-        if not a.no_helper and not run_going() and helper_due(dict(st, loop_started=started), time.time()):
+        if not a.no_helper and not run_going() and helper_due(st, time.time()):
             say(f"{HELP_AFTER_S // 60} мин без зелёных PR и партий: один цикл проверщика PR (pr_checker.py --once)")
             rc = help_check()
             say(f"цикл проверщика закончен (код {rc}); дальше партии")
