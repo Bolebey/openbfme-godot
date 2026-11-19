@@ -48,6 +48,7 @@ public:
 	static void buildFieldParse(MultiIniFieldParse &p);
 };
 
+// Local 87: RW 0x008C82A7 (getModuleName), RW 0x008C82FA (getModuleNameKey), RW 0x008C82AD / RW 0x008C83BA (dtors), RW 0x008C6583 (base dtor thunk), RW 0x004B612F (empty-string helper).
 class WeaponChangeSpecialPowerModule : public SpecialPowerModule
 {
 public:

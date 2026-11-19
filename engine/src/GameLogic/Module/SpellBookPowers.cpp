@@ -716,6 +716,7 @@ void ProductionSpeedBonus::xfer(Xfer &x)
 	});
 }
 
+// RW 0x008C891C
 void ScavengerSpecialPower::xfer(Xfer &x)
 {
 	SnapshotXfer::version(x, 1, 1);
