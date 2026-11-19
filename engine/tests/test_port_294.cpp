@@ -105,6 +105,20 @@ int countOf(GameLogic &logic, const std::string &templateName)
 	return n;
 }
 
+// the same, the ones the logic has not killed: a killed object stays in the list until the frame's destroy list runs
+int countAliveOf(GameLogic &logic, const std::string &templateName)
+{
+	int n = 0;
+	for (const Object *o = logic.getFirstObject(); o; o = o->getNextObject())
+	{
+		if (o->getTemplate()->getName() == templateName && !o->isEffectivelyDead())
+		{
+			++n;
+		}
+	}
+	return n;
+}
+
 // the object the module made: the owner's SlaveWatcherBehavior holds its id (RW 0x887AF5 from RW 0x8B86D6)
 Object *spawnedBy(econtest::Fx &f, Object &owner)
 {
@@ -199,7 +213,7 @@ TEST_CASE("PORT-294: the trigger leaves — the next upgrade event takes the upg
 	REQUIRE(again != nullptr);
 	CHECK(again->getID() != spikesId);
 	CHECK_FALSE(again->isEffectivelyDead());
-	CHECK(countOf(*f.logic, "Port294Spikes") == 2); // the killed one is still in the list (the logic deletes it later)
+	CHECK(countAliveOf(*f.logic, "Port294Spikes") == 1); // the killed one is gone, the new one is the only live one
 }
 
 TEST_CASE("PORT-294: the data's Permanent does not hold the removal back — slot 7 answers false (RW 0x9188EB, RW 0x8D2688)")
