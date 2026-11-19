@@ -14,7 +14,7 @@
 // and Common/RTS/PlayerAIDelegates.cpp): names and priority, each step confirmed in RW above.
 
 #include "doctest.h"
-#include "EconTestUtil.h"
+#include "CombatTestUtil.h"
 #include "ProdTestUtil.h"
 
 #include <memory>
@@ -50,6 +50,22 @@ const char kObjects[] =
 	"    DeathType = NORMAL\n"
 	"  End\n"
 	"End\n"
+	// a ground-attack weapon as the mod's bombard bow: RW 0x6C8A4E picks a NoVictimNeeded weapon for a point order (test_port_208.cpp)
+	"Weapon P198GroundBow\n"
+	"  AttackRange = 300\n"
+	"  MinimumAttackRange = 10\n"
+	"  DelayBetweenShots = 0\n"
+	"  ClipSize = 1\n"
+	"  AutoReloadsClip = Yes\n"
+	"  AcceptableAimDelta = 45\n"
+	"  NoVictimNeeded = Yes\n"
+	"  BombardType = Yes\n"
+	"  ScatterRadius = 10\n"
+	"  ProjectileNugget\n"
+	"    ProjectileTemplateName = Arrow\n"
+	"    WarheadTemplateName = BowWarhead\n"
+	"  End\n"
+	"End\n"
 	"Object P198Guard\n"
 	"  KindOf = INFANTRY SELECTABLE CAN_ATTACK\n"
 	"  VisionRange = 300\n"
@@ -58,7 +74,7 @@ const char kObjects[] =
 	"  GeometryMinorRadius = 8\n"
 	"  GeometryHeight = 20\n"
 	"  Body = ActiveBody ModuleTag_Body\n    MaxHealth = 100\n  End\n"
-	"  WeaponSet\n    Conditions = None\n    Weapon = PRIMARY P198Sword\n  End\n"
+	"  WeaponSet\n    Conditions = None\n    Weapon = PRIMARY P198Sword\n    Weapon = SECONDARY P198GroundBow\n  End\n"
 	"  Behavior = AIUpdateInterface ModuleTag_AI\n    AutoAcquireEnemiesWhenIdle = No\n  End\n"
 	"  LocomotorSet\n    Locomotor = WalkerLoco\n    Condition = SET_NORMAL\n    Speed = 40\n  End\n"
 	"End\n"
@@ -96,16 +112,45 @@ const char kObjects[] =
 	"  End\n"
 	"End\n";
 
-struct Port198World : econtest::Fx
+// The AI-notification world needs no weapon: only the template name and the factory id are read by RW 0x8F0739 / 0x8F073F.
+const char kAiObjects[] =
+	"Object P198Guard\n"
+	"  KindOf = INFANTRY SELECTABLE\n"
+	"  Geometry = CYLINDER\n"
+	"  GeometryMajorRadius = 8\n"
+	"  GeometryMinorRadius = 8\n"
+	"  GeometryHeight = 20\n"
+	"  Body = ActiveBody ModuleTag_Body\n    MaxHealth = 100\n  End\n"
+	"End\n"
+	"Object P198Lair\n"
+	"  KindOf = STRUCTURE IMMOBILE SELECTABLE\n"
+	"  Geometry = CYLINDER\n"
+	"  GeometryMajorRadius = 25\n"
+	"  GeometryMinorRadius = 25\n"
+	"  GeometryHeight = 40\n"
+	"  Body = ActiveBody ModuleTag_Body\n    MaxHealth = 1000\n  End\n"
+	"  Behavior = SpawnBehavior ModuleTag_Spawn\n"
+	"    SpawnNumber = 1\n"
+	"    SpawnReplaceDelay = 100000\n"
+	"    SpawnTemplateName = P198Guard\n"
+	"  End\n"
+	"  Behavior = QueueProductionExitUpdate ModuleTag_Exit\n"
+	"    UnitCreatePoint = X:20.0 Y:0.0 Z:0.0\n"
+	"    NaturalRallyPoint = X:40.0 Y:0.0 Z:0.0\n"
+	"  End\n"
+	"End\n";
+
+struct Port198World : combattest::CombatWorld
 {
 	explicit Port198World()
-		: econtest::Fx(kObjects)
+		: combattest::CombatWorld(kObjects)
 	{
+		combat().setAutoAcquireEnabled(false); // a guard waits for the order instead of choosing its own target (RW 0x87C9B8 path)
 	}
 
 	Object *at(const char *name, const char *owner, float x, float y)
 	{
-		Object *o = makeAt(name, owner, x, y);
+		Object *o = unit(name, owner[0] == 'A' ? 'A' : 'B', x, y);
 		REQUIRE(o != nullptr);
 		return o;
 	}
@@ -128,6 +173,15 @@ struct Port198World : econtest::Fx
 			}
 		}
 		return out;
+	}
+
+	void waitSpawns(SpawnBehavior &m, size_t count)
+	{
+		for (int i = 0; i < 100 && m.spawns().size() < count; ++i)
+		{
+			logic->runLogicFrame();
+		}
+		REQUIRE(m.spawns().size() == count);
 	}
 
 	// a new spawn walks out of the exit first (RW 0x87C9B8); an order given while it is in that state can be refused by its AI,
@@ -161,12 +215,15 @@ struct Port198AiWorld : prodtest::ProdWorld
 
 	explicit Port198AiWorld()
 	{
-		load(kObjects);
+		load(kAiObjects);
 		store.registerBlocks(env.blocks);
 		INI ini(env);
 		const std::string text = "SkirmishAIData TheSkirmishAIData\nEnd\n";
 		ini.loadMemory("skirmishaidata.ini", std::vector<std::uint8_t>(text.begin(), text.end()), INI_LOAD_OVERWRITE);
 		logic->skirmishAI().setStore(&store);
+		logic->settings().bodyThresholdsLoaded = true; // ActiveBody needs GameData's thresholds (as in EconTestUtil::Fx)
+		logic->settings().unitDamagedThreshold = 0.65f;
+		logic->settings().unitReallyDamagedThreshold = 0.4f;
 		REQUIRE(logic->skirmishAI().newGame(true) == 1);
 		AISkirmishPlayer *ai = logic->skirmishAI().findAI(players.findPlayerWithName("Bob")->getPlayerIndex());
 		REQUIRE(ai != nullptr);
@@ -197,6 +254,15 @@ struct Port198AiWorld : prodtest::ProdWorld
 		REQUIRE(m != nullptr);
 		return m;
 	}
+
+	void waitSpawns(SpawnBehavior &m, size_t count)
+	{
+		for (int i = 0; i < 100 && m.spawns().size() < count; ++i)
+		{
+			logic->runLogicFrame();
+		}
+		REQUIRE(m.spawns().size() == count);
+	}
 };
 } // namespace
 
@@ -208,8 +274,7 @@ TEST_CASE("PORT-198 SpawnBehavior: slot 3 gives every guard the force-attack ord
 	Object *lair = w.at("P198Lair", "Alice", 300.0f, 300.0f);
 	Object *victim = w.at("P198Victim", "Bob", 350.0f, 300.0f);
 	SpawnBehavior *spawner = w.module(*lair);
-	w.frames(2); // the first update queues the frame-0 replacement (RW 0x863455); both guards are then in the world
-	REQUIRE(spawner->spawns().size() == 2);
+	w.waitSpawns(*spawner, 2); // RW 0x863455 queues one replacement frame per spawn; both guards are then in the world
 
 	const std::vector<Object *> guards = w.guards(*spawner);
 	REQUIRE(guards.size() == 2);
@@ -234,8 +299,7 @@ TEST_CASE("PORT-198 SpawnBehavior: slots 5 / 6 ask the guards whether the spawne
 	Object *victim = w.at("P198Victim", "Bob", 350.0f, 300.0f);
 	Object *unattackable = w.at("P198Unattackable", "Bob", 350.0f, 300.0f);
 	SpawnBehavior *spawner = w.module(*lair);
-	w.frames(2);
-	REQUIRE(spawner->spawns().size() == 2);
+	w.waitSpawns(*spawner, 2);
 	const SpawnBehaviorInterface *si = SpawnBehaviorInterface::of(*lair);
 	REQUIRE(si != nullptr);
 
@@ -254,8 +318,7 @@ TEST_CASE("PORT-198 SpawnBehavior: a ground order through AIGroup and an idle or
 	Port198World w;
 	Object *lair = w.at("P198Lair", "Alice", 300.0f, 300.0f);
 	SpawnBehavior *spawner = w.module(*lair);
-	w.frames(2);
-	REQUIRE(spawner->spawns().size() == 2);
+	w.waitSpawns(*spawner, 2);
 	REQUIRE(lair->getAIUpdateInterface() == nullptr); // the lair has no AI of its own, its guards are its weapons
 	const std::vector<Object *> guards = w.guards(*spawner);
 	w.waitIdle(guards);
@@ -291,8 +354,7 @@ TEST_CASE("PORT-198 Player::onUnitCreated: a spawn completes its factory's AI re
 	request->state = 1;                  // in progress (RW 0x8F0751 / RW 0x8F0703)
 	ai->build.inProgress.push_back(request);
 
-	w.frames(2); // SpawnBehavior::createSpawn makes the guard and tells its player (RW 0x862BC5)
 	SpawnBehavior *spawner = w.module(*lair);
-	REQUIRE(spawner->spawns().size() == 1);
+	w.waitSpawns(*spawner, 1); // createSpawn makes the guard and tells its player (RW 0x862BC5)
 	CHECK(request->state == 2); // finished (RW 0x8F0779: the work order's vslot + 0x1C with 2)
 }
