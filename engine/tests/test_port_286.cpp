@@ -10,6 +10,7 @@
 #include "GameLogic/AttributeModifiers.h"
 #include "GameLogic/Combat/ObjectWeapons.h"
 #include "GameLogic/Module/SpecialPowerModules.h"
+#include "GameLogic/Object/AttributeModifierPool.h"
 #include "GameLogic/Object/Contain/HordeContainRuntime.h"
 #include "GameLogic/Object/Object.h"
 
@@ -170,6 +171,30 @@ ChildObject P286ImmediateCaster P286Caster
       AttributeModifier = P286Immediate
       AttributeModifierAffectsSelf = Yes
     End
+  End
+End
+ModifierList P286Lesson
+  Category = SPELL
+  Duration = 3000
+  Upgrade = Upgrade_P286Granted Delay:100
+End
+Weapon P286LessonWarhead
+  AttackRange = 200
+  RadiusDamageAffects = ALLIES
+  AttributeModifierNugget
+    AttributeModifier = P286Lesson
+    Radius = 1
+    SpecialObjectFilter = NONE +P286Learner ALLIES
+  End
+End
+CommandSet P286LearnerSet
+  1 = P286AfterGrant
+End
+ChildObject P286Learner P286Unit
+  CommandSet = P286LearnerSet
+  Behavior = ModelConditionUpgrade GrantTag
+    TriggeredBy = Upgrade_P286Granted
+    AddConditionFlags = USER_2
   End
 End
 )ini";
@@ -463,6 +488,42 @@ TEST_CASE("PORT-286: self cast grants the model-condition upgrade only on the po
 	f.cast(*instant, "P286Cast");
 	CHECK(instant->hasUpgrade(grant));
 	f.gate(*instant, "P286AfterGrant", "USER_2", true, true);
+}
+
+TEST_CASE("PORT-286: an allied warhead grants the upgrade at the idle pool's first wake, not on impact (RW 0x805A8E)")
+{
+	GateWorld f(kDelayedIni);
+	Object *source = f.unit("P286Unit", 'A', 300, 300);
+	Object *target = f.unit("P286Learner", 'A', 380, 300);
+	Object *bystander = f.unit("P286Learner", 'A', 440, 300);
+	f.frames(2);
+	const auto *pool = dynamic_cast<const AttributeModifierPool *>(target->attributeModifierPoolModule());
+	REQUIRE(pool);
+	REQUIRE(pool->entryCount() == 0);
+	const auto *grant = f.upgradeCenter.findUpgrade("Upgrade_P286Granted");
+	const auto *lesson = f.modifiers.find("P286Lesson");
+	const auto *warhead = f.stores.weapons().findWeaponTemplate("P286LessonWarhead");
+	REQUIRE(grant);
+	REQUIRE(lesson);
+	REQUIRE(lesson->m_upgrade);
+	CHECK(lesson->m_upgrade->delayFrames == 1);
+	REQUIRE(warhead);
+
+	// Start at impact, exercising the same AttributeModifierNugget path as the scholar's warhead (RW 0x90EAF9).
+	ObjectWeapons::createAndFireTempWeaponAt(warhead, source, *target);
+	REQUIRE(pool->hasList("P286Lesson"));
+	CHECK_FALSE(target->hasUpgrade(grant));
+	f.frames(10); // the old LOCAL-75 assertion was too early even if the shot had hit immediately
+	CHECK_FALSE(target->hasUpgrade(grant));
+	f.frames(4);
+	CHECK_FALSE(target->hasUpgrade(grant));
+	f.gate(*target, "P286AfterGrant", "USER_2", false, false);
+	f.frames(1); // Delay:100 is due at +1; the previously idle pool first processes it at +15 (Duration = 3000).
+	CHECK(target->hasUpgrade(grant));
+	CHECK_FALSE(pool->hasList("P286Lesson"));
+	f.gate(*target, "P286AfterGrant", "USER_2", true, true);
+	CHECK_FALSE(bystander->hasUpgrade(grant));
+	f.gate(*bystander, "P286AfterGrant", "USER_2", false, false);
 }
 
 TEST_CASE("PORT-286: secondary weapon mode opens the button, a replacement lock removes it (RW 0x6C97F9)")
