@@ -676,6 +676,41 @@ int TransportContain::reserveDoorForExit(const Object &obj)
 	return isSpecificRiderFreeToExit(obj) ? 0 : -1;
 }
 
+// RW 0x0086A3DB (main +0x24) / RW 0x0086B057 (contain +0x60 MI-thunk): TransportContain::onCapture
+void TransportContain::onCapture(Player *oldOwner, Player *newOwner)
+{
+	if (oldOwner == newOwner)
+	{
+		return;
+	}
+	// RW 0x0086A3E9: Object + 0x1C8 bit 0x20 = DISABLED_UNMANNED (type 5)
+	if (getObject()->isDisabledByType(5))
+	{
+		removeAllContained(false);
+		return;
+	}
+	orderAllPassengersToExit(2 /*CMD_FROM_AI*/);
+	if (isPassengerAllowedToFire() && getObject()->getControllingPlayer() != newOwner)
+	{
+		orderAllPassengersToIdle(2 /*CMD_FROM_AI*/);
+	}
+}
+
+void TransportContain::orderAllPassengersToIdle(int source)
+{
+	const std::vector<Object *> riders(m_contained.begin(), m_contained.end());
+	for (Object *r : riders)
+	{
+		if (r)
+		{
+			if (AIUpdateInterface *ai = r->getAIUpdateInterface())
+			{
+				ai->aiIdle((CommandSourceType)source);
+			}
+		}
+	}
+}
+
 void TransportContain::onObjectCreated()
 {
 	if (!m_payloadCreated)
@@ -1109,6 +1144,30 @@ void HordeTransportContain::onRiderPlaced(Object *rider, bool hidden)
 }
 
 // RW 0x87A559 -> RW 0x991027: a horde rider gets horde slot 0x84 (its AI command 0x3E), another rider with an AI aiExit (command 0x1A)
+// RW 0x0087A988 (contain slot 0x174, callback RW 0x0087A572): forward container upgrades to passengers
+void HordeTransportContain::onContainerUpgrade(const std::vector<const UpgradeTemplate *> &granted)
+{
+	if (granted.empty())
+	{
+		return;
+	}
+	const std::vector<Object *> riders(m_contained.begin(), m_contained.end());
+	for (Object *r : riders)
+	{
+		if (!r)
+		{
+			continue;
+		}
+		for (const UpgradeTemplate *t : granted)
+		{
+			if (t && r->affectedByUpgrade(t))
+			{
+				r->giveUpgrade(t);
+			}
+		}
+	}
+}
+
 void HordeTransportContain::orderAllPassengersToExit(int source)
 {
 	const std::vector<Object *> riders(m_contained.begin(), m_contained.end());

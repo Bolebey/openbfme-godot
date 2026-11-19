@@ -744,20 +744,170 @@ void GarrisonContain::loadGarrisonPoints()
 }
 
 // RW slot 0x6C of the main vtable (BFME1 getObjectGarrisonPointIndex): the first point that holds `id`
+// RW 0x0087C52E (GarrisonContain main +0x6C) / RW 0x0087CE61 (HordeGarrisonContain thunk -> 0x0087C52E)
 int GarrisonContain::getObjectGarrisonPointIndex(ObjectID id) const
 {
 	if (id == INVALID_ID)
 	{
 		return -1;
 	}
+	const Object *obj = getObject()->logic().findObjectByID(id);
+	const HordeContainInterface *horde = (obj && obj->getContain()) ? obj->getContain()->getHordeContainInterface() : nullptr;
+	const ContainModuleInterface::ContainedItemsList *members = horde ? obj->getContain()->getContainedItemsList() : nullptr;
 	for (int i = 0; i < MAX_GARRISON_POINTS; ++i)
 	{
-		if (m_points[(size_t)i].object == id)
+		if (m_points[(size_t)i].object == INVALID_ID)
+		{
+			continue;
+		}
+		if (members)
+		{
+			for (const Object *m : *members)
+			{
+				if (m && m->getID() == m_points[(size_t)i].object)
+				{
+					return i;
+				}
+			}
+		}
+		else if (m_points[(size_t)i].object == id)
 		{
 			return i;
 		}
 	}
 	return -1;
+}
+
+// RW 0x0087B392 (contain slot 0x4C): GarrisonContain::getApparentControllingPlayer
+Player *GarrisonContain::getApparentControllingPlayer(const Player *observingPlayer) const
+{
+	Player *owner = getObject()->getControllingPlayer();
+	if (m_hiddenFlag && owner && observingPlayer && owner->getRelationship(observingPlayer->getDefaultTeam()) != ALLIES)
+	{
+		if (Team *orig = originalTeam())
+		{
+			return orig->getControllingPlayer();
+		}
+	}
+	return owner;
+}
+
+// RW 0x0087BA06 (DamageModuleInterface slot 2): evacuate on BODY_REALLYDAMAGED unless GARRISONABLE_UNTIL_DESTROYED
+void GarrisonContain::onBodyDamageStateChange(const DamageInfo *, BodyDamageType, BodyDamageType newState)
+{
+	if (newState != BODY_REALLYDAMAGED)
+	{
+		return;
+	}
+	static const int kUntilDestroyed = CombatNames::kindOf("GARRISONABLE_UNTIL_DESTROYED"); // RW 0x0087BA13: template +0x111 bit 0x80
+	if (getObject()->isKindOf((unsigned)kUntilDestroyed))
+	{
+		return;
+	}
+	if (getContainCount() > 0)
+	{
+		orderAllPassengersToIdle(2 /*CMD_FROM_AI*/);
+		orderAllPassengersToExit(2 /*CMD_FROM_AI*/);
+	}
+}
+
+void GarrisonContain::orderAllPassengersToIdle(int source)
+{
+	const std::vector<Object *> riders(m_contained.begin(), m_contained.end());
+	for (Object *r : riders)
+	{
+		if (!r)
+		{
+			continue;
+		}
+		if (AIUpdateInterface *ai = r->getAIUpdateInterface())
+		{
+			ai->aiIdle((CommandSourceType)source);
+		}
+	}
+}
+
+// RW 0x0087BAEC (contain slot 0x138): GarrisonContain::attemptBestFirePointPosition(source, weapon, victim)
+bool GarrisonContain::attemptBestFirePointPosition(Object *source, Weapon *weapon, Object *victim)
+{
+	if (!source || !weapon || !victim)
+	{
+		return false;
+	}
+	const int idx = getObjectGarrisonPointIndex(source->getID());
+	if (idx != -1)
+	{
+		removeObjectFromGarrisonPoint(source, idx);
+	}
+	putObjectAtBestGarrisonPoint(source, victim, nullptr);
+	const ObjectWeapons *w = source->getWeapons();
+	return w ? w->isWithinAttackRange(*victim, 0.0f, true) : false;
+}
+
+// RW 0x0087BB6A (contain slot 0x134): GarrisonContain::attemptBestFirePointPosition(source, weapon, targetPos)
+bool GarrisonContain::attemptBestFirePointPosition(Object *source, Weapon *weapon, const Coord3D *targetPos)
+{
+	if (!source || !weapon || !targetPos)
+	{
+		return false;
+	}
+	const int idx = getObjectGarrisonPointIndex(source->getID());
+	if (idx != -1)
+	{
+		removeObjectFromGarrisonPoint(source, idx);
+	}
+	putObjectAtBestGarrisonPoint(source, nullptr, targetPos);
+	const ObjectWeapons *w = source->getWeapons();
+	return w ? w->isWithinAttackRange(*targetPos) : false;
+}
+
+// RW 0x0087CF57 (HordeGarrisonContain ExitInterface slot 0x1C): getNaturalRallyPoint -> getExitOffset (slot 0x160)
+bool GarrisonContain::getNaturalRallyPoint(Coord3D &out) const
+{
+	if (!isHordeGarrison())
+	{
+		return false;
+	}
+	return getExitOffset(out);
+}
+
+// RW 0x0087CF74 (HordeGarrisonContain::onDie): no DieMux check; if shouldKillContainedOnDie (RW 0x0086588C) kills hordes & members (RW 0x00990F0A), else orders exit
+void GarrisonContain::onDie(const DieModuleInterface::Event &event)
+{
+	if (!isHordeGarrison())
+	{
+		OpenContain::onDie(event);
+		return;
+	}
+	m_dying = true;
+	if (m_killingRiders && openData().m_killPassengersOnDeath)
+	{
+		const std::vector<Object *> riders(m_contained.begin(), m_contained.end());
+		for (Object *r : riders)
+		{
+			if (!r || r->isEffectivelyDead())
+			{
+				continue;
+			}
+			if (ContainModuleInterface *hc = r->getContain(); hc && hc->getHordeContainInterface())
+			{
+				if (const ContainedItemsList *ml = hc->getContainedItemsList())
+				{
+					const std::vector<Object *> members(ml->begin(), ml->end());
+					for (Object *m : members)
+					{
+						if (m && !m->isEffectivelyDead())
+						{
+							m->kill(DAMAGE_UNRESISTABLE, 0);
+						}
+					}
+				}
+			}
+			r->kill(DAMAGE_UNRESISTABLE, 0);
+		}
+		return;
+	}
+	orderAllPassengersToExit(2 /*CMD_FROM_AI*/);
 }
 
 // RW 0x87B6E1

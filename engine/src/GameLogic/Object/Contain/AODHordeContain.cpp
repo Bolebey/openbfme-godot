@@ -48,6 +48,7 @@
 #include "GameLogic/Module/PhysicsBehavior.h"
 #include "GameLogic/Object/Contain/HordeContainBehaviorData.h"
 #include "GameLogic/Object/Contain/HordeContainCore.h"
+#include "GameLogic/Object/ExperienceTracker.h"
 #include "GameLogic/Object/Object.h"
 #include "GameLogic/Object/ObjectGeometry.h"
 #include "GameLogic/SimMath.h"
@@ -308,9 +309,14 @@ bool AODHordeContain::addToContain(Object *obj)
 	{
 		return false;
 	}
+	// RW 0x0087D649 (AODHordeContain::onContaining): fadeIn 5s + ExperienceTracker::gainLevel(true) (RW 0x0087D673 -> 0x79D7AD)
 	if (ObjectClientHooks *client = getObject()->logic().clientHooks())
 	{
-		client->fadeIn(*obj, LOGICFRAMES_PER_SECOND * 5); // RW 0x87D650
+		client->fadeIn(*obj, LOGICFRAMES_PER_SECOND * 5);
+	}
+	if (ExperienceTracker *xp = obj->getExperienceTracker())
+	{
+		xp->gainLevel(true);
 	}
 	const bool hadKeptSlot = core().slotOf(obj->getID()) >= 0;
 	if (!core().built())

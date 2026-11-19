@@ -221,6 +221,83 @@ bool SiegeEngineContainT<Base, Horde>::moodScanWhileContained() const
 	return m_siege->m_crewAllowedToFire;
 }
 
+// RW 0x0087F1BA (SiegeEngineContain) / RW 0x008801F7 (HordeSiegeEngineContain) contain slot 0x108: defect crew then base
+template <class Base, bool Horde>
+void SiegeEngineContainT<Base, Horde>::onDefect(Object *newOwner, bool permanent)
+{
+	const std::vector<Object *> crew(m_crew.rbegin(), m_crew.rend());
+	for (Object *c : crew)
+	{
+		if (c)
+		{
+			c->defect(newOwner, permanent);
+		}
+	}
+	Base::onDefect(newOwner, permanent);
+}
+
+// RW 0x0087F18B (SiegeEngineContain) / RW 0x008801C8 (HordeSiegeEngineContain) contain slot 0x10C: end crew defection then base
+template <class Base, bool Horde>
+void SiegeEngineContainT<Base, Horde>::onDefectionEnded()
+{
+	const std::vector<Object *> crew(m_crew.rbegin(), m_crew.rend());
+	for (Object *c : crew)
+	{
+		if (c)
+		{
+			c->endDefection();
+		}
+	}
+	Base::onDefectionEnded();
+}
+
+// RW 0x0087F10E (SiegeEngineContain) / RW 0x0088014B (HordeSiegeEngineContain) contain slot 0x110: iterateContained
+template <class Base, bool Horde>
+void SiegeEngineContainT<Base, Horde>::iterateContained(const std::function<void(Object *)> &fn, unsigned flags)
+{
+	if (!fn)
+	{
+		return;
+	}
+	const bool includeCrew = (flags & 4u) != 0;
+	const bool reverse = (flags & 8u) != 0;
+	if (includeCrew && reverse)
+	{
+		const std::vector<Object *> crew(m_crew.rbegin(), m_crew.rend());
+		for (Object *c : crew)
+		{
+			if (c) fn(c);
+		}
+	}
+	if ((flags & 1u) != 0)
+	{
+		if (reverse)
+		{
+			const std::vector<Object *> riders(this->m_contained.rbegin(), this->m_contained.rend());
+			for (Object *r : riders)
+			{
+				if (r) fn(r);
+			}
+		}
+		else
+		{
+			const std::vector<Object *> riders(this->m_contained.begin(), this->m_contained.end());
+			for (Object *r : riders)
+			{
+				if (r) fn(r);
+			}
+		}
+	}
+	if (includeCrew && !reverse)
+	{
+		const std::vector<Object *> crew(m_crew.begin(), m_crew.end());
+		for (Object *c : crew)
+		{
+			if (c) fn(c);
+		}
+	}
+}
+
 // RW 0x87F099 / RW 0x0087FEA4
 template <class Base, bool Horde>
 void SiegeEngineContainT<Base, Horde>::removeAllContained(bool exposeStealthUnits)

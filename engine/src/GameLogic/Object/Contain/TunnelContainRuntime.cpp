@@ -251,6 +251,36 @@ void TunnelContain::onBuildComplete()
 }
 
 // RW 0x00880FA8 (TunnelContain main +0x84) / RW 0x0088117A (main +0x80 findHordeContaining, covered by isContainedHere RW 0x008811DD)
+// RW 0x00880F78 (contain slot 0x110): iterate TunnelTracker riders when flags & 1 (reverse when flags & 8)
+void TunnelContain::iterateContained(const std::function<void(Object *)> &fn, unsigned flags)
+{
+	if (!fn || (flags & 1u) == 0)
+	{
+		return;
+	}
+	TunnelTracker *t = tracker();
+	if (!t)
+	{
+		return;
+	}
+	if ((flags & 8u) != 0)
+	{
+		const std::vector<Object *> riders(t->riders().rbegin(), t->riders().rend());
+		for (Object *r : riders)
+		{
+			if (r) fn(r);
+		}
+	}
+	else
+	{
+		const std::vector<Object *> riders(t->riders().begin(), t->riders().end());
+		for (Object *r : riders)
+		{
+			if (r) fn(r);
+		}
+	}
+}
+
 const ContainModuleInterface::ContainedItemsList *TunnelContain::getContainedItemsList() const
 {
 	TunnelTracker *t = tracker();
