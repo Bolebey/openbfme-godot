@@ -40,6 +40,8 @@
 
 ## Сделано
 
+- ✅ 2026-11-19: п. 12(б)–(г) — аура, у которой сцена не смогла поставить цель, которую берёт её фильтр (ни цель, ни её бойцы не проходят `ObjectFilter`: экипаж осадной башни, пристройки, «пехота без отряда»), -> DISABLED «нужна цель, которой нет в сцене», а не NO-AURA. Рохан / Мордор / Люди на ПК: NO-AURA 0 / 2 / 0 (было 19 / 4+ / 2); остались `SauronNazgulsLeadership` (Саурон, цель `MordorWitchKingSpell`) и `GrondAntiFearModiffer` (Гронд) — разобрать по RW 0x89F42D. Ванильные `factb` / `factc units` зелёные: стойки S-289 только у таранов; Саруман `IsengardWizardBlast` — ORDER (бисекция `FACTB_LIST`: ни один объект и ни одна пара до него не ломают, только весь прогон; п. 11).
+
 - ✅ 2026-11-19: п. 13 и 12(а) — индекс «кто выдаёт» из INI (`docs/ennorath/GRANTS_INI.tsv`, `tools/mod/script_map.py`: кнопки, `ExperienceLevel Upgrades`, `GrantUpgradeCreate`, `ObjectCreationUpgrade` / OCL `GrantUpgrade`, `ModifierList Upgrade`, стартовые улучшения и науки игрока; 4891 строка) вместе со `SCRIPT_GRANTS.tsv`; 82 улучшения / науки мода не выдаёт ничто — они в конце файла с пометкой «(given by nothing)». `matrix_run.py collect`: NO-AURA, которую свип включил только такими улучшениями, -> MOD-DATA с объяснением (19 строк маскировки Эовин: `Upgrade_EowynConditionDisguised`).
 
 - ✅ 2026-11-18 `cad744cc`: сцена серых кнопок читает условия как RW 0x942733 (`NEED_UPGRADE` = список `NeededUpgrade`, `MOUNTED_ONLY` = `MOUNTED`, условия «пока есть состояние» не нужды); пауза способности → апгрейд `UnpauseSpecialPowerUpgrade.TriggeredBy` (RW 0x943585) и ожидание перезарядки; способность бойца — у его отряда (`InitialPayload`, `BuildVariations`); `OBJECT_UPGRADE` без очереди производства серая и в ритейле (RW 0x943050).
