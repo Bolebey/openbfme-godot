@@ -99,6 +99,9 @@ public:
 	// RW State vtable slot 0x24 (lane AI-2): false for the plain states (RW 0x9188EB: idle RW 0xC28468, follow path RW 0xC29228, busy RW 0xC274A8); AIAttackState
 	// answers "its own machine's state is not idle" (RW 0x740ECD -> 0x742DD0). AIUpdate vslot 0x1BC (RW 0x662B3C) asks it of the current state (true with none)
 	virtual bool isActive() const { return false; }
+	// Port 257: RW State vtable slot 0x34 (RW 0x9188EB false for every state except AIGiantBirdFollowThruState RW 0xC2DAA0 -> RW 0x8BD372 true).
+	// AIUpdateInterface vslot 0x1D0 (RW 0x662B28) asks it of the current state (true with none); FellBeastSwoopPower::update (RW 0x8CB2CE) checks it.
+	virtual bool isFollowThru() const { return false; }
 	// the OpenBFME state hash of the state's own fields
 	virtual void crc(class StateHasher &hasher) const { (void)hasher; }
 	// lane MODULES-3: the fields a state keeps between its activations (RW keeps the state objects), hashed while it is neither the current nor the temporary state
@@ -261,8 +264,7 @@ private:
 };
 
 // ---- the states ----------------------------------------------------------------------------------------------------------------
-// stop S-5148: the stop line of the idle state's unported stance failure (RotWK RW 0x7553AB / 0x7537E0; AIStateMachine.cpp), noted by AIIdleState::update
-const char *idleStanceStopLine();
+// Port 226 (issue #549): stop S-5148 is closed: the idle state's stance countdown (RotWK RW 0x7553AB / 0x7537E0) runs in AIIdleState::update
 
 // AIIdleState (ZH AIStates.cpp:1273-1460, B1 RW-equivalent 0x188090): stakes out the unit's cell and sleeps.
 class AIIdleState : public AIState
@@ -274,11 +276,14 @@ public:
 	bool isIdle() const override { return true; }
 	void crc(class StateHasher &hasher) const override;
 	void xfer(class Xfer &x) override;
+	/// retail's + 0x22 (RW 0x7553AB's stance countdown); read by the tests of its rule
+	unsigned short stancesCountdown() const { return m_stancesCountdown; }
 
 private:
 	void doInitIdleState();
-	unsigned short m_initialSleepOffset = 0xFFFF;
-	bool m_inited = false;
+	unsigned short m_initialSleepOffset = 0xFFFF; // + 0x20
+	unsigned short m_stancesCountdown = 5;        // + 0x22: RW 0x7489B6 sets it to 5 at every onEnter (DONOR BFME2 0x00346FD0 AIIdleStateOnEnter.cpp)
+	bool m_inited = false;                        // + 0x25
 };
 
 // AIMoveToState (ZH AIStates.cpp:2076 and AIInternalMoveToState): a PATH-1 AIMoveToState driven as a machine state; with a goal object
