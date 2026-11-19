@@ -47,7 +47,7 @@ def test_port_reads_resolve_literals_enums_and_wrappers(tmp_path):
         "void f(Object &o)\n{\n\tfloat s;\n\to.attributeModifierSum(ATTRIBUTE_RANGE, nullptr, s); // attributeModifierSum(3, in a comment)\n"
         "\tattributeModifierProduct(o, 13);\n\to.attributeModifierSum(0x15, nullptr, s);\n\to.attributeModifierSum(t, nullptr, s);\n}\n",
         encoding="utf-8")
-    reads, cites, queries = mm.port_scan(src)
+    reads, cites, queries, _via = mm.port_scan(src)
     assert queries[("attributeModifierProduct", 4)] == 0 and queries[("attributeModifierProduct", 2)] == 1  # Economy's: (obj, type)
     got = {(r.attribute, r.call) for r in reads}
     assert (7, "attributeModifierSum") in got and (21, "attributeModifierSum") in got and (13, "attributeModifierProduct") in got

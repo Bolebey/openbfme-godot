@@ -287,6 +287,7 @@ ENUM = re.compile(r"\b(ATTRIBUTE_\w+)\s*=\s*(0x[0-9A-Fa-f]+|\d+)")
 DEF = re.compile(r"(?:\b[\w:<>,&*\s]+?\s)?(?:(\w+)::)?(\w+)\s*\(([^()]*)\)\s*(?:const\s*)?(?:override\s*)?\{")
 # (name, argument count) -> the attribute argument: Object::attributeModifierSum(type, name, out) / attributeModifierProduct(type, name, innate,
 # out); a port function of the same name and another arity (Economy::attributeModifierProduct(obj, type)) is another function
+NOT_FOLLOWED = {"attributeModifierSum", "attributeModifierProduct", "operator", "update", "onObjectCreated", "getValue"}
 BASE_QUERIES = {("attributeModifierSum", 3): 0, ("attributeModifierProduct", 4): 0,
                 # Economy's (obj, type) seams: Economy::attributeModifierProduct / Sum call a std::function that GameLogic.cpp installs as a lambda
                 # around Object::attributeModifierProduct / Sum (setAttributeModifierProvider / setAttributeModifierSumProvider), so the type passes on
@@ -430,7 +431,22 @@ def port_scan(src: Path):
                     if q in STRICT and not named:
                         continue  # a common name (value / sum / product) counts only with a named attribute constant
                     reads.append(PortRead(f, ln, q, val, a, owner))
-    return reads, cites, queries
+    # through calls (owner 2026-11-19: TerrainResourceBehavior.cpp reads PRODUCTION through Economy::productionMoneyProduct): a port function
+    # reads the attributes read in its own body; a file reads what its code reads directly and through the port functions it calls that read
+    # them directly (by name). Common short names are not followed (a name clash would invent a read).
+    fn_attrs: dict[str, set[int]] = defaultdict(set)
+    for r in reads:
+        if r.attribute is not None and r.function:
+            fn_attrs[r.function].add(r.attribute)
+    # ONE level only: a name-based transitive closure spreads through common helpers until every file "reads" every attribute
+    followable = lambda n: len(n) >= 8 and n not in NOT_FOLLOWED
+    called = re.compile(r"\b(\w+)\s*\(")
+    via_calls: dict[str, set[int]] = defaultdict(set)
+    for f, (_raw, code) in files.items():
+        for c in set(called.findall(code)):
+            if followable(c) and c in fn_attrs:
+                via_calls[f] |= fn_attrs[c]
+    return reads, cites, queries, via_calls
 
 
 # ---- the mod ------------------------------------------------------------------------------------------------------------------------------
@@ -525,7 +541,7 @@ def mod_side(base: Path, overlay: Path, src_dir: Path | None = None, rw_tables: 
 
 # ---- the join -----------------------------------------------------------------------------------------------------------------------------
 
-def reader_status(readers, cites, reads, inv: cc.Inventory):
+def reader_status(readers, cites, reads, inv: cc.Inventory, via_calls: dict[str, set[int]] | None = None):
     """reader -> (status, files): the files that cite an address inside the reader's function, and whether one of them reads the attribute."""
     owner_cache: dict[int, int | None] = {}
     files_of: dict[int, set[str]] = defaultdict(set)
@@ -547,6 +563,8 @@ def reader_status(readers, cites, reads, inv: cc.Inventory):
             out[id(rd)] = ("not-cited", set())
         elif any(rd.attribute in reads_in[f] for f in files):
             out[id(rd)] = ("ported", files)
+        elif via_calls and any(rd.attribute in via_calls.get(f, ()) for f in files):
+            out[id(rd)] = ("ported-via-call", files)  # the citing file calls a port function that reads the attribute
         else:
             out[id(rd)] = ("cited-no-read", files)
     return out
@@ -611,7 +629,7 @@ def write(out: Path, names, lists, factions, readers, unresolved, wrappers, read
         mls = mod_by_attr.get(a, [])
         reached = [m for m in mls if m.factions]
         rds = [r for r in readers if r.attribute == num] if num is not None else []
-        ported = sum(1 for r in rds if status[id(r)][0] == "ported")
+        ported = sum(1 for r in rds if status[id(r)][0] in ("ported", "ported-via-call"))
         prd = [r for r in reads if r.attribute == num] if num is not None else []
         rows.append((a, num, len(mls), len(reached), len(rds), ported, sum(1 for r in rds if status[id(r)][0] == "cited-no-read"), len(prd),
                      verdict(len(mls), len(rds), ported, len(prd), num is not None)))
@@ -629,7 +647,7 @@ def write(out: Path, names, lists, factions, readers, unresolved, wrappers, read
     md += ["", "## RotWK readers not ported", ""]
     for rd in sorted(readers, key=lambda r: (r.attribute, r.site)):
         st, files = status[id(rd)]
-        if st == "ported":
+        if st in ("ported", "ported-via-call"):
             continue
         md.append(f"- {names[rd.attribute] if rd.attribute < len(names) else rd.attribute}: call RW 0x{rd.site:06X} in RW 0x{rd.function:06X}"
                   f"{' (reached from ' + fn_class[rd.function] + ')' if fn_class.get(rd.function) else ''}: {st}"
@@ -673,9 +691,9 @@ def main(argv=None) -> int:
     img = Image(a.game)
     names = attribute_names(img)
     readers, unresolved, wrappers = rotwk_readers(img, inv, blocks)
-    reads, cites, queries = port_scan(a.src)
+    reads, cites, queries, via_calls = port_scan(a.src)
     lists, factions = mod_side(a.base, a.overlay, a.src)
-    status = reader_status(readers, cites, reads, inv)
+    status = reader_status(readers, cites, reads, inv, via_calls)
     rows = write(a.out, names, lists, factions, readers, unresolved, wrappers, reads, status, function_classes(a.function_map), queries)
     print(f"{len(lists)} modifier lists, {sum(len(m.modifiers) for m in lists.values())} modifiers; {len(readers)} RotWK readers in "
           f"{len({r.function for r in readers})} functions ({len(wrappers)} wrappers, {len(unresolved)} unresolved); {len(reads)} port reads")
