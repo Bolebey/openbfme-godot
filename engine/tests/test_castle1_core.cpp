@@ -371,7 +371,7 @@ TEST_CASE("castle1: two identical worlds give the same hash every frame through 
 	CHECK(a[30] != c[30]);
 }
 
-TEST_CASE("castle1: stops S-950 .. S-952 are in the live report, and the unported crew notes S-951 at runtime")
+TEST_CASE("castle1: stops S-950 .. S-952 are in the live report, and a wall that FilterCrew takes is held as the prepared crew (PORT-296)")
 {
 	CastleFx f;
 	const GameLogic::Report rep = f.logic->report();
