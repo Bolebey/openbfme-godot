@@ -22,6 +22,7 @@ std::string hordeObject(const std::string &name, const std::string &kind, const 
 std::string winningRecord(const std::string &ini, const std::string &objectName)
 {
 	logictest::LogicWorld world;
+	world.logic->settings().bodyThresholdsLoaded = true;
 	LogicModules::registerAll(world.w.modules);
 	const std::string error = world.w.load(ini, INI_LOAD_OVERWRITE, "synthetic.ini");
 	REQUIRE_MESSAGE(error.empty(), error);
@@ -48,6 +49,8 @@ TEST_CASE("PORT-292: empty or missing horde interface falls back and HERO takes 
 	// RW 0x6918C7..0x6918DE: omitted / empty answer and missing interface use the object's template.
 	CHECK(winningRecord(hordeObject("P292Plain", "HORDE", "HordeContain", ""), "P292Plain") == "P292Plain");
 	CHECK(winningRecord("Object P292NoContain\n KindOf = HORDE\n Body = ImmortalBody BodyTag\n MaxHealth = 1\n End\nEnd\n", "P292NoContain") == "P292NoContain");
+	// An ordinary non-hero non-horde keeps its own template as well.
+	CHECK(winningRecord("Object P292Ordinary\n KindOf = INFANTRY\n Body = ImmortalBody BodyTag\n MaxHealth = 1\n End\nEnd\n", "P292Ordinary") == "P292Ordinary");
 	// RW 0x6917DF branches to HERO before HORDE, even when both kind bits are present.
 	CHECK(winningRecord(hordeObject("P292Hero", "HERO HORDE", "HordeContain", "  LivingWorldOverloadTemplate = P292Ignored\n"), "P292Hero") == "P292Hero");
 }
