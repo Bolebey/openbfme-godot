@@ -49,3 +49,19 @@ def test_a_hash_test_red_on_main_that_the_pr_moves_is_seen_by_its_values():
     assert pc.MOVES.search(pc.moves_mark([])).group(1) == ""
     assert pc.MOVES.search(pc.moves_mark(["perf1*", "uber1*"])).group(1) == "perf1*,uber1*"
     assert "❌" not in pc.moves_mark(["perf1*"])   # the dashboard and the batch read ❌ as a red verdict
+
+
+def test_a_pr_claimed_on_the_other_sandbox_is_left_and_this_sandboxs_claim_holds(monkeypatch, tmp_path):
+    (tmp_path / "runs").mkdir()
+    claims = tmp_path / "runs" / "prcheck" / "claims"
+    monkeypatch.setattr(pc, "CLAIMS", claims)
+    monkeypatch.setattr(pc, "SANDBOX", "1")
+    p = {"number": 7, "headRefOid": "abc"}
+    assert pc.claim_check(p, settle=0)
+    assert not pc.held_elsewhere(p, pc.check_claims())
+    (claims / "7.json").write_text('{"sandbox": "2", "head": "abc", "t": %f}' % __import__("time").time())
+    assert pc.held_elsewhere(p, pc.check_claims()) == "2"
+    assert not pc.held_elsewhere({"number": 7, "headRefOid": "new"}, pc.check_claims())
+    assert not pc.held_elsewhere(p, pc.check_claims(now=__import__("time").time() + pc.CLAIM_S + 1))
+    pc.release_check(p)   # not ours: stays
+    assert (claims / "7.json").exists()

@@ -633,6 +633,7 @@ void Drawable::advanceAnimationLocal(double elapsedMs)
 			e.lightDraw->stepFlicker((float)(elapsedMs * 0.001));
 		}
 	}
+	flushPendingCapturePresentation();
 }
 
 void Drawable::advanceAnimation(double elapsedMs)
@@ -654,6 +655,7 @@ void Drawable::advanceAnimation(double elapsedMs)
 			e.lightDraw->stepFlicker((float)(elapsedMs * 0.001));
 		}
 	}
+	flushPendingCapturePresentation();
 }
 
 // lane COMBAT-4 (FB-0002), RW 0x4CBFFB (W3DTruckDraw's draw update, run once per client frame: 6 per logic frame, RW 0xDE4324 + 0x38): with a front tire bone
@@ -2557,4 +2559,65 @@ Coord3D Drawable::getPresentationPosition() const
 		return m_presentationPosition;
 	}
 	return *getPosition();
+}
+
+bool Drawable::hasPendingAnimationTransition() const
+{
+	for (const DrawEntry &e : m_entries)
+	{
+		if (e.draw && e.draw->pendingStatePending())
+		{
+			const AnimationStateInfo *st = e.draw->currentAnimationState();
+			// Trans_CancelReraise in captureflag.ini has its own LuaEvent = OnStateEnter (raises the previous owner's flag).
+			if (st && st->stateName == "Trans_CancelReraise")
+			{
+				continue;
+			}
+			return true;
+		}
+	}
+	return false;
+}
+
+void Drawable::applyCapturePresentationNow(const std::vector<DeferredSubObject> &subObjects, bool hasIndicator, std::uint32_t indicator, bool hasHouse, std::uint32_t house)
+{
+	for (const DeferredSubObject &s : subObjects)
+	{
+		showSubObject(s.name, s.visible, s.permanent);
+	}
+	if (hasIndicator)
+	{
+		setIndicatorColor(indicator);
+	}
+	if (hasHouse)
+	{
+		setHouseColor(house);
+	}
+}
+
+void Drawable::applyOrDeferCapturePresentation(std::vector<DeferredSubObject> subObjects, bool hasIndicator, std::uint32_t indicator, bool hasHouse, std::uint32_t house)
+{
+	if (!hasPendingAnimationTransition())
+	{
+		m_pendingCapturePresentation = PendingCapturePresentation{};
+		applyCapturePresentationNow(subObjects, hasIndicator, indicator, hasHouse, house);
+		return;
+	}
+	m_pendingCapturePresentation.active = true;
+	m_pendingCapturePresentation.subObjects = std::move(subObjects);
+	m_pendingCapturePresentation.hasIndicatorColor = hasIndicator;
+	m_pendingCapturePresentation.indicatorColor = indicator;
+	m_pendingCapturePresentation.hasHouseColor = hasHouse;
+	m_pendingCapturePresentation.houseColor = house;
+}
+
+void Drawable::flushPendingCapturePresentation()
+{
+	if (!m_pendingCapturePresentation.active || hasPendingAnimationTransition())
+	{
+		return;
+	}
+	PendingCapturePresentation pending = std::move(m_pendingCapturePresentation);
+	m_pendingCapturePresentation = PendingCapturePresentation{};
+	applyCapturePresentationNow(pending.subObjects, pending.hasIndicatorColor, pending.indicatorColor, pending.hasHouseColor, pending.houseColor);
 }

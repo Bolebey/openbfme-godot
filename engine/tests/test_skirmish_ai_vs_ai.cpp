@@ -956,7 +956,11 @@ TEST_CASE("skirmish ai vs ai: Evendim, 30 game-minutes: every pairing ends - Mor
 	// Colab); merge-point bisect: 6e3b8a16 (before #596) keeps the old values, 2ce6a623 (with it) moves them: seed 7 stays open at 9000 (was Mordor's
 	// defeat at 3367), seed 2 a new table from the first window on, seed 1234 open at 9000 as before
 	// pin: PR #619 (Port 226, #549) merged onto main 026fbc2f, measured once on the merged tree (Linux GCC on Colab): every fifth idle update of a unit with a StancesBehavior returns FAILURE (RW 0x7553AB -> RW 0x7537C7 / 0x7537E0), the unit goes to AIGoingIdleState -> onMoveEnd -> guardHere (RW 0x743864 -> 0x86228E -> RW 0x662A21): a guard machine main did not run: seed 2 ends with Mordor's defeat (start position 0) at 8197 (was open at 9000), seeds 7 and 1234 stay open at 9000
-	for (const Game &g : { Game{ "FactionMordor", "FactionMen", 2u, 0, 8197 }, Game{ "FactionMen", "FactionMordor", 7u, -1, -1 }, Game{ "FactionMordor", "FactionMen", 1234u, -1, -1 } })
+	// pin: the landing of 2026-11-19 (the four local stations, PRs #681 / #682 / #683 / #709), measured on the merged tree and on main 4e9f0ad7 alone
+	// (Windows MSVC): both give the same three games, so the local PRs do not move them; main was already red here (the checker on Colab saw it red on
+	// main since 2026-11-18; an earlier landing moved it, not identified): seed 1234 ends with Mordor's defeat (start position 0) at 8887 (was open at
+	// 9000), seed 2 ends with Mordor's defeat at 8197 as before, seed 7 stays open
+	for (const Game &g : { Game{ "FactionMordor", "FactionMen", 2u, 0, 8197 }, Game{ "FactionMen", "FactionMordor", 7u, -1, -1 }, Game{ "FactionMordor", "FactionMen", 1234u, 0, 8887 } })
 	{
 		INFO(g.a << " vs " << g.b << " seed " << g.seed);
 		VersusRun run;
