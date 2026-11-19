@@ -53,6 +53,9 @@ struct ObjectMovementInfo;
 // lane PHYS-1 (AIUpdateAllies.cpp): AI_MOVE_OUT_OF_THE_WAY (26), the move-away path of RW 0x66DA5F followed to its end
 std::unique_ptr<class AIState> makeMoveOutOfTheWayState(class AIStateMachine &machine);
 
+// Base AIUpdateInterface no-op/compiler slots in RotWK 2.01: RW 0x0066ECF9 (construct -> nullptr, vslot 126),
+// RW 0x00A15F21 (AICMD 0x3F/0x40 -> return -1, vslots 36/37), and MI this-0x0C thunks RW 0x008A18ED / RW 0x008FF2DB
+// (port uses single inheritance without a separate AICommandInterface subobject).
 class AIUpdateInterface : public UpdateModule, public AIMoveHost
 {
 public:

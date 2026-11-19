@@ -646,6 +646,7 @@ AIUpdateInterface::AIUpdateInterface(Thing *thing, const ModuleData *data)
 	}
 }
 
+// RW 0x0066F0E1 (scalar deleting dtor, AI vslot 0; calls 0x0066EB5E)
 AIUpdateInterface::~AIUpdateInterface()
 {
 	m_destroying = true; // the object left the world already (its drawable is gone): the states' exits must not touch its model condition
@@ -672,6 +673,7 @@ AIUpdateInterface::~AIUpdateInterface()
 	}
 }
 
+// RW 0x006621F4 (AI vslot 150 / +0x258)
 std::unique_ptr<AIStateMachine> AIUpdateInterface::makeStateMachine()
 {
 	std::unique_ptr<AIStateMachine> m = std::make_unique<AIStateMachine>(*this, machineName());
@@ -732,7 +734,7 @@ std::unique_ptr<AIStateMachine> AIUpdateInterface::makeStateMachine()
 	return m;
 }
 
-// B1 AIUpdate.cpp:2006
+// RW 0x006622A9 (AI vslot 5 / +0x14; B1 AIUpdate.cpp:2006)
 void AIUpdateInterface::onObjectCreated()
 {
 	if (!m_machine)
@@ -1022,6 +1024,7 @@ void AIUpdateInterface::processOrderQueue()
 	m_world->ordersManager().process(getObject()->getID());
 }
 
+// RW 0x00662552 (AI vslot 0x264); RW 0x00662592 (friend_notifyStateMachineChanged, AI vslot 153, tail-calls 0x00662552)
 void AIUpdateInterface::wakeUpNow()
 {
 	if (getWakeFrame() > (UnsignedInt)UPDATE_SLEEP_NONE && !m_isInUpdate)
@@ -1397,6 +1400,7 @@ bool AIUpdateInterface::aiAbilityApproachObject(Object *target, CommandSourceTyp
 	return true;
 }
 
+// RW 0x0066B636 (privateMoveToObject, AICMD 0x01, AI vslot 15 / +0x3C)
 void AIUpdateInterface::aiMoveToObject(Object *target, CommandSourceType source)
 {
 	if (!acceptCommand(source, 1))
@@ -1520,6 +1524,7 @@ void AIUpdateInterface::aiFollowPath(const std::vector<Coord3D> &path, Object *i
 	privateFollowPath(path, ignoreObject, source, exitProduction);
 }
 
+// RW 0x0066BAC1 (privateFollowPath, AICMD 0x09/0x0A, AI vslot 30 / +0x78)
 void AIUpdateInterface::privateFollowPath(const std::vector<Coord3D> &path, Object *ignoreObject, CommandSourceType source, bool exitProduction)
 {
 	m_world->noteStop(kStopCommands);
@@ -1621,6 +1626,7 @@ void AIUpdateInterface::aiFollowPathAppend(const Coord3D &pos, CommandSourceType
 	privateFollowPathAppend(pos, source);
 }
 
+// RW 0x0066E39A (privateFollowPathAppend, AICMD 0x35, AI vslot 33 / +0x84)
 void AIUpdateInterface::privateFollowPathAppend(const Coord3D &pos, CommandSourceType source)
 {
 	m_world->noteStop(kStopCommands);
@@ -1983,6 +1989,7 @@ void AIUpdateInterface::setLocomotorGoalNone()
 	m_mover->setGoalNone();
 }
 
+// RW 0x0066297C (AI vslot 135 / +0x21C)
 void AIUpdateInterface::setLocomotorGoalOrientation(float angle)
 {
 	m_mover->setGoalAngle(angle);
@@ -2650,6 +2657,7 @@ void AIUpdateInterface::crc(StateHasher &h) const
 // ---------------------------------------------------------------------------------------------------------------------------------
 // the module classes
 // ---------------------------------------------------------------------------------------------------------------------------------
+// RW 0x0066ECB9 (getModuleName -> "AIUpdateInterface", AI vslot 2) and RW 0x0066EC74 (getModuleNameKey, AI vslot 4)
 void AIUpdateInterface::registerClasses(ModuleFactory &modules)
 {
 	// every AI module class of the registry (RW module-registry golden: isAiModuleData true). The classes with behaviour of their own that is not ported

@@ -284,7 +284,7 @@ void AIFollowWaypointPathState::xfer(Xfer &x)
 	}
 }
 
-// AI commands 6 / 7 / 0x32 / 0x33 (RW 0x66B907 / 0x66BA11 / vslots 0x70 / 0x74)
+// AI commands 6 / 7 / 0x32 / 0x33 (RW 0x66B907 / 0x66BA11 / RW 0x0066B9AF / RW 0x0066BA69)
 bool AIUpdateInterface::aiFollowWaypointPath(int waypointId, CommandSourceType source, bool asTeam, bool exact)
 {
 	const int command = exact ? (asTeam ? 0x33 : 0x32) : (asTeam ? 7 : 6);
