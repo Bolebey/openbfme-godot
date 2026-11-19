@@ -149,8 +149,13 @@ GarrisonContain::GarrisonContain(Thing *thing, const ModuleData *data, const Gar
 	getObject()->logic().noteStop(GarrisonRules::stopLine());
 }
 
+// RW 0x0087B8A9 (GarrisonContain scalar deleting dtor), RW 0x0087D3A9 (HordeGarrisonContain scalar deleting dtor),
+// RW 0x006576FF (HordeGarrisonContainModuleData scalar deleting dtor), RW 0x0088395E (CitadelSlaughterHordeContain scalar deleting dtor)
 GarrisonContain::~GarrisonContain() = default;
 
+// RW 0x0087B302 / RW 0x0087B2BD (GarrisonContain getModuleName / getModuleNameKey),
+// RW 0x0087D35E / RW 0x0087D364 (HordeGarrisonContain getModuleName / getModuleNameKey; empty AsciiString slot RW 0x004B612F),
+// RW 0x0088385C / RW 0x00883862 (CitadelSlaughterHordeContain getModuleName / getModuleNameKey)
 void GarrisonContain::registerClasses(ModuleFactory &modules)
 {
 	modules.bindTypedData<SlaughterHordeContainBehaviorData>("SlaughterHordeContain", MODULETYPE_BEHAVIOR);
@@ -216,7 +221,7 @@ void GarrisonContain::transformPoint(const Coord3D &local, Coord3D &out) const
 	out = Coord3D{ w[0], w[1], w[2] };
 }
 
-// slots 0x158 / 0x15C / 0x160: the horde garrison's data positions through the transform (RW 0x87D1A7 / 0x87D1E0 / 0x87D219); OpenContain's answer is the container's
+// slots 0x158 / 0x15C / 0x160: the horde garrison's data positions through the transform (RW 0x87D1A7 / RW 0x0087D1E0 / RW 0x0087D219); OpenContain's answer is the container's
 // position (RW 0x8657D1 / 0x867ACD, the SHIP branch aside)
 // RW 0x87B308 (contain slot 0x1C, the garrison tables RW 0xC5C698 / 0xC5C9F0 / 0xC5F0D0 / 0xC5F2E8): the module data's ImmuneToClearBuildingAttacks byte
 // (+ 0xA1; its field row is RW 0xC09630). DamageContainedNugget asks it (RW 0x9110E4 / 0x9111F3) and skips the garrison when it answers true.
@@ -371,6 +376,7 @@ bool GarrisonContain::hordeMemberInside(const Object &obj, Object **horde) const
 // ---------------------------------------------------------------------------------------------------------------------------------
 
 // RW 0x87CFEB (HordeGarrisonContain) / RW 0x8674C2 (OpenContain)
+// RW 0x0087CDA6 (HordeGarrisonContain member entry -> 0x00990CB9 / redeployOccupants / GarrisonContain::onContaining)
 bool GarrisonContain::addToContain(Object *obj)
 {
 	if (!obj || obj->getContainedBy())
@@ -1439,6 +1445,8 @@ void GarrisonContain::crc(StateHasher &h) const
 }
 
 // ---- lane SAVE-4b: the snapshot (OpenBFME native, S-4190): OpenContain's, then the crc's fields (every point position slot), then the statistics ----------
+// RW 0x0087B50B (GarrisonContain::xfer), RW 0x0087CFA6 (HordeGarrisonContain::xfer),
+// RW 0x0086970E (GarrisonContain::loadPostProcess), RW 0x0087CFE6 (HordeGarrisonContain::loadPostProcess)
 void GarrisonContain::xfer(Xfer &x)
 {
 	XferVersion v{ 1, 2 }; // 2: lane GARRISON-4's original team
@@ -1745,7 +1753,7 @@ bool CitadelSlaughterHordeContain::shouldSlaughter(const Object &obj) const
 void CitadelSlaughterHordeContain::deliverRing(Object &rider)
 {
 	Object *obj = &rider;
-	// BFME2 CitadelSlaughterHordeContain 0x480E9A: idle, clear the configured
+	// RW 0x008840FC (DONOR BFME2 0x00480E9A): idle, clear the configured
 	// status, destroy (not kill) the closest filtered object, apply upgrades by
 	// type, emit FX, and remember the carrier for next update's exit.
 	if (auto *ai = obj->getAIUpdateInterface())
@@ -1793,6 +1801,7 @@ void CitadelSlaughterHordeContain::crc(StateHasher &h) const
 	h.addU32(m_ringExit);
 }
 
+// RW 0x0088356A (CitadelSlaughterHordeContain::xfer)
 void CitadelSlaughterHordeContain::xfer(Xfer &x)
 {
 	XferVersion version{1, 2};

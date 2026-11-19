@@ -92,6 +92,7 @@ bool SiegeEngineContainT<Base, Horde>::isCrewCandidate(const Object &obj) const
 
 // RW 0x87ECC7 / 0x87FD0F
 template <class Base, bool Horde>
+// RW 0x87ECC7 (SiegeEngineContain) / RW 0x0087FD0F (HordeSiegeEngineContain)
 bool SiegeEngineContainT<Base, Horde>::isValidContainerFor(const Object &obj, bool checkCapacity, bool checkPath) const
 {
 	static const int temporarilyDefected = statusBit("TEMPORARILY_DEFECTED");
@@ -111,7 +112,7 @@ bool SiegeEngineContainT<Base, Horde>::isValidContainerFor(const Object &obj, bo
 	return Base::isValidContainerFor(obj, checkCapacity, checkPath); // SiegeEngineContain: RW 0x86A002; HordeSiegeEngineContain: RW 0x87A48C
 }
 
-// RW 0x87F341 / 0x880377
+// RW 0x87F341 / RW 0x00880377
 template <class Base, bool Horde>
 void SiegeEngineContainT<Base, Horde>::addToContainList(Object *obj)
 {
@@ -149,7 +150,7 @@ void SiegeEngineContainT<Base, Horde>::addToContainList(Object *obj)
 	}
 }
 
-// RW 0x87EFF8 / 0x87FE19 (main slot 0x34)
+// RW 0x87EFF8 / RW 0x0087FE19 (main slot 0x34)
 template <class Base, bool Horde>
 void SiegeEngineContainT<Base, Horde>::removeFromContainList(Object *obj)
 {
@@ -197,7 +198,7 @@ const ObjectStatusMaskType &SiegeEngineContainT<Base, Horde>::statusMaskFor(cons
 	return OpenContain::statusMaskFor(obj);
 }
 
-// RW 0x87F5B4 / 0x8805CA: the crew on its bones, then the riders (the base's redeploy)
+// RW 0x87F5B4 / RW 0x008805CA: the crew on its bones, then the riders (the base's redeploy)
 template <class Base, bool Horde>
 void SiegeEngineContainT<Base, Horde>::redeployOccupants()
 {
@@ -206,7 +207,7 @@ void SiegeEngineContainT<Base, Horde>::redeployOccupants()
 	Base::redeployOccupants();
 }
 
-// RW 0x87ED45 (contain slot 0xD4): fild count; fmul SpeedPercentPerCrew
+// RW 0x87ED45 (SiegeEngineContain) / RW 0x0087FD9D (HordeSiegeEngineContain) (contain slot 0xD4): fild count; fmul SpeedPercentPerCrew
 template <class Base, bool Horde>
 float SiegeEngineContainT<Base, Horde>::getCrewPowerMultiplier() const
 {
@@ -220,7 +221,7 @@ bool SiegeEngineContainT<Base, Horde>::moodScanWhileContained() const
 	return m_siege->m_crewAllowedToFire;
 }
 
-// RW 0x87F099 / 0x87FEA4
+// RW 0x87F099 / RW 0x0087FEA4
 template <class Base, bool Horde>
 void SiegeEngineContainT<Base, Horde>::removeAllContained(bool exposeStealthUnits)
 {
@@ -250,7 +251,7 @@ void SiegeEngineContainT<Base, Horde>::onRemoving(Object *obj)
 	TransportContain::onRemoving(obj);       // RW 0x86ABDC
 }
 
-// RW 0x87EBF1
+// RW 0x87EBF1 (SiegeEngineContain) / RW 0x0087FCDC (HordeSiegeEngineContain)
 template <class Base, bool Horde>
 bool SiegeEngineContainT<Base, Horde>::isSpecificRiderFreeToExit(const Object &rider) const
 {
@@ -261,7 +262,7 @@ bool SiegeEngineContainT<Base, Horde>::isSpecificRiderFreeToExit(const Object &r
 	return TransportContain::isSpecificRiderFreeToExit(rider); // RW 0x86A2D0
 }
 
-// RW 0x87EE17 / 0x87FDDD
+// RW 0x87EE17 / RW 0x0087FDDD
 template <class Base, bool Horde>
 void SiegeEngineContainT<Base, Horde>::onDelete()
 {
@@ -274,7 +275,7 @@ void SiegeEngineContainT<Base, Horde>::onDelete()
 	}
 }
 
-// RW 0x87EE53 / 0x87FFC7
+// RW 0x87EE53 / RW 0x0087FFC7
 template <class Base, bool Horde>
 void SiegeEngineContainT<Base, Horde>::createPayload()
 {
@@ -580,6 +581,8 @@ void SiegeEngineContainT<Base, Horde>::crc(StateHasher &h) const
 }
 
 // lane SAVE-4b: the snapshot (OpenBFME native, S-4190): the transport's, then the crew as ids, its count and the two flags
+// RW 0x0087F5E4 (SiegeEngineContain::xfer) / RW 0x0087F435 (SiegeEngineContain::loadPostProcess),
+// RW 0x008805FA (HordeSiegeEngineContain::xfer) / RW 0x0088042C (HordeSiegeEngineContain::loadPostProcess)
 template <class Base, bool Horde>
 void SiegeEngineContainT<Base, Horde>::xfer(Xfer &x)
 {
@@ -595,6 +598,11 @@ void SiegeEngineContainT<Base, Horde>::xfer(Xfer &x)
 template class SiegeEngineContainT<TransportContain, false>;
 template class SiegeEngineContainT<HordeTransportContain, true>;
 
+// RW 0x0087F2D4 / RW 0x0087F2FC / RW 0x0087F598 (SiegeEngineContain getModuleName / getModuleNameKey / scalar deleting dtor),
+// RW 0x00880311 / RW 0x00880332 / RW 0x008805AE (HordeSiegeEngineContain getModuleName / getModuleNameKey / scalar deleting dtor),
+// RW 0x0087FCEF (shared isExitBusy thunk -> TransportContain::isExitBusy 0x00869E73),
+// RW 0x0087EC6E (SiegeEngineContain::onContaining -> TransportContain::onContaining 0x0086A943; client TransferSelection is S-1105),
+// RW 0x0087FCD7 (HordeSiegeEngineContain::onContaining thunk -> 0x0086A943)
 void SiegeEngineContainRegistry::registerClasses(ModuleFactory &modules)
 {
 	modules.bindTypedData<SiegeEngineContainBehaviorData>("SiegeEngineContain", MODULETYPE_BEHAVIOR);

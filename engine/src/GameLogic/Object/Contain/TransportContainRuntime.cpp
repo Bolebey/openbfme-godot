@@ -137,8 +137,11 @@ TransportContain::TransportContain(Thing *thing, const ModuleData *data, const T
 	getObject()->logic().noteStop(kStopTransport);
 }
 
+// RW 0x0086B14D (TransportContain scalar deleting dtor), RW 0x0087A46B (HordeTransportContain scalar deleting dtor)
 TransportContain::~TransportContain() = default;
 
+// RW 0x0086B04A (TransportContain::getModuleName), RW 0x0086B005 (TransportContain::getModuleNameKey),
+// RW 0x0087A31B (HordeTransportContain::getModuleName), RW 0x0087A426 (HordeTransportContain::getModuleNameKey)
 void TransportContain::registerClasses(ModuleFactory &modules)
 {
 	modules.bindTypedData<TransportContainBehaviorData>("TransportContain", MODULETYPE_BEHAVIOR);
@@ -860,6 +863,7 @@ UpdateSleepTime TransportContain::update()
 	return s;
 }
 
+// RW 0x00869ECF (TransportContain::crc, retail tail-jumps to no-op 0x009F3A3C)
 void TransportContain::crc(StateHasher &h) const
 {
 	OpenContain::crc(h);
@@ -1354,6 +1358,7 @@ void HordeTransportContain::crc(StateHasher &h) const
 }
 
 // ---- lane SAVE-4b: the snapshots (OpenBFME native, S-4190) ------------------------------------------------------------------------------------------------
+// RW 0x00869E86 (TransportContain::xfer), RW 0x0086970E (TransportContain::loadPostProcess thunk -> OpenContain::loadPostProcess)
 void TransportContain::xfer(Xfer &x)
 {
 	SnapshotXfer::version(x, 1, 1);
@@ -1371,6 +1376,7 @@ void TransportContain::xfer(Xfer &x)
 	}
 }
 
+// RW 0x0087A3EB (HordeTransportContain::xfer), RW 0x0087CFE6 (HordeTransportContain::loadPostProcess thunk -> 0x0086970E)
 void HordeTransportContain::xfer(Xfer &x)
 {
 	SnapshotXfer::version(x, 1, 1);

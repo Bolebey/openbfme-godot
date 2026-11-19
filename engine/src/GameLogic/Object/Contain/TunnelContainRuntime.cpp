@@ -209,6 +209,7 @@ TunnelContain::TunnelContain(Thing *thing, const ModuleData *data, const TunnelC
 	getObject()->logic().noteStop(stopLine()); // the stop reaches GameLogic::report().stops in every game that has a tunnel
 }
 
+// RW 0x00880E18 (TunnelContain::getModuleName), RW 0x00880DD3 (TunnelContain::getModuleNameKey)
 void TunnelContain::registerClasses(ModuleFactory &modules)
 {
 	modules.bindTypedData<TunnelContainBehaviorData>("TunnelContain", MODULETYPE_BEHAVIOR);
@@ -249,6 +250,7 @@ void TunnelContain::onBuildComplete()
 	}
 }
 
+// RW 0x00880FA8 (TunnelContain main +0x84) / RW 0x0088117A (main +0x80 findHordeContaining, covered by isContainedHere RW 0x008811DD)
 const ContainModuleInterface::ContainedItemsList *TunnelContain::getContainedItemsList() const
 {
 	TunnelTracker *t = tracker();
@@ -523,6 +525,8 @@ void TunnelTracker::xfer(Xfer &x, GameLogic &logic)
 }
 
 // lane SAVE-4b: the tunnel's snapshot (OpenBFME native, S-4190): GarrisonContain's, then its two flags; the network is obfme:TunnelTracker's
+// RW 0x00880E44 (TunnelContain::xfer), RW 0x00880E8B (TunnelContain::loadPostProcess thunk -> 0x0087CFE6),
+// RW 0x00880E1E (asOpenContain MI cast), RW 0x00880EF2 (scalar deleting dtor)
 void TunnelContain::xfer(Xfer &x)
 {
 	SnapshotXfer::version(x, 1, 1);

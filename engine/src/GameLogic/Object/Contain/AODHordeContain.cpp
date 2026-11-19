@@ -1012,6 +1012,9 @@ void AODHordeContain::crc(StateHasher &h) const
 	}
 }
 
+// RW 0x0087E567 (AODHordeContain::xfer), RW 0x0087D917 (loadPostProcess thunk -> HordeContain::loadPostProcess 0x0086C8F2),
+// RW 0x0087E784 (getModuleName), RW 0x0087E78A (getModuleNameKey), RW 0x0087E8E0 (scalar deleting dtor),
+// RW 0x00879A72 (moveHordeToPosition -> AIUpdateInterface::aiMoveToPosition 0x0066C4CA)
 void AODHordeContain::xfer(Xfer &x)
 {
 	SnapshotXfer::version(x, 1, 1);
