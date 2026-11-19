@@ -127,6 +127,8 @@ def ensure_tree() -> None:
     if not (WT / ".git").exists():
         sh(["git", "worktree", "prune"], cwd=REPO)  # a Colab restart leaves the old tree's registration behind
         sh(["git", "worktree", "add", "--detach", str(WT), "origin/main"], cwd=REPO).check_returncode()
+    # docs/STOPS.md merges by stop id (tools/stops_merge.py, .gitattributes merge=stops; owner 2026-11-19: a line union doubled 67 rows)
+    sh(["git", "config", "merge.stops.driver", "python3 tools/stops_merge.py %O %A %B"], cwd=REPO)
 
 
 def build() -> tuple[bool, str]:
