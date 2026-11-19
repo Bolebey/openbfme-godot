@@ -37,6 +37,7 @@ The table is deliberately partial: the other rows in the function map still need
 | 0x872B24 | Interns the HordeContain module name and returns its key; not simulation behaviour. | Module registry plumbing. |
 | 0x872B76 | Clears interface +0x188 and wakes the containing update. | Already ported: `HordeContain::setGarrisoned`, `HordeGarrisonLink.cpp`. |
 | 0x8736EF | Scalar deleting destructor (map tier A); not gameplay behaviour. | Lifecycle. |
+| 0x86C0BC | Returns -1 for null, otherwise the argument's indicator colour via Object RW 0x6916CD. | Underlying `Object::getIndicatorColor` exists; this wrapper's callers and equivalence still need verification. |
 | 0x86C77D | Initialises module +0x2C5 to the inverse of module-data `ThisFormationIsTheMainFormation` +0x1D8. | Missing: `HordeContain::onCreate` is empty; snapshot / mismatch recovery is S-7520. |
 | 0x86C8F2 | Compares saved module +0x2C5 with inverse module-data +0x1D8; mismatch calls horde interface +0x60 (`toggleFormation` RW 0x86C7F6). | Missing formation restoration; S-7520. |
 | 0x86D056 | Interface slot +0x30: this-adjusting thunk to RW 0x86C997, which passes each `AttributeModifiers` entry (module-data +0x22C) and -1 to the argument's `Object::addAttributeModifier` RW 0x68F1A8. | Missing joining-member path S-1600; the separately implemented `HordeFormation.cpp::applyFormationModifiers` is the distinct slot +0x1E4. The hand-off is within #552's membership area. |
