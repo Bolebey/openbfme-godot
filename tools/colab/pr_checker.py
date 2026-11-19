@@ -21,6 +21,11 @@ checked yet (state in /content/prcheck/state.json):
     warnings only: the verdict stays the tests'.
 The GitHub token is the sandbox's git credential (~/.git-credentials), never printed.
 
+A PR from another account's fork (a trusted person's agent, owner 2026-11-17) is never built or run on the owner's machines: GitHub's
+runner checks it (.github/workflows/fork-pr.yml), the checker only notes that once per head (<!-- prcheck-foreign <head> -->, not a verdict),
+and its retail tests run in the owner's batch after the code was read (batch_bot.py). foreign() fails closed: only a PR whose branch GitHub
+says lives in this repository is the owner's.
+
 Order and skips (owner 2026-11-17: the checker ran hours behind, re-checking what Claude had already taken):
  - the most recently updated PRs first;
  - a PR whose head is already in a batch Claude is testing or landing (origin batch/*, land/*, agent/claude/station-0) is skipped;
@@ -50,8 +55,13 @@ HOME = Path(os.environ.get("PRCHECK_HOME", "/content/prcheck"))
 WT = HOME / "wt"
 STATE = Path(os.environ.get("PRCHECK_STATE", str(HOME / "state.json")))  # autostart keeps it in /content/sandbox (saved to Drive)
 REPORTS = HOME / "reports"
-BASE = ["ENNORATH scenario*", "module coverage*", "modgap2*", "mapobj*", "logic retail: the PlayerTemplate*",
-        "save4a retail*", "save4b retail*", "move retail*", "perf1*", "uber1*"]
+# The batch's whole set (batch_bot.py SUITE, owner 2026-11-17: batch 18b spent three hours bisecting skirmish ai vs ai, aiexpand1 and script2
+# angmar, which this checker did not run, down to PRs it had passed) plus the PlayerTemplate check; test_batch_bot.py keeps them equal.
+# The tests run one per core in parallel: the longest one sets the time.
+BASE = ["perf1*", "uber1*", "skirmish?ai?vs?ai*", "aiexpand1*", "save4a*", "save4b*", "save4c*", "script3*", "script2?angmar*",
+        "module?coverage*", "modgap1*", "modgap2*", "mod1*", "facta?stops*", "factb?spell?book*", "FACT-A?spell?book*", "factb?units*",
+        "factc?units*", "ENNORATH?scenario*", "mapobj*", "move?retail*", "LOCAL-*", "PORT-1*", "PORT-2*", "PORT-3*", "PORT-4*", "PORT-5*",
+        "PORT-6*", "PORT-7*", "PORT-8*", "PORT-9*", "logic retail: the PlayerTemplate*"]
 PINS = {"perf1*", "uber1*"}
 SHARED = ("docs/STOPS.md", "docs/ennorath/NIGHT_WATCH.md", "README.md")
 DOC_UNION = {"docs/STOPS.md", "docs/ennorath/NIGHT_WATCH.md", "docs/ennorath/PROBLEMS.md", "docs/ennorath/TOP20.md",
@@ -59,6 +69,14 @@ DOC_UNION = {"docs/STOPS.md", "docs/ennorath/NIGHT_WATCH.md", "docs/ennorath/PRO
 
 
 SANDBOX = (Path("/content/sandbox_id").read_text().strip() if Path("/content/sandbox_id").exists() else "?")
+# Owner 2026-11-19: the checker and the batcher help each other ("они должны быть синхронизированы, чтобы знали друг о друге и не делали
+# одно и то же"). Sandbox 2's batch loop runs a checker cycle after 30 minutes without green PRs (batch_bot.py helper_due), and this
+# checker runs a batch round when it has nothing to check (help_batch). A check claims its PR on the Drive first: the other sandbox's
+# checker leaves a PR whose current head is claimed there, until the claim is CLAIM_S old.
+CLAIMS = Path(os.environ.get("PRCHECK_CLAIMS", "/content/drive/MyDrive/openbfme-runs/prcheck/claims"))
+CLAIM_S = 4 * 3600
+CLAIM_SETTLE_S = 90   # the Drive carries a write to the other sandbox within about a minute
+INSTALL = Path("/content/sandbox")
 
 
 def sh(cmd: list[str] | str, cwd: Path = WT, timeout: int | None = None, env: dict | None = None) -> subprocess.CompletedProcess:
@@ -80,6 +98,19 @@ def gh(*args: str) -> str:
     if done.returncode:
         raise RuntimeError(f"gh {' '.join(args[:2])}: {done.stderr.strip()[:300]}")
     return done.stdout
+
+
+STATUS_DIR = Path(os.environ.get("OPENBFME_STATUS_DIR", "/content/status"))
+
+
+def status(key: str, text: str) -> None:
+    """What this bot does right now, one line in /content/status/<key>.txt (owner 2026-11-18: the dashboard says what each bot is busy
+    with); watchdog.py puts every such line into the sandbox's heartbeat. Never fails the bot."""
+    try:
+        STATUS_DIR.mkdir(parents=True, exist_ok=True)
+        (STATUS_DIR / f"{key}.txt").write_text(text[:300] + "\n", encoding="utf-8")
+    except OSError:
+        pass
 
 
 def load_state() -> dict:
@@ -109,19 +140,57 @@ def build() -> tuple[bool, str]:
     return True, ""
 
 
+# What a test measured, not only its colour (owner 2026-11-18): a hash test red on main (aiexpand1, skirmish AI vs AI, save4b ...) that a PR
+# moves stays red, so pass / fail alone cannot see the move. The signature is the failures' own lines (the assertion and its values, file
+# paths and line numbers dropped): equal on main and on the PR = the PR does not move the test.
+SIG_LINE = re.compile(r"ERROR:|values:|TEST CASE:|logged:|FATAL|SIGSEGV|CRASH")
+SIG_PATH = re.compile(r"^\S*?\.(?:cpp|h|hpp)(?::\d+|\(\d+\))?:?\s*")
+
+
+def signature(status: str, out: str) -> str:
+    """'pass' / 'none', or a short hash of the failure lines of `out` (doctest's own output)."""
+    if status != "fail":
+        return status
+    keep = [SIG_PATH.sub("", l.strip()) for l in out.splitlines() if SIG_LINE.search(l)]
+    return "fail:" + hashlib.sha1("\n".join(keep).encode("utf-8", "replace")).hexdigest()[:12]
+
+
+SIGS: dict[str, str] = {}   # pattern -> signature of its last run (run_test fills it; each pattern runs in one thread)
+
+
+def moved_tests(res: dict[str, tuple[str, str]], base: dict[str, str], main_sigs: dict[str, str]) -> list[str]:
+    """The base tests whose result on the PR differs from main's: by signature where both have one, else by status."""
+    return [tc for tc in BASE if SIGS.get(tc, res[tc][0]) != main_sigs.get(tc, base.get(tc))]
+
+
+MOVES = re.compile(r"<!-- prcheck-moves ([^ ]*) ?-->")
+
+
+def moves_mark(moved: list[str]) -> str:
+    """The comment's lines for batch_bot.py (the hidden mark) and the reader."""
+    mark = f"<!-- prcheck-moves {','.join(moved)} -->"
+    if moved:
+        return mark + f"\n🧷 Сдвигает хеш-тесты {', '.join(f'`{t}`' for t in moved)} (их значения не как на main): в партию пойдёт один."
+    return mark + "\n🔕 Базовый набор не сдвинут (значения как на main): пойдёт в общую партию."
+
+
 def run_test(tc: str) -> tuple[str, str, str]:
-    """(pattern, 'pass'|'fail'|'none', first error lines)."""
+    """(pattern, 'pass'|'fail'|'none', first error lines); its signature goes to SIGS[pattern]."""
     exe = WT / "engine/build/openbfme_tests"
     try:
         done = sh([str(exe), f"-tc={tc}"], timeout=2400, env=agent_env())
         out = done.stdout + done.stderr
     except subprocess.TimeoutExpired:
+        SIGS[tc] = "fail:timeout"
         return tc, "fail", "timeout 40 min"
     m = re.search(r"test cases:\s*(\d+)\s*\|\s*(\d+) passed\s*\|\s*(\d+) failed", out)
     if not m or m.group(1) == "0":
+        SIGS[tc] = "none"
         return tc, "none", ""
     errs = "\n".join([l[:220] for l in out.splitlines() if re.search(r"ERROR|FATAL|SIGSEGV|CRASH", l)][:4])
-    return tc, ("fail" if (done.returncode or m.group(3) != "0") else "pass"), errs
+    st = "fail" if (done.returncode or m.group(3) != "0") else "pass"
+    SIGS[tc] = signature(st, out)
+    return tc, st, errs
 
 
 _ENV: dict | None = None
@@ -143,6 +212,10 @@ def run_set(patterns: list[str]) -> dict[str, tuple[str, str]]:
 
 def main_baseline(state: dict, main_sha: str) -> dict:
     """BASE on main itself, once per main commit."""
+    if not set(BASE) <= set(state["main"].get("results") or {}):  # BASE grew (2026-11-17: the batch's whole set): measure main again
+        state["main"] = {}
+    if not set(BASE) <= set(state["main"].get("sigs") or {}):   # measured before the signatures (2026-11-18): measure main again
+        state["main"] = {}
     if state["main"].get("sha") == main_sha and "audit" in state["main"]:
         return state["main"]["results"]
     old = state["main"].get("sha")
@@ -153,11 +226,12 @@ def main_baseline(state: dict, main_sha: str) -> dict:
             save_state(state)
             return state["main"]["results"]
     sh(["git", "checkout", "-q", "-f", "--detach", main_sha]).check_returncode()
+    status("prcheck", f"main {main_sha[:8]}: сборка и эталонный набор ({len(BASE)} наборов), с ним сравниваются PR")
     ok, err = build()
     if not ok:
         raise RuntimeError(f"main {main_sha[:8]} does not build:\n{err}")
     res = run_set(BASE)
-    state["main"] = {"sha": main_sha, "results": {k: v[0] for k, v in res.items()}}
+    state["main"] = {"sha": main_sha, "results": {k: v[0] for k, v in res.items()}, "sigs": {k: SIGS.get(k, v[0]) for k, v in res.items()}}
     state["main"]["audit"] = str(run_audit(HOME / "audit-main") or "")  # the field audit of this main: the PRs' audits compare with it
     save_state(state)
     return state["main"]["results"]
@@ -237,6 +311,7 @@ def check_pr(pr: dict, state: dict, main_sha: str, open_prs: list[dict], comment
     base = main_baseline(state, main_sha)
     sh(["git", "fetch", "-q", "origin", f"+pull/{n}/head:refs/prcheck/{n}"]).check_returncode()
     sh(["git", "checkout", "-q", "-f", "--detach", main_sha]).check_returncode()
+    status("prcheck", f"PR #{n} ({pr['title'][:60]}): вливаю в main {main_sha[:8]}")
     lines = [f"<!-- prcheck {sha} -->", f"**Проверка PR #{n}** на `main` {main_sha[:8]}, голова {sha[:8]} (песочница {SANDBOX}, `tools/colab/pr_checker.py`)", ""]
     merge = sh(["git", "-c", "user.name=prcheck", "-c", "user.email=prcheck@localhost", "merge", "--no-edit", "--no-verify", "-q", f"refs/prcheck/{n}"])
     if merge.returncode:
@@ -293,6 +368,7 @@ def check_pr(pr: dict, state: dict, main_sha: str, open_prs: list[dict], comment
             "(строка `` `<объект> <кнопка>`: почему ``; ошибка теста — чинить тест, а не объяснять)"
         lines += [head, "```", out[:3500], "```"]
     t_build = time.time()
+    status("prcheck", f"PR #{n} ({pr['title'][:60]}): сборка")
     ok, err = build()
     t_build = time.time() - t_build
     if not ok:
@@ -302,6 +378,8 @@ def check_pr(pr: dict, state: dict, main_sha: str, open_prs: list[dict], comment
     own = own_tests(diff, pr["title"])
     base_needed = touches_engine(changed)
     t_tests = time.time()
+    status("prcheck", f"PR #{n} ({pr['title'][:60]}): тесты, {len(own) + (len(BASE) if base_needed else 0)} наборов"
+           + (" и аудит полей" if base_needed else ""))
     with cf.ThreadPoolExecutor(1) as side:  # the field audit of the PR's tree beside its tests (about 8 minutes, one core)
         audit_job = side.submit(run_audit, HOME / "audit-pr") if base_needed else None
         res = run_set(own + (BASE if base_needed else []))
@@ -345,6 +423,9 @@ def check_pr(pr: dict, state: dict, main_sha: str, open_prs: list[dict], comment
     for tc, e in worse:
         if named(tc):
             lines.append(f"⚠️ `{tc}` сдвигает пин, причина в PR названа: владелец перемерит при вливании." + (f"\n```\n{e}\n```" if e else ""))
+    # the batch's split (owner 2026-11-18): a PR that moves any base test (its signature differs from main's, red on main or not) goes into
+    # a batch alone, the others together; batch_bot.py reads this mark. Without the base set run (no engine change) nothing moves.
+    lines.append(moves_mark(moved_tests(res, base, state["main"].get("sigs") or {}) if base_needed else []))
     if not worse:
         reds = [tc for tc in BASE if base.get(tc) == "fail"]
         lines.append("✅ Базовый набор как на main" + (f" (на main и так красные: {', '.join(f'`{t}`' for t in reds)})" if reds else "") + ".")
@@ -398,6 +479,17 @@ def touches_engine(changed: list[str]) -> bool:
 
 RETURNED = re.compile(r"<!-- returned -->|не принят")
 TAKEN_REFS = ("refs/remotes/origin/batch/", "refs/remotes/origin/land/", "refs/remotes/origin/agent/claude/station-0")
+
+
+def foreign(p: dict) -> bool:
+    """True unless GitHub says the PR's branch lives in this repository (only the owner and the agents working through the owner's account
+    push here). GitHub sets these fields, not the PR; a missing field or a deleted fork counts as foreign."""
+    return p.get("isCrossRepository") is not False or (p.get("headRepositoryOwner") or {}).get("login") != GH.split("/")[0]
+
+
+FOREIGN_NOTE = ("🔒 **PR из чужого форка**: на песочницах владельца его код не собирается и не запускается. Сборку и свои тесты "
+                "проверяет GitHub Actions — проверка «Fork PR: build and own tests» у этого PR (тесты, которым нужны файлы игры, там "
+                "пропускаются). Тесты на данных игры пройдут в батче владельца после того, как владелец прочитает код.")
 
 
 def skip_reason(p: dict) -> str:
@@ -476,12 +568,35 @@ def finish(n: int, sha: str, lines: list[str], comment: bool, state: dict) -> st
     return body
 
 
+def last_checked_head(comments: list[dict]) -> str:
+    """The head of the newest real check among the PR's comments ('' = none): `<!-- prcheck <sha> -->` reports, without the ⏸️ notes
+    (a skip is not a check)."""
+    heads = [m.group(1) for c in comments for m in [re.match(r"<!-- prcheck ([0-9a-f]{40}) -->", c.get("body") or "")]
+             if m and "⏸️" not in (c.get("body") or "")]
+    return heads[-1] if heads else ""
+
+
+def sync_from_comments(p: dict, state: dict) -> None:
+    """Once per PR head: when the local state does not know this head as checked, read the PR's comments. A report on this head = checked
+    (no second run); a report on an older head = the PR was checked before, so a new head is a rework and goes first."""
+    n, head = str(p["number"]), p["headRefOid"]
+    synced = state.setdefault("synced", {})
+    if state["checked"].get(n) == head or synced.get(n) == head or p["isDraft"]:
+        return
+    comments = json.loads(gh("pr", "view", n, "--json", "comments")).get("comments") or []
+    last = last_checked_head(comments)
+    if last:
+        state["checked"][n] = last
+    synced[n] = head
+    save_state(state)
+
+
 def cycle(args) -> int:
     state = load_state()
     sh(["git", "fetch", "-q", "origin"], cwd=REPO).check_returncode()
     main_sha = sh(["git", "rev-parse", "origin/main"], cwd=REPO).stdout.strip()
     prs = json.loads(gh("pr", "list", "--state", "open", "--limit", "100", "--json",
-                        "number,title,body,headRefOid,headRefName,files,isDraft,updatedAt"))
+                        "number,title,body,headRefOid,headRefName,files,isDraft,updatedAt,isCrossRepository,headRepositoryOwner"))
     sh(["git", "fetch", "-q", "origin", "+refs/pull/*/head:refs/prcheck/*"], cwd=REPO)  # the heads, for the batch test below
     # A red PR whose description changed is checked again without a new commit: an agent that only names a pin's cause in the PR body
     # (the named-pin rule reads the body) gets its new verdict (PR 583, 2026-11-17).
@@ -498,13 +613,26 @@ def cycle(args) -> int:
         report = REPORTS / f"{n}-{p['headRefOid'][:8]}.md"
         return bodies[n] != h and report.exists() and "❌" in report.read_text(encoding="utf-8", errors="replace")
 
+    # GitHub is the record of what was checked, not the local state: a sandbox restored from an older backup (sb1 2026-11-18, a state from
+    # 2026-11-15) took every PR for new, re-checked the whole list and left reworked PR 523 behind the queue for hours.
+    for p in prs:
+        sync_from_comments(p, state)
     todo = [p for p in prs if (args.pr is None or p["number"] == args.pr) and not p["isDraft"]
             and (state["checked"].get(str(p["number"])) != p["headRefOid"] or body_changed(p))
             and state.get("errors", {}).get(str(p["number"])) != p["headRefOid"]
-            and not p["headRefName"].startswith(("claude/", "agent/claude/"))]
+            and not p["headRefName"].startswith(("claude/", "agent/claude/", "agent/local/"))]   # local stations: Claude tests them on the PC and lands them (owner 2026-11-19)
     skipped = state.setdefault("skipped", {})
     keep = []
     for p in todo:
+        if foreign(p):  # GitHub's runner checks it; one note per head, never a build here
+            n, head = str(p["number"]), p["headRefOid"]
+            if state.setdefault("foreign", {}).get(n) != head:
+                print(f"#{n}: from another account's fork, left to GitHub Actions", flush=True)
+                if not args.no_comment:
+                    gh("pr", "comment", n, "--body", f"<!-- prcheck-foreign {head} -->\n{FOREIGN_NOTE}")
+                state["foreign"][n] = head
+                save_state(state)
+            continue
         why = skip_reason(p) if args.pr is None else ""
         if why:
             if skipped.get(str(p["number"])) != [p["headRefOid"], why]:
@@ -518,12 +646,19 @@ def cycle(args) -> int:
             continue
         keep.append(p)
     todo = keep
+    held = check_claims()
+    for p in [p for p in todo if held_elsewhere(p, held)]:
+        print(f"#{p['number']}: checked on sandbox {held_elsewhere(p, held)} now", flush=True)
+    todo = [p for p in todo if not held_elsewhere(p, held)]
     # a reworked PR (checked before, new head) first: its agent waits for the answer (PR 523 waited four hours behind new PRs); then the
     # freshest first
     todo = sorted(todo, key=lambda p: p.get("updatedAt") or "", reverse=True)
     todo = sorted(todo, key=lambda p: str(p["number"]) not in state["checked"])
     # one PR per cycle, then the list again: a PR reworked while another is being checked waits for that one check only, not the whole queue
     for p in todo[:1]:
+        if not claim_check(p):
+            print(f"#{p['number']}: the other sandbox claimed it first", flush=True)
+            continue
         bodies[str(p["number"])] = body_hash(p)
         t0 = time.time()
         try:
@@ -533,6 +668,8 @@ def cycle(args) -> int:
             print(f"#{p['number']}: checker error: {e}", flush=True)
             state.setdefault("errors", {})[str(p["number"])] = p["headRefOid"]
             save_state(state)
+        finally:
+            release_check(p)
     return len(todo)
 
 
@@ -559,12 +696,73 @@ def self_update() -> None:
     os.execv(sys.executable, [sys.executable, str(me)] + sys.argv[1:])
 
 
+def check_claims(now: float | None = None) -> dict[int, dict]:
+    now = time.time() if now is None else now
+    held: dict[int, dict] = {}
+    for f in CLAIMS.glob("*.json") if CLAIMS.exists() else []:
+        try:
+            c = json.loads(f.read_text())
+        except (OSError, ValueError):
+            continue
+        if now - float(c.get("t", 0)) < CLAIM_S and f.stem.isdigit():
+            held[int(f.stem)] = c
+    return held
+
+
+def held_elsewhere(p: dict, held: dict[int, dict]) -> str:
+    c = held.get(p["number"])
+    return c["sandbox"] if c and c.get("sandbox") != SANDBOX and c.get("head") == p["headRefOid"] else ""
+
+
+def claim_check(p: dict, settle: float = CLAIM_SETTLE_S) -> bool:
+    """Write this sandbox's claim, give the Drive time to bring the other's, keep the PR only if the claim still names this sandbox.
+    Without the Drive (a hand run elsewhere) every claim holds."""
+    if not CLAIMS.parent.parent.exists():
+        return True
+    CLAIMS.mkdir(parents=True, exist_ok=True)
+    f = CLAIMS / f"{p['number']}.json"
+    f.write_text(json.dumps({"sandbox": SANDBOX, "head": p["headRefOid"], "t": time.time()}))
+    time.sleep(settle)
+    try:
+        c = json.loads(f.read_text())
+    except (OSError, ValueError):
+        return False
+    return c.get("sandbox") == SANDBOX and c.get("head") == p["headRefOid"]
+
+
+def release_check(p: dict) -> None:
+    f = CLAIMS / f"{p['number']}.json"
+    try:
+        if json.loads(f.read_text()).get("sandbox") == SANDBOX:
+            f.unlink()
+    except (OSError, ValueError):
+        pass
+
+
+def help_batch() -> int:
+    """Nothing to check: one batch round of batch_bot.py (it starts a batch only by its own rules: green PRs, claims, the shared loop
+    state on the Drive). Not where sandbox 2's batch loop itself runs this checker (--no-helper)."""
+    new = sh(["git", "show", "origin/main:tools/colab/batch_bot.py"], cwd=REPO).stdout
+    if not new:
+        return -1
+    path = INSTALL / "batch_bot.py"
+    if not path.exists() or path.read_text(encoding="utf-8", errors="replace") != new:
+        tmp = path.with_name("batch_bot.py.new")
+        tmp.write_text(new, encoding="utf-8")
+        os.replace(tmp, path)
+    status("prcheck", "проверять нечего: ход батчера (batch_bot.py loop --once)")
+    with open("/content/batch_loop.log", "ab") as log:
+        return subprocess.run([sys.executable, str(path), "loop", "--once", "--no-helper"], cwd=str(INSTALL), stdout=log,
+                              stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL).returncode
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--once", action="store_true")
     ap.add_argument("--pr", type=int)
     ap.add_argument("--no-comment", action="store_true")
     ap.add_argument("--no-self-update", action="store_true", help="keep the running copy (a branch version under test)")
+    ap.add_argument("--no-helper", action="store_true", help="never run a batch round when idle (the cycle batch_bot.py runs itself)")
     args = ap.parse_args()
     ensure_tree()
     while True:
@@ -574,6 +772,10 @@ def main() -> int:
         if args.once or args.pr:
             return 0
         if not n:
+            status("prcheck", "все открытые PR проверены на своих головах: жду новых коммитов")
+            if not args.no_helper:
+                help_batch()
+                status("prcheck", "все открытые PR проверены на своих головах: жду новых коммитов")
             time.sleep(300)
 
 

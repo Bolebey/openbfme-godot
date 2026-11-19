@@ -136,6 +136,8 @@ public:
 	// slot 0x50 (RW 0x7B0F25: mov eax, [ecx + 0x1C]; ret; the interface at module + 0x10 for SpecialPowerModule): the target id the module kept when its
 	// initiate ran (SpecialPowerModule: RW 0x897E9E .. 0x897EA3 stores the target's ObjectID; 0 for a module that keeps none)
 	virtual ObjectID getTargetId() const = 0;
+	// slot 0x4C (RW 0x00896751): SpecialAbilityUpdate::finishAbility (RW 0x0085314C) clears m_updateDisabled (+0x28)
+	virtual void clearUpdateDisabled() {}
 };
 
 // SpecialPowerModule (RW module vtable 0xC65058, interface 0xC64FF0; constructor RW 0x8973EE). Module fields: + 0x14 the recharge length,
@@ -178,6 +180,9 @@ public:
 		return m_spData ? m_spData->m_initiateSound : empty;
 	}
 	ObjectID getTargetId() const override { return m_targetId; } // slot 0x50 (RW 0x7B0F25)
+	void clearUpdateDisabled() override { m_updateDisabled = false; } // slot 0x4C (RW 0x00896751)
+	void setUpdateDisabled(bool disabled) { m_updateDisabled = disabled; }
+	bool isUpdateDisabled() const { return m_updateDisabled; }
 
 	// lane HERO-1: the module's vslot 0x38 (RW 0x897D25 -> 0x897987(null)): the trigger a SpecialAbilityUpdate runs when its preparation starts (the
 	// recharge, the light points and the trigger effects at the object; the subclass effect is not part of it)
@@ -267,7 +272,7 @@ private:
 	int m_lastHealed = 0;
 };
 
-// OCLSpecialPower (data constructor RW 0x8C752F, table RW 0xC73A40 after the base; module constructor RW 0x8C72E9, interface RW 0xC73890):
+// OCLSpecialPower (data constructor RW 0x8C752F, destructor RW 0x008C7A33 / 0x008C7A17, table RW 0xC73A40 after the base; module constructor RW 0x8C72E9, destructor RW 0x008C7319 / 0x008C7377, name RW 0x008C7313 / 0x008C7332, interface RW 0xC73890):
 // + 0x7C UpgradeOCL (science, OCL) pairs, + 0x88 OCL, + 0x8C CreateLocation (index into RW 0xDB32D8, default 0 CREATE_AT_EDGE_NEAR_SOURCE),
 // + 0x90 UpgradeName, + 0x9C NearestSecondaryObjectFilter. doSpecialPowerAtLocation (RW 0x8C75D8): the base part (RW 0x89816C), the OCL is the
 // first UpgradeOCL whose science the player owns, else OCL (RW 0x8C7393); CREATE_AT_LOCATION (case 3, RW 0x8C776B) creates it with the module's

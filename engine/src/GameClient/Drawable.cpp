@@ -633,6 +633,7 @@ void Drawable::advanceAnimationLocal(double elapsedMs)
 			e.lightDraw->stepFlicker((float)(elapsedMs * 0.001));
 		}
 	}
+	flushPendingCapturePresentation();
 }
 
 void Drawable::advanceAnimation(double elapsedMs)
@@ -654,6 +655,7 @@ void Drawable::advanceAnimation(double elapsedMs)
 			e.lightDraw->stepFlicker((float)(elapsedMs * 0.001));
 		}
 	}
+	flushPendingCapturePresentation();
 }
 
 // lane COMBAT-4 (FB-0002), RW 0x4CBFFB (W3DTruckDraw's draw update, run once per client frame: 6 per logic frame, RW 0xDE4324 + 0x38): with a front tire bone
@@ -731,6 +733,38 @@ void Drawable::advanceTires(DrawEntry &e, double elapsedMs)
 	}
 }
 
+// PORT-267 (fork issue 626): the floor records of this drawable, once per client frame. RotWK's shared W3DFloorBuffer holds one record per
+// (drawable, model name); the port keeps that record on the drawable's floor entry, and the two places that touch it are the module's
+// doDrawModule (RW 0x4CEBCA, instance vtable RW 0xBE3378 slot +0x2C) and the buffer's per-frame walk (RW 0x4E547D).
+void Drawable::updateFloorFades()
+{
+	for (DrawEntry &e : m_entries)
+	{
+		// RW 0x4CEBCA needs the module data only: the record is found by the data's ModelName (RW 0x4CEC04 passes data +8), not by the model the
+		// archives resolved, so a floor whose model is missing still gets its record
+		if (e.kind != W3D_DRAWKIND_FLOOR || !e.data)
+		{
+			continue;
+		}
+		const auto *data = dynamic_cast<const W3DFloorDrawModuleData *>(e.data);
+		if (!data)
+		{
+			continue;
+		}
+		// RW 0x4CEBCA: the data (RW 0x4CEBCE) and the drawable (RW 0x4CEBD6) exist, FloorFadeRateOnObjectDeath (data +0x20) is not zero
+		// (RW 0x4CEBDA) and the drawable's object is effectively dead (RW 0x4CEBEC..0x4CEBFD) -> the rate goes to the record, RW 0x4CEC1E
+		// through RW 0x46AFCA to RW 0x4E5A98 (the record's +0x88)
+		if (data->m_floorFadeRateOnObjectDeath != 0.0f && m_effectivelyDead)
+		{
+			e.floorFade.setRate(data->m_floorFadeRateOnObjectDeath);
+		}
+		// RW 0x4E42DE: the record's visibility (bit 12 of Drawable + 0x264) drives the state machine RW 0x4E54BE..0x4E54FD. The port's equivalent
+		// of that bit is whether the floor is drawn at all: its HideIfModelConditions (RENDER-2) or a script's / the client's hide
+		e.floorFade.setVisible(!e.conditionHidden && !e.moduleHidden && !m_clientHidden);
+		e.floorFade.step(drawOpacity()); // RW 0x4E547D -> RW 0x4E3EC5
+	}
+}
+
 void Drawable::syncFromSnapshot(const ObjectSnapshot &rec, UnsignedInt snapshotFrame, double alpha, bool interpolate)
 {
 	// the sequential form (lane PERF-3 keeps it as the reference of prepareSync / commitSync, DrawableManager::setParallelSync(false)). Lane SMOOTH-1: the
@@ -763,6 +797,7 @@ void Drawable::syncFromSnapshot(const ObjectSnapshot &rec, UnsignedInt snapshotF
 	updatePhantomLook(rec);                        // lane FBSIM-1
 	m_moveSpeed = rec.moveSpeed;                   // lane SMOOTH-3: the walk / run cycle's speed source (RW 0x4B67D4)
 	m_scriptTarget = rec.scriptTarget;             // lane FX-3
+	m_effectivelyDead = rec.effectivelyDead;       // PORT-267: the floor gate RW 0x4CEBEC..0x4CEBFD
 	applyPhysicsXform(rec, p);                     // LOCAL-25: presentation physics
 }
 
@@ -2524,4 +2559,65 @@ Coord3D Drawable::getPresentationPosition() const
 		return m_presentationPosition;
 	}
 	return *getPosition();
+}
+
+bool Drawable::hasPendingAnimationTransition() const
+{
+	for (const DrawEntry &e : m_entries)
+	{
+		if (e.draw && e.draw->pendingStatePending())
+		{
+			const AnimationStateInfo *st = e.draw->currentAnimationState();
+			// Trans_CancelReraise in captureflag.ini has its own LuaEvent = OnStateEnter (raises the previous owner's flag).
+			if (st && st->stateName == "Trans_CancelReraise")
+			{
+				continue;
+			}
+			return true;
+		}
+	}
+	return false;
+}
+
+void Drawable::applyCapturePresentationNow(const std::vector<DeferredSubObject> &subObjects, bool hasIndicator, std::uint32_t indicator, bool hasHouse, std::uint32_t house)
+{
+	for (const DeferredSubObject &s : subObjects)
+	{
+		showSubObject(s.name, s.visible, s.permanent);
+	}
+	if (hasIndicator)
+	{
+		setIndicatorColor(indicator);
+	}
+	if (hasHouse)
+	{
+		setHouseColor(house);
+	}
+}
+
+void Drawable::applyOrDeferCapturePresentation(std::vector<DeferredSubObject> subObjects, bool hasIndicator, std::uint32_t indicator, bool hasHouse, std::uint32_t house)
+{
+	if (!hasPendingAnimationTransition())
+	{
+		m_pendingCapturePresentation = PendingCapturePresentation{};
+		applyCapturePresentationNow(subObjects, hasIndicator, indicator, hasHouse, house);
+		return;
+	}
+	m_pendingCapturePresentation.active = true;
+	m_pendingCapturePresentation.subObjects = std::move(subObjects);
+	m_pendingCapturePresentation.hasIndicatorColor = hasIndicator;
+	m_pendingCapturePresentation.indicatorColor = indicator;
+	m_pendingCapturePresentation.hasHouseColor = hasHouse;
+	m_pendingCapturePresentation.houseColor = house;
+}
+
+void Drawable::flushPendingCapturePresentation()
+{
+	if (!m_pendingCapturePresentation.active || hasPendingAnimationTransition())
+	{
+		return;
+	}
+	PendingCapturePresentation pending = std::move(m_pendingCapturePresentation);
+	m_pendingCapturePresentation = PendingCapturePresentation{};
+	applyCapturePresentationNow(pending.subObjects, pending.hasIndicatorColor, pending.indicatorColor, pending.hasHouseColor, pending.houseColor);
 }
