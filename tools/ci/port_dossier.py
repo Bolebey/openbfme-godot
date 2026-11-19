@@ -6,7 +6,8 @@ addresses. The dossier lists, from the maps in the repository:
     address the issue names that is a function start of the map;
   * the button matrix's red buttons whose module class is the task's (MATRIX_GAPS.tsv);
   * the mod's fields of those classes no reader uses yet (FIELD_GAPS.tsv);
-  * the attribute modifier reads in those classes or at the named functions (MODIFIER_READERS.tsv).
+  * the attribute modifier reads in those classes or at the named functions (MODIFIER_READERS.tsv), and the red buttons of those classes whose
+    modifier lists change an attribute the port does not read there (MODIFIER_MATRIX.tsv).
 The disassembly of the task's functions needs game.dat, which never goes to GitHub: sandbox 4 writes it to the arena files on the Drive as
 `dossier-<issue>.txt` (tools/mod/dossier_disasm.py), and the dashboard hands that file to the task's agent only.
 
@@ -92,6 +93,12 @@ def dossier(text: str) -> str:
     if mods:
         out += ["", "### Чтения атрибутов-модификаторов (`MODIFIER_READERS.tsv`)", ""]
         out += [f"- {r['attribute']}: вызов `{r['call']}` в `{r['function']}` — {r['status']}" for r in mods[:LIMIT]]
+    # the matrix <-> modifier link: red buttons of these classes whose modifier lists change an attribute the port does not read there
+    unread = [r for r in rows("MODIFIER_MATRIX.tsv") if r.get("module class") in classes and r.get("attributes the port does not read")]
+    if unread:
+        out += ["", f"### Кнопки, чьи модификаторы порт не читает (`MODIFIER_MATRIX.tsv`, {len(unread)})", ""]
+        out += [f"- {r['faction']} `{r['object']}` `{r['button']}`: списки {r['modifier lists']} меняют "
+                f"{r['attributes the port does not read']} — чтение не перенесено" for r in unread[:LIMIT]]
     out += ["", "_Досье обновляется при правке задачи; полные списки — в картах `docs/ennorath/`._"]
     return "\n".join(out)
 

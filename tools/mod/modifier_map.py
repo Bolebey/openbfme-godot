@@ -30,7 +30,7 @@ An attribute's verdict: `dead in RotWK` (the mod sets it, RotWK reads it nowhere
 `partly ported`, `ported`, `port-only reads` (the port reads it where RotWK has no reader), `unknown to RotWK` (a mod name the table lacks).
 
 Outputs (--out): modifier-map.md (the summary and the per attribute detail), modifier-lists.tsv, modifier-readers.tsv, modifier-port-reads.tsv,
-modifier-unresolved.tsv.
+modifier-unresolved.tsv, modifier-matrix.tsv (the button matrix's red buttons with their modules' lists and the attributes the port does not read).
 
     python tools/mod/modifier_map.py --base <RotWK install> --overlay <Ennorath install> --game <game.dat> --out <dir>
 """
@@ -658,6 +658,36 @@ def write(out: Path, names, lists, factions, readers, unresolved, wrappers, read
     return rows
 
 
+def matrix_link(out: Path, lists: dict, rows, gaps_path: Path) -> int:
+    """modifier-matrix.tsv (owner 2026-11-19: the maps linked): every red button of MATRIX_GAPS.tsv with the ModifierLists its module names
+    (the object's module of that class: refs from mod_side), their attributes and each attribute's verdict here. A button whose list changes an
+    attribute the port does not read where RotWK does (`not read by the port` / `partly ported`) shows why it "does nothing"."""
+    if not gaps_path.exists():
+        return 0
+    verdicts = {a: v for a, _n, _m, _r, _rw, _pt, _cnr, _pr, v in rows}
+    by_module: dict[tuple[str, str], list] = defaultdict(list)
+    for ml in lists.values():
+        for typ, name, cls, _k in ml.refs:
+            if typ == "object":
+                by_module[(name.lower(), cls)].append(ml)
+    with gaps_path.open(encoding="utf-8", newline="") as s:
+        gaps = list(csv.DictReader([l for l in s if not l.startswith("#")], delimiter="\t", quoting=csv.QUOTE_NONE))
+    n = 0
+    with (out / "modifier-matrix.tsv").open("w", encoding="utf-8", newline="") as s:
+        w = csv.writer(s, delimiter="\t", lineterminator="\n")
+        w.writerow(["faction", "object", "button", "result", "module class", "modifier lists", "attributes", "attributes the port does not read"])
+        for g in gaps:
+            mls = by_module.get(((g.get("module object") or "").lower(), g.get("module class") or ""), [])
+            if not mls:
+                continue
+            attrs = sorted({a.upper() for ml in mls for a, _v in ml.modifiers if a})
+            unread = [a for a in attrs if verdicts.get(a) in ("not read by the port", "partly ported")]
+            w.writerow([g.get("faction"), g.get("object"), g.get("button"), g.get("result"), g.get("module class"),
+                        " ".join(sorted({ml.name for ml in mls})), " ".join(attrs), " ".join(unread)])
+            n += 1
+    return n
+
+
 def function_classes(path: Path) -> dict[int, str]:
     out = {}
     if path.exists():
@@ -680,6 +710,8 @@ def main(argv=None) -> int:
     ap.add_argument("--src", type=Path, default=here / "engine" / "src")
     ap.add_argument("--inventory", type=Path, help="rw_function_blocks.json (default: citation_check.find_inventory)")
     ap.add_argument("--function-map", type=Path, default=here / "docs" / "ennorath" / "RW_FUNCTION_MAP.tsv")
+    ap.add_argument("--matrix-gaps", type=Path, default=here / "docs" / "ennorath" / "MATRIX_GAPS.tsv",
+                    help="the button matrix's red buttons, linked to their modules' modifier lists (modifier-matrix.tsv)")
     a = ap.parse_args(argv)
     full = cc.DRIVE_COPY.with_name("rw_function_blocks_full.json")  # the whole binary (the maps run's angr pass); the default one holds the
     inv_path = a.inventory or (full if full.exists() else cc.find_inventory(here))  # module code only and misses most readers
@@ -695,6 +727,7 @@ def main(argv=None) -> int:
     lists, factions = mod_side(a.base, a.overlay, a.src)
     status = reader_status(readers, cites, reads, inv, via_calls)
     rows = write(a.out, names, lists, factions, readers, unresolved, wrappers, reads, status, function_classes(a.function_map), queries)
+    linked = matrix_link(a.out, lists, rows, a.matrix_gaps)
     print(f"{len(lists)} modifier lists, {sum(len(m.modifiers) for m in lists.values())} modifiers; {len(readers)} RotWK readers in "
           f"{len({r.function for r in readers})} functions ({len(wrappers)} wrappers, {len(unresolved)} unresolved); {len(reads)} port reads")
     for a_, num, n, rch, rw, pt, cnr, pr, v in rows:
