@@ -98,10 +98,12 @@ public:
 	ActiveBody(Thing *thing, const ActiveBodyModuleData *data);
 
 	BodyModuleInterface *getBody() override { return this; }
-	float getHealth() const override { return m_currentHealth; }
-	float getMaxHealth() const override { return m_maxHealth; }
+	// PORT-293: the interface's getters, each its own RW function (table RW 0xC720F0; the interface `this` is module + 0x10, as RW 0x8C1C51's
+	// `lea ecx, [esi - 0x10]` shows). 41 sites call the health getter, 58 the max-health one, 27 the damage state
+	float getHealth() const override { return m_currentHealth; }        ///< RW 0x5F2D41 (slot 0x10, `fld [ecx + 8]` = module + 0x18)
+	float getMaxHealth() const override { return m_maxHealth; }         ///< RW 0x6AA274 (slot 0x1C, `fld [ecx + 0x10]` = module + 0x20)
 	float getInitialHealth() const override { return m_initialHealth; }
-	float getPreviousHealth() const { return m_previousHealth; }
+	float getPreviousHealth() const { return m_previousHealth; }        ///< RW 0x49449C (slot 0x20, `fld [ecx + 0x1C]` = module + 0x2C)
 	// lane HERO-1 (Sol review): the reference the revive scales (RW 0x8C47DE reads body interface + 0x1C = module + 0x2C; RW 0x8C1CD5 setMaxHealth stores newMax
 	// there). Distinct from the previous health internalChangeHealth keeps (RW 0x8C31A5 writes interface + 0x0C); it starts at the actual initial health
 	float getReviveReference() const { return m_reviveReference; }
