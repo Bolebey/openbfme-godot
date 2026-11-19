@@ -383,7 +383,7 @@ TEST_CASE("fx4 bones: RandomBone draws the logic random among the drawable's bon
 	w.combat().setLaunchOffsets(nullptr);
 }
 
-TEST_CASE("fx4 save: the last damage record's type round-trips in ActiveBody's xfer version 3; version 1 and 2 load with defaults")
+TEST_CASE("fx4 save: the last damage record's type round-trips in ActiveBody's xfer version 4; versions 1, 2 and 3 load with defaults")
 {
 	FxWorld w;
 	Object *a = w.unit("TdfxProbe", 'B', 400, 300);
@@ -404,7 +404,7 @@ TEST_CASE("fx4 save: the last damage record's type round-trips in ActiveBody's x
 	XferSave saved;
 	ba->xfer(saved);
 	REQUIRE_FALSE(saved.data().empty());
-	CHECK(saved.data()[0] == 3); // includes the record's noEffect byte
+	CHECK(saved.data()[0] == 4); // includes the record's noEffect byte and its amount (PORT-296)
 	XferLoad load(saved.data());
 	bb->xfer(load);
 	REQUIRE(load.atEnd());
@@ -414,11 +414,24 @@ TEST_CASE("fx4 save: the last damage record's type round-trips in ActiveBody's x
 	bool noEffect = true;
 	REQUIRE(bb->lastDamageRecordNoEffect(noEffect));
 	CHECK_FALSE(noEffect);
+	CHECK(bb->lastDamageAmount() == water.m_input.m_amount);
 	XferSave again;
 	bb->xfer(again);
 	CHECK(again.data() == saved.data());
+	// version 3 (before PORT-296): without the trailing amount (loads cleanly with the default zero)
+	std::vector<std::uint8_t> v3 = saved.data();
+	v3[0] = 3;
+	v3.resize(v3.size() - 4);
+	XferLoad oldV3(v3);
+	bc->xfer(oldV3);
+	REQUIRE(oldV3.atEnd());
+	REQUIRE(bc->lastDamageRecordType(type));
+	CHECK(type == DAMAGE_WATER);
+	REQUIRE(bc->lastDamageRecordNoEffect(noEffect));
+	CHECK_FALSE(noEffect);
+	CHECK(bc->lastDamageAmount() == 0.0f);
 	// version 2 (before Local 30): without the trailing noEffect byte (loads cleanly with default false)
-	std::vector<std::uint8_t> v2 = saved.data();
+	std::vector<std::uint8_t> v2 = v3;
 	v2[0] = 2;
 	v2.pop_back();
 	XferLoad oldV2(v2);

@@ -46,8 +46,8 @@ namespace
 {
 // A castle whose crew filter takes one piece of its layout (FilterCrew = ANY +STRUCTURE; no retail castle ships a crew filter, so the mechanism is exercised
 // by data written here: a crew member is an owned piece of the layout, the way RW 0x79AD4E classifies one), its keep and one foundation (BASE_FOUNDATION goes
-// to the foundations before the crew test, RW 0x79ADA8). CrewPrepareTime is a duration in milliseconds (parser RW 0x73B33E -> the module data + 0x38 in
-// frames): 1000 ms = 30 frames at 30 logic frames per second; CrewPrepareInterval 200 ms = 6 frames.
+// to the foundations before the crew test, RW 0x79ADA8). CrewPrepareTime is a duration in milliseconds (parser RW 0x73B33E, the INI's milliseconds times
+// LOGICFRAMES_PER_MSEC_REAL 0.005 -> the module data + 0x38 in frames): 6000 ms = 30 frames; CrewPrepareInterval 2000 ms = 10 frames.
 const char kCrewObjects[] =
 	"Object CKKeep\n"
 	"  KindOf = STRUCTURE SELECTABLE IMMOBILE CASTLE_KEEP\n"
@@ -81,14 +81,14 @@ const char kCrewObjects[] =
 	"  End\n"
 	"End\n"
 	"Object CKCastle\n"
-	"  KindOf = STRUCTURE IMMOBILE BASE_FOUNDATION CASTLE_CENTER\n"
+	"  KindOf = IMMOBILE BASE_FOUNDATION CASTLE_CENTER\n"
 	"  Behavior = CastleBehavior ModuleTag_castle\n"
 	"    CastleToUnpackForFaction = Alpha Base_Crew\n"
 	"    CastleToUnpackForFaction = Beta Base_Crew\n"
 	"    FilterCrew = ANY +STRUCTURE\n"
-	"    FilterValidOwnedEntries = ANY\n"
-	"    CrewPrepareTime = 1000\n"
-	"    CrewPrepareInterval = 200\n"
+	"    FilterValidOwnedEntries = ANY +STRUCTURE +BASE_FOUNDATION\n"
+	"    CrewPrepareTime = 6000\n"
+	"    CrewPrepareInterval = 2000\n"
 	"    CrewPrepareFX = CrewPrepareFx\n"
 	"    CrewReleaseFX = CrewReleaseFx\n"
 	"    InstantUnpack = Yes\n"
@@ -187,7 +187,8 @@ TEST_CASE("PORT-296: a crew member is prepared for its castle (RW 0x798397) and 
 
 	// RW 0x79B274: the keep at 99 percent or more releases the crew without any hit
 	f.keep(b)->setConstructionPercent(99.0f);
-	f.frames(1);
+	f.frames(5); // the state 0 update sleeps 5 frames (RW 0x79D0D5): the first state 4 update is the sixth frame
+	REQUIRE(f.logic->getFrame() == 6);
 	const ObjectID memberId = m->getID();
 	CHECK(b->crew().empty());
 	// RW 0x79834D .. 0x79838E: the release undoes every preparation step
@@ -219,7 +220,7 @@ TEST_CASE("PORT-296: a hostile hit releases the crew only once CrewPrepareTime h
 	REQUIRE(bob != nullptr);
 	const UnsignedInt unpackFrame = b->unpackFrame();
 	// a hostile hit inside the first frames: the record's frame is at or after the unpack frame (RW 0x79B188) and its player is an enemy (RW 0x79B1C1),
-	// but the crew's clock waits for the unpack frame plus the data's CrewPrepareTime (1000 ms = 30 frames)
+	// but the crew's clock waits for the unpack frame plus the data's CrewPrepareTime (6000 ms = 30 frames)
 	f.frames(10);
 	REQUIRE(f.logic->getFrame() == unpackFrame + 10); // one update per frame (state 4 returns UPDATE_SLEEP_NONE)
 	f.hit(*m, bob, 5.0f);
@@ -306,13 +307,14 @@ TEST_CASE("PORT-296: the crew prepare FX ticks every CrewPrepareInterval frames 
 	{
 		f.frames(1);
 		REQUIRE(f.logic->getFrame() == frame);
-		if (frame % 6u == 0u)
+		// the state 0 update slept to the sixth frame (RW 0x79D0D5); from then on the module runs every frame (UPDATE_SLEEP_NONE)
+		if (frame >= 6u && frame % 10u == 0u)
 		{
 			++expected;
 		}
 		CHECK(f.fxAt("CastleBehavior crew prepare") == expected);
 	}
-	CHECK(expected == 10ull); // 60 frames, every sixth
+	CHECK(expected == 6ull); // the frames 10, 20, .. 60
 	REQUIRE(b->crew().size() == 1);
 }
 
