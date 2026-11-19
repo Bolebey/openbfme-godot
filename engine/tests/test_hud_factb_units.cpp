@@ -2258,8 +2258,34 @@ void unitsSweep(const std::string &faction, Results &res, bool sweep)
 					res.fail(item, str("DISABLED: needs a state the fresh object lacks (the aura's RequiredConditions bits 0x%X: MOUNTED / TAINT / ELVEN_WOOD)", d->m_requiredConditions));
 					continue;
 				}
+				// MATRIX_TODO 12 (2026-11-19): a BonusName the mod defines no ModifierList for (Smaug's Drachenschuppen): the pool's add looks the
+				// name up (RW 0x614470 answers -1) and adds nothing, in RotWK as here: mod data, not a port finding
+				if (!d->m_bonusName.empty() && TheAttributeModifierStore && TheAttributeModifierStore->findIndex(d->m_bonusName) < 0)
+				{
+					res.fail(item, "MOD-DATA: the aura's BonusName " + d->m_bonusName + " names no ModifierList of the mod (the store's lookup RW 0x614470 answers -1: the pulse adds nothing)");
+					continue;
+				}
 				std::string given;
 				const UpgradeMux *mux = const_cast<AttributeModifierAuraUpdate *>(aura.module)->getUpgrade();
+				// ConflictsWith (data + 0x90): UpgradeMux::wouldUpgrade answers no while the object or its player has a conflicting upgrade, so the aura
+				// stays off. The sweep's hero arrives levelled (Upgrade_Level_N given), so an aura for its low levels (Araphant's Soldierlvl1:
+				// ConflictsWith = Upgrade_Level_3) is off as in RotWK: the scene lacks the state it needs
+				if (!d->m_startsActive && mux && !mux->isAlreadyUpgraded() && !mux->muxData()->m_requiresAllConflictingTriggers)
+				{
+					std::string conflict;
+					for (const std::string &c : mux->muxData()->m_conflictsWith)
+					{
+						if (h->hasUpgrade(c) || g.rig.local->hasUpgradeComplete(c))
+						{
+							conflict += (conflict.empty() ? "" : ", ") + c;
+						}
+					}
+					if (!conflict.empty())
+					{
+						res.fail(item, "DISABLED: needs a holder without " + conflict + " (the aura's ConflictsWith; the scene's holder has it: UpgradeMux::wouldUpgrade keeps the aura off)");
+						continue;
+					}
+				}
 				if (!d->m_startsActive && mux && !mux->isAlreadyUpgraded())
 				{
 					for (const std::string &up : mux->muxData()->m_triggeredBy)
@@ -2347,9 +2373,41 @@ void unitsSweep(const std::string &faction, Results &res, bool sweep)
 				}
 				const std::string what = str("%s on %s (%s) at %.0f of Range %.0f%s", d->m_bonusName.c_str(), targetName.c_str(), d->m_targetEnemy ? "enemy" : "own",
 											off, d->m_range, given.empty() ? "" : (", after " + given).c_str());
+				// RW 0x805B4C .. 0x805B81: a list with ReplaceInCategoryIfLongest (+0xD2) is not added while another list of its category runs to the same
+				// or a later frame (`cmp [entry + 8], expiry; jae` -> no add). Two auras of one holder giving lists of one category and one Duration (Sauron's
+				// SauronNazgulsLeadership and SauronNazgulsLeadership2, both SPELL, 3000) keep the flagged one off whenever the other pulses first, in RotWK
+				// as here: the mod's data, not a port finding
+				std::string crowd;
+				if (!on && TheAttributeModifierStore)
+				{
+					const ModifierListTemplate *mine = TheAttributeModifierStore->find(d->m_bonusName);
+					Object *tt = g.logic().findObjectByID(tid);
+					std::vector<Object *> check{ tt };
+					if (tt && tt->getContain() && tt->getContain()->getContainedItemsList())
+					{
+						check.insert(check.end(), tt->getContain()->getContainedItemsList()->begin(), tt->getContain()->getContainedItemsList()->end());
+					}
+					for (Object *o : check)
+					{
+						const AttributeModifierPool *pool = o ? static_cast<const AttributeModifierPool *>(o->findModule("AttributeModifierPoolUpdate")) : nullptr;
+						for (const std::string &n : pool && mine && mine->m_replaceInCategoryIfLongest ? pool->listNames() : std::vector<std::string>{})
+						{
+							const ModifierListTemplate *other = TheAttributeModifierStore->find(n);
+							if (crowd.empty() && n != d->m_bonusName && other && other->m_category == mine->m_category && other->m_duration >= mine->m_duration)
+							{
+								crowd = n;
+							}
+						}
+					}
+				}
 				if (on)
 				{
 					res.pass(item, "AURA: " + what);
+				}
+				else if (!crowd.empty())
+				{
+					res.fail(item, "MOD-DATA: " + what + ": the list has ReplaceInCategoryIfLongest and the target holds " + crowd +
+									   " of its category with the same or a longer Duration, which turns it away (RW 0x805B7E: jae, no add)");
 				}
 				else if (!eligible)
 				{
@@ -2359,7 +2417,21 @@ void unitsSweep(const std::string &faction, Results &res, bool sweep)
 				}
 				else
 				{
-					res.fail(item, str("NO-AURA: %s never arrived in %u frames (pulses %u)", what.c_str(), d->m_refreshDelay + 10, aura.module->pulses()));
+					// where the target is now: a holder that moves (a tornado), crushes (Grond) or kills its neighbour takes the target out of the scene
+					const Object *tt = g.logic().findObjectByID(tid);
+					const Object *hh = g.logic().findObjectByID(aura.holder);
+					std::string now = !tt || tt->isDestroyed() ? std::string("the target is gone") : tt->isEffectivelyDead() ? std::string("the target is dead") : !hh ? std::string("the holder is gone")
+									  : str("the target at %.0f", std::hypot(tt->getPosition()->x - hh->getPosition()->x, tt->getPosition()->y - hh->getPosition()->y));
+					if (!hh)
+					{
+						// the holder left the world inside the wait (the summoned Tom Bombadil: LifetimeUpdate 72000 ms, RefreshDelay 99999 ms): one pulse at most, and
+						// aura.module died with it (do not read it); the scene cannot judge the aura
+						res.fail(item, "DISABLED: needs a holder that lives through RefreshDelay + 10 frames: " + what + " (the holder left the world inside the wait; its modules went with it)");
+					}
+					else
+					{
+						res.fail(item, str("NO-AURA: %s never arrived in %u frames (pulses %u; %s)", what.c_str(), d->m_refreshDelay + 10, aura.module->pulses(), now.c_str()));
+					}
 				}
 			}
 		}
