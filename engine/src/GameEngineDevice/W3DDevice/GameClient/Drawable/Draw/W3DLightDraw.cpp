@@ -1,6 +1,7 @@
 // OpenBFME. GPL-3.0.
 //
-// Both editions: RW 0x004CE750, BFME2 0x004CEF80. See W3DLightDraw.h.
+// Both editions: module ctor RW 0x004CF121 (BFME2 0x004CEF80). See W3DLightDraw.h.
+// PORT-308: exact first instructions of the class's own functions, read from RW 0x004CF121 and the vtable RW 0x00BE36D8.
 
 #if defined(__GNUC__) || defined(__clang__)
 #pragma GCC diagnostic ignored "-Winvalid-offsetof"
@@ -44,6 +45,7 @@ const FieldParse *light()
 }
 } // namespace W3DLightDrawTables
 
+// RW 0x004CF515: the data ctor; RW 0x004CF52C stores the 20.0f literal at data +0x2C (Radius), RW 0x004CF566 Intensity 1.0f.
 W3DLightDrawModuleData::W3DLightDrawModuleData()
 	: m_ambient{ 0.0f, 0.0f, 0.0f }
 	, m_diffuse{ 0.0f, 0.0f, 0.0f }
@@ -58,11 +60,14 @@ W3DLightDrawModuleData::W3DLightDrawModuleData()
 {
 }
 
+// RW 0x004CF4D0: vtable slot +0x10, caches the field table RW 0x00BDBB08.
 void W3DLightDrawModuleData::buildFieldParse(MultiIniFieldParse &p)
 {
 	p.add(kW3DLightDrawFields);
 }
 
+// RW 0x004CF121: vtable RW 0x00BE36D8; RW 0x004CF208 reads data +0x2C into the light's far attenuation end (+0x104),
+// RW 0x004CF20E / RW 0x004CF21C write start 1.0f (+0x100), RW 0x004CF227 sets the attenuation flag.
 W3DLightDraw::W3DLightDraw(Thing *thing, const ModuleData *moduleData)
 	: DrawableModule(thing, moduleData), m_thing(thing), m_data(dynamic_cast<const W3DLightDrawModuleData *>(moduleData))
 {
@@ -77,6 +82,7 @@ W3DLightDraw::W3DLightDraw(Thing *thing, const ModuleData *moduleData)
 	}
 }
 
+// RW 0x004CF246: disables and releases the light (the slot +0x00 deleting dtor is RW 0x004CF5B6).
 W3DLightDraw::~W3DLightDraw()
 {
 	LightPulsePool *pool = getPool();
@@ -117,6 +123,7 @@ void W3DLightDraw::setLightPool(LightPulsePool *pool)
 	}
 }
 
+// RW 0x004CF208: the only read of the parsed Radius (data +0x2C), in the module constructor.
 float W3DLightDraw::lightRadius() const
 {
 	return m_data ? m_data->m_radius : 0.0f;
@@ -198,12 +205,14 @@ void W3DLightDraw::reactToTransformChange(const Coord3D * /*oldPos*/, float /*ol
 	updateLight();
 }
 
+// RW 0x004CF29D: slot +0x40 enables / disables the light itself.
 void W3DLightDraw::setEnabled(bool enabled)
 {
 	m_enabled = enabled;
 	updateLight();
 }
 
+// RW 0x004CF2B5: slot +0x2C steps the phase by 1 / the frame-time global RW 0x00D9F608, the flicker drift and the pulse sine.
 void W3DLightDraw::stepFlicker(float dt)
 {
 	m_phase += dt;
@@ -246,6 +255,7 @@ void W3DLightDraw::stepFlicker(float dt)
 	updateLight();
 }
 
+// RW 0x004CF488: slot +0x0C, version 1..1 and the four floats (+0x10..+0x1C).
 void W3DLightDraw::xfer(Xfer &x)
 {
 	SnapshotXfer::version(x, 1, 1);

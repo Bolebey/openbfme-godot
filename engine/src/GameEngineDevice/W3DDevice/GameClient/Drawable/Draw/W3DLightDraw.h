@@ -8,11 +8,11 @@
 //     - friend_newModuleData:     RW 0x00464626
 //     - buildFieldParse:          RW 0x004CF4F0, table RW 0x00BDBB08
 //     - ModuleData ctor:          RW 0x004CF510, vtable RW 0x00BE3790
-//     - W3DLightDraw ctor:        RW 0x004CE750, vtable RW 0x00BE37D0
-//     - ~W3DLightDraw:            RW 0x004CE800
-//     - doDrawModule:             RW 0x004CE930
-//     - reactToTransformChange:   RW 0x004CEAC0
-//     - xfer:                     RW 0x004CF488
+//     - W3DLightDraw ctor:        RW 0x004CF121, module vtable RW 0x00BE36D8
+//     - ~W3DLightDraw:            RW 0x004CF246 (deleting dtor RW 0x004CF5B6)
+//     - doDrawModule:             RW 0x004CF2B5 (flicker / pulse; Radius is read in the ctor RW 0x004CF208)
+//     - reactToTransformChange:   RW 0x004CF5EE
+//     - xfer:                     RW 0x004CF488 (slot +0x0C); buildFieldParse RW 0x004CF4D0, setEnabled RW 0x004CF29D, name RW 0x004CF240
 //   BFME2 1.06:
 //     - friend_newModuleInstance: BFME2 0x00464DF8 (or 0x00064E1E)
 //     - friend_newModuleData:     BFME2 0x00464E2F (or 0x00064E2F)
