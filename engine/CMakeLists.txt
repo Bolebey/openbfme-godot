@@ -1516,6 +1516,7 @@ add_executable(openbfme_tests
     tests/test_local_81.cpp
     tests/test_local_82.cpp
     tests/test_local_84.cpp
+    tests/test_local_87.cpp
     # lane LOCAL-27 (bridges as retail: Bridge block, damage models, towers, scaffold, radar color, issue #189)
     tests/test_local_27.cpp
     # lane LOCAL-33 (castle gates and 'man the walls' as retail: GateProxyBehavior, ManTheWallsSpecialPower, issue #283)
