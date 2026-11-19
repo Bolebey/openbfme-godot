@@ -147,8 +147,6 @@ public:
 	// template's factor only when it is above 0, the template otherwise (0.0 is what an omitted INI row leaves).
 	virtual float getVisionRearOverride() const = 0;
 	virtual float getVisionSideOverride() const = 0;
-	// RW 0x86D6FD, interface slot 0x274: copy the module data's LivingWorldOverloadTemplate.
-	virtual std::string livingWorldOverloadTemplate() const = 0;
 	// slot 0x170 (RW 0x870667), called by Object::setTeam (RW 0x69954A) with its non-null team: every contained member (the list contain slot 0x118 fills),
 	// then every member on the way into a garrison (the map at interface + 0x54, by id) gets Object::setTeam(team)
 	virtual void setMembersTeam(Team *team) = 0;
@@ -209,6 +207,9 @@ public:
 	// otherwise only the members that are affectedByUpgrade; every member that takes it flashes (RW 0x871B0F -> RW 0x70E013, the grey
 	// 0.99 colour at RW 0xBE53BC, pushed as `push 0xf; push 4; push 4` at RW 0x871B18)
 	virtual void giveUpgrade(const UpgradeTemplate *upgrade, bool allMembers) = 0;
+	// RW 0x86D6FD, interface slot 0x274: copy the module data's LivingWorldOverloadTemplate.
+	// Appended so the port's existing interface slots do not move.
+	virtual std::string livingWorldOverloadTemplate() const = 0;
 };
 
 class HordeContain : public UpdateModule, public ContainModuleInterface, public CreateModuleInterface, public HordeContainInterface
