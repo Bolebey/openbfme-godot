@@ -71,7 +71,7 @@ TEST_CASE("PORT-302: an armor upgrade cannot give an InactiveBody an armor-set c
 	// so the write must be refused there for this body (the test fails without that change).
 	ArmorUpgrade *bridgeUpgrade = dynamic_cast<ArmorUpgrade *>(bridge->findModule("ArmorUpgrade"));
 	REQUIRE(bridgeUpgrade != nullptr);
-	bridgeUpgrade->apply(true);
+	bridgeUpgrade->giveSelfUpgrade();
 	CHECK(bridge->armorSetFlags() == 0);
 	bridge->setArmorSetFlag(bit, true);
 	CHECK(bridge->armorSetFlags() == 0);
@@ -79,7 +79,7 @@ TEST_CASE("PORT-302: an armor upgrade cannot give an InactiveBody an armor-set c
 	// The neighbour keeps retail's behaviour: a body that implements the slots stores the condition.
 	ArmorUpgrade *guardUpgrade = dynamic_cast<ArmorUpgrade *>(guard->findModule("ArmorUpgrade"));
 	REQUIRE(guardUpgrade != nullptr);
-	guardUpgrade->apply(true);
+	guardUpgrade->giveSelfUpgrade();
 	CHECK(guard->armorSetFlags() == flag);
 	guard->setArmorSetFlag(bit, false);
 	CHECK(guard->armorSetFlags() == 0);
