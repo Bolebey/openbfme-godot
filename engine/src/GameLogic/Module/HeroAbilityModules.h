@@ -226,7 +226,7 @@ private:
 //     (127), STUNNED_STANDING_UP (163), INVISIBLE_STEALTH (546, RW 0x68FC06), none of AutoAbilityDisallowedOnModelCondition (+ 0x13C), not IGNORE_AI_COMMAND
 //     (status 74), the AI's + 0x34 zero (RW 0x85D69B: m_temporaryKeptMachine == nullptr);
 //   * the command (RW 0x696FD2 / 0x697890 / 0x6979D9 for the SPECIAL_POWER (24) and SPELL_BOOK (38) buttons): Object::doSpecialPower* of the button's power with
-//     the button's options | 0x40000 (| AUTO_ABILITY_TRIGGERED 0x20000000 from this module). The other command types are counted (S-1227).
+//     the button's options | 0x40000 (| AUTO_ABILITY_TRIGGERED 0x20000000 from this module); FIRE_WEAPON (RW 0x75CC3E) and all other command types dispatch through Object::doCommandButton*.
 class AutoAbilityBehaviorModuleData : public ModuleData
 {
 public:
