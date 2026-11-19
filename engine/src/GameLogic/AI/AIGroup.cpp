@@ -670,21 +670,12 @@ void AIGroup::groupAttackPosition(const Coord3D &pos, int maxShotsToFire, Comman
 				}
 			}
 		}
-		// RW 0x772357 .. 0x772375 -> SpawnBehavior::orderSlavesAttackPosition (RW 0x863807, SpawnBehaviorInterface slot 4): every live slave in list order
+		// RW 0x772357 .. 0x772375 -> SpawnBehavior::orderSlavesAttackPosition (RW 0x863807, SpawnBehaviorInterface slot 4): every live slave in list order.
+		// PORT-198: the order is now given through the interface slot itself, so the edain-unchained proxy (several SpawnBehaviors on one object) reaches
+		// all of their lists; the slot keeps RW's own resolve / AI checks.
 		if (SpawnBehaviorInterface *spawn = SpawnBehaviorInterface::of(*o))
 		{
-			spawn->forEachSpawnID([&](ObjectID slaveId) {
-				if (Object *slave = m_logic.findObjectByID(slaveId))
-				{
-					if (!slave->isDestroyed())
-					{
-						if (AIUpdateInterface *sai = slave->getAIUpdateInterface())
-						{
-							sai->aiAttackPosition(pos, maxShotsToFire, source);
-						}
-					}
-				}
-			});
+			spawn->orderSlavesToAttackPosition(pos, maxShotsToFire, source); // RW 0x772380 -> vtable + 0x10
 		}
 		if (AIUpdateInterface *ai = o->getAIUpdateInterface())
 		{

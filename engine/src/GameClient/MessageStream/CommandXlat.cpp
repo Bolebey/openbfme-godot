@@ -208,17 +208,15 @@ bool CommandTranslator::objectCanDamage(Object &obj, Object &victim)
 			}
 		}
 	}
-	// PORT-208 (issue #490): RW 0x6913B7 .. 0x691416 as in objectCanAttack: a spawner's slaves decide whether the spawner can hurt the victim
+	// PORT-208 (issue #490): RW 0x6913B7 .. 0x691416 as in objectCanAttack: a spawner's slaves decide whether the spawner can hurt the victim.
+	// PORT-198: RW 0x6C8A01 asks the same list through the spawn interface's slot 6 (RW 0x8629ED) - the spawner's own weapons failed above, so
+	// the answer comes from the first spawn whose weapons can attack (the edain-unchained proxy reaches every SpawnBehavior at once).
 	if (obj.isKindOf((unsigned)CombatNames::kinds().spawnsAreTheWeapons))
 	{
-		if (SpawnBehaviorInterface *spawn = SpawnBehaviorInterface::of(obj))
+		if (const SpawnBehaviorInterface *spawn = SpawnBehaviorInterface::of(obj))
 		{
-			bool any = false;
-			spawn->forEachSpawnID([&](ObjectID slaveId) {
-				Object *slave = m_ctx.logic.findObjectByID(slaveId);
-				any = any || (slave && !slave->isDestroyed() && objectCanDamage(*slave, victim));
-			});
-			if (any)
+			const CanAttackResult result = spawn->canAnySlavesUseWeaponAgainstTarget(ATTACK_NEW_TARGET, &victim, nullptr, CMD_FROM_PLAYER);
+			if (result == ATTACKRESULT_POSSIBLE || result == ATTACKRESULT_POSSIBLE_AFTER_MOVING)
 			{
 				return true;
 			}
