@@ -45,6 +45,9 @@ const char kPort294Objects[] =
 	"Upgrade Port294OtherBought\n"
 	"  Type = PLAYER\n"
 	"End\n"
+	"Upgrade Port294ConflictBought\n"
+	"  Type = PLAYER\n"
+	"End\n"
 	"Upgrade Port294SpikesKept\n"
 	"  Type = OBJECT\n"
 	"End\n"
@@ -58,6 +61,7 @@ const char kPort294Objects[] =
 	"  End\n"
 	"  Behavior = ObjectCreationUpgrade MakeTheSpikes\n"
 	"    TriggeredBy = Port294SpikesBought\n"
+	"    ConflictsWith = Port294ConflictBought\n"
 	"    Delay = 0.0\n"
 	"    ThingToSpawn = Port294Spikes\n"
 	"    Offset = X:10.0 Y:0.0 Z:5.0\n"
@@ -175,7 +179,7 @@ TEST_CASE("PORT-294: ObjectCreationUpgrade makes its object at Offset and Angle,
 	CHECK(watcher->getSlaveID() == spikes->getID());
 }
 
-TEST_CASE("PORT-294: the trigger leaves — the next upgrade event takes the upgrade back and DestroyWhenSold kills the object it made (RW 0x8B8329 -> RW 0x8B87C5)")
+TEST_CASE("PORT-294: a conflicting upgrade — the next upgrade event takes the module's upgrade back and DestroyWhenSold kills the object it made (RW 0x8B8329 -> RW 0x8B87C5)")
 {
 	econtest::Fx f(kPort294Objects);
 	Object *fortress = f.makeAt("Port294Fortress", "Alice", 200.0f, 200.0f);
@@ -195,19 +199,20 @@ TEST_CASE("PORT-294: the trigger leaves — the next upgrade event takes the upg
 	f.frames(2);
 	CHECK(fortress->hasUpgrade("Port294SpikesKept"));
 	CHECK(countOf(*f.logic, "Port294Spikes") == 1);
-	CHECK_FALSE(spikes->isEffectivelyDead());
+	REQUIRE_FALSE(spikes->isEffectivelyDead());
 
-	// the trigger leaves the player (RW 0x6AE60C clears the bits and does not run the modules); the next completion event does
-	alice->removeCompletedUpgrade("Port294SpikesBought");
-	CHECK_FALSE(alice->hasUpgradeComplete("Port294SpikesBought"));
-	fortress->updateUpgradeModules(); // what RW 0x6AE483 does on every object of the player
-	// RW 0x8B8329 -> 0x8B8387 slot 8 (RW 0x8B87C5): not executed, not pending, DestroyWhenSold kills the watcher's slave (RW 0x887AF5 id,
-	// RW 0xA0605D read, RW 0x698EC3 with damage type 8)
+	// an upgrade the module conflicts with arrives: the module has run, so updateUpgradeModules (RW 0x6936FE) no longer asks attemptUpgrade
+	// (0x69375F) and only postUpgradeCheck (0x6937AF) sees it. RW 0x8B82AB answers no (RW 0x8B8300 over the conflicting mask), so 0x8B8387
+	// runs the removal slot 8 at once (RW 0x8B87C5), pending or not: not executed, not pending, and DestroyWhenSold kills the watcher's
+	// slave (RW 0x887AF5 id, RW 0xA0605D read, RW 0x698EC3 with damage type 8)
+	alice->addCompletedUpgrade("Port294ConflictBought");
 	CHECK(spikes->isEffectivelyDead());
 
-	// and it is armed again: the trigger coming back runs the module a second time, from its own upgrade event
-	f.frames(1);
-	alice->addCompletedUpgrade("Port294SpikesBought");
+	// and it is armed again: with the conflict gone the same event runs the module a second time (0x8B837A: nothing pending -> RW 0x855388)
+	f.frames(1); // the slave's death reaches the SlaveWatcher (RW 0x887A35)
+	alice->removeCompletedUpgrade("Port294ConflictBought");
+	CHECK_FALSE(alice->hasUpgradeComplete("Port294ConflictBought"));
+	fortress->updateUpgradeModules(); // what RW 0x6AE483 does on every object of the player
 	f.frames(2);
 	Object *again = spawnedBy(f, *fortress);
 	REQUIRE(again != nullptr);
