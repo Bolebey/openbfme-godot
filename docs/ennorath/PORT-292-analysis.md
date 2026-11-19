@@ -27,14 +27,14 @@ The table is deliberately partial: the other rows in the function map still need
 | RW start | First-instruction body / outcome | Port location or scope |
 |---|---|---|
 | 0x872A69 | Returns the HordeContain class-name string pointer; not simulation behaviour. | Module registry plumbing. |
-| 0x872A8D | Stores the argument at interface +0x160; setter, reader not established. | Needs its caller chain. |
-| 0x872A9A | Returns interface +0x160; getter. | Needs its caller chain. |
+| 0x872A8D | Stores the argument at interface +0x160 = module +0x27C, the banner countdown. | `HordeContain::m_bannerCountdown`, set in `HordeBanner.cpp`; direct setter's callers still need comparison. |
+| 0x872A9A | Returns interface +0x160 = module +0x27C, the banner countdown; getter. | `HordeContain::m_bannerCountdown`; no standalone gameplay algorithm. |
 | 0x872AAE | Returns interface +0x1EC, the last-member-entered frame. | Already ported: `HordeContain::lastMemberEnteredFrame`, `HordeGarrisonLink.cpp`. |
-| 0x872ACB | Returns interface +0x150; getter. | Needs its caller chain. |
-| 0x872AD2 | Stores the argument at interface +0x150; setter, reader not established. | Needs its caller chain. |
+| 0x872ACB | Returns interface +0x150 = module +0x26C, banner carrier id; getter. | `HordeContain::bannerCarrier`; `SpecialAbilityModules.cpp` reads it. No standalone gameplay algorithm. |
+| 0x872AD2 | Stores argument at interface +0x150 = module +0x26C, banner carrier id. | `HordeBanner.cpp::handOverBannerCarrier` assigns `m_bannerCarrier`; full setter caller comparison remains open. |
 | 0x872AE7 | Returns interface +0x188, the garrisoned flag. | Already ported: `HordeContain::isGarrisoned`, `HordeGarrisonLink.cpp`. |
-| 0x872AEE | Returns interface +0x16C; getter. | Needs its caller chain. |
-| 0x872AF5 | Stores the argument at interface +0x18C; setter, reader not established. | Needs its caller chain. |
+| 0x872AEE | Returns interface +0x16C = module +0x288; getter. | Donor stores an object id there (BFME2 `HordeContainIface11CSlots.cpp`), exact RW role and port equivalence still need verification. |
+| 0x872AF5 | Stores the argument at interface +0x18C = module +0x2A8. | Donor treats this as initial-payload survival percent (`HordeContain_createPayload.cpp`); RW reader and port comparison remain to be checked. |
 | 0x872B02 | Returns interface `this - 0x11C`; base-pointer adjustment, not simulation behaviour. | Interface plumbing. |
 | 0x872B24 | Interns the HordeContain module name and returns its key; not simulation behaviour. | Module registry plumbing. |
 | 0x872B76 | Clears interface +0x188 and wakes the containing update. | Already ported: `HordeContain::setGarrisoned`, `HordeGarrisonLink.cpp`. |
@@ -56,7 +56,7 @@ The table is deliberately partial: the other rows in the function map still need
 | 0x86F8BA | For non-null argument, searches contained and interface +0x54 objects for Object +0x46C equal to it. | Member lookup #552; semantics and full equivalence unverified. |
 | 0x86F9CA | Returns true if any id in interface +0x54 resolves to a live object. | Entering-member map #552 / S-7505; full equivalence unverified. |
 | 0x86FE0F | Selects a random contained object, or if the list is empty a random interface +0x54 id resolved through RW 0x449681; empty lists return null. | Member lookup #552 / S-7505; full equivalence unverified. |
-| 0x870655 | Resolves the id in interface +0x150 through `findObjectByID` RW 0x449681. | A getter; writer / caller identity and port comparison still need verification. |
+| 0x870655 | Resolves the banner carrier id at interface +0x150 = module +0x26C through `findObjectByID` RW 0x449681. | Getter; `HordeContain::bannerCarrier` exposes the id, and `HordeContainRuntime.cpp` resolves `m_bannerCarrier` via logic. Direct caller comparison remains open. |
 | 0x870AEE | Returns false if a contained member not in interface +0x54 is more than 10 units away in 2D; otherwise true. | Member / entering map owned by #552; full equivalence unverified. |
 | 0x8710A8 | For each contained member not in interface +0x54, calls its AI slot +0x218 with both arguments if it has AI. | Member hand-off #552; full equivalence unverified. |
 | 0x871110 | Calls `FXList::doFXObj` RW 0x4B1B5A for contained members and live objects resolved from interface +0x54 ids. | Member / entering map and client event boundary; full equivalence unverified, S-7505 / #552. |
