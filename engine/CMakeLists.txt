@@ -1505,6 +1505,7 @@ add_executable(openbfme_tests
     tests/test_local_75.cpp
     # lane LOCAL-78 (Ennorath button sweep NO-RULE effect rules in SweepEffectProbe.h, issue #576)
     tests/test_local_78.cpp
+    tests/test_local_81.cpp
     # lane LOCAL-27 (bridges as retail: Bridge block, damage models, towers, scaffold, radar color, issue #189)
     tests/test_local_27.cpp
     # lane LOCAL-33 (castle gates and 'man the walls' as retail: GateProxyBehavior, ManTheWallsSpecialPower, issue #283)
