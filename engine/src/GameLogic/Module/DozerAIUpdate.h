@@ -38,7 +38,7 @@
 //     0x6C RW 0x88CFFE: the paid price back, truncated, the money spent score taken back, the object destroyed); a legal site: the body's health is changed by
 //     1.0 - health (body vslots 0x10 / 0x84: the structure rises from 1 hit point).
 //   * DozerAIUpdate::update (RW 0x88CAF5): the base AI update, then a current REPAIR task whose target the ActionManager no longer lets it repair is cancelled
-//     (RW 0x82D7F2, S-1282), then the primary machine. The dozer never sleeps (returns 1).
+//     (RW 0x82D7F2, PORT-289), then the primary machine. The dozer never sleeps (returns 1).
 // TARGET (lane BUILD-2, DozerActionDoActionState::update RW 0x88D993, sub task 3): a build task adds 100 / calcTimeToBuild(template, the dozer's owner, the dozer)
 // to the construction percent each frame (SSE, RW 0x88DE72..0x88DE99) and changes the body's health by MaxHealth / that (x87, RW 0x88DEA8..0x88DEB5), sets itself as
 // producer / builder when none is set, and completes the structure when the percent reaches 100 (RW 0x88DEE0 ff); a repair task heals the body by RepairHealthPercentPerSecond
@@ -130,7 +130,7 @@ public:
 	// MSG_RESUME_CONSTRUCTION: RW 0x8ACEA9 (vslot 0xB4): the ActionManager's test, then newTask(BUILD, structure); the command path first idles a dozer without a task
 	bool resumeConstruction(Object &structure);
 	// lane BUILD-2: RW 0x88BD8D (vslot 0xB0, MSG_DO_REPAIR, a worker spawned to repair): the ActionManager's test and a free sole benefactor, then newTask(REPAIR)
-	bool repair(Object &structure);
+	bool repair(Object &structure, CommandSourceType source = CMD_FROM_AI);
 	bool repairing() const { return m_currentTask == DOZER_TASK_REPAIR; }
 	// the frames of work (sub task 3) this dozer put into its current / last task
 	UnsignedInt taskWorkFrames() const { return m_taskWorkFrames; }

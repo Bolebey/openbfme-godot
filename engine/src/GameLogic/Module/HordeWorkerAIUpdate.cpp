@@ -100,7 +100,6 @@ UpdateSleepTime HordeWorkerAIUpdate::update()
 // RW 0x89ECA0 / BFME2 0x49AFFC
 void HordeWorkerAIUpdate::privateRepair(Object *obj, CommandSourceType cmdSource)
 {
-	(void)cmdSource;
 	Object *me = getObject();
 	if (!me || !obj)
 	{
@@ -121,7 +120,7 @@ void HordeWorkerAIUpdate::privateRepair(Object *obj, CommandSourceType cmdSource
 				}
 				if (DozerAIUpdate *d = dynamic_cast<DozerAIUpdate *>(member->getAIUpdateInterface()))
 				{
-					d->repair(*obj);
+					d->repair(*obj, cmdSource);
 				}
 				else if (AIUpdateInterface *ai = member->getAIUpdateInterface())
 				{

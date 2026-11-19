@@ -2,6 +2,7 @@
 // See GameLogic/Module/DozerAIUpdate.h for the sources of every rule.
 
 #include "GameLogic/Module/DozerAIUpdate.h"
+#include "GameLogic/ActionManager.h"
 #include "GameLogic/Module/WorkerAIUpdate.h"
 #include "Common/ModEngineFeatures.h"
 #include "GameLogic/Economy.h"
@@ -136,12 +137,6 @@ bool sameOwnerUnfinished(const Object &dozer, const Object &structure)
 	return !structure.isDestroyed() && structure.isUnderConstruction() && structure.getControllingPlayer() == dozer.getControllingPlayer();
 }
 
-// the stand-in of the ActionManager's canRepairObject (RW 0x82D7F2, not ported: S-1282): the dozer's owner's finished, living structure
-bool canRepair(const Object &dozer, const Object *structure)
-{
-	return structure && !structure->isDestroyed() && !structure->isEffectivelyDead() && !structure->isUnderConstruction() &&
-	       structure->getControllingPlayer() == dozer.getControllingPlayer();
-}
 } // namespace
 
 DozerAIUpdate::DozerAIUpdate(Thing *thing, const ModuleData *data)
@@ -603,20 +598,17 @@ bool DozerAIUpdate::resumeConstruction(Object &structure)
 	return true;
 }
 
-bool DozerAIUpdate::repair(Object &structure)
+bool DozerAIUpdate::repair(Object &structure, CommandSourceType source)
 {
-	// RW 0x88BD8D: the dozer can repair (slot 0x50) and the ActionManager allows it (RW 0x82D7F2, S-1282), the structure has no other sole healer (RW 0x68B8D3);
-	// the command path RW 0x88E552 idles a dozer without a current task first
+	// RW 0x88BD8D: the ActionManager's canRepairObject (RW 0x82D7F2) is the
+	// one order gate; the existing repair task remains the healing path.
+	// RW 0x88E552 idles a dozer without a current task first.
 	Object *self = getObject();
-	if (!canRepair(*self, &structure))
+	if (!ActionManager::canRepairObject(self, &structure, source))
 	{
 		return false;
 	}
-	const ObjectID healer = self->logic().getFrame() > structure.soleHealingBenefactorExpiry() ? (ObjectID)INVALID_ID : structure.soleHealingBenefactor();
-	if (healer != INVALID_ID && healer != self->getID())
-	{
-		return false;
-	}
+	setLastCommandSource(source); // AI + 0x48: retain the source for the task's per-frame gate
 	if (m_primaryState < 0)
 	{
 		primarySetState(PRIMARY_IDLE);
@@ -1180,9 +1172,10 @@ UpdateSleepTime DozerAIUpdate::update()
 void DozerAIUpdate::dozerMachineStep()
 {
 	Object *self = getObject();
-	if (m_currentTask == DOZER_TASK_REPAIR && !canRepair(*self, self->logic().findObjectByID(getTaskTarget(DOZER_TASK_REPAIR))))
+	if (m_currentTask == DOZER_TASK_REPAIR &&
+		!ActionManager::canRepairObject(self, self->logic().findObjectByID(getTaskTarget(DOZER_TASK_REPAIR)), lastCommandSource()))
 	{
-		cancelTaskInternal(DOZER_TASK_REPAIR); // RW 0x88CB6D (the ActionManager's test RW 0x82D7F2: S-1282)
+		cancelTaskInternal(DOZER_TASK_REPAIR); // RW 0x88CB6D -> ActionManager::canRepairObject
 	}
 	// the primary machine (ZH StateMachine::updateStateMachine)
 	const int before = m_primaryState;
