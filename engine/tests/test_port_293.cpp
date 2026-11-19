@@ -99,6 +99,22 @@ float health(Object &o)
 	return o.getBodyModule()->getHealth();
 }
 
+// the module's HealingDelay in logic frames as the INI parse made it (data + 0x140; INI parseDurationUnsignedInt = ceil(ms * 5 / 1000), so HealingDelay 1000 is
+// exactly 5 frames: LOGICFRAMES_PER_SECOND is 5, not 30)
+const AutoHealBehaviorModuleData *dataOf(Object &o)
+{
+	const AutoHealBehaviorModuleData *data = nullptr;
+	for (const auto &nugget : static_cast<const ThingTemplate *>(o.getTemplate())->behaviorModules().nuggets())
+	{
+		if (const auto *healData = dynamic_cast<const AutoHealBehaviorModuleData *>(nugget.data.get()))
+		{
+			data = healData;
+		}
+	}
+	REQUIRE(data);
+	return data;
+}
+
 } // namespace
 
 TEST_SUITE_BEGIN("PORT-293");
@@ -177,21 +193,22 @@ TEST_CASE("PORT-293 AutoHealBehavior: NonStackable refuses a heal while the targ
 	CHECK(health(*target) == 410.0f);
 	Port293HealAccess::healOne(*stack, *target, false);
 	CHECK(health(*target) == 420.0f);
-	// NonStackable: the first hit lands and stamps the frame, the second one in the same frame is refused
-	const UnsignedInt now = f.logic->getFrame();
+	// NonStackable: the target's stamp is the one the other module left (stamp + delay > frame), so the hit is refused and nothing is written
+	const UnsignedInt delay = dataOf(*healer)->m_healingDelay;
+	CHECK(delay == 5); // HealingDelay 1000
+	const UnsignedInt healedAt = target->getBodyModule()->getLastHealingFrame();
+	CHECK(healedAt == 0); // the two hits above landed in the world's first frame
+	CHECK(f.logic->getFrame() == 0);
+	Port293HealAccess::healOne(*guarded, *target, false);
+	CHECK(health(*target) == 420.0f);
+	CHECK(target->getBodyModule()->getLastHealingFrame() == healedAt); // a refusal writes nothing
+	f.frames((int)(healedAt + delay - 1 - f.logic->getFrame()));       // one frame short of the delay: still refused
+	Port293HealAccess::healOne(*guarded, *target, false);
+	CHECK(health(*target) == 420.0f);
+	f.frames(1); // healedAt + delay: the sum is no longer greater than the frame
 	Port293HealAccess::healOne(*guarded, *target, false);
 	CHECK(health(*target) == 430.0f);
-	CHECK(target->getBodyModule()->getLastHealingFrame() == now);
-	Port293HealAccess::healOne(*guarded, *target, false);
-	CHECK(health(*target) == 430.0f);
-	CHECK(target->getBodyModule()->getLastHealingFrame() == now); // a refusal writes nothing
-	f.frames(29);                                                  // 29 + 30 > 29: still refused
-	Port293HealAccess::healOne(*guarded, *target, false);
-	CHECK(health(*target) == 430.0f);
-	f.frames(1); // now + 30: the sum is no longer greater than the frame
-	Port293HealAccess::healOne(*guarded, *target, false);
-	CHECK(health(*target) == 440.0f);
-	CHECK(target->getBodyModule()->getLastHealingFrame() == now + 30);
+	CHECK(target->getBodyModule()->getLastHealingFrame() == healedAt + delay);
 }
 
 // RW 0x85579A / 0x8557A2: the sum is unsigned, so a never-healed body (-1, RW 0x8C3897) refuses a NonStackable heal until HealingDelay - 1 frames of the
@@ -207,15 +224,17 @@ TEST_CASE("PORT-293 AutoHealBehavior: a never-healed target refuses NonStackable
 	AutoHealBehavior *guarded = f.healOf(healer);
 	wound(*target);
 	REQUIRE(target->getBodyModule()->getLastHealingFrame() == 0xFFFFFFFFu);
+	const UnsignedInt delay = dataOf(*healer)->m_healingDelay;
+	CHECK(delay == 5); // HealingDelay 1000
 	Port293HealAccess::healOne(*guarded, *target, false);
-	CHECK(health(*target) == 400.0f); // 0xFFFFFFFF + 30 = 29 > 0
-	f.frames(28);
+	CHECK(health(*target) == 400.0f); // 0xFFFFFFFF + delay = delay - 1 > 0
+	f.frames((int)(delay - 2));
 	Port293HealAccess::healOne(*guarded, *target, false);
-	CHECK(health(*target) == 400.0f); // 29 > 28
+	CHECK(health(*target) == 400.0f); // delay - 1 > delay - 2
 	f.frames(1);
 	Port293HealAccess::healOne(*guarded, *target, false);
-	CHECK(health(*target) == 410.0f); // 29 > 29 is false
-	CHECK(target->getBodyModule()->getLastHealingFrame() == 29);
+	CHECK(health(*target) == 410.0f); // delay - 1 > delay - 1 is false
+	CHECK(target->getBodyModule()->getLastHealingFrame() == delay - 1);
 }
 
 TEST_SUITE_END();
