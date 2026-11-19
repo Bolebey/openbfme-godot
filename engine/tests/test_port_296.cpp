@@ -27,7 +27,6 @@
 #include "ProdTestUtil.h"
 #include "IniTestUtil.h"
 
-#include "AudioIniState.h" // initest
 #include "Common/Audio/AudioEntryPoints.h"
 #include "Common/Audio/GameAudio.h"
 #include "Common/Audio/SimulatedAudioDevice.h"
@@ -45,9 +44,10 @@ using namespace prodtest;
 
 namespace
 {
-// A castle whose crew filter takes the infantry of its layout (FilterCrew = ANY +INFANTRY, the retail shape of a RotWK fortress; no retail castle ships a
-// crew filter, so the mechanism is exercised by data written here), the keep and one crewman. CrewPrepareTime is a duration in milliseconds (parser RW 0x73B33E
-// -> the module data + 0x38 in frames): 1000 ms = 30 frames at 30 logic frames per second; CrewPrepareInterval 200 ms = 6 frames.
+// A castle whose crew filter takes one piece of its layout (FilterCrew = ANY +STRUCTURE; no retail castle ships a crew filter, so the mechanism is exercised
+// by data written here: a crew member is an owned piece of the layout, the way RW 0x79AD4E classifies one), its keep and one foundation (BASE_FOUNDATION goes
+// to the foundations before the crew test, RW 0x79ADA8). CrewPrepareTime is a duration in milliseconds (parser RW 0x73B33E -> the module data + 0x38 in
+// frames): 1000 ms = 30 frames at 30 logic frames per second; CrewPrepareInterval 200 ms = 6 frames.
 const char kCrewObjects[] =
 	"Object CKKeep\n"
 	"  KindOf = STRUCTURE SELECTABLE IMMOBILE CASTLE_KEEP\n"
@@ -61,7 +61,7 @@ const char kCrewObjects[] =
 	"  End\n"
 	"End\n"
 	"Object CKCrewman\n"
-	"  KindOf = INFANTRY SELECTABLE\n"
+	"  KindOf = STRUCTURE SELECTABLE IMMOBILE\n"
 	"  Body = ActiveBody ModuleTag_Body\n"
 	"    MaxHealth = 200\n"
 	"    MaxHealthDamaged = 100\n"
@@ -71,7 +71,7 @@ const char kCrewObjects[] =
 	"  End\n"
 	"End\n"
 	"Object CKHall\n"
-	"  KindOf = STRUCTURE SELECTABLE IMMOBILE\n"
+	"  KindOf = STRUCTURE SELECTABLE IMMOBILE BASE_FOUNDATION\n"
 	"  Body = ActiveBody ModuleTag_Body\n"
 	"    MaxHealth = 100\n"
 	"    MaxHealthDamaged = 50\n"
@@ -85,7 +85,7 @@ const char kCrewObjects[] =
 	"  Behavior = CastleBehavior ModuleTag_castle\n"
 	"    CastleToUnpackForFaction = Alpha Base_Crew\n"
 	"    CastleToUnpackForFaction = Beta Base_Crew\n"
-	"    FilterCrew = ANY +INFANTRY\n"
+	"    FilterCrew = ANY +STRUCTURE\n"
 	"    FilterValidOwnedEntries = ANY\n"
 	"    CrewPrepareTime = 1000\n"
 	"    CrewPrepareInterval = 200\n"
@@ -105,8 +105,8 @@ struct CrewWorld : ProdWorld
 		layout.name = "Base_Crew";
 		layout.version = 5;
 		layout.entries.push_back({ "", "CKKeep", 0.0f, 0.0f, 0.0f, 0.0f, 40, 1 });
-		layout.entries.push_back({ "", "CKCrewman", 40.0f, 0.0f, 0.0f, 0.0f, 40, 1 });
-		layout.entries.push_back({ "", "CKHall", -40.0f, 0.0f, 0.0f, 0.0f, 40, 1 });
+		layout.entries.push_back({ "", "CKCrewman", 60.0f, 0.0f, 0.0f, 0.0f, 40, 1 });
+		layout.entries.push_back({ "", "CKHall", 0.0f, 60.0f, 0.0f, 0.0f, 40, 1 });
 		logic->castleTemplates().add(layout);
 	}
 	Object *castle(const char *player = "Alice", float x = 1000.0f, float y = 1000.0f)
@@ -173,6 +173,7 @@ TEST_CASE("PORT-296: a crew member is prepared for its castle (RW 0x798397) and 
 	Object *c = f.castle();
 	CastleBehavior *b = f.cb(c);
 	REQUIRE(b != nullptr);
+	MESSAGE("DEBUG owned=" << b->ownedObjects().size() << " crew=" << b->crew().size() << " members=" << b->members().size() << " keep=" << b->keepId());
 	REQUIRE(b->crew().size() == 1);
 	Object *m = f.crewman(b);
 	// RW 0x798398 / 0x7983A6: the castle is the producer, the member is held for good

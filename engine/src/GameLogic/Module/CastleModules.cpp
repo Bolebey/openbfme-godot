@@ -242,6 +242,8 @@ CastleBehavior::CastleBehavior(Thing *thing, const CastleBehaviorModuleData *dat
 }
 
 // lane CASTLEAREA-1: RW 0x79AAA7 (the module's destructor) frees the areas (RW 0x79A37D)
+// RW 0x797BCF: the destructor (the base chain RW 0x8B88B0, then, when the module has unpacked - + 0x34 != 0 -, the castle's footprint returns to the
+// pathfinder: ThePartitionManager RW 0xDE4B40 + 0x10 -> RW 0x6E85FB); the areas go in the port's own ~CastleBehavior (RW 0x79A37D, lane CASTLEAREA-1)
 CastleBehavior::~CastleBehavior()
 {
 	freeAreas();
@@ -1755,6 +1757,8 @@ void CastleBehavior::crc(StateHasher &h) const
 }
 
 // ---- CastleMemberBehavior -----------------------------------------------------------------------------------------------------------
+// RW 0x797CA7: the module's constructor: the module data (+ 4), the interface vtables, the occupant id + 0x14, the castle id + 0x18, + 0x1C and the
+// audio handle + 0x20 (1), the bytes + 0x24 / + 0x25 clear
 CastleMemberBehavior::CastleMemberBehavior(Thing *thing, const CastleMemberBehaviorModuleData *data)
 	: BehaviorModule(thing, data)
 	, m_data(data)
@@ -1988,6 +1992,8 @@ void CastleBehavior::xfer(Xfer &x)
 	}
 }
 
+// RW 0x797CF2: the module's xfer (the block, the occupant id + 0x14, + 0x24, + 0x1C, the castle id + 0x18, then RW 0x8CD4AA); the port's native
+// snapshot (lane SAVE-4b) carries the same ids
 void CastleMemberBehavior::xfer(Xfer &x)
 {
 	SnapshotXfer::version(x, 1, 1);
