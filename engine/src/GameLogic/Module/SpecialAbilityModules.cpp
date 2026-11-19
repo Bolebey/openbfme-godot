@@ -10,6 +10,7 @@
 #include "Common/Audio/AudioRequests.h"
 #include "GameLogic/Combat/CombatLineOfSight.h"
 #include "GameLogic/AI/AIWorld.h"
+#include "GameLogic/AttributeModifiers.h"
 #include "GameLogic/SnapshotXfer.h"
 #include "GameLogic/Module/GiantBirdAIUpdate.h"
 #include "GameLogic/Module/EmotionModules.h"
@@ -2198,7 +2199,13 @@ public:
 	GameLogicRandom &logicRandom() override { return m_obj.logic().random(); }
 	std::uint32_t weaponBonusConditionMask() override { return m_obj.weaponBonusConditionMask(); }
 	const WeaponBonusSet *globalWeaponBonusSet() override { return m_obj.logic().settings().globalWeaponBonusSet.get(); }
-	float rateOfFireAttributeProduct() override { return 1.0f; }
+	// RW 0x6CEF6D (Weapon::privateFireWeapon) -> RW 0x6CF042: source->getAttributeModifierProduct(0x15, &factor, nullptr, true) (RW 0x68C82D).
+	float rateOfFireAttributeProduct() override
+	{
+		float rof = 1.0f;
+		m_obj.attributeModifierProduct(ATTRIBUTE_RATE_OF_FIRE, nullptr, true, rof);
+		return rof;
+	}
 	bool containedAmmo(const ObjectFilter &, unsigned &count) override
 	{
 		count = 0;

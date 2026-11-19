@@ -1543,6 +1543,7 @@ add_executable(openbfme_tests
     tests/test_local_82.cpp
     tests/test_local_84.cpp
     tests/test_local_87.cpp
+    tests/test_local_85.cpp
     # lane LOCAL-89 (issue #715, the model draw's terrain decal: RW 0x4B94BC / 0x4B95AD / 0x672B96 / 0x675C25)
     tests/test_local_89.cpp
     tests/test_local_92.cpp
