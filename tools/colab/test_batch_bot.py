@@ -141,6 +141,7 @@ def test_a_pr_that_conflicts_with_main_itself_goes_back_to_its_agent():
     body = bb.left_comment("2026-11-19e", take[0], left[579])
     assert "engine/src/a.cpp" in body and bb.RETURNED.search(body) and not body.startswith("<!-- prcheck")
     assert not bb.RETURNED.search(bb.left_comment("2026-11-19e", take[1], left[615]))   # a conflict with an earlier PR waits
+    assert bb.EMPTY_RC not in (0, 1)   # an empty batch is neither green nor red: the loop does not hold the next one for it
 
 
 def test_main_results_are_shared_between_batches_on_one_main(tmp_path):
@@ -192,3 +193,12 @@ def test_a_renumbered_stop_moves_only_the_prs_own_lines_of_a_shared_table(monkey
     assert stops.read_text(encoding="utf-8") == "| S-7493 | code | someone else's stop |\n| S-1022 | code | emotions, see S-7507 |\n"
     assert (tmp_path / "docs" / "stops.d" / "S-7507.md").read_text(encoding="utf-8").startswith("| S-7507 |")
     assert done == ["#654: S-7493 -> S-7507 (taken)"]
+
+
+def test_a_stop_row_one_side_edited_keeps_only_the_edit_after_the_union_merge():
+    # 2026-11-19e: Port 271 narrowed S-705; the union merge kept main's old row beside it and the landing's fragments collect refused it
+    base = "| S-704 | code | a |\n| S-705 | code | old |\n"
+    merged = "| S-704 | code | a |\n| S-705 | code | old |\n| S-705 | code | narrowed |\n| S-706 | code | new |\n"
+    assert bb.dedupe_rows(merged, base) == "| S-704 | code | a |\n| S-705 | code | narrowed |\n| S-706 | code | new |\n"
+    both = "| S-705 | code | ours |\n| S-705 | code | theirs |\n"   # both sides edited the row: a real conflict
+    assert bb.dedupe_rows(both, base) is None
