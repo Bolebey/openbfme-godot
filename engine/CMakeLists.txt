@@ -534,6 +534,7 @@ include(cmake/Port237.cmake)    # PORT-237: OCL nuggets/fields, CreateObjectDie,
 include(cmake/Port220.cmake)    # PORT-220: the single-use command flag, Object + 0x45B (issue #529; OPENBFME_PORT220_TESTS)
 include(cmake/Port257.cmake)    # PORT-257: GiantBirdAIUpdate onCollide/collision push/states 0x3FD-0x3FE & cmd 0x41, FellBeastSwoopPower vslot 0x1D0 (issue #605; OPENBFME_PORT257_TESTS)
 include(cmake/Port261.cmake)    # PORT-261: the player-side powers PlayerHealSpecialPower and StoreObjectsSpecialPower (issue #609; OPENBFME_PORT261_TESTS)
+include(cmake/Local80.cmake)    # LOCAL-80: script library rank actions and PLAYER_COMPARE_RANK (issue #704; OPENBFME_LOCAL80_TESTS)
 include(cmake/Port224.cmake)    # PORT-224: destroying a creep lair or worker-rebuilt structure mid-rebuild fades the hole without money or treasure (issue #534; OPENBFME_PORT224_TESTS)
 include(cmake/Port222.cmake)    # PORT-222: a LevelGrantSpecialPower fills a horde's experience pool (fork issue 532; OPENBFME_PORT222_TESTS)
 include(cmake/Port268.cmake)    # PORT-268: stop grouping tool integration tests
@@ -1308,6 +1309,7 @@ add_executable(openbfme_tests
     ${OPENBFME_PORT220_TESTS}
     ${OPENBFME_PORT257_TESTS}
     ${OPENBFME_PORT261_TESTS}
+    ${OPENBFME_LOCAL80_TESTS}
     ${OPENBFME_PORT224_TESTS}
     ${OPENBFME_PORT222_TESTS}
     ${OPENBFME_PORT206_TESTS}
@@ -1493,6 +1495,7 @@ add_executable(openbfme_tests
     tests/test_local_57.cpp
     # lane LOCAL-65 (Isengard building foundations under black ground and multi-faction terrain fitting, issue #510 / P-130)
     tests/test_local_65.cpp
+    tests/test_local_66.cpp
     # lane LOCAL-62 (capturing a production building cancels its production queue, issue #483 / P-122)
     tests/test_local_62.cpp
     # lane LOCAL-63 (Isengard unpack buildings stay visible at 100% completion, issue #508 / P-129)
@@ -1512,6 +1515,7 @@ add_executable(openbfme_tests
     tests/test_local_79.cpp
     tests/test_local_81.cpp
     tests/test_local_82.cpp
+    tests/test_local_84.cpp
     # lane LOCAL-27 (bridges as retail: Bridge block, damage models, towers, scaffold, radar color, issue #189)
     tests/test_local_27.cpp
     # lane LOCAL-33 (castle gates and 'man the walls' as retail: GateProxyBehavior, ManTheWallsSpecialPower, issue #283)
