@@ -7,13 +7,16 @@ Three independent sources, joined per attribute:
    lines, Category, Duration and the rest of its fields; every field of any definition (objects and their modules, weapons, upgrades, special
    powers, object creation lists, sciences, ExperienceLevel, crates) whose value names a ModifierList; and whether a playable faction reaches the
    list (ennorath_graph.walk from each PlayerTemplate with PlayableSide = Yes; an ExperienceLevel counts when one of its TargetNames is reached).
-2. RotWK 2.01 (game.dat): the attribute names from the table RW 0xDA6D28 (28 pointers; the index is the attribute's number), and every reader:
-   the pool's query methods RW 0x804F39 (the sum) and RW 0x804FFF (the product) take the attribute number as their first stack argument;
-   a function that tail-jumps to one of them (Object::getAttributeModifierSum / Product RW 0x68C818 / 0x68C82D) or passes its own argument
-   through (`push dword ptr [ebp + N]`) is a wrapper, and its callers are followed the same way. At each call the argument is the k-th push
-   counted back from the call (stopping at the previous call, ret or jmp): an immediate is the attribute; a register is followed back to its
-   `mov reg, imm` / `xor reg, reg`; anything else is listed as unresolved (modifier-unresolved.tsv), never guessed. Function bounds come from the
-   RotWK function inventory (citation_check.find_inventory: rw_function_blocks.json).
+2. RotWK 2.01 (game.dat): the attribute names from the table RW 0xDA6D28 (28 pointers; the index is the attribute's number), and every reader.
+   Every read reaches TheModifierListStore's value query RW 0x6144BF(list index, attribute, &out, flag); the functions that pass their own
+   argument on to it (`push dword ptr [ebp + N]`) or tail-jump to such a function are wrappers and are followed the same way: the pool's sum and
+   product (RW 0x804F39 / 0x804FFF), their patched copy outside .text (RW 0xECA015, called through RW 0xECA000 by AdjustDamage's ARMOR read),
+   the pool's apply on add (RW 0x8052FB: HEALTH, HEALTH_MULT), Object::getAttributeModifierSum / Product (RW 0x68C818 / 0x68C82D). Every
+   executable section is scanned (RotWK 2.01 carries patched code in stxt774, stxt371, .mackt, .danetta). At each call the attribute is the k-th
+   push counted back from the call (stopping at the previous call, ret or jmp): an immediate, or a register whose values are followed back through
+   mov / xor / add / sub / setcc (EmotionNugget::canApply RW 0x8E149D reads RESIST_FEAR or RESIST_TERROR: both are listed); anything else is
+   listed as unresolved (modifier-unresolved.tsv), never guessed. Function bounds come from the whole-binary inventory
+   (rw_function_blocks_full.json, the maps run's angr pass; the default rw_function_blocks.json holds module code only).
 3. The port (engine/src, code only: comments and string literals blanked): the calls of Object::attributeModifierSum / attributeModifierProduct
    (attribute = argument 0) and of every port function that passes one of its own parameters on to such a call (a wrapper, found to a fixed point,
    e.g. Economy::attributeModifierProduct(obj, type): argument 1). The attribute argument is an integer literal or an ATTRIBUTE_* enumerator of
@@ -27,7 +30,7 @@ An attribute's verdict: `dead in RotWK` (the mod sets it, RotWK reads it nowhere
 `partly ported`, `ported`, `port-only reads` (the port reads it where RotWK has no reader), `unknown to RotWK` (a mod name the table lacks).
 
 Outputs (--out): modifier-map.md (the summary and the per attribute detail), modifier-lists.tsv, modifier-readers.tsv, modifier-port-reads.tsv,
-modifier-unresolved.tsv.
+modifier-unresolved.tsv, modifier-matrix.tsv (the button matrix's red buttons with their modules' lists and the attributes the port does not read).
 
     python tools/mod/modifier_map.py --base <RotWK install> --overlay <Ennorath install> --game <game.dat> --out <dir>
 """
@@ -48,7 +51,12 @@ import citation_check as cc  # noqa: E402
 
 NAMES_TABLE = 0xDA6D28
 NAME_COUNT = 28
-POOL_QUERIES = {0x804F39: "sum", 0x804FFF: "product"}
+# The one function every attribute read reaches: TheModifierListStore's value query RW 0x6144BF(list index, attribute, &out, flag) (ecx =
+# RW 0xDE3C14) hands the attribute to the list's own RW 0x805268, which compares it with each entry. The pool's sum and product (RW 0x804F39 /
+# RW 0x804FFF, their patched copy RW 0xECA015) pass their attribute on to it (`push dword ptr [ebp + 8]`), and so does the pool's apply on add
+# (RW 0x8052FB: HEALTH, HEALTH_MULT): all of them are found as wrappers from here. RW 0x805268 has no other caller.
+SEEDS = {0x6144BF: 1}
+KNOWN = {0x6144BF: "list value", 0x804F39: "sum", 0x804FFF: "product", 0xECA015: "sum (patch copy)", 0x8052FB: "apply on add"}
 CITE = re.compile(r"\bRW\s+0x([0-9A-Fa-f]{5,8})\b")
 
 
@@ -77,9 +85,13 @@ class Image:
         pe = pefile.PE(str(game), fast_load=True)
         self.base = pe.OPTIONAL_HEADER.ImageBase
         self.data = pe.get_memory_mapped_image()
-        text = next(s for s in pe.sections if s.Name.rstrip(b"\0") == b".text")
-        self.tstart = self.base + text.VirtualAddress
-        self.tend = self.tstart + text.Misc_VirtualSize
+        # every executable section: RotWK 2.01 carries patched code outside .text (stxt774, stxt371, .mackt, .danetta: AdjustDamage's ARMOR
+        # query RW 0x5D8AF1 calls the copy of Object::getAttributeModifierSum at RW 0xECA000)
+        self.code = [(self.base + s.VirtualAddress, self.base + s.VirtualAddress + s.Misc_VirtualSize)
+                     for s in pe.sections if s.Characteristics & 0x20000000]
+
+    def executable(self, va: int) -> bool:
+        return any(a <= va < b for a, b in self.code)
 
     def u32(self, va: int) -> int:
         return struct.unpack_from("<I", self.data, va - self.base)[0]
@@ -94,16 +106,18 @@ class Image:
         return self.data[off:off + n]
 
     def branch_index(self) -> dict[int, list[tuple[int, str]]]:
-        """target -> [(site, 'call' | 'jmp')] for every rel32 E8 / E9 in .text."""
+        """target -> [(site, 'call' | 'jmp')] for every rel32 E8 / E9 in the executable sections (a byte scan: a hit inside another
+        instruction is dropped later, when the decode of its function does not land on it)."""
         out: dict[int, list[tuple[int, str]]] = defaultdict(list)
-        t = self.data[self.tstart - self.base:self.tend - self.base]
-        for i in range(len(t) - 5):
-            op = t[i]
-            if op in (0xE8, 0xE9):
-                site = self.tstart + i
-                target = (site + 5 + struct.unpack_from("<i", t, i + 1)[0]) & 0xFFFFFFFF
-                if self.tstart <= target < self.tend:
-                    out[target].append((site, "call" if op == 0xE8 else "jmp"))
+        for start, end in self.code:
+            t = self.data[start - self.base:end - self.base]
+            for i in range(len(t) - 5):
+                op = t[i]
+                if op in (0xE8, 0xE9):
+                    site = start + i
+                    target = (site + 5 + struct.unpack_from("<i", t, i + 1)[0]) & 0xFFFFFFFF
+                    if self.executable(target):
+                        out[target].append((site, "call" if op == 0xE8 else "jmp"))
         return out
 
 
@@ -152,23 +166,62 @@ def argument_at(instrs, k: int):
             return ("arg", (off - 8) // 4)
         return ("?", f"push {op}")
     if REG_IMM.match(op):
-        for j in range(idx - 1, -1, -1):
-            ins = instrs[j]
-            if ins.mnemonic == "call":
-                break
-            if ins.mnemonic == "mov" and re.fullmatch(rf"{op}, (0x[0-9a-f]+|\d+)", ins.op_str):
-                return ("imm", int(ins.op_str.split(", ")[1], 0))
-            if ins.mnemonic == "xor" and ins.op_str == f"{op}, {op}":
-                return ("imm", 0)
-            if ins.op_str.startswith(op + ",") or (ins.mnemonic in ("pop", "inc", "dec") and ins.op_str == op):
-                return ("?", f"push {op}: {ins.mnemonic} {ins.op_str} at {ins.address:#x}")
-        return ("?", f"push {op}: no constant found")
+        vals, why = register_values(instrs, idx, op)
+        if vals:
+            return ("imm", vals if len(vals) > 1 else next(iter(vals)))
+        return ("?", f"push {op}: {why}")
     return ("?", f"push {op}")
 
 
-def uses_ebp_frame(md, img: Image, function: int) -> bool:
-    ins = list(md.disasm(img.bytes_at(function, 16), function))
-    return len(ins) >= 2 and ins[0].mnemonic == "push" and ins[0].op_str == "ebp" and ins[1].mnemonic == "mov" and ins[1].op_str == "ebp, esp"
+LOW8 = {"eax": "al", "ecx": "cl", "edx": "dl", "ebx": "bl"}
+CALL_CLOBBERS = {"eax", "ecx", "edx"}
+
+
+def writes(ins, reg: str) -> bool:
+    """the instruction writes `reg` (or its low byte) as its first operand."""
+    first = ins.op_str.split(",")[0].strip()
+    return first in (reg, LOW8.get(reg, "?"), reg[1:] if len(reg) == 3 else "?")
+
+
+def register_values(instrs, idx: int, reg: str, depth: int = 0):
+    """The constant values `reg` can hold before instrs[idx], walking back in address order: mov reg, imm; xor reg, reg; mov reg, reg2;
+    add / sub reg, imm; setcc on its low byte after the register was zeroed ({0, 1}). (set, '') or (None, why): anything else is not guessed."""
+    if depth > 8:
+        return None, "too deep"
+    for j in range(idx - 1, -1, -1):
+        ins = instrs[j]
+        m, ops = ins.mnemonic, ins.op_str
+        if m == "call":
+            return (None, f"a call at {ins.address:#x} clobbers it") if reg in CALL_CLOBBERS else register_values(instrs, j, reg, depth)
+        if not writes(ins, reg) or m in ("cmp", "test", "push"):
+            continue
+        mm_ = re.fullmatch(rf"{reg}, (0x[0-9a-f]+|\d+)", ops)
+        if m == "mov" and mm_:
+            return {int(mm_.group(1), 0)}, ""
+        if m == "xor" and ops == f"{reg}, {reg}":
+            return {0}, ""
+        src = re.fullmatch(rf"{reg}, (e[a-d]x|e[sd]i|ebp)", ops)
+        if m == "mov" and src:
+            return register_values(instrs, j, src.group(1), depth + 1)
+        if m in ("inc", "dec") and ops == reg:
+            base, why = register_values(instrs, j, reg, depth + 1)
+            if base is None:
+                return None, why
+            return {v + 1 if m == "inc" else v - 1 for v in base}, ""
+        if m in ("add", "sub") and mm_:
+            base, why = register_values(instrs, j, reg, depth + 1)
+            if base is None:
+                return None, why
+            d = int(mm_.group(1), 0)
+            return {v + d if m == "add" else v - d for v in base}, ""
+        if m.startswith("set") and ops == LOW8.get(reg):
+            base, why = register_values(instrs, j, reg, depth + 1)
+            if base == {0}:
+                return {0, 1}, ""
+            return None, f"{m} {ops} on a register not zeroed"
+        return None, f"{m} {ops} at {ins.address:#x}"
+    return None, "no constant found"
+
 
 
 def rotwk_readers(img: Image, inv: cc.Inventory, blocks: dict[int, list[tuple[int, int]]]):
@@ -178,7 +231,7 @@ def rotwk_readers(img: Image, inv: cc.Inventory, blocks: dict[int, list[tuple[in
     readers: list[Reader] = []
     unresolved: list[Unresolved] = []
     wrappers: dict[int, tuple[str, int, tuple[int, ...]]] = {}
-    work = [(t, kind, 0, ()) for t, kind in POOL_QUERIES.items()]
+    work = [(t, KNOWN[t], k, ()) for t, k in SEEDS.items()]
     seen = set()
     while work:
         target, kind, k, via = work.pop()
@@ -187,30 +240,36 @@ def rotwk_readers(img: Image, inv: cc.Inventory, blocks: dict[int, list[tuple[in
         seen.add((target, k))
         for site, how in branches.get(target, []):
             fn = inv.owner(site)
-            if how == "jmp":
-                if fn is None:
-                    unresolved.append(Unresolved(site, None, target, "jmp from outside the inventory"))
-                elif fn != target:
-                    wrappers[fn] = (kind, k, via)
-                    work.append((fn, kind, k, (target,) + via))
-                continue
             if fn is None:
-                unresolved.append(Unresolved(site, None, target, "call from outside the inventory"))
+                # a byte pattern inside data or another instruction is no call; a real one outside the inventory is listed
+                ins = next(md.disasm(img.bytes_at(site, 16), site), None)
+                if ins is not None and ins.mnemonic in ("call", "jmp") and int(ins.op_str, 0) == target:
+                    unresolved.append(Unresolved(site, None, target, f"{how} from outside the inventory"))
                 continue
-            run = None
-            for s, n in blocks.get(fn, ()):
-                if s <= site < s + n:
-                    run = decode_run(md, img, s, site)
+            # the function's blocks in address order up to the site (a register set in an earlier block reaches it: RW 0x8E146D's edi)
+            run = []
+            for s, n in sorted(blocks.get(fn, ())):
+                if s > site:
                     break
-            if run is None:
-                unresolved.append(Unresolved(site, fn, target, "the decode does not reach the call"))
+                if s <= site < s + n:
+                    part = decode_run(md, img, s, site)
+                    run = None if part is None else run + part
+                    break
+                run += list(md.disasm(img.bytes_at(s, n), s))
+            if not run or run[-1].address != site:
+                continue  # not an instruction of its function: the byte scan's E8 / E9 inside another instruction
+            if how == "jmp":
+                if fn != target:  # a tail jump: the function passes its own arguments on unchanged
+                    wrappers[fn] = (kind, k, via)
+                    work.append((fn, KNOWN.get(fn, kind), k, (target,) + via))
                 continue
             what, val = argument_at(run, k)
             if what == "imm":
-                readers.append(Reader(site, fn, kind, val, (target,) + via if target not in POOL_QUERIES else via))
-            elif what == "arg" and uses_ebp_frame(md, img, fn):
+                for v in sorted(val) if isinstance(val, set) else [val]:  # a computed attribute: every value it can take is read
+                    readers.append(Reader(site, fn, kind, v, (target,) + via))
+            elif what == "arg" and any(i.mnemonic == "mov" and i.op_str == "ebp, esp" for i in run):
                 wrappers[fn] = (kind, val, via)
-                work.append((fn, kind, val, (target,) + via))
+                work.append((fn, KNOWN.get(fn, kind), val, (target,) + via))
             else:
                 unresolved.append(Unresolved(site, fn, target, str(val)))
     return readers, unresolved, wrappers
@@ -228,12 +287,18 @@ ENUM = re.compile(r"\b(ATTRIBUTE_\w+)\s*=\s*(0x[0-9A-Fa-f]+|\d+)")
 DEF = re.compile(r"(?:\b[\w:<>,&*\s]+?\s)?(?:(\w+)::)?(\w+)\s*\(([^()]*)\)\s*(?:const\s*)?(?:override\s*)?\{")
 # (name, argument count) -> the attribute argument: Object::attributeModifierSum(type, name, out) / attributeModifierProduct(type, name, innate,
 # out); a port function of the same name and another arity (Economy::attributeModifierProduct(obj, type)) is another function
+NOT_FOLLOWED = {"attributeModifierSum", "attributeModifierProduct", "operator", "update", "onObjectCreated", "getValue"}
 BASE_QUERIES = {("attributeModifierSum", 3): 0, ("attributeModifierProduct", 4): 0,
                 # Economy's (obj, type) seams: Economy::attributeModifierProduct / Sum call a std::function that GameLogic.cpp installs as a lambda
                 # around Object::attributeModifierProduct / Sum (setAttributeModifierProvider / setAttributeModifierSumProvider), so the type passes on
                 ("attributeModifierProduct", 2): 1, ("attributeModifierSum", 2): 1,
                 # the seams themselves, called directly (Economy.cpp: m_attributeSums(obj, COMMAND_POINT_BONUS, sum))
-                ("m_attributeModifiers", 3): 1, ("m_attributeSums", 3): 1}
+                ("m_attributeModifiers", 3): 1, ("m_attributeSums", 3): 1,
+                # the pool's own queries and the list's value query (AttributeModifierPool.cpp: list->value(ATTRIBUTE_HEALTH, ...) = RW 0x6144BF,
+                # product(ATTRIBUTE_HEALTH_MULT, ...) = RW 0x804FFF in the apply on add RW 0x8052FB); their names are common words, so a call
+                # of them counts only with a named attribute constant (STRICT)
+                ("value", 3): 0, ("sum", 3): 0, ("product", 4): 0}
+STRICT = {"value", "sum", "product"}
 CONST = re.compile(r"\b(?:constexpr|const)\s+(?:int|unsigned|std::uint32_t|std::int32_t|UnsignedInt|Int)\s+(\w+)\s*=\s*(0x[0-9A-Fa-f]+|\d+)\s*;")
 LAMBDA = re.compile(r"\]\s*\(([^()]*)\)\s*(?:->\s*\w+\s*)?\{[^{}]*$")
 
@@ -356,15 +421,32 @@ def port_scan(src: Path):
                 # a conditional picks one of two constants: both are read
                 arms = re.fullmatch(r".*\?\s*([\w:x]+)\s*:\s*([\w:x]+)\s*", a)
                 for arg in ([arms.group(1), arms.group(2)] if arms else [a]):
-                    val = None
+                    val, named = None, False
                     if re.fullmatch(r"(0x[0-9A-Fa-f]+|\d+)u?", arg):
                         val = int(arg.rstrip("u"), 0)
                     else:
                         tok = re.sub(r"^\(?\s*(?:\(\s*int\s*\)|static_cast<int>\()?\s*", "", arg).rstrip(")").split("::")[-1].strip()
                         if tok in enums:
-                            val = enums[tok]
+                            val, named = enums[tok], True
+                    if q in STRICT and not named:
+                        continue  # a common name (value / sum / product) counts only with a named attribute constant
                     reads.append(PortRead(f, ln, q, val, a, owner))
-    return reads, cites, queries
+    # through calls (owner 2026-11-19: TerrainResourceBehavior.cpp reads PRODUCTION through Economy::productionMoneyProduct): a port function
+    # reads the attributes read in its own body; a file reads what its code reads directly and through the port functions it calls that read
+    # them directly (by name). Common short names are not followed (a name clash would invent a read).
+    fn_attrs: dict[str, set[int]] = defaultdict(set)
+    for r in reads:
+        if r.attribute is not None and r.function:
+            fn_attrs[r.function].add(r.attribute)
+    # ONE level only: a name-based transitive closure spreads through common helpers until every file "reads" every attribute
+    followable = lambda n: len(n) >= 8 and n not in NOT_FOLLOWED
+    called = re.compile(r"\b(\w+)\s*\(")
+    via_calls: dict[str, set[int]] = defaultdict(set)
+    for f, (_raw, code) in files.items():
+        for c in set(called.findall(code)):
+            if followable(c) and c in fn_attrs:
+                via_calls[f] |= fn_attrs[c]
+    return reads, cites, queries, via_calls
 
 
 # ---- the mod ------------------------------------------------------------------------------------------------------------------------------
@@ -459,7 +541,7 @@ def mod_side(base: Path, overlay: Path, src_dir: Path | None = None, rw_tables: 
 
 # ---- the join -----------------------------------------------------------------------------------------------------------------------------
 
-def reader_status(readers, cites, reads, inv: cc.Inventory):
+def reader_status(readers, cites, reads, inv: cc.Inventory, via_calls: dict[str, set[int]] | None = None):
     """reader -> (status, files): the files that cite an address inside the reader's function, and whether one of them reads the attribute."""
     owner_cache: dict[int, int | None] = {}
     files_of: dict[int, set[str]] = defaultdict(set)
@@ -481,6 +563,8 @@ def reader_status(readers, cites, reads, inv: cc.Inventory):
             out[id(rd)] = ("not-cited", set())
         elif any(rd.attribute in reads_in[f] for f in files):
             out[id(rd)] = ("ported", files)
+        elif via_calls and any(rd.attribute in via_calls.get(f, ()) for f in files):
+            out[id(rd)] = ("ported-via-call", files)  # the citing file calls a port function that reads the attribute
         else:
             out[id(rd)] = ("cited-no-read", files)
     return out
@@ -512,7 +596,7 @@ def write(out: Path, names, lists, factions, readers, unresolved, wrappers, read
                             ml.src])
     with (out / "modifier-readers.tsv").open("w", encoding="utf-8", newline="") as s:
         w = csv.writer(s, delimiter="\t", lineterminator="\n")
-        w.writerow(["attribute", "number", "kind", "call", "function", "class", "via", "status", "port files"])
+        w.writerow(["attribute", "number", "kind", "call", "function", "reached from (RW_FUNCTION_MAP module)", "via", "status", "port files"])
         for rd in sorted(readers, key=lambda r: (r.attribute, r.site)):
             st, files = status[id(rd)]
             w.writerow([names[rd.attribute] if rd.attribute < len(names) else f"#{rd.attribute}", rd.attribute, rd.kind, f"RW 0x{rd.site:06X}",
@@ -545,7 +629,7 @@ def write(out: Path, names, lists, factions, readers, unresolved, wrappers, read
         mls = mod_by_attr.get(a, [])
         reached = [m for m in mls if m.factions]
         rds = [r for r in readers if r.attribute == num] if num is not None else []
-        ported = sum(1 for r in rds if status[id(r)][0] == "ported")
+        ported = sum(1 for r in rds if status[id(r)][0] in ("ported", "ported-via-call"))
         prd = [r for r in reads if r.attribute == num] if num is not None else []
         rows.append((a, num, len(mls), len(reached), len(rds), ported, sum(1 for r in rds if status[id(r)][0] == "cited-no-read"), len(prd),
                      verdict(len(mls), len(rds), ported, len(prd), num is not None)))
@@ -563,15 +647,45 @@ def write(out: Path, names, lists, factions, readers, unresolved, wrappers, read
     md += ["", "## RotWK readers not ported", ""]
     for rd in sorted(readers, key=lambda r: (r.attribute, r.site)):
         st, files = status[id(rd)]
-        if st == "ported":
+        if st in ("ported", "ported-via-call"):
             continue
         md.append(f"- {names[rd.attribute] if rd.attribute < len(names) else rd.attribute}: call RW 0x{rd.site:06X} in RW 0x{rd.function:06X}"
-                  f"{' (' + fn_class[rd.function] + ')' if fn_class.get(rd.function) else ''}: {st}"
+                  f"{' (reached from ' + fn_class[rd.function] + ')' if fn_class.get(rd.function) else ''}: {st}"
                   f"{' (cited in ' + ', '.join(sorted(files)) + ')' if files else ''}")
     md += ["", "## The port's attribute queries", "", "Base queries and the port functions found to pass the attribute on (argument index): "
            + ", ".join(f"`{q}`/{n} ({k})" for (q, n), k in sorted(queries.items())) + "."]
     (out / "modifier-map.md").write_text("\n".join(md) + "\n", encoding="utf-8")
     return rows
+
+
+def matrix_link(out: Path, lists: dict, rows, gaps_path: Path) -> int:
+    """modifier-matrix.tsv (owner 2026-11-19: the maps linked): every red button of MATRIX_GAPS.tsv with the ModifierLists its module names
+    (the object's module of that class: refs from mod_side), their attributes and each attribute's verdict here. A button whose list changes an
+    attribute the port does not read where RotWK does (`not read by the port` / `partly ported`) shows why it "does nothing"."""
+    if not gaps_path.exists():
+        return 0
+    verdicts = {a: v for a, _n, _m, _r, _rw, _pt, _cnr, _pr, v in rows}
+    by_module: dict[tuple[str, str], list] = defaultdict(list)
+    for ml in lists.values():
+        for typ, name, cls, _k in ml.refs:
+            if typ == "object":
+                by_module[(name.lower(), cls)].append(ml)
+    with gaps_path.open(encoding="utf-8", newline="") as s:
+        gaps = list(csv.DictReader([l for l in s if not l.startswith("#")], delimiter="\t", quoting=csv.QUOTE_NONE))
+    n = 0
+    with (out / "modifier-matrix.tsv").open("w", encoding="utf-8", newline="") as s:
+        w = csv.writer(s, delimiter="\t", lineterminator="\n")
+        w.writerow(["faction", "object", "button", "result", "module class", "modifier lists", "attributes", "attributes the port does not read"])
+        for g in gaps:
+            mls = by_module.get(((g.get("module object") or "").lower(), g.get("module class") or ""), [])
+            if not mls:
+                continue
+            attrs = sorted({a.upper() for ml in mls for a, _v in ml.modifiers if a})
+            unread = [a for a in attrs if verdicts.get(a) in ("not read by the port", "partly ported")]
+            w.writerow([g.get("faction"), g.get("object"), g.get("button"), g.get("result"), g.get("module class"),
+                        " ".join(sorted({ml.name for ml in mls})), " ".join(attrs), " ".join(unread)])
+            n += 1
+    return n
 
 
 def function_classes(path: Path) -> dict[int, str]:
@@ -596,8 +710,11 @@ def main(argv=None) -> int:
     ap.add_argument("--src", type=Path, default=here / "engine" / "src")
     ap.add_argument("--inventory", type=Path, help="rw_function_blocks.json (default: citation_check.find_inventory)")
     ap.add_argument("--function-map", type=Path, default=here / "docs" / "ennorath" / "RW_FUNCTION_MAP.tsv")
+    ap.add_argument("--matrix-gaps", type=Path, default=here / "docs" / "ennorath" / "MATRIX_GAPS.tsv",
+                    help="the button matrix's red buttons, linked to their modules' modifier lists (modifier-matrix.tsv)")
     a = ap.parse_args(argv)
-    inv_path = a.inventory or cc.find_inventory(here)
+    full = cc.DRIVE_COPY.with_name("rw_function_blocks_full.json")  # the whole binary (the maps run's angr pass); the default one holds the
+    inv_path = a.inventory or (full if full.exists() else cc.find_inventory(here))  # module code only and misses most readers
     if not inv_path or not inv_path.exists():
         raise SystemExit("modifier_map: no RotWK function inventory (rw_function_blocks.json): pass --inventory")
     functions = json.loads(inv_path.read_text(encoding="utf-8"))["functions"]
@@ -606,10 +723,11 @@ def main(argv=None) -> int:
     img = Image(a.game)
     names = attribute_names(img)
     readers, unresolved, wrappers = rotwk_readers(img, inv, blocks)
-    reads, cites, queries = port_scan(a.src)
+    reads, cites, queries, via_calls = port_scan(a.src)
     lists, factions = mod_side(a.base, a.overlay, a.src)
-    status = reader_status(readers, cites, reads, inv)
+    status = reader_status(readers, cites, reads, inv, via_calls)
     rows = write(a.out, names, lists, factions, readers, unresolved, wrappers, reads, status, function_classes(a.function_map), queries)
+    linked = matrix_link(a.out, lists, rows, a.matrix_gaps)
     print(f"{len(lists)} modifier lists, {sum(len(m.modifiers) for m in lists.values())} modifiers; {len(readers)} RotWK readers in "
           f"{len({r.function for r in readers})} functions ({len(wrappers)} wrappers, {len(unresolved)} unresolved); {len(reads)} port reads")
     for a_, num, n, rch, rw, pt, cnr, pr, v in rows:
