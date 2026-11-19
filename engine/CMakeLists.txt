@@ -537,6 +537,7 @@ include(cmake/Port261.cmake)    # PORT-261: the player-side powers PlayerHealSpe
 include(cmake/Local80.cmake)    # LOCAL-80: script library rank actions and PLAYER_COMPARE_RANK (issue #704; OPENBFME_LOCAL80_TESTS)
 include(cmake/Port224.cmake)    # PORT-224: destroying a creep lair or worker-rebuilt structure mid-rebuild fades the hole without money or treasure (issue #534; OPENBFME_PORT224_TESTS)
 include(cmake/Port222.cmake)    # PORT-222: a LevelGrantSpecialPower fills a horde's experience pool (fork issue 532; OPENBFME_PORT222_TESTS)
+include(cmake/Port301.cmake)    # PORT-301: ShareExperienceBehavior — the shared experience of a hero (fork issue 693; OPENBFME_PORT301_TESTS)
 include(cmake/Port268.cmake)    # PORT-268: stop grouping tool integration tests
 include(cmake/Port206.cmake)    # PORT-206: the weapon bonus conditions of Object + 0x39C, WeaponBonusUpgrade sets PLAYER_UPGRADE (issue #488; OPENBFME_PORT206_TESTS)
 include(cmake/Port258.cmake)    # PORT-258: powers on enemy units — DominateEnemy, Curse, Deflect, TimerRefresh (issue #606; OPENBFME_PORT258_TESTS)
