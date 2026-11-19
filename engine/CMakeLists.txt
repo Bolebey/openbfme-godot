@@ -512,6 +512,7 @@ include(cmake/Port134.cmake)    # PORT-134: the pick casts a model's aligned box
 include(cmake/Port153.cmake)  # PORT-153: SkirmishAI ArmyDefinition economy / defence / opportunity-target settings (OPENBFME_PORT153_TESTS)
 include(cmake/Port148.cmake)    # PORT-148: the GIANT_BIRD flyer attacks a structure (OPENBFME_PORT148_TESTS)
 include(cmake/Port145.cmake)    # PORT-145: a unit ordered into a SHIP boards it only while the ship sits idle at the shore (issue #362; OPENBFME_PORT145_TESTS)
+include(cmake/Port136.cmake)    # PORT-136: the summoned eagles attack on their own (issue #338; OPENBFME_PORT136_TESTS)
 include(cmake/Bldfx1.cmake)     # FEAT-BLDFX-1: the FXList nugget sinks, scorches, decals, light pulses, camera shakers (OPENBFME_BLDFX1_SOURCES / _TESTS)
 include(cmake/Decompfix1109.cmake) # DECOMPFIX-1109: FLEECHASE-1, ENTERADJUST-1, REQTHROTTLE-1 (OPENBFME_DECOMPFIX1109_TESTS)
 include(cmake/Port5.cmake)      # PORT-5: the bird's deferred ability target (OPENBFME_PORT5_TESTS)
@@ -1005,6 +1006,7 @@ add_executable(openbfme_tests
     ${OPENBFME_PORT135_TESTS}
     ${OPENBFME_PORT426_TESTS}
     ${OPENBFME_PORT212_TESTS}
+    ${OPENBFME_PORT136_TESTS}
     ${OPENBFME_PORT121_TESTS}
     ${OPENBFME_PORT435_TESTS}
     ${OPENBFME_PORT132_TESTS}
