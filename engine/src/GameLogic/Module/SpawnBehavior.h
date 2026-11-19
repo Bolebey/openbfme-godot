@@ -78,24 +78,25 @@ class SpawnBehaviorInterface
 {
 public:
 	virtual ~SpawnBehaviorInterface() = default;
-		virtual void onSpawnDeath(ObjectID deadSpawn, const DieModuleInterface::Event *info) = 0; // slot 1
-		// slot 3 (RW 0x8637BE, DONOR BFME2 SpawnBehavior_orderSlavesToAttackTarget.cpp 0x46070E): every live spawn with an AI (+ 0x260) gets
-		// aiForceAttackObject(target, maxShots, source) (RW 0x771380); a spawn that no longer resolves and one without an AI are skipped
-		virtual void orderSlavesToAttackTarget(Object *target, int maxShotsToFire, CommandSourceType source) = 0;
-		// slot 4 (RW 0x863807): the same walk with aiAttackPosition (RW 0x6961F1), reached from AIGroup::groupAttackPosition RW 0x772369
-		virtual void orderSlavesToAttackPosition(const Coord3D &pos, int maxShotsToFire, CommandSourceType source) = 0;
-		// slots 5 / 6 (RW 0x862990 / 0x8629ED): asks each spawn's weapons (RW 0x68D6A6 / 0x68B5FA) about the target; POSSIBLE or
-		// POSSIBLE_AFTER_MOVING answers at once, INVALID_SHOT is remembered and returned only if no spawn can attack (DONOR BFME2's priority)
-		virtual CanAttackResult canAnySlavesAttackSpecificTarget(int attackType, const Object *target, CommandSourceType source) const = 0;
-		virtual CanAttackResult canAnySlavesUseWeaponAgainstTarget(int attackType, const Object *target, const Coord3D *pos,
-		                                                           CommandSourceType source) const = 0;
-		virtual bool canAnySlavesAttack() const = 0;                                           // slot 7 (lane DECOMP-3, Object::isAbleToAttack RW 0x691413)
-		// slot 8 (RW 0x863850; lane SCRIPT-4, AIGroup::groupIdle RW 0x771F49): every slave of the list that is in the world and has an AI idles (RW 0x5E821A)
-		virtual void orderSlavesToGoIdle(CommandSourceType source) = 0;
-		virtual void stopSpawning() = 0;                                                       // slot 9
-		// slot 10 (RW 0x862E4F, from GettingBuiltBehavior RW 0x8569D7): every live spawn's SlavedUpdate is re-enslaved to the spawner (RW 0x8A510B)
-		virtual void reEnslaveSpawns() = 0;
-		virtual bool isSpawnerActive() const = 0;                                              // slot 11
+	virtual void onSpawnDeath(ObjectID deadSpawn, const DieModuleInterface::Event *info) = 0; // slot 1
+	// slot 3 (RW 0x8637BE, DONOR BFME2 SpawnBehavior_orderSlavesToAttackTarget.cpp 0x46070E): every live spawn with an AI (+ 0x260) gets
+	// aiForceAttackObject(target, maxShots, source) (RW 0x771380); a spawn that no longer resolves and one without an AI are skipped
+	virtual void orderSlavesToAttackTarget(Object *target, int maxShotsToFire, CommandSourceType source) = 0;
+	// slot 4 (RW 0x863807): the same walk with aiAttackPosition (RW 0x6961F1), reached from AIGroup::groupAttackPosition RW 0x772369
+	virtual void orderSlavesToAttackPosition(const Coord3D &pos, int maxShotsToFire, CommandSourceType source) = 0;
+	// slots 5 / 6 (RW 0x862990 / 0x8629ED): asks each spawn's weapons (RW 0x68D6A6 / 0x68B5FA) about the target; POSSIBLE or
+	// POSSIBLE_AFTER_MOVING answers at once (RW 0x8629CC / 0x862A2D), INVALID_SHOT is remembered and returned only if no spawn can
+	// attack (RW 0x8629D3 / 0x8629E0 / 0x862A34 / 0x862A41)
+	virtual CanAttackResult canAnySlavesAttackSpecificTarget(int attackType, const Object *target, CommandSourceType source) const = 0;
+	virtual CanAttackResult canAnySlavesUseWeaponAgainstTarget(int attackType, const Object *target, const Coord3D *pos,
+	                                                           CommandSourceType source) const = 0;
+	virtual bool canAnySlavesAttack() const = 0;                                           // slot 7 (lane DECOMP-3, Object::isAbleToAttack RW 0x691413)
+	// slot 8 (RW 0x863850; lane SCRIPT-4, AIGroup::groupIdle RW 0x771F49): every slave of the list that is in the world and has an AI idles (RW 0x5E821A)
+	virtual void orderSlavesToGoIdle(CommandSourceType source) = 0;
+	virtual void stopSpawning() = 0;                                                       // slot 9
+	// slot 10 (RW 0x862E4F, from GettingBuiltBehavior RW 0x8569D7): every live spawn's SlavedUpdate is re-enslaved to the spawner (RW 0x8A510B)
+	virtual void reEnslaveSpawns() = 0;
+	virtual bool isSpawnerActive() const = 0;                                              // slot 11
 		// slot 12 (RW 0x86327C; lane BACKLOG4, Object::defect RW 0x699401): every replacement that is due (its frame is before now) takes an orphan when one can
 		// be reclaimed (RW 0x862A88) and leaves the list
 		virtual void reclaimDueOrphans() = 0;

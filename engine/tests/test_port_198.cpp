@@ -16,6 +16,7 @@
 #include "doctest.h"
 #include "CombatTestUtil.h"
 #include "ProdTestUtil.h"
+#include "Common/ModEngineFeatures.h"
 
 #include <memory>
 #include <string>
@@ -267,9 +268,10 @@ struct Port198AiWorld : prodtest::ProdWorld
 } // namespace
 
 // RW 0x8637BE: the whole spawn list in order, each spawn with its AI gets aiForceAttackObject(target, maxShots, source), no other
-// eligibility test. The edain-unchained proxy (two SpawnBehaviors) reaches both lists; the victim identity comes from the order.
+// eligibility test. The retail object has one SpawnBehavior; the victim identity comes from the order.
 TEST_CASE("PORT-198 SpawnBehavior: slot 3 gives every guard the force-attack order (RW 0x8637BE -> RW 0x771380)")
 {
+	ModEngineFeatures::reset(); // retail: one spawner per object; the multi-spawner proxy is MODS-3 (Edain's .spwnun)
 	Port198World w;
 	Object *lair = w.at("P198Lair", "Alice", 300.0f, 300.0f);
 	Object *victim = w.at("P198Victim", "Bob", 350.0f, 300.0f);
@@ -294,6 +296,7 @@ TEST_CASE("PORT-198 SpawnBehavior: slot 3 gives every guard the force-attack ord
 // (RW 0x6C91F7 .. 0x6C9229) makes every spawn answer NOT_POSSIBLE; a normal one is POSSIBLE through the guards' swords.
 TEST_CASE("PORT-198 SpawnBehavior: slots 5 / 6 ask the guards whether the spawner can shoot (RW 0x862990 / 0x8629ED)")
 {
+	ModEngineFeatures::reset();
 	Port198World w;
 	Object *lair = w.at("P198Lair", "Alice", 300.0f, 300.0f);
 	Object *victim = w.at("P198Victim", "Bob", 350.0f, 300.0f);
@@ -315,6 +318,7 @@ TEST_CASE("PORT-198 SpawnBehavior: slots 5 / 6 ask the guards whether the spawne
 // (slot 8 RW 0x863850) still work after the order moved into the interface. No second reaction to one click.
 TEST_CASE("PORT-198 SpawnBehavior: a ground order through AIGroup and an idle order reach the guards (RW 0x863807 / 0x863850)")
 {
+	ModEngineFeatures::reset();
 	Port198World w;
 	Object *lair = w.at("P198Lair", "Alice", 300.0f, 300.0f);
 	SpawnBehavior *spawner = w.module(*lair);
@@ -345,6 +349,7 @@ TEST_CASE("PORT-198 SpawnBehavior: a ground order through AIGroup and an idle or
 // with that factory and template. Without the call the request stays in progress (state 1) and nothing else in the port writes it.
 TEST_CASE("PORT-198 Player::onUnitCreated: a spawn completes its factory's AI request (RW 0x6AA688 -> RW 0x8F06FF(..., 0))")
 {
+	ModEngineFeatures::reset();
 	Port198AiWorld w;
 	Object *lair = w.lair();
 	AISkirmishPlayer *ai = w.bobAI();
