@@ -17,3 +17,25 @@ The other confirmed reader of slot +0x274 is AIWoTRForfeitTactic update RW 0x9B7
 ## Further work
 
 The other uncited functions still require classification against their callers and the other open ownership boundaries. In particular RW 0x870D4E iterates the contained list and the entering-member map, optionally filters each object, skips missing drawables, and invokes Drawable RW 0x672B96 then RW 0x67093E. Its caller and client event path still need proof; do not introduce a simulation-to-drawable direct call (the existing thread boundary is `ObjectClientHooks`).
+
+## Individually checked small entries
+
+The table is deliberately partial: the other rows in the function map still need a behaviour-by-behaviour comparison, not an assumed verdict from `none`.
+
+| RW start | First-instruction body / outcome | Port location or scope |
+|---|---|---|
+| 0x872A69 | Returns the HordeContain class-name string pointer; not simulation behaviour. | Module registry plumbing. |
+| 0x872A8D | Stores the argument at interface +0x160; setter, reader not established. | Needs its caller chain. |
+| 0x872A9A | Returns interface +0x160; getter. | Needs its caller chain. |
+| 0x872AAE | Returns interface +0x1EC, the last-member-entered frame. | Already ported: `HordeContain::lastMemberEnteredFrame`, `HordeGarrisonLink.cpp`. |
+| 0x872ACB | Returns interface +0x150; getter. | Needs its caller chain. |
+| 0x872AD2 | Stores the argument at interface +0x150; setter, reader not established. | Needs its caller chain. |
+| 0x872AE7 | Returns interface +0x188, the garrisoned flag. | Already ported: `HordeContain::isGarrisoned`, `HordeGarrisonLink.cpp`. |
+| 0x872AEE | Returns interface +0x16C; getter. | Needs its caller chain. |
+| 0x872AF5 | Stores the argument at interface +0x18C; setter, reader not established. | Needs its caller chain. |
+| 0x872B02 | Returns interface `this - 0x11C`; base-pointer adjustment, not simulation behaviour. | Interface plumbing. |
+| 0x872B24 | Interns the HordeContain module name and returns its key; not simulation behaviour. | Module registry plumbing. |
+| 0x872B76 | Clears interface +0x188 and wakes the containing update. | Already ported: `HordeContain::setGarrisoned`, `HordeGarrisonLink.cpp`. |
+| 0x8736EF | Scalar deleting destructor (map tier A); not gameplay behaviour. | Lifecycle. |
+| 0x86D6FD | Copies module-data +0x280 as a string. | Ported here: `HordeContain::livingWorldOverloadTemplate`; remaining forfeit caller S-7518. |
+| 0x86DF44 | Last-member death / periodic split check. | Already ported: `HordeContainRuntime.cpp`, Port 265. |
