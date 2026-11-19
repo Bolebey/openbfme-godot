@@ -77,6 +77,12 @@ def port_cases() -> tuple[set[str], set[str]]:
     return conds, acts
 
 
+def music_cases() -> set[str]:
+    """The music library runs on the client (engine/src/GameClient/MusicScripts.cpp: `case C_<condition>:` / `case A_<action>:`)."""
+    t = (ROOT / "engine" / "src" / "GameClient" / "MusicScripts.cpp").read_text(encoding="utf-8", errors="replace")
+    return set(re.findall(r"\bcase\s+[CA]_([A-Z][A-Z0-9_]+)\s*:", t))
+
+
 def scripts_of(body: bytes, reg) -> list[dict]:
     names, p = census.parse_toc(body)
     rec = []
@@ -150,11 +156,13 @@ def main() -> int:
     reg = sc.load_registry()
     kinds = ini_names(m)
     pconds, pacts = port_cases()
+    music = music_cases()
     # the ordinals the ScriptEngine runs itself (script_census.ENGINE_OWN: never reach the conditions / actions switch)
     own = {reg[k][i][0] for k, ks in (("condition", "condition"), ("action", "action")) for i in sc.ENGINE_OWN[ks] if i in reg[k]}
     files = [n for n in m.files if (n.startswith("libraries\\") and n.endswith(".map")) or n.endswith(".scb")]
     rows, grants = [], []
     unported = collections.Counter()
+    lib_total = lib_open = 0  # the progress share (owner 2026-11-19): scripts of the sides' libraries, and those with a type the port lacks
     unported_where = collections.defaultdict(set)
     for path in sorted(files):
         blob = m.read(path)
@@ -162,14 +170,18 @@ def main() -> int:
             continue
         body, _ = census.decode(blob)
         src = "mod" if str(m.files[path][0]).startswith(str(a.overlay)) else "rotwk"
+        is_music = path.startswith("libraries\\music_")
         for s in scripts_of(body, reg):
             missing = []
             for it in s["cond"]:
-                if it != "OR" and it["name"] not in pconds and it["name"] not in own:
+                if it != "OR" and it["name"] not in own and it["name"] not in (music if is_music else pconds):
                     missing.append(it["name"])
             for it in s["act"] + s["else"]:
-                if it["name"] not in pacts and it["name"] not in own:
+                if it["name"] not in own and it["name"] not in (music if is_music else pacts):
                     missing.append(it["name"])
+            if path.startswith("libraries\\"):
+                lib_total += 1
+                lib_open += 1 if missing else 0
             for n in missing:
                 unported[n] += 1
                 unported_where[n].add(path)
@@ -208,6 +220,10 @@ def main() -> int:
              "  case for. It transcribes the mod's scripts, so it is not in the repository: `script-map/SCRIPT_MAP.tsv` of the field audit",
              "  (Drive `field-audit-auto`, `ennorath-audit.zip` of the arena archive).", "",
              "Files: %d, scripts: %d, grants: %d." % (len({r[0] for r in rows}), len(rows), len(set(grants))), "",
+             # read by tools/mod/progress_snapshot.py (columns scripts_total / scripts_open): keep the wording
+             "Library scripts: %d; with a condition or action the port has no case for: %d." % (lib_total, lib_open),
+             "(A script whose every type has a case is counted as executed: the case may still differ from RotWK, as a matrix PASS is checked",
+             "behaviour and this is not.)", "",
              "## Condition / action types the mod's scripts use that the port does not execute", "",
              "| type | uses | files |", "|---|---|---|"]
     for n, c in unported.most_common():
