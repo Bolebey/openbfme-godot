@@ -173,7 +173,6 @@ TEST_CASE("PORT-296: a crew member is prepared for its castle (RW 0x798397) and 
 	Object *c = f.castle();
 	CastleBehavior *b = f.cb(c);
 	REQUIRE(b != nullptr);
-	MESSAGE("DEBUG owned=" << b->ownedObjects().size() << " crew=" << b->crew().size() << " members=" << b->members().size() << " keep=" << b->keepId());
 	REQUIRE(b->crew().size() == 1);
 	Object *m = f.crewman(b);
 	// RW 0x798398 / 0x7983A6: the castle is the producer, the member is held for good
