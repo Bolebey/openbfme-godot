@@ -211,7 +211,7 @@ TEST_CASE("PORT-294: the data's Permanent does not hold the removal back — slo
 
 	// RW 0x691438 -> slot 3 (RW 0x8D278A) -> RW 0x8D2688: the removal runs unless slot 7 answers permanent; the class answers false
 	// (RW 0x9188EB) although the data says Permanent = Yes, so DestroyWhenSold still kills the object
-	fortress->removeUpgrade("Port294OwnSpikes");
+	fortress->removeUpgrade(Player::resolveUpgrade("Port294OwnSpikes", true));
 	CHECK_FALSE(fortress->hasUpgrade("Port294OwnSpikes"));
 	CHECK(spikes->isEffectivelyDead());
 }
