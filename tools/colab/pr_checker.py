@@ -69,6 +69,14 @@ DOC_UNION = {"docs/STOPS.md", "docs/ennorath/NIGHT_WATCH.md", "docs/ennorath/PRO
 
 
 SANDBOX = (Path("/content/sandbox_id").read_text().strip() if Path("/content/sandbox_id").exists() else "?")
+# Owner 2026-11-19: the checker and the batcher help each other ("они должны быть синхронизированы, чтобы знали друг о друге и не делали
+# одно и то же"). Sandbox 2's batch loop runs a checker cycle after 30 minutes without green PRs (batch_bot.py helper_due), and this
+# checker runs a batch round when it has nothing to check (help_batch). A check claims its PR on the Drive first: the other sandbox's
+# checker leaves a PR whose current head is claimed there, until the claim is CLAIM_S old.
+CLAIMS = Path(os.environ.get("PRCHECK_CLAIMS", "/content/drive/MyDrive/openbfme-runs/prcheck/claims"))
+CLAIM_S = 4 * 3600
+CLAIM_SETTLE_S = 90   # the Drive carries a write to the other sandbox within about a minute
+INSTALL = Path("/content/sandbox")
 
 
 def sh(cmd: list[str] | str, cwd: Path = WT, timeout: int | None = None, env: dict | None = None) -> subprocess.CompletedProcess:
@@ -638,12 +646,19 @@ def cycle(args) -> int:
             continue
         keep.append(p)
     todo = keep
+    held = check_claims()
+    for p in [p for p in todo if held_elsewhere(p, held)]:
+        print(f"#{p['number']}: checked on sandbox {held_elsewhere(p, held)} now", flush=True)
+    todo = [p for p in todo if not held_elsewhere(p, held)]
     # a reworked PR (checked before, new head) first: its agent waits for the answer (PR 523 waited four hours behind new PRs); then the
     # freshest first
     todo = sorted(todo, key=lambda p: p.get("updatedAt") or "", reverse=True)
     todo = sorted(todo, key=lambda p: str(p["number"]) not in state["checked"])
     # one PR per cycle, then the list again: a PR reworked while another is being checked waits for that one check only, not the whole queue
     for p in todo[:1]:
+        if not claim_check(p):
+            print(f"#{p['number']}: the other sandbox claimed it first", flush=True)
+            continue
         bodies[str(p["number"])] = body_hash(p)
         t0 = time.time()
         try:
@@ -653,6 +668,8 @@ def cycle(args) -> int:
             print(f"#{p['number']}: checker error: {e}", flush=True)
             state.setdefault("errors", {})[str(p["number"])] = p["headRefOid"]
             save_state(state)
+        finally:
+            release_check(p)
     return len(todo)
 
 
@@ -679,12 +696,73 @@ def self_update() -> None:
     os.execv(sys.executable, [sys.executable, str(me)] + sys.argv[1:])
 
 
+def check_claims(now: float | None = None) -> dict[int, dict]:
+    now = time.time() if now is None else now
+    held: dict[int, dict] = {}
+    for f in CLAIMS.glob("*.json") if CLAIMS.exists() else []:
+        try:
+            c = json.loads(f.read_text())
+        except (OSError, ValueError):
+            continue
+        if now - float(c.get("t", 0)) < CLAIM_S and f.stem.isdigit():
+            held[int(f.stem)] = c
+    return held
+
+
+def held_elsewhere(p: dict, held: dict[int, dict]) -> str:
+    c = held.get(p["number"])
+    return c["sandbox"] if c and c.get("sandbox") != SANDBOX and c.get("head") == p["headRefOid"] else ""
+
+
+def claim_check(p: dict, settle: float = CLAIM_SETTLE_S) -> bool:
+    """Write this sandbox's claim, give the Drive time to bring the other's, keep the PR only if the claim still names this sandbox.
+    Without the Drive (a hand run elsewhere) every claim holds."""
+    if not CLAIMS.parent.parent.exists():
+        return True
+    CLAIMS.mkdir(parents=True, exist_ok=True)
+    f = CLAIMS / f"{p['number']}.json"
+    f.write_text(json.dumps({"sandbox": SANDBOX, "head": p["headRefOid"], "t": time.time()}))
+    time.sleep(settle)
+    try:
+        c = json.loads(f.read_text())
+    except (OSError, ValueError):
+        return False
+    return c.get("sandbox") == SANDBOX and c.get("head") == p["headRefOid"]
+
+
+def release_check(p: dict) -> None:
+    f = CLAIMS / f"{p['number']}.json"
+    try:
+        if json.loads(f.read_text()).get("sandbox") == SANDBOX:
+            f.unlink()
+    except (OSError, ValueError):
+        pass
+
+
+def help_batch() -> int:
+    """Nothing to check: one batch round of batch_bot.py (it starts a batch only by its own rules: green PRs, claims, the shared loop
+    state on the Drive). Not where sandbox 2's batch loop itself runs this checker (--no-helper)."""
+    new = sh(["git", "show", "origin/main:tools/colab/batch_bot.py"], cwd=REPO).stdout
+    if not new:
+        return -1
+    path = INSTALL / "batch_bot.py"
+    if not path.exists() or path.read_text(encoding="utf-8", errors="replace") != new:
+        tmp = path.with_name("batch_bot.py.new")
+        tmp.write_text(new, encoding="utf-8")
+        os.replace(tmp, path)
+    status("prcheck", "проверять нечего: ход батчера (batch_bot.py loop --once)")
+    with open("/content/batch_loop.log", "ab") as log:
+        return subprocess.run([sys.executable, str(path), "loop", "--once", "--no-helper"], cwd=str(INSTALL), stdout=log,
+                              stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL).returncode
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--once", action="store_true")
     ap.add_argument("--pr", type=int)
     ap.add_argument("--no-comment", action="store_true")
     ap.add_argument("--no-self-update", action="store_true", help="keep the running copy (a branch version under test)")
+    ap.add_argument("--no-helper", action="store_true", help="never run a batch round when idle (the cycle batch_bot.py runs itself)")
     args = ap.parse_args()
     ensure_tree()
     while True:
@@ -695,6 +773,9 @@ def main() -> int:
             return 0
         if not n:
             status("prcheck", "все открытые PR проверены на своих головах: жду новых коммитов")
+            if not args.no_helper:
+                help_batch()
+                status("prcheck", "все открытые PR проверены на своих головах: жду новых коммитов")
             time.sleep(300)
 
 
