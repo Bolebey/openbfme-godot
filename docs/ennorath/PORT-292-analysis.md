@@ -74,13 +74,13 @@ These entries are not a blanket claim that the entire #552 member mechanism is p
 | 0x86C192 | Sets owner orientation using RW 0x70C31E, marks interface +4 dirty, wakes update RW 0x850C32. | Port comparison and caller unresolved. |
 | 0x86C758 | Rejects argument with template +0x115 bit 0x20; otherwise forwards three arguments to RW 0x86A002. | Contain acceptance, S-7505 / #552; exact equivalence unresolved. |
 | 0x86C8B9 | Null-guarded delegation from owner +0x27C to that container's +0x258 vslot +0x68. | Containment hand-off S-7505 / #552; exact equivalence unresolved. |
-| 0x86C9E7 | Returns address of module-data +0x1A4, no mutation. | Getter; field and callers still require confirmation. |
-| 0x86C9F3 | Returns address of module-data +0x18C, no mutation. | Getter; field and callers still require confirmation. |
+| 0x86C9E7 | Returns address of module-data +0x1A4 (`SplitHorde` vector), no mutation. | Getter; parser in `HordeContain.cpp`, storage `HordeContainModuleData::m_splitHorde`; callers and equivalence still require confirmation. |
+| 0x86C9F3 | Returns address of module-data +0x18C (`RankInfo` vector), no mutation. | Getter; parser in `HordeContain.cpp`, storage `HordeContainModuleData::m_rankInfo`; callers and equivalence still require confirmation. |
 | 0x86D1FE | If the horde AI is moving RW 0x664485, calls RW 0x662A0E for each contained member's AI, then the horde AI. | Member-AI mechanism #552 / #650; exact equivalence unresolved. |
 | 0x86F6E1 | Calls RW 0x690B11 on contained and entering members, then if drawable and locally controlled flushes model conditions RW 0x67449C(0). | Selection/presentation and member list S-7505 / #552; exact equivalence unresolved. |
 | 0x86FEAD | Uses callback RW 0x86C79A over members and resolves the chosen id: callback selects greatest experience excluding template bit +0x11C / 0x10. | Member selection S-7505 / #552; exact equivalence unresolved. |
 | 0x86FFD2 | Requires at least one member, the requested template to equal the alternate, and non-main alternate's MinimumHordeSize. | Existing `HordeFormation.cpp::registerHandlers` checks `alternateFormationTemplate` and `canToggleFormation`; formation swap remains S-589. |
-| 0x870D4E | Traverses contained objects and entering ids, optional filter RW 0x7640C1; calls Drawable RW 0x672B96 and RW 0x67093E. | S-7505 / #552 lists this function; caller and ordered presentation path unresolved, no simulation-to-client shortcut. |
+| 0x870D4E | Traverses contained objects and entering ids, applying optional filter RW 0x7640C1 with member and horde's controlling player (RW 0x68B678); calls Drawable `setTerrainDecal(type)` RW 0x672B96 and `setTerrainDecalFadeTarget(target, rate)` RW 0x67093E. | S-7505 / #552 lists this function; caller and ordered presentation path unresolved, no simulation-to-client shortcut. |
 | 0x87104A | With argument flags bit 0x10, visits interface +0x150 ids through callback; otherwise delegates to RW 0x8666A1. | Member-list traversal #552; exact equivalence unresolved. |
 | 0x87159F | Sets interface +0x1CC then clears tree at +0x1C0 through RW 0x8664EA. | State/ownership and callers unresolved. |
 | 0x871844 | Calls interface +0xE0, frees each +0x270 vector entry, clears vector and tail-calls RW 0x86708F. | Lifecycle/contain cleanup S-7505 / #552; exact equivalence unresolved. |
