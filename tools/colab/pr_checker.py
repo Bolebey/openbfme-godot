@@ -369,6 +369,28 @@ def own_tests(diff: str, title: str) -> list[str]:
     return sorted(pats)
 
 
+def own_test_missing(pr: dict, diff: str) -> list[str]:
+    """tools/ci/own_test_check.py's rule on this PR (opened after the rule): the added test prefixes no text shows passing."""
+    for d in (Path(__file__).resolve().parents[1] / "ci", WT / "tools" / "ci"):  # a checkout's own, else the checker tree's
+        if (d / "own_test_check.py").exists() and str(d) not in sys.path:
+            sys.path.insert(0, str(d))
+    try:
+        import own_test_check as ot
+    except ImportError:
+        return []
+    if (pr.get("createdAt") or "") < ot.RULE_SINCE:
+        return []
+    texts = [pr.get("body") or ""]
+    try:
+        texts += [c.get("body") or "" for c in json.loads(gh("pr", "view", str(pr["number"]), "--json", "comments")).get("comments") or []]
+        m = re.search(r"(?:closes|fixes|resolves)\s+#(\d+)", pr.get("body") or "", re.I)
+        if m:
+            texts += [c.get("body") or "" for c in json.loads(gh("issue", "view", m.group(1), "--json", "comments")).get("comments") or []]
+    except Exception:
+        pass
+    return ot.missing(diff, [t for t in texts if not ot.BOT.match(t)])
+
+
 def check_pr(pr: dict, state: dict, main_sha: str, open_prs: list[dict], comment: bool) -> str:
     n, sha = pr["number"], pr["headRefOid"]
     sh(["git", "fetch", "-q", "origin", f"+pull/{n}/head:refs/prcheck/{n}"]).check_returncode()
@@ -429,6 +451,14 @@ def check_pr(pr: dict, state: dict, main_sha: str, open_prs: list[dict], comment
             "❌ **Матрица ухудшает кнопки, проходившие на main**, без объяснения в `docs/ennorath/matrix_explain.d/<задача>.md` " \
             "(строка `` `<объект> <кнопка>`: почему ``; ошибка теста — чинить тест, а не объяснять)"
         lines += [head, "```", out[:3500], "```"]
+    # owner 2026-11-19: a PR that adds tests shows them passing (tools/ci/own_test_check.py, the same rule as the Actions check "Own test
+    # shown passing"): without the line it goes back at once, no build spent on it (PR 721's test had never compiled)
+    miss = own_test_missing(pr, diff)
+    if miss:
+        lines.append("❌ **Свой тест не показан пройденным**: для " + ", ".join(f"`{m}*`" for m in miss) + " нет строки итога doctest "
+                     "(`[doctest] test cases: N | N passed | 0 failed`) в описании PR, его комментариях или отчёте в issue. Собери, прогони свой "
+                     "тест и вставь итог в описание PR. Сборка не запускалась.")
+        return finish(n, sha, lines, comment, state)
     t_build = time.time()
     status("prcheck", f"PR #{n} ({pr['title'][:60]}): сборка")
     ok, err = build()
@@ -697,7 +727,7 @@ def cycle(args) -> int:
     sh(["git", "fetch", "-q", "origin"], cwd=REPO).check_returncode()
     main_sha = sh(["git", "rev-parse", "origin/main"], cwd=REPO).stdout.strip()
     prs = json.loads(gh("pr", "list", "--state", "open", "--limit", "100", "--json",
-                        "number,title,body,headRefOid,headRefName,files,isDraft,updatedAt,isCrossRepository,headRepositoryOwner"))
+                        "number,title,body,headRefOid,headRefName,files,isDraft,updatedAt,createdAt,isCrossRepository,headRepositoryOwner"))
     sh(["git", "fetch", "-q", "origin", "+refs/pull/*/head:refs/prcheck/*"], cwd=REPO)  # the heads, for the batch test below
     # A red PR whose description changed is checked again without a new commit: an agent that only names a pin's cause in the PR body
     # (the named-pin rule reads the body) gets its new verdict (PR 583, 2026-11-17).
