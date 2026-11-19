@@ -676,6 +676,10 @@ TEST_CASE("perf1: the big battle (400 frames) and a 4-player AI skirmish after a
 	// pin: P-77 (2026-11-13) re-measured the battle and the skirmish once on station-0 (OPENBFME_PERF1_REGEN=1, Windows MSVC): a BASE_SITE castle's unpack no longer
 	// refuses its own members, the castle or a DOZER (thunk RW 0x797A96 bit 8, RW 0x796E9A .. 0x796EE3), so the starting fortresses place members the port
 	// used to drop; the allied blob keeps its file
+	// pin: the PC batch of 2026-11-19 (batch 19f, Ports 300, 294, 270, 275, 459, 282, 272, 241, 277, 280, 136) re-measured it once on the merged
+	// tree (REGEN=1, Windows MSVC), bisected over the merge points: green after batch 19f, red from Port 294 (#723) on: ObjectCreationUpgrade's
+	// own wouldUpgrade / postUpgradeCheck (RW 0x8B82AB / 0x8B8329), asked on every upgrade event (RW 0x6936FE), replace the mux base's answers;
+	// PORT-459 (#653) after it was not split off
 	// pin: the fork's merge of upstream 234f5742 (2026-11-13) re-measured the battle and the skirmish once on the merged tree (OPENBFME_PERF1_REGEN=1, Linux GCC on Colab, whose hashes
 	// match the MSVC pins frame for frame on main df5f0b41): PORT-13's GameLogicSettings::crc hashes AttackMoveUsesFormations only when it is false (both editions'
 	// aidata.ini set Yes), so every frame's settings hash moves; with the old condition put back the old pins pass, so nothing else moved
@@ -756,6 +760,10 @@ TEST_CASE("perf1: the allied blob (300 frames) hashes as the build before the co
 	// pin: the fork's merge of upstream 234f5742 (2026-11-13) re-measured the allied blob once on the merged tree (OPENBFME_PERF1_REGEN=1, Linux GCC on Colab, whose hashes
 	// match the MSVC pins frame for frame on main df5f0b41): PORT-13's GameLogicSettings::crc hashes AttackMoveUsesFormations only when it is false (both editions'
 	// aidata.ini set Yes), so every frame's settings hash moves; with the old condition put back the old pins pass, so nothing else moved
+	// pin: batches 2026-11-18l and m (fork PRs 579, 615, 629, 658, 661, 623: Ports 218, 232, 255, 274, 261, 252) merged onto main e3bb171a
+	// (with PR 619, Port 226, landed on its own): the batches and main each re-pinned skirmish4_6000 on its own tree, so the merge re-measured it once on
+	// the merged tree (OPENBFME_PERF1_REGEN=1, Linux GCC on Colab); uber1 did not move; not bisected between the ports (target acquisition of Port 226 meets
+	// the batches' logic changes)
 	// pin: the arena PR batch of 2026-11-14 (fork PRs 217, 359 .. 424: 20 ports) re-measured the allied blob once on the merged tree (OPENBFME_PERF1_REGEN=1, Linux GCC on Colab,
 	// whose hashes match the MSVC pins): with the batch only perf1 and uber1 move against main bc66c72f on the same machine (every other suite of the
 	// batch run fails or passes as on main); the batch's logic changes are Port 138 (a rubble rebuild), Port 145 (SHIP enter legs), Port 148 (GIANT_BIRD

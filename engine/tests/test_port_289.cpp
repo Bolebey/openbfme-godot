@@ -250,6 +250,7 @@ TEST_CASE("PORT-289 dead targets, active sole healers and shroud command sources
 	Object *otherDozer = r.place("Port289Dozer", 'A', 80.0f, 100.0f);
 	Object *target = r.place("Port289Structure", 'A', 140.0f, 140.0f);
 	r.damage(*target, 500.0f);
+	r.logic->runLogicFrame(); // a fresh object's zero expiry is still active on frame 0
 	REQUIRE(target->attemptHealingFromSoleBenefactor(1.0f, otherDozer, 20));
 	CHECK_FALSE(ActionManager::canRepairObject(dozer, target, CMD_FROM_PLAYER));
 	for (int i = 0; i < 21; ++i)
@@ -276,6 +277,7 @@ TEST_CASE("PORT-289 type 0x8A and RepairSpecialPower share canRepairObject and k
 	REQUIRE(repair != nullptr);
 	REQUIRE(ai != nullptr);
 	const float before = target->getBodyModule()->getHealth();
+	r.logic->runLogicFrame(); // frame 0 has orderFrame == 0, which the dozer's most-recent-task scan intentionally skips
 	repair->doSpecialPowerAtObject(target, 0);
 	CHECK(repair->repairs() == 1);
 	CHECK(ai->repairing());

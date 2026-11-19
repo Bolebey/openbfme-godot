@@ -195,12 +195,22 @@ Object::~Object()
 			hooks->objectDestroyed(*this);
 		}
 	}
+	m_client = nullptr; // RW Object::~Object detaches the drawable before deleting modules (prevents post-DESTROYED events)
 	if (m_team)
 	{
 		m_team->friend_removeMember(this);
 		m_team = nullptr;
 	}
+	// RW 0x0069A8D7 .. 0x0069A8E9: cached module interface pointers (+0x258 .. +0x264) are cleared before deleting modules
+	m_ai = nullptr;
+	m_body = nullptr;
+	m_contain = nullptr;
+	m_attributePool = nullptr;
+	m_physics = nullptr;
+	m_slaved = nullptr;
+	m_moduleCachesBuilt = false;
 	m_moduleLookupsCached = false; // a lookup while the modules go scans what is left, as before the caches
+	m_collideModules.clear();
 	for (std::unique_ptr<BehaviorModule> &m : m_modules)
 	{
 		m.reset();
@@ -1632,7 +1642,7 @@ BehaviorModule *Object::findModule(std::string_view className) const
 {
 	for (const std::unique_ptr<BehaviorModule> &m : m_modules)
 	{
-		if (m->getModuleClassName() == className)
+		if (m && m->getModuleClassName() == className)
 		{
 			return m.get();
 		}
@@ -1659,7 +1669,7 @@ ExitInterface *Object::getObjectExitInterface() const
 {
 	for (const std::unique_ptr<BehaviorModule> &m : m_modules)
 	{
-		if (ExitInterface *e = m->getExitInterface())
+		if (ExitInterface *e = m ? m->getExitInterface() : nullptr)
 		{
 			return e;
 		}
@@ -1672,7 +1682,7 @@ DockUpdateInterface *Object::getDockUpdateInterface() const
 {
 	for (const std::unique_ptr<BehaviorModule> &m : m_modules)
 	{
-		if (DockUpdateInterface *d = m->getDockUpdateInterface())
+		if (DockUpdateInterface *d = m ? m->getDockUpdateInterface() : nullptr)
 		{
 			return d;
 		}
@@ -1684,7 +1694,7 @@ ProductionUpdateInterface *Object::getProductionUpdate() const
 {
 	for (const std::unique_ptr<BehaviorModule> &m : m_modules)
 	{
-		if (ProductionUpdateInterface *p = m->getProductionUpdateInterface())
+		if (ProductionUpdateInterface *p = m ? m->getProductionUpdateInterface() : nullptr)
 		{
 			return p;
 		}
@@ -1696,7 +1706,7 @@ BehaviorModule *Object::findModuleByTag(NameKeyType tagKey) const
 {
 	for (const std::unique_ptr<BehaviorModule> &m : m_modules)
 	{
-		if (m->getModuleTagNameKey() == tagKey)
+		if (m && m->getModuleTagNameKey() == tagKey)
 		{
 			return m.get();
 		}
@@ -1709,7 +1719,7 @@ const SpecialPowerModuleInterface *Object::findSpecialPowerModuleInterface(int p
 	// RW 0x691526: iterates modules, finds first with SpecialPowerModuleInterface whose template has powerType
 	for (const std::unique_ptr<BehaviorModule> &m : m_modules)
 	{
-		const SpecialPowerModuleInterface *sp = m->getSpecialPower();
+		const SpecialPowerModuleInterface *sp = m ? m->getSpecialPower() : nullptr;
 		if (!sp)
 		{
 			continue;
