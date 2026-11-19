@@ -612,7 +612,7 @@ def cycle(args) -> int:
     todo = [p for p in prs if (args.pr is None or p["number"] == args.pr) and not p["isDraft"]
             and (state["checked"].get(str(p["number"])) != p["headRefOid"] or body_changed(p))
             and state.get("errors", {}).get(str(p["number"])) != p["headRefOid"]
-            and not p["headRefName"].startswith(("claude/", "agent/claude/"))]
+            and not p["headRefName"].startswith(("claude/", "agent/claude/", "agent/local/"))]   # local stations: Claude tests them on the PC and lands them (owner 2026-11-19)
     skipped = state.setdefault("skipped", {})
     keep = []
     for p in todo:
