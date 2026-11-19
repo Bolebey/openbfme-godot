@@ -147,6 +147,8 @@ public:
 	// template's factor only when it is above 0, the template otherwise (0.0 is what an omitted INI row leaves).
 	virtual float getVisionRearOverride() const = 0;
 	virtual float getVisionSideOverride() const = 0;
+	// RW 0x86D6FD, interface slot 0x274: copy the module data's LivingWorldOverloadTemplate.
+	virtual std::string livingWorldOverloadTemplate() const = 0;
 	// slot 0x170 (RW 0x870667), called by Object::setTeam (RW 0x69954A) with its non-null team: every contained member (the list contain slot 0x118 fills),
 	// then every member on the way into a garrison (the map at interface + 0x54, by id) gets Object::setTeam(team)
 	virtual void setMembersTeam(Team *team) = 0;
@@ -424,6 +426,7 @@ public:
 	// lane COMBAT-1: the typed data (RanksToReleaseWhenAttacking, MeleeBehavior, ...) and the melee engagement. While engaged the formation is frozen where the men stand: the member
 	// pass does not run (RW 0x86D75E beginMelee / 0x86C0F9 endMelee; horde spec 2.1 step 3), the horde AI's melee behaviour moves the members instead
 	const HordeContainModuleData &hordeData() const;
+	std::string livingWorldOverloadTemplate() const override;
 	bool meleeEngaged() const { return m_meleeEngaged; }
 
 	// ---- lane BACKLOG-8: wall scaling (HordeWallScaling.cpp) ----
