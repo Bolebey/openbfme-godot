@@ -1489,6 +1489,8 @@ add_executable(openbfme_tests
     # lane LOCAL-52 (W3D transparent/floor render priority order below particles, issue #408 / P-100)
     tests/test_local_52.cpp
     tests/test_local_53.cpp
+    # lane LOCAL-57 (P-74, issue #413): civilians on Ennorath maps
+    tests/test_local_57.cpp
     # lane LOCAL-65 (Isengard building foundations under black ground and multi-faction terrain fitting, issue #510 / P-130)
     tests/test_local_65.cpp
     # lane LOCAL-62 (capturing a production building cancels its production queue, issue #483 / P-122)
@@ -1508,6 +1510,7 @@ add_executable(openbfme_tests
     tests/test_local_78.cpp
     # lane LOCAL-79 (issue #621, P-124: target PathfindDiameter 40 in melee reach RW 0x6EAF79 / RW 0x6ED843 / RW 0x6CC07C)
     tests/test_local_79.cpp
+    tests/test_local_81.cpp
     # lane LOCAL-27 (bridges as retail: Bridge block, damage models, towers, scaffold, radar color, issue #189)
     tests/test_local_27.cpp
     # lane LOCAL-33 (castle gates and 'man the walls' as retail: GateProxyBehavior, ManTheWallsSpecialPower, issue #283)

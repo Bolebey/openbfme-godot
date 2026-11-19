@@ -630,6 +630,49 @@ bool canUseCommandButton(Object &obj, const CommandButton &button)
 	return canDoSpecialPower(obj, powerOf(button));
 }
 
+bool canUseCommandButtonAtObject(Object &obj, const CommandButton &button, Object &target, CommandSourceType source)
+{
+	// RW 0x75CF21(this = button, obj, &target, loc 0, source)
+	GameLogic &logic = obj.logic();
+	if (const UpgradeTemplate *upgrade = buttonUpgrade(button); upgrade && button.m_command != GUI_COMMAND_FIRE_WEAPON)
+	{
+		return upgradeButtonUsable(obj, *upgrade);
+	}
+	const std::uint32_t options = button.m_options;
+	if (options & COMMAND_OPTION_NEED_TARGET_POS)
+	{
+		return false; // RW 0x75CFA1: a location is needed and loc == null
+	}
+	if (options & 7u)
+	{
+		if (const SpecialPowerTemplate *power = powerOf(button))
+		{
+			return canDoSpecialPowerAtObject(obj, &target, source, power, options, false); // RW 0x75CFBF -> RW 0x82D925
+		}
+		// RW 0x75CFD8 -> ActionManager::canFireWeaponAtObject (RW 0x82C3D7): not ported here; fall through to true only when FIRE_WEAPON is ready
+		if (button.m_command == GUI_COMMAND_FIRE_WEAPON)
+		{
+			++stats().fireWeaponButtons;
+			if (const UpgradeTemplate *upgrade = buttonUpgrade(button); upgrade && !obj.hasUpgrade(upgrade))
+			{
+				return false;
+			}
+			return logic.getFrame() >= obj.getFireWeaponDeadline();
+		}
+		return false;
+	}
+	if (button.m_command == GUI_COMMAND_FIRE_WEAPON)
+	{
+		++stats().fireWeaponButtons;
+		if (const UpgradeTemplate *upgrade = buttonUpgrade(button); upgrade && !obj.hasUpgrade(upgrade))
+		{
+			return false;
+		}
+		return logic.getFrame() >= obj.getFireWeaponDeadline();
+	}
+	return canDoSpecialPower(obj, powerOf(button));
+}
+
 int finalTestKind(int type)
 {
 	return (int)finalTestOf(type);
