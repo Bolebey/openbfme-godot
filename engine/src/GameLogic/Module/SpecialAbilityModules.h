@@ -408,6 +408,7 @@ private:
 	const HeroModeSpecialAbilityUpdateModuleData *m_hm;
 };
 
+// Local 87: RW 0x008C6D2B (getModuleName), RW 0x008C6DAD (getModuleNameKey), RW 0x008C6E46 (data dtor).
 class LevelGrantSpecialPower : public SpecialAbilityUpdate
 {
 public:

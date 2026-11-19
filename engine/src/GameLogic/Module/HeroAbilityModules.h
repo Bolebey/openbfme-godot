@@ -480,6 +480,7 @@ public:
 };
 
 // RW 0x008D0DE6 (ctor), RW 0x008E38D8 (loadPostProcess -> no-op RW 0x0063F3BF)
+// Local 87: RW 0x008D0F50 (scalar deleting destructor).
 class DominateEnemySpecialPower : public SpecialAbilityUpdate
 {
 public:
@@ -509,6 +510,7 @@ public:
 	static void buildFieldParse(MultiIniFieldParse &p);
 };
 
+// Local 87: RW 0x008D21A3 (getModuleName), RW 0x008D21C9 (getModuleNameKey), RW 0x008D220E (dtor).
 class ActivateModuleSpecialPower : public SpecialAbilityUpdate
 {
 public:
@@ -583,6 +585,7 @@ public:
 };
 
 // RW 0x008D11DD (ctor), RW 0x008E38D8 (loadPostProcess -> no-op RW 0x0063F3BF)
+// Local 87: RW 0x008D128E (scalar deleting destructor).
 class CurseSpecialPower : public SpecialAbilityUpdate
 {
 public:
@@ -600,6 +603,7 @@ private:
 	unsigned m_cursed = 0;
 };
 
+// Local 87: RW 0x008CB0E0 (getModuleName), RW 0x008CB106 (getModuleNameKey), RW 0x008CB14B (dtor).
 class FellBeastSwoopPower : public SpecialAbilityUpdate
 {
 public:
@@ -693,6 +697,7 @@ private:
 };
 
 // RW 0x00654884 (create), RW 0x0065197C (ctor)
+// Local 87: RW 0x006548BC (dtor), RW 0x008C6583 (base dtor thunk).
 class SpecialPowerTimerRefreshSpecialPower : public SpecialPowerModule
 {
 public:
