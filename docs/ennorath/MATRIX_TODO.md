@@ -40,5 +40,7 @@
 
 ## Сделано
 
+- ✅ 2026-11-19: п. 13 и 12(а) — индекс «кто выдаёт» из INI (`docs/ennorath/GRANTS_INI.tsv`, `tools/mod/script_map.py`: кнопки, `ExperienceLevel Upgrades`, `GrantUpgradeCreate`, `ObjectCreationUpgrade` / OCL `GrantUpgrade`, `ModifierList Upgrade`, стартовые улучшения и науки игрока; 4891 строка) вместе со `SCRIPT_GRANTS.tsv`; 82 улучшения / науки мода не выдаёт ничто — они в конце файла с пометкой «(given by nothing)». `matrix_run.py collect`: NO-AURA, которую свип включил только такими улучшениями, -> MOD-DATA с объяснением (19 строк маскировки Эовин: `Upgrade_EowynConditionDisguised`).
+
 - ✅ 2026-11-18 `cad744cc`: сцена серых кнопок читает условия как RW 0x942733 (`NEED_UPGRADE` = список `NeededUpgrade`, `MOUNTED_ONLY` = `MOUNTED`, условия «пока есть состояние» не нужды); пауза способности → апгрейд `UnpauseSpecialPowerUpgrade.TriggeredBy` (RW 0x943585) и ожидание перезарядки; способность бойца — у его отряда (`InitialPayload`, `BuildVariations`); `OBJECT_UPGRADE` без очереди производства серая и в ритейле (RW 0x943050).
 - ✅ 2026-11-18: UPGRADE-IDLE (апгрейд куплен, а его модуль не сработал: `UpgradeMux` slot 0 / 2) и NO-END (модификатор навсегда при `Duration` > 0, RW 0x805A8E); Рохан / Дикие / Ангмар на ПК владельца: 0 срабатываний, ложных нет.

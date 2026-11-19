@@ -17,6 +17,8 @@ Library scripts: 2468; with a condition or action the port has no case for: 97.
 (A script whose every type has a case is counted as executed: the case may still differ from RotWK, as a matrix PASS is checked
 behaviour and this is not.)
 
+`GRANTS_INI.tsv` is the INI half of «who gives it» (4891 rows). Upgrades / sciences the mod defines that neither the INI nor a script gives: 82 (a module or button waiting for one of them never runs in the original either; the matrix calls such a row MOD-DATA).
+
 ## Condition / action types the mod's scripts use that the port does not execute
 
 | type | uses | files |
