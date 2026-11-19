@@ -1549,6 +1549,8 @@ add_executable(openbfme_tests
     tests/test_local_89.cpp
     tests/test_local_92.cpp
     tests/test_local_91.cpp
+    # lane LOCAL-90 (SymbioticStructuresBody getDamageState & body delegates, body citations: RW 0x8C4FF9 / 0x8C4FB5 / 0x8C505F / 0x8C5146 / 0x8C5250 / 0x8C5284 / 0x8C52DB)
+    tests/test_local_90.cpp
     # lane LOCAL-27 (bridges as retail: Bridge block, damage models, towers, scaffold, radar color, issue #189)
     tests/test_local_27.cpp
     # lane LOCAL-33 (castle gates and 'man the walls' as retail: GateProxyBehavior, ManTheWallsSpecialPower, issue #283)
