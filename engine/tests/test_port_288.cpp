@@ -37,11 +37,12 @@ struct CastWorld : combattest::CombatWorld
 		const char *otherModule = "")
 	{
 		const std::string ini = std::string("SpecialPower CastPower\n Enum = SPECIAL_GENERAL_TARGETLESS\nEnd\n") +
+			"Locomotor CastLoco\n Surfaces = GROUND\n Appearance = TWO_LEGS\n TurnTime = 2000\n TurnTimeDamaged = 2000\n End\n" +
 			"Weapon CastWeapon\n AttackRange = 65\n MinimumAttackRange = 12.5\n RadiusDamageAffects = ENEMIES\n" + effect + "End\n" +
 			"Object CastUnit\n KindOf = SELECTABLE " + kind + "\n Geometry = CYLINDER\n GeometryMajorRadius = 8\n GeometryHeight = 16\n" +
 			(ordinarySet ? " WeaponSet\n  Conditions = None\n  Weapon = PRIMARY SwordWeapon\n End\n" : "") + otherModule +
 			" Body = ActiveBody BodyTag\n  MaxHealth = 100\n End\n Behavior = AIUpdateInterface AiTag\n End\n Behavior = PhysicsBehavior PhysicsTag\n End\n" +
-			" LocomotorSet\n  Locomotor = WalkerLoco\n  Condition = SET_NORMAL\n  Speed = 55\n End\n" +
+			" LocomotorSet\n  Locomotor = CastLoco\n  Condition = SET_NORMAL\n  Speed = 55\n End\n" +
 			" Behavior = SpecialPowerModule PowerTag\n  SpecialPowerTemplate = CastPower\n  UpdateModuleStartsAttack = Yes\n End\n" +
 			" Behavior = WeaponFireSpecialAbilityUpdate AbilityTag\n  SpecialPowerTemplate = CastPower\n  SpecialWeapon = " + (missing ? "AbsentWeapon" : "CastWeapon") +
 			"\n  StartAbilityRange = 100\n  IgnoreFacingCheck = Yes\n" + abilityFields + " End\nEnd\n";
@@ -99,7 +100,7 @@ TEST_CASE("PORT-288 unpacking tracks a moving victim before firing a directional
 	w.frames(1);
 	// tolerance: RW 0x896370 -> RW 0x5E6810 takes one locomotor turn step toward +Y rather than snapping to pi/2.
 	CHECK(o->getOrientation() > 0.0f);
-	// tolerance: one WalkerLoco step is smaller than a quarter-turn.
+	// tolerance: one CastLoco step is smaller than a quarter-turn.
 	CHECK(o->getOrientation() < 1.56f);
 	CHECK(a.shotsFired() == 0);
 	w.runUntil([&] { return a.shotsFired() != 0; }, 48);
