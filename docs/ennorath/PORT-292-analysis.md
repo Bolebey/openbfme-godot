@@ -41,6 +41,11 @@ The table is deliberately partial: the other rows in the function map still need
 | 0x86C77D | Initialises module +0x2C5 to the inverse of module-data `ThisFormationIsTheMainFormation` +0x1D8. | Missing: `HordeContain::onCreate` is empty; snapshot / mismatch recovery is S-7520. |
 | 0x86C8F2 | Compares saved module +0x2C5 with inverse module-data +0x1D8; mismatch calls horde interface +0x60 (`toggleFormation` RW 0x86C7F6). | Missing formation restoration; S-7520. |
 | 0x86D056 | Interface slot +0x30: this-adjusting thunk to RW 0x86C997, which passes each `AttributeModifiers` entry (module-data +0x22C) and -1 to the argument's `Object::addAttributeModifier` RW 0x68F1A8. | Missing joining-member path S-1600; the separately implemented `HordeFormation.cpp::applyFormationModifiers` is the distinct slot +0x1E4. The hand-off is within #552's membership area. |
+| 0x86D3F3 | Returns true if any contained object has Object +0x110 bit 29. | Member-status query; meaning and port equivalence still need verification. |
+| 0x86D438 | For each live contained member with AI, requires AI slot +0x1BC and current victim RW 0x668303 matching the argument, with an additional argument-contain test for hordes. | Member AI / containment #552 and S-7505; full equivalence unverified. |
+| 0x86D4CD | For each live contained member with AI, looks for AI slot +0x1BC and a current victim matching the argument or the argument's horde contain test. | Member AI / containment #552 and S-7505; full equivalence unverified. |
+| 0x86D5BB | Returns true if any live contained member with AI answers true at AI slot +0x1BC. | Member AI / containment #552 and S-7505; full equivalence unverified. |
+| 0x86D7E6 | Walks contained members and returns false if a member's AI +0x140 exists and AI +0x1FC equals 4; otherwise true. | Member-state query; meaning and port equivalence still need verification. |
 | 0x8713F6 | Horde mean position; both contained and entering-member lists. | Partially ported in `AttachUpdate.cpp`; entering-member list is owned by #552, S-1361. |
 | 0x86D6FD | Copies module-data +0x280 as a string. | Ported here: `HordeContain::livingWorldOverloadTemplate`; remaining forfeit caller S-7518. |
 | 0x86DF44 | Last-member death / periodic split check. | Already ported: `HordeContainRuntime.cpp`, Port 265. |
