@@ -1511,6 +1511,7 @@ add_executable(openbfme_tests
     # lane LOCAL-79 (issue #621, P-124: target PathfindDiameter 40 in melee reach RW 0x6EAF79 / RW 0x6ED843 / RW 0x6CC07C)
     tests/test_local_79.cpp
     tests/test_local_81.cpp
+    tests/test_local_82.cpp
     # lane LOCAL-27 (bridges as retail: Bridge block, damage models, towers, scaffold, radar color, issue #189)
     tests/test_local_27.cpp
     # lane LOCAL-33 (castle gates and 'man the walls' as retail: GateProxyBehavior, ManTheWallsSpecialPower, issue #283)
