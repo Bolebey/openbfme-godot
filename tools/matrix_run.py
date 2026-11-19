@@ -41,6 +41,7 @@ FACTIONS = ["FactionArnor", "FactionMen", "FactionRohan", "FactionElves", "Facti
 MATRIX = REPO / "docs" / "ennorath" / "MATRIX.tsv"
 README = REPO / "docs" / "ennorath" / "README.md"
 TEST_CASE = "ENNORATH sweep units*"
+SPELL_CASE = "ENNORATH sweep spell book*"   # MATRIX_TODO 17: the faction's palantir powers
 DEFAULT_MAP = "map mp fall back 8p"
 # graph edges (field names, lower case) that name an object as a requirement, a price rule or a label: the object is not the faction's content
 NOT_CONTENT = {"requiredobject", "buildingrequired", "displaynameinvisibleforenemy", "useobjecttemplateforcostdiscount", "beaconname",
@@ -179,6 +180,12 @@ def run_one(a, faction: str) -> tuple[str, int, float]:
         skip.write_text("\n".join(sorted(done | skips | {last})) + "\n", encoding="utf-8")
     if crashed:
         print(f"{faction}: {len(crashed)} crash(es): {', '.join(crashed)}", flush=True)
+    # MATRIX_TODO 17 (2026-11-19): the faction's spell book, once after the units, its rows (`spell <power>`) in the same report; a crash there
+    # costs only the book's rows (the units are written already)
+    with open(log_path, "ab") as log:
+        log.write(b"\n===== spell book =====\n")
+        log.flush()
+        subprocess.call([str(a.tests), f"-tc={SPELL_CASE}"], cwd=REPO, env=env, stdout=log, stderr=subprocess.STDOUT)
     return faction, rc, time.time() - t0
 
 

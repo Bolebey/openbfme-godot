@@ -2512,6 +2512,41 @@ TEST_CASE("ENNORATH sweep units: every unit, horde and hero ability and upgrade 
 	}
 }
 
+// MATRIX_TODO 17 (2026-11-19): the faction's spell book (the palantir's powers: 12-16 per Ennorath faction, about 130) was outside the matrix; the
+// vanilla books have their own `factb spell book` cases. The same run (spellBookOf: the book's powers cast through the HUD's spell bar, each with its
+// effect) on the mod's data, its lines in the faction's report as `spell <power>` rows (tools/matrix_run.py runs it after the units)
+namespace
+{
+void spellBookOf(const std::string &faction, Results &res, bool viaStore = false); // defined with the vanilla spell book cases below
+} // namespace
+
+TEST_CASE("ENNORATH sweep spell book: every power of one faction's spell book cast through the HUD's spell bar on the mod's data (a report)")
+{
+	const char *faction = std::getenv("OPENBFME_SWEEP_FACTION");
+	if (!faction || !std::getenv("OPENBFME_SWEEP_OVERLAY"))
+	{
+		retailtest::printSkip("ENNORATH sweep spell book (set OPENBFME_SWEEP_OVERLAY and OPENBFME_SWEEP_FACTION)");
+		return;
+	}
+	if (!haveWorld("ENNORATH sweep spell book"))
+	{
+		return;
+	}
+	Results r;
+	if (const char *tsv = std::getenv("OPENBFME_SWEEP_REPORT"))
+	{
+		r.stream = std::fopen(tsv, "ab");
+		REQUIRE_MESSAGE(r.stream, "cannot write " << tsv);
+		r.streamFaction = faction;
+	}
+	spellBookOf(faction, r);
+	r.print((std::string("spell book ") + faction).c_str());
+	if (r.stream)
+	{
+		std::fclose(r.stream);
+	}
+}
+
 // Two buttons the owner saw disabled (docs/ennorath/BUTTON_SWEEP.md), on the mod's data:
 // RohanOldMan's Command_SpecialAbilityTheodenAusbeutesteuer and Command_SpecialAbilityRohanTraitors have EnableOnModelCondition USER_3, which comes from AllowedTheodenButtons (Duration
 // 2000), given again every 2000 ms within 200 of a Rohan building (PassiveAreaEffectBehavior ModuleTag_FeelGoodTheoden, data\ini\object\goodfaction\structures\rohan\farm.ini): the mod
@@ -3307,7 +3342,7 @@ float healthNear(GameLogic &logic, const Coord3D &at, float radius, const Player
 // `viaStore` (lane FACT-C): the sciences are bought the way a player buys them: the Palantir's store (SpellStore.apt) opened, every _active button
 // clicked and the store closed (MSG_PURCHASE_SCIENCE, RW 0x823360) round after round with the points of a full rank ladder, until each power's
 // required sciences are the player's; a power whose science the store never sold fails
-void spellBookOf(const std::string &faction, Results &res, bool viaStore = false)
+void spellBookOf(const std::string &faction, Results &res, bool viaStore)
 {
 	SharedWorld &s = shared();
 	factb::HudGame g(s, faction.c_str());
