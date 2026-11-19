@@ -13,7 +13,7 @@
 
 class LargeGroupAudioGrid
 {
-  public:
+public:
 	// Centres in half-cell units: parity encodes the grid, so neighbouring
 	// centres are one step apart and no two grids share a cell identifier.
 	using Cell = std::pair<int, int>;
@@ -26,91 +26,98 @@ class LargeGroupAudioGrid
 			rows[g] = int(std::ceil((maxY + (g >> 1) * width * 0.5f) / width));
 		}
 	}
-	// RW 0x9712C9 / RW 0x971392: members contribute by position, not by object
-	// ID.
-	void change(float x, float y, unsigned short amount, bool add, const Cell *skip = nullptr)
-	{
-		for (int g = 0; g < 4; ++g)
-		{
-			Cell c;
-			if (!lookup(g, x, y, c) || (skip && c == skip[g]))
-				continue;
-			auto &w = weights[c];
-			// RW 0x9D7DCD stores the low word; RW 0x9D7D5B clamps subtraction at
-			// zero.
-			w = add ? static_cast<unsigned short>(w + amount) : (w >= amount ? w - amount : 0);
-			if (!w)
-				weights.erase(c);
-		}
-	}
-	// RW 0x971FA7: beyond frame one only one block can activate its grids per pass.
-	// Accumulating sparse weights before activation is equivalent to replaying the position list.
+	// RW 0x971FA7: after frame one at most one block per pass allocates its grids.
 	void advance(unsigned start, unsigned stop, unsigned frame, bool &allocated)
 	{
-		if (!active && total >= start && (!allocated || frame <= 1))
+		handoffs.clear();
+		if (!active)
 		{
+			if (total < start || (allocated && frame > 1))
+				return;
 			active = true;
 			allocated = true;
+			// RW 0x9715BA: replay each position/weight entry, including duplicates.
+			for (const auto &[x, y, w] : waiting)
+				change(x, y, w, true);
+			waiting.clear();
 		}
-		else if (active && total == 0)
+		else if (total <= 0)
+		{
 			active = false;
-		if (active)
-			playing = select(start, stop, playing);
-		else
+			weights.clear();
+			dirty.clear();
 			playing.clear();
-	}
-	Selection select(unsigned start, unsigned stop, const Selection &previous) const
-	{
-		// RW 0x971FA7: displace a playing cell below StopThreshold or next to a
-		// heavier neighbour.
-		Selection selected, locked;
-		auto take = [&](Cell c) {
-			selected.insert(c);
+			return;
+		}
+		if (dirty.empty())
+			return;
+		Selection locked;
+		auto lock = [&](Cell c) {
 			locked.insert(c);
 			neighbours(c, [&](Cell n, int, int) { locked.insert(n); });
 		};
-		for (Cell c : previous)
+		auto take = [&](Cell c) {
+			playing.insert(c);
+			lock(c);
+		};
+		// A changed playing cell below stop or any playing neighbour strictly lighter
+		// than a changed cell loses its event. Detect before selecting replacements.
+		std::vector<Cell> displaced;
+		auto displace = [&](Cell c) {
+			if (playing.erase(c))
+				displaced.push_back(c);
+		};
+		for (Cell c : dirty)
 		{
 			unsigned w = weight(c);
-			bool keep = w >= stop && !weights.empty();
+			if (playing.count(c) && w < stop)
+				displace(c);
 			neighbours(c, [&](Cell n, int, int) {
 				if (weight(n) > w)
-					keep = false;
+					displace(c);
+				else if (weight(n) < w)
+					displace(n);
 			});
-			if (keep)
-				take(c);
 		}
-		struct Candidate
-		{
-			Cell c;
-			unsigned w;
-			int missing;
+		for (Cell c : playing)
+			lock(c);
+		auto better = [&](Cell a, Cell b) { // RW 0x9701ED
+			return weight(a) != weight(b) ? weight(a) > weight(b) : missing(a) < missing(b);
 		};
-		std::vector<Candidate> candidates;
-		for (auto &entry : weights)
+		// RW 0x971FA7 at 0x972139: try each displaced event on its eight neighbours,
+		// then its old cell. At equal rank keep the first. This precedes fresh starts.
+		for (Cell old : displaced)
 		{
-			if (entry.second < start || locked.count(entry.first))
-				continue;
-			int missing = 8; // RW 0x9D7D1E: upper nibble counts absent neighbour pointers.
-			neighbours(entry.first, [&](Cell, int, int) { --missing; });
-			candidates.push_back({entry.first, entry.second, missing});
+			Cell best;
+			bool found = false;
+			auto consider = [&](Cell c) {
+				if (weight(c) < start || locked.count(c))
+					return;
+				dirty.insert(c);
+				if (!found || better(c, best))
+				{
+					best = c;
+					found = true;
+				}
+			};
+			neighbours(old, [&](Cell n, int, int) { consider(n); });
+			consider(old);
+			if (found)
+			{
+				take(best);
+				handoffs.emplace(best, old);
+			}
 		}
-		std::sort(candidates.begin(), candidates.end(), [](const Candidate &a, const Candidate &b) {
-			if (a.w != b.w)
-				return a.w > b.w; // RW 0x9701ED
-			if (a.missing != b.missing)
-				return a.missing < b.missing;
-			// INFERENCE: allocation order (RW 0x9715BA / RW 0x9D7BC8)
-			// models pointer order RW 0x9709DA -> RW 0x42C22B: grid 0..3,
-			// then linear (row-major) index.
-			if (grid(a.c) != grid(b.c))
-				return grid(a.c) < grid(b.c);
-			return std::tie(a.c.second, a.c.first) < std::tie(b.c.second, b.c.first);
-		});
-		for (auto &v : candidates)
-			if (!locked.count(v.c))
-				take(v.c); // RW 0x9D7D78 overlap locks
-		return selected;
+		std::vector<Cell> candidates(dirty.begin(), dirty.end());
+		std::stable_sort(candidates.begin(), candidates.end(), better);
+		for (Cell c : candidates)
+		{
+			if (weight(c) < start)
+				break;
+			if (!locked.count(c))
+				take(c); // RW 0x9D7D78 overlap locks
+		}
+		dirty.clear();
 	}
 	Coord3D position(Cell c) const // RW 0x9D7DF6: bias centre by the eight
 								   // neighbours, independently per axis.
@@ -158,14 +165,23 @@ class LargeGroupAudioGrid
 				if (!(e.x == e.storedX && e.y == e.storedY))
 				{
 					// RW 0x971157: if the two lookups name the same cell leave its word alone (also after overflow).
-					Cell unchanged[4];
-					for (int g = 0; g < 4; ++g)
+					if (!active)
 					{
-						Cell old, now;
-						unchanged[g] = (lookup(g, e.storedX, e.storedY, old) && lookup(g, e.x, e.y, now) && old == now) ? old : Cell{-1, -1};
+						change(e.storedX, e.storedY, e.weight, false);
+						change(e.x, e.y, e.weight, true);
 					}
-					change(e.storedX, e.storedY, e.weight, false, unchanged);
-					change(e.x, e.y, e.weight, true, unchanged);
+					else
+						for (int g = 0; g < 4; ++g)
+						{
+							Cell old, now;
+							bool hasOld = lookup(g, e.storedX, e.storedY, old), hasNow = lookup(g, e.x, e.y, now);
+							if (hasOld && hasNow && old == now)
+								continue;
+							if (hasOld)
+								changeCell(old, e.weight, false);
+							if (hasNow)
+								changeCell(now, e.weight, true);
+						}
 				}
 			}
 			else if (nowQ)
@@ -195,8 +211,57 @@ class LargeGroupAudioGrid
 	}
 	size_t members = 0;
 	Selection playing;
+	std::map<Cell, Cell> handoffs; // recipient -> donor of this pass
 
-  private:
+private:
+	// INFERENCE: allocation order (RW 0x9715BA / RW 0x9D7BC8) models the address order
+	// RW 0x9709DA -> RW 0x42C22B for equal candidates: grid, then row-major index.
+	struct AllocationOrder
+	{
+		bool operator()(Cell a, Cell b) const
+		{
+			if (grid(a) != grid(b))
+				return grid(a) < grid(b);
+			return std::tie(a.second, a.first) < std::tie(b.second, b.first);
+		}
+	};
+	std::set<Cell, AllocationOrder> dirty;
+	std::multiset<std::tuple<float, float, unsigned short>> waiting;
+	int missing(Cell c) const
+	{ // RW 0x9D7D1E: upper nibble counts absent neighbours
+		int result = 8;
+		neighbours(c, [&](Cell, int, int) { --result; });
+		return result;
+	}
+	void change(float x, float y, unsigned short w, bool add)
+	{
+		if (!active)
+		{
+			if (add)
+				waiting.emplace(x, y, w);
+			else
+			{
+				auto i = waiting.find({x, y, w});
+				if (i != waiting.end())
+					waiting.erase(i);
+			}
+			return;
+		}
+		for (int g = 0; g < 4; ++g)
+		{
+			Cell c;
+			if (lookup(g, x, y, c))
+				changeCell(c, w, add);
+		}
+	}
+	void changeCell(Cell c, unsigned short amount, bool add)
+	{
+		auto &w = weights[c]; // RW 0x9D7DCD stores the low word; RW 0x9D7D5B clamps subtraction.
+		w = add ? static_cast<unsigned short>(w + amount) : (w >= amount ? w - amount : 0);
+		if (!w)
+			weights.erase(c);
+		dirty.insert(c); // RW 0x971121
+	}
 	static bool masks(const LargeGroupAudioMap &map, const ModelConditionMask &mc, const ObjectStatusMaskType &st)
 	{
 		for (size_t w = 0; w < mc.size(); ++w)
