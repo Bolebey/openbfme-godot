@@ -45,6 +45,10 @@ The table is deliberately partial: the other rows in the function map still need
 | 0x86DF44 | Last-member death / periodic split check. | Already ported: `HordeContainRuntime.cpp`, Port 265. |
 | 0x86E13E | Iterates the contained list, searches the module +0x17C id map and calls horde slot +0x2C for each untracked member. | Membership hand-off belongs to #552; full equivalence unverified. |
 | 0x86F60A | Checks the local player and `UseSimpleHordeDecals`, then invokes Drawable RW 0x672F0D for the horde or its contained / entering members. | Client presentation and membership path S-7505 / #552; full equivalence unverified. |
+| 0x86F8BA | For non-null argument, searches contained and interface +0x54 objects for Object +0x46C equal to it. | Member lookup #552; semantics and full equivalence unverified. |
+| 0x86F9CA | Returns true if any id in interface +0x54 resolves to a live object. | Entering-member map #552 / S-7505; full equivalence unverified. |
+| 0x86FE0F | Selects a random contained object, or if the list is empty a random interface +0x54 id resolved through RW 0x449681; empty lists return null. | Member lookup #552 / S-7505; full equivalence unverified. |
+| 0x870655 | Resolves the id in interface +0x150 through `findObjectByID` RW 0x449681. | A getter; writer / caller identity and port comparison still need verification. |
 | 0x870AEE | Returns false if a contained member not in interface +0x54 is more than 10 units away in 2D; otherwise true. | Member / entering map owned by #552; full equivalence unverified. |
 | 0x8710A8 | For each contained member not in interface +0x54, calls its AI slot +0x218 with both arguments if it has AI. | Member hand-off #552; full equivalence unverified. |
 | 0x871110 | Calls `FXList::doFXObj` RW 0x4B1B5A for contained members and live objects resolved from interface +0x54 ids. | Member / entering map and client event boundary; full equivalence unverified, S-7505 / #552. |
