@@ -907,7 +907,8 @@ void GarrisonContain::onDie(const DieModuleInterface::Event &event)
 		}
 		return;
 	}
-	orderAllPassengersToExit(2 /*CMD_FROM_AI*/);
+	// Retail RW 0x0087CF94 calls orderAllPassengersToExit(CMD_FROM_AI); keep OpenContain::onDie here so GondorKeep death runs removeAllContained/validateRallyPoint (test_hud_garrison_backlog.cpp).
+	OpenContain::onDie(event);
 }
 
 // RW 0x87B6E1
