@@ -122,6 +122,11 @@ public:
 
 	virtual bool isOpen() const { return m_state == OPEN; } // slot 6
 	virtual bool isSettled() const { return m_settled; }    // slot 10
+	// RW 0x654FD1 (the update interface RW 0xC667E0 slot 1; the base class's slot 1 is RW 0x8B3313, `*out = 0`): the gate overrides the empty mask
+	// with ONE bit, bit 3 of the second byte = 0x800 = DISABLED_USER_FROZEN (11) of the table RW 0xDAD904. A frozen gate therefore keeps running
+	// its update (an open / close under way still advances); every other disabled type skips it, exactly as the base's empty mask does.
+	// RW 0x654FD1 zeroes the 4-byte buffer (RW 0xA3CF28 = memset), ORs 8 at buffer + 1 and answers it.
+	DisabledMaskType getDisabledTypesToProcess() const override { return (DisabledMaskType)(1u << DISABLED_USER_FROZEN); }
 	virtual void open();                                     // slot 7
 	virtual void close();                                    // slot 8
 	virtual void toggle();                                   // slot 9
@@ -144,8 +149,11 @@ public:
 	void pushOut();
 	unsigned pushOutRequests() const { return m_pushOutRequests; }
 
+	// port accessors (no retail slot of their own: RW 0x89C12F / 0x89C18E read the members directly)
 	virtual State state() const { return (State)m_state; }
 	virtual GeometryState geometryState() const { return (GeometryState)m_geometryState; }
+	// RW 0x9A5E04 (the gate interface RW 0xC668E0 slot 11, `fld dword ptr [ecx + 0x34]`): the open / close progress the AI gate walk and the proxy
+	// (RW 0x656779 -> [gate interface]+0x2C) read. The port's m_percent is the same +0x34 value the update writes (RW 0x89CE33 / 0x89CDCC).
 	virtual float percent() const { return m_percent; }
 	int wantOpenRequest() const { return m_request; }
 	// the sounds the gate would have started (stop S-1942: not played), in order: "opening", "closing", "opened", "closed"
