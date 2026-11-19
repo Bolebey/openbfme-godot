@@ -256,6 +256,24 @@ public:
 	// lane SCRIPT-4: AI command 0x1E (RW 0x771790 aiGuardPosition, BFME2 decomp AICommandInterfaceAttackCommands.cpp tier A) -> aiDoCommand's gate, then
 	// privateGuardPosition (RW 0x6649C6, tier A; AI/AIGuardCommands.cpp): guard `pos` in `mode`; false when nothing changed
 	bool aiGuardPosition(const Coord3D &pos, int mode, CommandSourceType source);
+	// Local 84: RW 0x00664B19 privateGuardObject (AICMD 0x1F, AI vslot 64 / +0x100): guard `target` in `mode`
+	bool aiGuardObject(Object *target, int mode, CommandSourceType source);
+	// Local 84: RW 0x0066F121 getGuardObject (AI vslot 119, [ecx + 0x64])
+	ObjectID guardObject() const { return m_guardObject; }
+	// Local 84: RW 0x0066ECEB clearGuardTargetType (AI vslot 124, shifts +0x50 -> +0x54 and sets +0x50 = GUARDTARGET_NONE)
+	void clearGuardTargetType();
+	// Local 84: RW 0x00662CC6 doQuickExit (AI vslot 117): unlocks machine, saves goal, runs AI_FOLLOW_EXITPRODUCTION_PATH (7) as temp state for 10s, restores lock
+	void doQuickExit(const std::vector<Coord3D> &path);
+	// Local 84: RW 0x006672D8 privateTightenToPosition (AICMD 0x02, AI vslot 25, state 27 AI_MOVE_AND_TIGHTEN)
+	bool aiTightenToPosition(const Coord3D &pos, CommandSourceType source);
+	// Local 84: RW 0x0066B7A2 bfmePrivateCommand38 (AICMD 0x38, AI vslot 21, state 30 AI_MOVE_AND_DELETE)
+	bool aiMoveToAndDelete(const Coord3D &pos, CommandSourceType source);
+	// Local 84: RW 0x0066B817 bfmePrivateCommand41 (AICMD 0x41, AI vslot 22, state 55 AI_MOVE_TO_POSITION_AND_DIE)
+	bool aiMoveToPositionAndDie(const Coord3D &pos, CommandSourceType source);
+	// Local 84: RW 0x0066488A privateWanderInPlace (AICMD 0x2C, AI vslot 76, state 41 AI_WANDER_IN_PLACE)
+	bool aiWanderInPlace(CommandSourceType source);
+	// Local 84: RW 0x0066D6D5 joinTeam (AI vslot 103): sync newly-joined member with an existing teammate's state or move to it
+	void joinTeam();
 	// PORT-203: AI command 0x37 (RW 0x7C8154 aiGuardTunnelNetwork) -> aiDoCommand's gate, then privateGuardTunnelNetwork RW 0x664ABF (AI vslot 0xF8):
 	// enter state 0x18 (AI_TUNNEL_NETWORK_GUARD, AITunnelNetworkGuardState)
 	bool aiGuardTunnelNetwork(int mode, CommandSourceType source);
@@ -720,6 +738,8 @@ private:
 	CombatSettings m_combat;
 	int m_guardMode = 0;                              ///< RW AI + 0x4C (lane PLAY-4)
 	int m_guardTargetType = 0;                        ///< RW AI + 0x54
+	int m_guardTargetTypeNext = 4;                    ///< Local 84: RW AI + 0x50 (4 = GUARDTARGET_NONE)
+	ObjectID m_guardObject = INVALID_ID;              ///< Local 84: RW AI + 0x64 (privateGuardObject RW 0x00664B19)
 	Coord3D m_guardLocation{ 0.0f, 0.0f, 0.0f };      ///< RW AI + 0x58
 	float m_guardAngle = 0.0f;                        ///< RW AI + 0x1A0
 	std::uint32_t m_guardTeam = 0;                    ///< lane BFME2CAMP1: RW AI + 0x68, a TeamID (0 none)
