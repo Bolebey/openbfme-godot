@@ -95,6 +95,10 @@ public:
 	}
 	// RW body vslot 0x44; a body without a damage frame answers -1 (RW 0x8C511E).
 	virtual UnsignedInt lastDamageFrame() const { return 0xFFFFFFFFu; }
+	// PORT-293: RW body vslot 0x48, the frame of the last healing hit. ActiveBody answers it through RW 0x5DC48C (module + 0xC0, -1 until the first
+	// healing hit: RW 0x8C3897). Every other body class of 2.01 answers the shared `or eax, -1` stub (e.g. InactiveBody's table RW 0xC718C8 + 0x48 =
+	// RW 0x48DACD), so the default is the never-healed value. AutoHealBehavior's NonStackable rule reads it (RW 0x855797)
+	virtual UnsignedInt getLastHealingFrame() const { return 0xFFFFFFFFu; }
 	// lane BACKLOG-1: RW vt[0x74], the body's GrabObject template name (ActiveBody RW 0x8C281E: the data's + 0x2C; InactiveBody RW 0x8C1B14: the empty string
 	// RW 0xBD0C3F). OpenContain's CHUNK_VENDOR / ROCK_VENDOR entry test reads it (RW 0x8660FC)
 	virtual std::string getGrabObjectName() const { return std::string(); }
