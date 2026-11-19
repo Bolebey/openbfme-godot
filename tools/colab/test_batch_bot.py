@@ -213,4 +213,4 @@ def test_the_batch_loop_checks_a_pr_after_thirty_minutes_without_green_prs_or_ba
     now = 10_000.0
     assert not bb.helper_due({"finished": now - 600, "loop_started": 0}, now)
     assert not bb.helper_due({"ready_at": now - 1700}, now)
-    assert bb.helper_due({"finished": now - 4000, "ready_at": now - 1900, "loop_started": now - 5000}, now)
+    assert bb.helper_due({"finished": now - 4000, "ready_at": now - 1900}, now)
