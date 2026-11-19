@@ -1,10 +1,11 @@
 """task_overlap.py: two open tasks must not port the same RotWK mechanism (owner 2026-11-19: PRs 589 and 662 both ported Call the Horde's
 production speed bonus, 721 and 663 both the repair order; two of the four went back for rework).
 
-A task's mechanism is the set of RotWK functions it names: every `RW 0x...` of an open issue's text, and for an open PR also the `RW 0x...`
-of the lines its diff adds (what it actually ports), each mapped to the function that holds it (the whole-binary inventory,
-rw_function_blocks_full.json). Two open tasks overlap when they share a function. A function that half the open tasks name is a hub (a shared
-helper such as the damage path) and does not count.
+A task's mechanism is the set of RotWK functions it ports for the first time: every `RW 0x...` of an open issue's text and of the lines an
+open PR's diff adds, each mapped to the function that holds it (the whole-binary inventory, rw_function_blocks_full.json), less every function
+main's engine/src already cites (a helper the port has, an INI parser, a getter: naming it is no porting). Two open tasks overlap when they port
+the same function. The issue texts alone miss the duplicates of 2026-11-19 (554 / 647 and 677 / 649 name no common function: Port 231's PR
+went past its issue), so the PRs' added lines are what catches them. A function that half the open tasks name is a hub and does not count.
 
     task_overlap.py scan  [--out task-overlap.json]     every overlapping pair of open issues / PRs (the dashboard shows them, sb4 loop)
     task_overlap.py check --draft <issue text file>     before an issue is written: exit 1 when its functions are an open task's
@@ -40,6 +41,16 @@ def gh(*args: str) -> str:
     return done.stdout
 
 
+def pr_diff(n: int) -> str:
+    """The PR's diff; past GitHub's 20000-line limit for one diff (PR 675), its files' patches one by one."""
+    done = subprocess.run(["gh", "pr", "diff", str(n), "-R", REPO], capture_output=True, text=True, encoding="utf-8", errors="replace")
+    if done.returncode == 0:
+        return done.stdout
+    files = json.loads(subprocess.run(["gh", "api", "--paginate", f"repos/{REPO}/pulls/{n}/files?per_page=100"], capture_output=True, text=True,
+                                      encoding="utf-8", errors="replace").stdout or "[]")
+    return "\n".join(f.get("patch") or "" for f in files)
+
+
 def addresses(text: str) -> set[int]:
     return {int(a, 16) for a in CITE.findall(text or "")}
 
@@ -57,20 +68,20 @@ def functions_of(addrs: set[int], inv: cc.Inventory) -> set[int]:
     return out
 
 
-def open_tasks(inv: cc.Inventory) -> dict[str, dict]:
+def open_tasks(inv: cc.Inventory, ported: set[int]) -> dict[str, dict]:
     """task key -> {title, url, functions}; a PR that closes an issue joins that issue's task."""
     tasks: dict[str, dict] = {}
     issues = json.loads(gh("issue", "list", "--state", "open", "--limit", "300", "--json", "number,title,body,url"))
     for i in issues:
         if not TASK_TITLE.match(i["title"]):
             continue
-        tasks[f"#{i['number']}"] = {"title": i["title"], "url": i["url"], "functions": functions_of(addresses(i["body"]), inv), "prs": []}
+        tasks[f"#{i['number']}"] = {"title": i["title"], "url": i["url"], "functions": functions_of(addresses(i["body"]), inv) - ported, "prs": []}
     prs = json.loads(gh("pr", "list", "--state", "open", "--limit", "200", "--json", "number,title,body,headRefName,url"))
     for p in prs:
         if not p["headRefName"].startswith(("arena/", "agent/local/")):
             continue
-        diff = gh("pr", "diff", str(p["number"]))
-        funcs = functions_of(addresses(added_lines(diff)) | addresses(p.get("body") or ""), inv)
+        diff = pr_diff(p["number"])
+        funcs = functions_of(addresses(added_lines(diff)) | addresses(p.get("body") or ""), inv) - ported
         m = CLOSES.search(p.get("body") or "")
         key = f"#{m.group(1)}" if m and f"#{m.group(1)}" in tasks else f"PR #{p['number']}"
         t = tasks.setdefault(key, {"title": p["title"], "url": p["url"], "functions": set(), "prs": []})
@@ -113,14 +124,16 @@ def main(argv=None) -> int:
     ap.add_argument("--draft", type=Path, help="check: the issue text to be written")
     ap.add_argument("--out", type=Path, help="scan: the JSON for the dashboard")
     ap.add_argument("--inventory", type=Path)
+    ap.add_argument("--src", type=Path, default=Path(__file__).resolve().parents[2] / "engine" / "src", help="main's engine/src")
     a = ap.parse_args(argv)
     inv = load_inventory(a.inventory)
-    tasks = open_tasks(inv)
+    ported = functions_of(cc.cited(a.src), inv)  # what main's code already cites: not a new porting
+    tasks = open_tasks(inv, ported)
     hub = hubs(tasks)
     if a.cmd == "check":
         if not a.draft:
             raise SystemExit("check needs --draft")
-        mine = functions_of(addresses(a.draft.read_text(encoding="utf-8")), inv) - hub
+        mine = functions_of(addresses(a.draft.read_text(encoding="utf-8")), inv) - hub - ported
         hits = [(k, sorted(mine & t["functions"])) for k, t in sorted(tasks.items()) if mine & t["functions"]]
         if not mine:
             print("task_overlap: the draft names no RotWK function (RW 0x...): nothing to check")
