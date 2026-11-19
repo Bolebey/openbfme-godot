@@ -3300,6 +3300,7 @@ std::vector<std::string> SpecialAbilityModules::hero2StopLines()
 // Retail SpecialAbilityUpdate::xfer is RW 0x00852782 (versions 1..3: fields +0x74, +0x3C, +0x28, +0x40, +0x44, +0x5C, +0x24, +0x2C, +0x64 list, +0x68,
 // +0x7D, +0x30, +0x7E..+0x81, +0x70, +0x82..+0x83, +0x7C, +0x34/+0x38 sound handles, v2 +0x78/+0x50, v3 +0x60). The port transfers its fields in
 // declaration order, then the crc counters.
+// RW 0x00851E38 (SpecialAbilityUpdate::getModuleNameKey)
 void SpecialAbilityUpdate::xfer(Xfer &x)
 {
 	// lane PORT-93: version 2 adds whether the ActiveLoopSound's handle is held (RW 0x8528C8 / 0x8528DB transfer the two handles; here the audio side keeps
@@ -3384,7 +3385,7 @@ void ToggleMountedSpecialAbilityUpdate::xfer(Xfer &x)
 }
 
 // RW 0x008C6E67 (slot 3): version 1, delegates to SpecialAbilityUpdate::xfer (RW 0x00852782).
-// Deleting dtor RW 0x008958A1 -> 0x0089583C chains to ~SpecialAbilityUpdate (RW 0x00854D9A).
+// RW 0x0089585C (getModuleNameKey); deleting dtor RW 0x008958A1 -> 0x0089583C chains to ~SpecialAbilityUpdate (RW 0x00854D9A).
 void HeroModeSpecialAbilityUpdate::xfer(Xfer &x)
 {
 	SnapshotXfer::version(x, 1, 1);
@@ -3399,7 +3400,7 @@ void LevelGrantSpecialPower::xfer(Xfer &x)
 }
 
 // RW 0x008C6E67 (slot 3): version 1, delegates to SpecialAbilityUpdate::xfer (RW 0x00852782).
-// Deleting dtor RW 0x0089453F -> 0x00894402 chains to ~SpecialAbilityUpdate (RW 0x00854D9A).
+// RW 0x00894422 (getModuleNameKey); deleting dtor RW 0x0089453F -> 0x00894402 chains to ~SpecialAbilityUpdate (RW 0x00854D9A).
 void ModelConditionSpecialAbilityUpdate::xfer(Xfer &x)
 {
 	SnapshotXfer::version(x, 1, 1);
@@ -3407,6 +3408,7 @@ void ModelConditionSpecialAbilityUpdate::xfer(Xfer &x)
 	x.xferUnsignedInt(&m_emotions);
 }
 
+// RW 0x008B1EE7 (slot 3): version 1, SpecialAbilityUpdate::xfer (RW 0x00852782), m_replaceAfterPacking (+0x8C).
 void SummonReplacementSpecialAbilityUpdate::xfer(Xfer &x)
 {
 	SnapshotXfer::version(x, 1, 1); // lane SUMMON-1
@@ -3417,6 +3419,7 @@ void SummonReplacementSpecialAbilityUpdate::xfer(Xfer &x)
 	x.xferUnsignedInt(&m_emotions);
 }
 
+// RW 0x008B4301 (slot 3): UpdateModule::xfer (RW 0x00850C60), version 2, m_isDisguised (+0x90, kept on Object status here), m_opacity (+0x8C), SpecialAbilityUpdate::xfer (RW 0x00852782).
 void SpecialDisguiseUpdate::xfer(Xfer &x)
 {
 	SnapshotXfer::version(x, 1, 1);

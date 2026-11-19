@@ -540,6 +540,7 @@ public:
 	static void buildFieldParse(MultiIniFieldParse &p);
 };
 
+// RW 0x00893E7D (getModuleName), RW 0x00893E83 (getModuleNameKey), RW 0x008940E4 (scalar deleting dtor -> 0x00893E4C).
 class ArrowStormUpdate : public SpecialAbilityUpdate
 {
 public:
@@ -633,6 +634,7 @@ public:
 	static void buildFieldParse(MultiIniFieldParse &p);
 };
 
+// RW 0x008B0546 (getModuleName), RW 0x008B054C (getModuleNameKey), RW 0x008B0671 (scalar deleting dtor -> 0x008B050A).
 class RousingSpeechUpdate : public SpecialAbilityUpdate
 {
 public:

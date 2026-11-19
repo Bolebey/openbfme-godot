@@ -1495,6 +1495,7 @@ add_executable(openbfme_tests
     tests/test_local_24.cpp
     # lane LOCAL-28 (W3DLightDraw as retail: object lights, issue #190)
     tests/test_local_28.cpp
+    tests/test_local_88.cpp
     # lane LOCAL-38 (object lights as retail: LightEnvironmentClass per render object, issue #294)
     tests/test_local_38.cpp
     # lane LOCAL-25 (locomotor ground motion presentation and unread simulation stops S-7221, issue #187)
@@ -1543,6 +1544,7 @@ add_executable(openbfme_tests
     tests/test_local_84.cpp
     # lane LOCAL-89 (issue #715, the model draw's terrain decal: RW 0x4B94BC / 0x4B95AD / 0x672B96 / 0x675C25)
     tests/test_local_89.cpp
+    tests/test_local_92.cpp
     # lane LOCAL-27 (bridges as retail: Bridge block, damage models, towers, scaffold, radar color, issue #189)
     tests/test_local_27.cpp
     # lane LOCAL-33 (castle gates and 'man the walls' as retail: GateProxyBehavior, ManTheWallsSpecialPower, issue #283)
