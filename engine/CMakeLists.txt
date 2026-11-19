@@ -557,6 +557,8 @@ include(cmake/Port271.cmake)    # PORT-271: several units and heroes selected â€
 include(cmake/Port294.cmake)    # PORT-294: ObjectCreationUpgrade's own mux slots â€” wouldUpgrade, postUpgradeCheck, isPermanent (fork issue #686; OPENBFME_PORT294_TESTS)
 include(cmake/Port275.cmake)    # PORT-275: the command set swap re-evaluates the bar in the same update (fork issue 642; OPENBFME_PORT275_TESTS)
 include(cmake/Port280.cmake)    # PORT-280: ProductionSpeedBonus consumer on Player, calcTimeToBuild and ProductionUpdate (fork issue 647; OPENBFME_PORT280_TESTS)
+include(cmake/Threatlevel1.cmake) # THREATLEVEL-1: the map scripts' threat conditions and counters (appends to OPENBFME_SIM_SOURCES; OPENBFME_THREATLEVEL1_TESTS)
+include(cmake/Buildclear1.cmake) # BUILDCLEAR-1: the placement's clear-of-objects test RW 0x796D37 (OPENBFME_BUILDCLEAR1_TESTS)
 add_library(openbfme_core STATIC
     ${OPENBFME_PLAY2_SOURCES}
     ${OPENBFME_APT_SOURCES}
@@ -1342,6 +1344,8 @@ add_executable(openbfme_tests
     ${OPENBFME_PORT294_TESTS}
     ${OPENBFME_PORT275_TESTS}
     ${OPENBFME_PORT280_TESTS}
+    ${OPENBFME_THREATLEVEL1_TESTS}
+    ${OPENBFME_BUILDCLEAR1_TESTS}
     tests/test_main.cpp
     tests/test_big_archive.cpp
     tests/test_parser_fuzz_regressions.cpp
