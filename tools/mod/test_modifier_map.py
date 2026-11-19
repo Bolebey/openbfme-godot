@@ -63,3 +63,12 @@ def test_the_verdicts():
     assert mm.verdict(5, 2, 2, 3, True) == "ported"
     assert mm.verdict(5, 0, 0, 1, True) == "dead in RotWK (port-only reads)"
     assert mm.verdict(1, 0, 0, 0, False) == "unknown to RotWK"
+
+
+def test_a_computed_attribute_gives_every_value_it_can_take():
+    # RW 0x8E1458 .. 0x8E149A (EmotionNugget::canApply): xor ecx, ecx; cmp dword ptr [eax + 4], 6; sete cl; add ecx, 4; mov edi, ecx;
+    # push 0; push edi; call -> RESIST_FEAR (4) or RESIST_TERROR (5)
+    code = b"\x33\xC9\x83\x78\x04\x06\x0F\x94\xC1\x83\xC1\x04\x8B\xF9\x6A\x00\x57"
+    assert mm.argument_at(run(code), 0) == ("imm", {4, 5})
+    # a register written by a call is not guessed
+    assert mm.argument_at(run(b"\xE8\x00\x00\x00\x00\x8B\xF8\x57"), 0)[0] == "?"
