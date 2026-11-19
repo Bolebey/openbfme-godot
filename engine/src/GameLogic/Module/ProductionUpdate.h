@@ -60,7 +60,7 @@ enum ProductionType
 
 typedef std::uint32_t ProductionID;
 
-// RW 0x8A08D3
+// RW 0x8A08D3 (scalar deleting dtor RW 0x008A3084)
 struct ProductionEntry
 {
 	ProductionType type = PRODUCTION_INVALID;
@@ -171,13 +171,14 @@ class ProductionUpdate : public UpdateModule, public ProductionUpdateInterface
 {
 public:
 	OBFME_MODULE_XFER(ProductionUpdate) // lane SAVE-4b
+	// RW 0x008A17D8 (scalar deleting dtor RW 0x008A1B36; ModuleData empty-string virtual RW 0x004B612F)
 	ProductionUpdate(Thing *thing, const ProductionUpdateModuleData *data);
 
 	static void registerClass(ModuleFactory &modules);
 
 	ProductionUpdateInterface *getProductionUpdateInterface() override { return this; }
 	UpdateSleepTime update() override;
-	DisabledMaskType getDisabledTypesToProcess() const override { return m_data->m_disabledTypesToProcess; }
+	DisabledMaskType getDisabledTypesToProcess() const override { return m_data->m_disabledTypesToProcess; } // RW 0x008A196F
 	void crc(StateHasher &hasher) const override;
 
 	// ProductionUpdateInterface
@@ -194,12 +195,12 @@ public:
 	void cancelUnitCreateByType(const ThingTemplate *type, bool all) override;
 	int countUnitTypeInQueue(const ThingTemplate *type) const override;
 	bool isSecondaryQueue() const override { return m_data->m_secondaryQueue; }
-	int getProductionCount() const override { return (int)m_queue.size(); }
+	int getProductionCount() const override { return (int)m_queue.size(); } // slot 17, RW 0x009F9F37
 	const ProductionEntry *firstProduction() const override { return m_queue.empty() ? nullptr : m_queue.front().get(); }
-	const ProductionEntry *nextProduction(const ProductionEntry *e) const override;
+	const ProductionEntry *nextProduction(const ProductionEntry *e) const override; // slot 22, RW 0x008A1904
 	void setHoldDoorOpen(int door, bool hold) override;
-	void setFactoryDisabled(bool disabled) override { m_factoryDisabled = disabled; }
-	bool isFactoryDisabled() const override { return m_factoryDisabled; }
+	void setFactoryDisabled(bool disabled) override { m_factoryDisabled = disabled; } // slot 24, RW 0x008A1916
+	bool isFactoryDisabled() const override { return m_factoryDisabled; } // slot 25, RW 0x008A1923
 	float productionCostMultiplier(const ThingTemplate *type) const override;
 	float productionTimeMultiplier(const ThingTemplate *type) const override;
 	void cancelAllProduction() override;

@@ -341,6 +341,7 @@ public:
 	static void buildFieldParse(MultiIniFieldParse &p) { buildBaseFieldParse(p); }
 };
 
+// scalar deleting dtor RW 0x008BC4AA
 class BuildableHeroListUpgrade : public UpgradeModule
 {
 public:

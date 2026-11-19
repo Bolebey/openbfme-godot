@@ -1376,7 +1376,7 @@ void BuildableHeroListUpgrade::upgradeImplementation()
 void HeroModules::registerAll(ModuleFactory &modules)
 {
 	bindRuntime<RespawnUpdate, RespawnUpdateModuleData>(modules, "RespawnUpdate");
-	bindRuntime<BuildableHeroListUpgrade, BuildableHeroListUpgradeModuleData>(modules, "BuildableHeroListUpgrade");
+	bindRuntime<BuildableHeroListUpgrade, BuildableHeroListUpgradeModuleData>(modules, "BuildableHeroListUpgrade"); // GetSnapshotName RW 0x008BC40C, getModuleNameKey RW 0x008BC412
 	bindRuntime<UnpauseSpecialPowerUpgrade, UnpauseSpecialPowerUpgradeModuleData>(modules, "UnpauseSpecialPowerUpgrade");
 	bindRuntime<AttributeModifierAuraUpdate, AttributeModifierAuraUpdateModuleData>(modules, "AttributeModifierAuraUpdate");
 	bindRuntime<AutoHealBehavior, AutoHealBehaviorModuleData>(modules, "AutoHealBehavior");

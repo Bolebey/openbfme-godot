@@ -116,6 +116,7 @@ void DefaultProductionExitUpdate::registerClass(ModuleFactory &modules)
 	registerExit<DefaultProductionExitUpdate, DefaultProductionExitUpdateModuleData>(modules, "DefaultProductionExitUpdate");
 }
 
+// GetSnapshotName RW 0x008A9BBB, getModuleNameKey RW 0x008A9BE3
 void SupplyCenterProductionExitUpdate::registerClass(ModuleFactory &modules)
 {
 	registerExit<SupplyCenterProductionExitUpdate, DefaultProductionExitUpdateModuleData>(modules, "SupplyCenterProductionExitUpdate");
@@ -224,6 +225,7 @@ SpawnPointProductionExitUpdate::SpawnPointProductionExitUpdate(Thing *thing, con
 	friend_setNextCallFrame((UnsignedInt)UPDATE_SLEEP_FOREVER);
 }
 
+// GetSnapshotName RW 0x008A7208, getModuleNameKey RW 0x008A724F
 void SpawnPointProductionExitUpdate::registerClass(ModuleFactory &modules)
 {
 	registerExit<SpawnPointProductionExitUpdate, SpawnPointProductionExitUpdateModuleData>(modules, "SpawnPointProductionExitUpdate");
@@ -368,6 +370,7 @@ void SupplyCenterProductionExitUpdate::xfer(Xfer &x)
 }
 
 // every spawn point slot (the count says how many are in use); the report flag is the report's
+// RW 0x008A720E (OpenBFME native snapshot also saves bone coords/angles/count)
 void SpawnPointProductionExitUpdate::xfer(Xfer &x)
 {
 	SnapshotXfer::version(x, 1, 1);

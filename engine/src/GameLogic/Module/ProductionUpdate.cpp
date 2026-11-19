@@ -187,6 +187,7 @@ void ProductionUpdateModuleData::buildFieldParse(MultiIniFieldParse &p)
 	p.add(kProductionUpdateFieldParse);
 }
 
+// Snapshot name RW 0x008A18DA, getModuleNameKey RW 0x008A192A
 void ProductionUpdate::registerClass(ModuleFactory &modules)
 {
 	modules.bindTypedData<ProductionUpdateModuleData>("ProductionUpdate", MODULETYPE_BEHAVIOR);
@@ -232,6 +233,7 @@ int ProductionUpdate::canQueueCreateUnit() const
 	return (int)m_queue.size() < m_data->m_maxQueueEntries ? CANMAKE_OK : CANMAKE_QUEUE_FULL;
 }
 
+// RW 0x008A1904
 const ProductionEntry *ProductionUpdate::nextProduction(const ProductionEntry *e) const
 {
 	for (size_t i = 0; i < m_queue.size(); ++i)
@@ -1495,6 +1497,7 @@ void ProductionUpdate::crc(StateHasher &h) const
 }
 
 // ---- lane SAVE-4b: the snapshot (OpenBFME native, S-4190: the queue's entries with their templates by name, then the crc's fields) ---------------------
+// RW 0x008A3111 (OpenBFME native snapshot layout)
 void ProductionUpdate::xfer(Xfer &x)
 {
 	SnapshotXfer::version(x, 1, 1);
