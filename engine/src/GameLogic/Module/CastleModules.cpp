@@ -709,15 +709,26 @@ Object *CastleBehavior::createOwnedObject(const CastleTemplateEntry &entry, Play
 	{
 		return nullptr;
 	}
-	// lane BACKLOG2: RW 0x79899A: the castle's creation interface (its + 0x20 vtable RW 0xC30DE8 slot 4 = RW 0x859198) with (the castle, the template, the position,
-	// the angle, the player of the team chosen above, instant): clear the site (RW 0x858C41), construct through slot 7 (RW 0x858701), then push out
-	// the units in the way (RW 0x858CFC). S-303: use the shared construction path so producer, owner notifications, angle rules, completion and map placement match it.
+	// RW 0x79899A -> creation interface slot 7 RW 0x858701: clear the site, create and place the member, then push out units in the way (RW 0x858C41 / 0x858CFC).
+	// S-303: keep the castle as producer without routing through the generic plot-construction callbacks; retail's CastleBehavior path completes the member itself.
 	Player *creator = mine ? &owner : logic.players().getNeutralPlayer();
 	ConstructionSite::clearSiteForFoundation(logic, *tt, pos, angle);
-	Object *obj = creator ? Construction::constructOnPlot(*castle, *tt, pos, angle, *creator, instant) : nullptr;
+	Object *obj = logic.newObject(tt, team, ObjectStatusMaskType{});
 	if (!obj)
 	{
 		return nullptr;
+	}
+	obj->setProducer(castle); // RW 0x8587E7: retain the producing castle link
+	obj->setOrientation(angle);
+	obj->setPosition(&pos);
+	obj->friend_onBuildComplete();
+	if (AIWorld *ai = logic.aiWorld())
+	{
+		ai->addObjectToPathfindMap(*obj);
+	}
+	if (mine && obj->isKindOfName("STRUCTURE"))
+	{
+		Construction::onStructureConstructionComplete(owner, castle, *obj, false);
 	}
 	if (creator)
 	{
