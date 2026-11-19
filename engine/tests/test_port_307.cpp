@@ -22,7 +22,6 @@
 
 #include "CombatTestUtil.h"
 
-#include "Common/Thing/BehaviorModule.h"
 #include "GameLogic/Module/GateModules.h"
 #include "GameLogic/Module/UpdateModule.h"
 #include "GameLogic/Object/Object.h"
@@ -80,6 +79,7 @@ struct Port307World : combattest::CombatWorld
 		return dynamic_cast<GateOpenAndCloseBehavior *>(o->findModule("GateOpenAndCloseBehavior"));
 	}
 };
+} // namespace
 
 // RW 0x654FD1 vs the base RW 0x8B3313: the gate answers DISABLED_USER_FROZEN, every other module of the fixture answers the empty mask
 TEST_CASE("PORT-307 GateOpenAndCloseBehavior: the update interface's disabled mask is DISABLED_USER_FROZEN, not the base's empty mask")
@@ -113,7 +113,9 @@ TEST_CASE("PORT-307 WallHubBehavior: the update interface's disabled mask is eve
 	const DisabledMaskType named = (1u << DISABLED_USER_PARALYZED) | (1u << DISABLED_EMP) | (1u << DISABLED_HELD) | (1u << DISABLED_PARALYZED) |
 		(1u << DISABLED_UNMANNED) | (1u << DISABLED_UNDERPOWERED) | (1u << DISABLED_FREEFALL) | (1u << DISABLED_TEMPORARILY_BUSY) |
 		(1u << DISABLED_SCRIPT_DISABLED) | (1u << DISABLED_SCRIPT_UNDERPOWERED) | (1u << DISABLED_USER_FROZEN);
-	CHECK(named == (DisabledMaskType)0x00FFFFFEu);
+	// (the eleven named types are 1 .. 11: 0x0FFE; bits 12 .. 23 of the retail constant are the unused upper half of the 32-bit BitFlags, and bit 0 is
+	// DISABLED_DEFAULT. The retail value is the constant byte-for-byte, so the check above is the literal one.)
+	CHECK(named == (DisabledMaskType)0x0FFEu);
 	CHECK((hub->getDisabledTypesToProcess() & named) == named);
 	// the neighbour: its update sleeps for ever (RW 0x88B211), so the mask never wakes it
 	CHECK(hub->update() == UPDATE_SLEEP_FOREVER);

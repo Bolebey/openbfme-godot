@@ -65,6 +65,10 @@ public:
 	OBFME_MODULE_XFER(WallHubBehavior) // lane SAVE-4b: UpdateModule's (no state of its own)
 	WallHubBehavior(Thing *thing, const WallHubBehaviorModuleData *data);
 	UpdateSleepTime update() override { return UPDATE_SLEEP_FOREVER; } // RW 0x88B211
+	// RW 0x855E38 (the hub's own update interface RW 0xC565A8 slot 1, an override of UpdateModule's RW 0x8B3313): the constant 0x00FFFFFE, every disabled
+	// type but bit 0. The scheduler (RW 0x62EA46 .. 0x62EA7A) asks every module, so the value is part of the interface, even though update() sleeps for
+	// ever and nothing follows from it today. Bit 0 is DISABLED_DEFAULT, the name table's (RW 0xDAD904) placeholder, never set by setDisabledUntil.
+	DisabledMaskType getDisabledTypesToProcess() const override { return (DisabledMaskType)0x00FFFFFEu; }
 	void crc(StateHasher &hasher) const override;
 	const WallHubBehaviorModuleData *data() const { return m_data; }
 	// the interface (RW 0xC565A8); a template name the store lacks answers null (as RW 0x6D1305)
