@@ -1495,6 +1495,7 @@ add_executable(openbfme_tests
     tests/test_local_62.cpp
     # lane LOCAL-63 (Isengard unpack buildings stay visible at 100% completion, issue #508 / P-129)
     tests/test_local_63.cpp
+    tests/test_local_64.cpp
     # lane LOCAL-73 (ability visuals: P-139/P-141/P-144/P-146/P-147/P-149, issue #535)
     tests/test_local_73.cpp
     # lane LOCAL-59 (WeaponFireSpecialAbilityUpdate makes and loads weapon in ctor, fork issue #418)
@@ -1505,6 +1506,8 @@ add_executable(openbfme_tests
     tests/test_local_75.cpp
     # lane LOCAL-78 (Ennorath button sweep NO-RULE effect rules in SweepEffectProbe.h, issue #576)
     tests/test_local_78.cpp
+    # lane LOCAL-79 (issue #621, P-124: target PathfindDiameter 40 in melee reach RW 0x6EAF79 / RW 0x6ED843 / RW 0x6CC07C)
+    tests/test_local_79.cpp
     # lane LOCAL-27 (bridges as retail: Bridge block, damage models, towers, scaffold, radar color, issue #189)
     tests/test_local_27.cpp
     # lane LOCAL-33 (castle gates and 'man the walls' as retail: GateProxyBehavior, ManTheWallsSpecialPower, issue #283)
@@ -1513,6 +1516,7 @@ add_executable(openbfme_tests
     tests/test_local_36.cpp
     # lane LOCAL-45 (P-35 hud5 icons health bars, P-36 cheat1 snapshot after foreign RetailObjectWorld context, P-85 LOCAL-20 retaliation range 287.5, issue #401)
     tests/test_local_45.cpp
+    tests/test_local_83.cpp
     # shared numeric facade (WEAPON-1 e75dd8c, imported unchanged: wide PC24 results, SSE binary32 ops, retail integer conversions)
     tests/test_numeric_facade.cpp
     # lane ECON-1: the economy
