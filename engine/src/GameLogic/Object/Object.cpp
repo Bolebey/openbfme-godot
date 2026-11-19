@@ -1243,7 +1243,7 @@ void Object::setCapturedTeam(Team *team)
 	// owner's P-122), the unit in the doorway leaves for the old team and releaseLastExit frees a partial horde
 	if (ProductionUpdateInterface *production = getProductionUpdate())
 	{
-		production->cancelAndReleaseAllProduction(); // RW 0x69974D -> RW 0x8A1666
+		production->cancelAndReleaseAllProduction(); // RW 0x69974D -> getDie RW 0x008A18ED -> onDie RW 0x008A05A7 -> RW 0x8A1666
 	}
 	// S-1225, still unported: RW 0x699750 .. 0x6997A7 counts the structure in the old and the new player's score keeper (RW 0x79F0E1 on Player + 0x3DC,
 	// for two active players) and tells the client (RW 0x6D9A71, a local player only); RW 0x699792 sets the undetected-defector bit (+ 0x458 bit 1,
