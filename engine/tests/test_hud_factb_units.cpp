@@ -48,6 +48,8 @@
 #include "GameLogic/Combat/CombatState.h"
 #include "GameLogic/Combat/CombatQueries.h"
 #include "GameLogic/Module/EmotionModules.h"
+#include "GameLogic/BitFlags.h"
+#include "GameLogic/Combat/CombatNames.h"
 #include "GameLogic/Module/ExtraUpdateModules.h" // DeletionUpdate: a temporary object (the matrix's first-frames verdict)
 #include "GameLogic/Module/SlavedUpdate.h"
 #include "GameLogic/Module/StructureModules.h" // LifetimeUpdate
@@ -222,6 +224,12 @@ const std::set<std::string> &sweepSkips()
 const char *ownHordeOf(const std::string &faction)
 {
 	return faction == "FactionMordor" ? "MordorFighterHorde" : faction == "FactionWild" ? "GoblinFighterHorde" : faction == "FactionAngmar" ? "AngmarDarkDunedainHorde" : "IsengardFighterHorde";
+}
+
+// the faction's own soldier, the capturable unit for a store-list power (lane PORT-261): the same mapping as ownHordeOf, the member template
+const char *ownSoldierOf(const std::string &faction)
+{
+	return faction == "FactionMordor" ? "MordorFighter" : faction == "FactionWild" ? "GoblinFighter" : faction == "FactionAngmar" ? "AngmarDarkDunedain" : "IsengardFighter";
 }
 
 bool isPowerCommand(int c)
@@ -1258,6 +1266,24 @@ void unitsSweep(const std::string &faction, Results &res, bool sweep)
 						unportedFx.push_back(spm ? spm->unportedEffects() : 0);
 					}
 				};
+				// lane PORT-261: the abilities whose ChainedButton never starts the recharge (RW 0x853F2A) are detected by their trigger counter instead of the recharge frame
+				auto triggerSum = [&]() -> unsigned {
+					unsigned s = 0;
+					if (u && t)
+					{
+						for (const std::unique_ptr<BehaviorModule> &m : u->modules())
+						{
+							if (const SpecialAbilityUpdate *a = dynamic_cast<const SpecialAbilityUpdate *>(m.get()))
+							{
+								if (a->abilityData()->m_specialPowerTemplateName == t->getName())
+								{
+									s += a->abilitiesTriggered();
+								}
+							}
+						}
+					}
+					return s;
+				};
 				collect();
 				if (mods.empty())
 				{
@@ -1418,12 +1444,15 @@ void unitsSweep(const std::string &faction, Results &res, bool sweep)
 					}
 				} tempTarget{ g.logic() };
 				bool tempEnemyTarget = false;
+				// lane PORT-261: a second scope-guarded temp object for the sacrificial injured structure the rebuild powers need; tempTarget below may already
+				// point at a staged enemy/ally target, and overwriting it would leak that object and click on the structure instead of the intended target
+				TempTarget healTemp{ g.logic() };
 				// a position power whose result is on own units (a level grant, a heal, invisibility, timer refresh) is cast at an own horde made there;
 				// one whose result is on enemies (a dominate, a hit, a curse, a terror, a grab, replace, emotion, meta-impact, steal, paralyze) at the enemy;
 				// the others at the ground by the unit
 				const bool targetless = !cb->hasOption(COMMAND_OPTION_NEED_TARGET_ENEMY_OBJECT | COMMAND_OPTION_NEED_TARGET_NEUTRAL_OBJECT
 													   | COMMAND_OPTION_NEED_TARGET_ALLY_OBJECT | COMMAND_OPTION_NEED_TARGET_POS);
-				bool atOwn = false, stageOwn = false, atEnemy = false, closerEnemy = false, needsHeal = false, needsStealMoney = false, needsTimerRefresh = false;
+				bool atOwn = false, stageOwn = false, atEnemy = false, closerEnemy = false, needsHeal = false, needsStealMoney = false, needsTimerRefresh = false, needsStore = false;
 				for (const EffectProbe::Expect &x : EffectProbe::take(g.logic(), u, t).expects)
 				{
 					closerEnemy = closerEnemy
@@ -1438,6 +1467,7 @@ void unitsSweep(const std::string &faction, Results &res, bool sweep)
 							  || x.kind == EffectProbe::LUA_EVENT || x.kind == EffectProbe::META_IMPACT || x.kind == EffectProbe::STEAL_MONEY
 							  || x.kind == EffectProbe::PARALYZE;
 					needsHeal = needsHeal || x.kind == EffectProbe::HEAL;
+					needsStore = needsStore || x.kind == EffectProbe::STORE; // lane PORT-261: SPECIAL_STORE_LIST_2 captures only allied units in the radius
 					needsStealMoney = needsStealMoney || x.kind == EffectProbe::STEAL_MONEY;
 					needsTimerRefresh = needsTimerRefresh || x.kind == EffectProbe::TIMER_REFRESH;
 				}
@@ -1451,6 +1481,12 @@ void unitsSweep(const std::string &faction, Results &res, bool sweep)
 					enemyUnitId = g.rig.make(enemyName, c.x + 80.0f, c.y + 20.0f, enemy)->getID();
 					g.step(5);
 					toughen(g.logic(), enemyUnitId);
+				}
+				// lane PORT-261: an ability that stores units (SPECIAL_STORE_LIST_2) is pointed at the open ground; an allied unit must be in the radius to capture
+				if (needsStore)
+				{
+					g.rig.make(ownSoldierOf(faction), c.x + 115.0f, c.y + 115.0f);
+					g.rig.make(ownSoldierOf(faction), c.x + 128.0f, c.y + 122.0f);
 				}
 				if (needsStealMoney && enemy->getMoney()->countMoney() < 50000u)
 				{
@@ -1572,6 +1608,69 @@ void unitsSweep(const std::string &faction, Results &res, bool sweep)
 						}
 					}
 					injure(g.logic().findObjectByID(tempTarget.id != INVALID_ID ? tempTarget.id : allyId));
+					// lane PORT-261: a rebuild (PlayerHealSpecialPower whose HealAffects carries STRUCTURE, e.g. Theodred's Reparaturarbeiten and Balin's Baukunst) heals
+					// structures only; the cast at the horde's spot needs an injured own structure there or the power has no legal result (the outcome in RotWK too)
+					bool rebuild = false;
+					auto structureHeal = [&](const Object *h) {
+						if (!h)
+						{
+							return;
+						}
+						for (const std::unique_ptr<BehaviorModule> &m : h->modules())
+						{
+							const PlayerHealSpecialPower *ph = dynamic_cast<const PlayerHealSpecialPower *>(m.get());
+							if (ph && t && ph->getSpecialPowerTemplate() == t
+								&& BitFlagsTest(ph->data()->m_healAffects, (size_t)CombatNames::kindOf("STRUCTURE")))
+							{
+								rebuild = true;
+							}
+						}
+					};
+					structureHeal(u);
+					if (Object *oh = ownHordeId != INVALID_ID ? g.logic().findObjectByID(ownHordeId) : nullptr)
+					{
+						structureHeal(oh);
+						if (oh->getContain() && oh->getContain()->getContainedItemsList())
+						{
+							for (Object *m : *oh->getContain()->getContainedItemsList())
+							{
+								structureHeal(m);
+							}
+						}
+					}
+					if (rebuild)
+					{
+						const std::string &side = g.rig.local->getPlayerTemplate()->m_side;
+						const ThingTemplate *building = nullptr;
+						for (const ThingTemplate *tt : s.world->things().templates()) // a farm, cheapest to place, else any structure of the side
+						{
+							if (!factb::hasKindOf(*tt, "STRUCTURE") || factb::hasKindOf(*tt, "SUMMONED")
+								|| factb::stringFieldOf(*tt, "Side") != side)
+							{
+								continue;
+							}
+							if (tt->getName().find("Farm") != std::string::npos)
+							{
+								building = tt;
+								break;
+							}
+							building = building ? building : tt;
+						}
+						Coord3D spot = c;
+						if (Object *oh = ownHordeId != INVALID_ID ? g.logic().findObjectByID(ownHordeId) : nullptr)
+						{
+							spot = *oh->getPosition();
+						}
+						if (building)
+						{
+							// lane PORT-261: kept in a separate TempTarget so it cannot clobber a temp target the enemy-object branches already staged, and placed
+							// off the horde's foot (inside the HealRadius) so the placement does not stack on the horde cell
+							healTemp.id = g.rig.make(building->getName(), spot.x + 40.0f, spot.y + 40.0f)->getID();
+							g.step(3);
+							Object *built = g.logic().findObjectByID(healTemp.id);
+							injure(built);
+						}
+					}
 				}
 				if (needsTimerRefresh)
 				{
@@ -1637,6 +1736,8 @@ void unitsSweep(const std::string &faction, Results &res, bool sweep)
 					continue;
 				}
 				collect();
+				// lane PORT-261: the trigger counter for chained-button abilities (RW 0x853F2A skips their recharge), read where the press is armed
+				const unsigned triggerSumBefore = triggerSum();
 				auto resolveTarget = [&]() -> Object * {
 					Object *tgt = nullptr;
 					if (!cb->hasOption(COMMAND_OPTION_NEED_TARGET_ENEMY_OBJECT | COMMAND_OPTION_NEED_TARGET_NEUTRAL_OBJECT | COMMAND_OPTION_NEED_TARGET_ALLY_OBJECT | COMMAND_OPTION_NEED_TARGET_POS))
@@ -1969,6 +2070,8 @@ void unitsSweep(const std::string &faction, Results &res, bool sweep)
 					{
 						fired = fired || mods[k]->getReadyFrame() != readyBefore[k];
 					}
+					// lane PORT-261: chained-button abilities never start the recharge (RW 0x853F2A), so the trigger counter is the witness
+					fired = fired || triggerSum() != triggerSumBefore;
 				}
 				if (replaced)
 				{
@@ -2147,12 +2250,12 @@ void unitsSweep(const std::string &faction, Results &res, bool sweep)
 				if (d->m_affectContainedOnly)
 				{
 					// AffectContainedOnly: the Range scan (RW 0x89F676) is skipped, the pulse reaches the holder's contained objects: a garrison check, not this scene's
-					res.fail(item, "DISABLED: the aura affects only the objects its holder contains (AffectContainedOnly); the sweep garrisons nobody");
+					res.fail(item, "DISABLED: needs a garrison: the aura affects only the objects its holder contains (AffectContainedOnly); the sweep garrisons nobody");
 					continue;
 				}
 				if (d->m_requiredConditions)
 				{
-					res.fail(item, str("DISABLED: the aura needs a state the fresh object lacks (RequiredConditions bits 0x%X: MOUNTED / TAINT / ELVEN_WOOD)", d->m_requiredConditions));
+					res.fail(item, str("DISABLED: needs a state the fresh object lacks (the aura's RequiredConditions bits 0x%X: MOUNTED / TAINT / ELVEN_WOOD)", d->m_requiredConditions));
 					continue;
 				}
 				std::string given;
@@ -2217,6 +2320,8 @@ void unitsSweep(const std::string &faction, Results &res, bool sweep)
 				fixtureObjects.push_back(t->getID());
 				const ObjectID tid = t->getID();
 				bool on = false;
+				// MATRIX_TODO 12: whether the scene's target (or a member it contains: a horde's soldiers) is one the aura's filter takes at all
+				bool eligible = !d->m_objectFilter;
 				for (unsigned f = 0; f < d->m_refreshDelay + 10 && !on; ++f)
 				{
 					g.step(1);
@@ -2230,6 +2335,14 @@ void unitsSweep(const std::string &faction, Results &res, bool sweep)
 					{
 						const AttributeModifierPool *pool = o ? static_cast<const AttributeModifierPool *>(o->findModule("AttributeModifierPoolUpdate")) : nullptr;
 						on = on || (pool && pool->hasList(d->m_bonusName));
+						eligible = eligible || (o && ObjectFilterMatch::allows(g.logic(), *d->m_objectFilter, *o, g.rig.local));
+					}
+					// AllowSelf: the holder is one of the aura's targets (2026-11-18: Smaug's Drachenschuppen, Range 1, reads NO-AURA on a copy beside it)
+					if (d->m_allowSelf && !on)
+					{
+						Object *hh = g.logic().findObjectByID(aura.holder);
+						const AttributeModifierPool *hp = hh ? static_cast<const AttributeModifierPool *>(hh->findModule("AttributeModifierPoolUpdate")) : nullptr;
+						on = hp && hp->hasList(d->m_bonusName);
 					}
 				}
 				const std::string what = str("%s on %s (%s) at %.0f of Range %.0f%s", d->m_bonusName.c_str(), targetName.c_str(), d->m_targetEnemy ? "enemy" : "own",
@@ -2237,6 +2350,12 @@ void unitsSweep(const std::string &faction, Results &res, bool sweep)
 				if (on)
 				{
 					res.pass(item, "AURA: " + what);
+				}
+				else if (!eligible)
+				{
+					// the scene could not make a target the filter takes (a non-selectable crew, a horde soldier the filter wants apart from its horde,
+					// a structure add-on): the aura is not judged here, it is no port finding
+					res.fail(item, "DISABLED: needs a target the scene does not make: " + what + " (neither the target nor a member it contains passes the aura's ObjectFilter)");
 				}
 				else
 				{
@@ -2265,8 +2384,12 @@ TEST_CASE("factb units: every Isengard unit, horde and hero ability and upgrade 
 	Results r;
 	unitsOf("FactionIsengard", r);
 	r.print("units FactionIsengard");
-	r.check({ { "* Command_ToggleStance", "S-289" }, { "IsengardPorter Command_PorterExtinguishFire", "S-1997" },
-		{ "IsengardBallista Command_BombardEvil", "S-1990" }, { "IsengardSaruman Command_SarumanThunderBolt", "S-180 (the bolt's damage lands; its WeaponOCLNugget makes nothing)" } });
+	// the stance radial is pressed now (MATRIX_TODO 3): only the ram, which has no StancesBehavior, keeps a greyed stance button
+	r.check({ { "IsengardBatteringRam Command_ToggleStance", "S-289" }, { "IsengardPorter Command_PorterExtinguishFire", "S-1997" },
+		{ "IsengardBallista Command_BombardEvil", "S-1990" }, { "IsengardSaruman Command_SarumanThunderBolt", "S-180 (the bolt's damage lands; its WeaponOCLNugget makes nothing)" },
+		// ORDER (MATRIX_TODO 11 / 19, 2026-11-19): the blast hits nobody only after the whole Isengard sweep; alone, after either half of the
+		// objects before it, or after the first half plus any one of the second, it passes: a state the run accumulates, no single object's leak
+		{ "IsengardSaruman Command_SpecialAbilityIsengardWizardBlast", "ORDER: fails only after the whole sweep|SarumanWizardBlast" } });
 }
 
 TEST_CASE("factb units: every Mordor unit, horde and hero ability and upgrade button")
@@ -2279,7 +2402,7 @@ TEST_CASE("factb units: every Mordor unit, horde and hero ability and upgrade bu
 	unitsOf("FactionMordor", r);
 	r.print("units FactionMordor");
 	// lane FLY-1: the fell beasts' dismounts land and fire (GiantBirdAIUpdate, MOVING_TO_DISMOUNT): S-1994's pins went
-	r.check({ { "* Command_ToggleStance", "S-289" }, { "MordorPorter Command_PorterExtinguishFire", "S-1997" } });
+	r.check({ { "MordorBatteringRam Command_ToggleStance", "S-289" }, { "MordorPorter Command_PorterExtinguishFire", "S-1997" } });
 }
 
 // The button sweep, its first slice (docs/ennorath/BUTTON_SWEEP.md): the same sweep on a mod's data, one faction per process. A report: it prints what each
@@ -4332,11 +4455,9 @@ TEST_CASE("factc units: every Goblin and Angmar unit, horde and hero ability and
 		return;
 	}
 	factcCase("units", "FactionWild", unitsOf,
-			  { { "* Command_ToggleStance", "S-289" },
-				{ "WildPorter Command_PorterExtinguishFire", "S-1997|PorterFireExtinguisher: no result" } });
+			  { { "WildPorter Command_PorterExtinguishFire", "S-1997|PorterFireExtinguisher: no result" } }); // every stance button works (MATRIX_TODO 3)
 	factcCase("units", "FactionAngmar", unitsOf,
-			  { { "* Command_ToggleStance", "S-289" },
-				{ "AngmarDarkRangerHorde Command_AngmarLongShotAbility", "S-1997|HordeAttackNugget" }, { "AngmarKarsh Command_WhisperofDeath", "S-2006|AngmarWhisperofDeath: no result" },
+			  { { "AngmarDarkRangerHorde Command_AngmarLongShotAbility", "S-1997|HordeAttackNugget" }, { "AngmarKarsh Command_WhisperofDeath", "S-2006|AngmarWhisperofDeath: no result" },
 				{ "AngmarPorter Command_PorterExtinguishFire", "S-1997|PorterFireExtinguisher: no result" } });
 }
 

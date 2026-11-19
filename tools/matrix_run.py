@@ -51,7 +51,7 @@ CATEGORIES = [
     ("CRASH", re.compile(r"^CRASH")),                                # the engine died at this press: the first thing to fix
     ("STANCE", re.compile(r"^S-289")),                              # the stance button opens the radial: a known stop, not a fault
     ("NO-STANCE", re.compile(r"^STANCE: ")),                          # MATRIX_TODO 3: the stance radial pressed, a stance not taken (red)
-    ("NO-AURA", re.compile(r"^NO-AURA: ")),                            # MATRIX_TODO 5: an active aura that put its modifier on no target in range (red)
+    ("NO-AURA", re.compile(r"^NO-AURA: ")),                            # MATRIX_TODO 5: an active aura that put its modifier on no target in range (unverified, see UNVERIFIED)
     ("UNPORTED", re.compile(r"^UNPORTED: ")),                          # MATRIX_TODO 4: the click refused by an unported per-type object test (red: a port gap)
     ("NO-END", re.compile(r"never expires, though its Duration")),        # MATRIX_TODO 2: a modifier applied for good though its list has a Duration (RW 0x805A8E)
     ("NO-VALUE", re.compile(r"NO-VALUE: ")),                           # MATRIX_TODO 1b: a list landed, but the value the engine reads did not move by it (red)
@@ -80,10 +80,12 @@ CATEGORIES = [
 
 # Not red: the grey verdicts and the ones found to be the scene's or the mod's own (matrix review 2026-11-17). ORDER: red in the full run,
 # fine when the object is swept alone (tools/matrix_run.py recheck): leftovers of the earlier objects, not the port.
-NOT_RED = {"PASS", "STANCE", "DISABLED", "INVENTORY", "TEMPORARY", "MEMBER", "MOD-DATA", "NO-TARGET", "BY-DESIGN", "ORDER"}
+NOT_RED = {"PASS", "STANCE", "DISABLED", "INVENTORY", "TEMPORARY", "MEMBER", "MOD-DATA", "NO-TARGET", "BY-DESIGN", "ORDER", "NO-AURA"}
 # not red, but not shown green either (owner 2026-11-18: "не прячешь ли ты реальные проблемы"): the sweep could not judge them, and the owner's checks
 # in the original found real port gaps among them (MOD-DATA: 2 of 5 work in the original; NO-TARGET hid a working repair; ORDER may be a state leak)
-UNVERIFIED = {"MOD-DATA", "NO-TARGET", "ORDER"}
+# NO-AURA (2026-11-18 recount, 37 rows): the aura check does not yet give the target its state (Eowyn disguised), the holder itself (AllowSelf) or
+# the filter's kind (structures, Nazgul): unverified until it does, not red
+UNVERIFIED = {"MOD-DATA", "NO-TARGET", "ORDER", "NO-AURA"}
 
 
 def category(verdict: str, detail: str) -> str:
@@ -320,7 +322,58 @@ if BY_DESIGN_FILE.exists():
             BY_DESIGN[(_f[0], _f[1])] = _f[2]
 
 
+# docs/ennorath/SCRIPT_GRANTS.tsv (tools/mod/script_map.py): what the sides' script libraries give a player. A non-PASS row that names one of
+# those things gets the script appended, so a "given by nothing" reading (owner 2026-11-19: the Manwe science is Multiplayer_Human's) is not
+# taken for a port gap without looking at the script and whether the port runs its action.
+SCRIPT_GRANTS = REPO / "docs" / "ennorath" / "SCRIPT_GRANTS.tsv"
+
+
+def script_grants() -> dict[str, list[str]]:
+    out: dict[str, list[str]] = collections.defaultdict(list)
+    if not SCRIPT_GRANTS.exists():
+        return out
+    for line in SCRIPT_GRANTS.read_text(encoding="utf-8", errors="replace").splitlines():
+        f = line.split("	")
+        if line.startswith(("#", "kind	")) or len(f) < 8:
+            continue
+        lib = f[3].rsplit("\\", 1)[-1].removesuffix(".map")
+        note = f"{lib}/{f[4]} {f[2]}" + ("" if f[7] == "yes" else " (the port has no case for it)")
+        if note not in out[f[1]]:
+            out[f[1]].append(note)
+    return out
+
+
+GRANTS_INI = REPO / "docs" / "ennorath" / "GRANTS_INI.tsv"
+
+
+def never_given() -> set[str]:
+    """Upgrades / sciences nothing in the game gives (GRANTS_INI.tsv rows "(given by nothing)": neither an INI field nor a script, MATRIX_TODO 13)."""
+    if not GRANTS_INI.exists():
+        return set()
+    out = set()
+    for line in GRANTS_INI.read_text(encoding="utf-8", errors="replace").splitlines():
+        f = line.split("\t")
+        if len(f) >= 3 and f[2] == "(given by nothing)":
+            out.add(f[1])
+    return out
+
+
+def aura_dead(detail: str, never: set[str]) -> str:
+    """A NO-AURA row whose aura the sweep switched on with upgrades nothing in the game gives: the aura never runs in the original either."""
+    m = re.search(r", after ([A-Za-z0-9_, ]+?) never arrived", detail)
+    ups = [u.strip() for u in m.group(1).split(",")] if m else []
+    dead = [u for u in ups if u in never]
+    return ", ".join(dead) if ups and len(dead) == len(ups) else ""
+
+
+def script_note(detail: str, grants: dict[str, list[str]]) -> str:
+    hits = [f"{n} <- {', '.join(v[:2])}" for n, v in grants.items() if re.search(rf"\b{re.escape(n)}\b", detail)]
+    return f" [script: {'; '.join(hits[:3])}]" if hits else ""
+
+
 def cmd_collect(a) -> None:
+    grants = script_grants()
+    never = never_given()
     order = {}
     if (a.out / "recheck" / "order.tsv").exists():
         for line in (a.out / "recheck" / "order.tsv").read_text(encoding="utf-8").splitlines():
@@ -343,6 +396,11 @@ def cmd_collect(a) -> None:
                 why = BY_DESIGN.get((obj, button))
                 if cat != "PASS" and why:  # the owner's word on the mod's own design (docs/ennorath/matrix_bydesign.tsv)
                     cat, detail = "BY-DESIGN", f"BY-DESIGN: {why} (was: {detail})"
+                dead = aura_dead(detail, never) if cat == "NO-AURA" else ""
+                if dead:  # MATRIX_TODO 12a: e.g. Eowyn's disguise aura, switched on by Upgrade_EowynConditionDisguised, which nothing gives
+                    cat, detail = "MOD-DATA", f"MOD-DATA: the aura waits for {dead}, which nothing in the mod's INI or scripts gives (GRANTS_INI.tsv) (was: {detail})"
+                if cat != "PASS":
+                    detail += script_note(detail, grants)
                 rows.append((fac, obj, button, cat, detail))
     if not rows:
         raise SystemExit(f"no <faction>.tsv in {a.out}: run `run` first")
