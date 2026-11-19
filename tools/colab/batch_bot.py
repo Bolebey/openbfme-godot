@@ -573,6 +573,7 @@ def repin(test: str, ps: dict | list[dict], name: str) -> str:
 BATCH_MARK = "<!-- batch {name} {head} -->"
 LEFT_MARK = "<!-- batch-left {name} {head} -->"
 BASE_CONFLICT = "BASE: "   # merge_batch's mark of a conflict with the batch's base (main), not with an earlier PR
+EMPTY_RC = 3   # cmd_run's exit code for a batch whose PRs all left before the build
 
 
 def taken_comment(name: str, p: dict, sandbox: str) -> str:
@@ -745,7 +746,9 @@ def loop_round(a, st: dict) -> str:
     with open(RUNS / f"{name}.log", "w") as out:
         rc = subprocess.run([sys.executable, str(me), "run", "--name", name, "--max", str(a.max), "--base", base], cwd=str(REPO),
                             stdout=out, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL).returncode
-    st.update(name=name, finished=time.time(), red=rc != 0)
+    # an empty batch (every PR left: conflicts, returns) tested nothing, so it does not hold the next one for idle_hours (2026-11-19d held
+    # #681 #682 #683 for 2 h behind four PRs that conflicted with main)
+    st.update(name=name, finished=time.time(), red=rc not in (0, EMPTY_RC))
     if rc == 0:
         st["green"] = name
         return f"batch {name} green: batch/{name} pushed, waits for Claude's landing"
@@ -952,6 +955,8 @@ def run_batch(a, name: str, take: list[dict], wait: list, out_dir: Path) -> int:
         for p, why in left_batch(take, rows, out):
             gh("pr", "comment", str(p["number"]), "--body", left_comment(name, p, why))
     (STATUS_DIR / f"{RUN_KEY}.txt").unlink(missing_ok=True)   # done: the loop's line (or nothing) says the rest
+    if rows["verdict"].startswith("пустой"):
+        return EMPTY_RC
     return 0 if rows["verdict"].startswith("зелёный") else 1
 
 
