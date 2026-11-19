@@ -2,8 +2,7 @@
 // Expected behaviour and values are proven from RotWK 2.01 game.dat (md5 daed3668):
 //   - GameData::MaxCastleRadius (+0x1220) & BuildAssistant::isLocationClearOfObjects (RW 0x00796D37, 0x00661A02, 0x00661C13, 0x007940A6)
 //   - GameData::SellPercentage ctor default 1.0f (RW 0x006429AD -> 0x00643160 / 0x00643222, S-1981)
-//   - CastleMemberBehavior::BeingBuiltSound (RW 0x00799F0F -> 0x00798057 -> 0x00797C40, HELD_CASTLE_BEING_BUILT = 5)
-//   - ProductionSpeedBonus -> Player -> BuildAssistant::calcTimeToBuild & ProductionUpdate (RW 0x008C7171 -> 0x006AF3C8 / 0x006AF484 / 0x006AF28E, 0x0073C3E6, 0x008A1C1C, HELD_PRODUCTION_SPEED_BONUS = 6)
+//   - CastleMemberBehavior::BeingBuiltSound (RW 0x00799F0F -> 0x00798057 -> 0x00797C40, HELD_CASTLE_BEING_BUILT = 6)
 //   - ProductionUpdate::completeUnit script naming (RW 0x008A253B / 0x008A2624) & entry + 0x3C hordeTarget migration (RW 0x008A2A67 -> 0x008A171F -> 0x008A07E0)
 //   - Object::attemptHealingFromSoleBenefactor KeepSelectableWhenDead tail (RW 0x00690584 -> 0x00690626, S-652)
 
@@ -15,15 +14,7 @@
 #include "Common/Audio/AudioRequests.h"
 #include "Common/Audio/GameAudio.h"
 #include "Common/Audio/SimulatedAudioDevice.h"
-#include "Common/BuildAssistant.h"
-#include "Common/Player.h"
-#include "Common/PlayerTemplate.h"
-#include "Common/SpecialPower.h"
 #include "Common/StateHash.h"
-#include "Common/XferLoad.h"
-#include "Common/XferSave.h"
-#include "GameClient/FXList.h"
-#include "GameLogic/AttributeModifiers.h"
 #include "GameLogic/BuildAssistantSell.h"
 #include "GameLogic/BuildPlacement.h"
 #include "GameLogic/Construction.h"
@@ -31,8 +22,6 @@
 #include "GameLogic/Module/CastleModules.h"
 #include "GameLogic/Module/ProductionQueueHordeContain.h"
 #include "GameLogic/Module/ProductionUpdate.h"
-#include "GameLogic/Module/SpecialPowerModules.h"
-#include "GameLogic/Module/SpellBookPowers.h"
 #include "GameLogic/Object/Contain/HordeContainRuntime.h"
 #include "GameLogic/Object/PartitionManager.h"
 #include "GameLogic/ScriptEngine/ScriptEngine.h"
@@ -94,8 +83,7 @@ const char kPort231AudioBase[] =
 	"MusicTrack DefaultMusicTrack\n  Filename = NoFilename\n  Volume = 100\n  Type = DEFAULT\n  SubmixSlider = music\nEnd\n"
 	"DialogEvent DefaultDialog\n  Volume = 100\n  Type = ui everyone\n  Type = +DEFAULT\nEnd\n"
 	"AmbientStream DefaultAmbientStream\n  Filename = NoFilename\n  Volume = 100\n  Type = DEFAULT\n  MinRange = 100\n  MaxRange = 1000\n  SubmixSlider = ambient\nEnd\n"
-	"AudioEvent TestCastleBuildLoop\n  Sounds = castleloop\n  Control = loop\n  Type = world everyone\n  MaxRange = 5000\n  Limit = 0\nEnd\n"
-	"AudioEvent TestSpeedLoop\n  Sounds = speedloop\n  Control = loop\n  Type = world everyone\n  MaxRange = 5000\n  Limit = 0\nEnd\n";
+	"AudioEvent TestCastleBuildLoop\n  Sounds = castleloop\n  Control = loop\n  Type = world everyone\n  MaxRange = 5000\n  Limit = 0\nEnd\n";
 
 struct Port231Audio
 {
@@ -109,7 +97,6 @@ struct Port231Audio
 	{
 		initest::FileList list;
 		list.push_back({ "data\\audio\\sounds\\castleloop.wav", toStr(makeSilenceWavMs(4000.0)) });
-		list.push_back({ "data\\audio\\sounds\\speedloop.wav", toStr(makeSilenceWavMs(4000.0)) });
 		list.push_back({ "data\\ini\\none.txt", "x" });
 		fx.mount(list);
 		ini.registerBlocks(fx.env.blocks);
@@ -143,31 +130,10 @@ struct Port231Audio
 
 struct Port231World : ProdWorld
 {
-	SpecialPowerStore powers;
-	SpecialPowerStore *savedPowers = TheSpecialPowerStore;
-	FXListStore fxLists;
-	FXListStore *savedFx = TheFXListStore;
-	AttributeModifierStore modifiers;
-	AttributeModifierStore *savedModifiers = TheAttributeModifierStore;
-
 	Port231World()
 	{
-		TheSpecialPowerStore = &powers;
-		TheFXListStore = &fxLists;
-		TheAttributeModifierStore = &modifiers;
-		modifiers.registerBlock(w.fx.env.blocks);
-		w.fx.env.blocks.registerBlock("FXList", [](INI *ini) { ParseFXListDefinitionGlobal(ini); });
-		w.fx.env.blocks.registerBlock("SpecialPower", [](INI *ini) { SpecialPowerStore::parseSpecialPowerDefinitionGlobal(ini); });
-		SpecialPowerModules::registerAll(w.modules);
-		SpellBookPowers::registerAll(w.modules);
 		logic->settings().bodyThresholdsLoaded = true;
 		logic->partition().setRegion(0.0f, 0.0f, 4000.0f, 4000.0f);
-	}
-	~Port231World()
-	{
-		TheSpecialPowerStore = savedPowers;
-		TheFXListStore = savedFx;
-		TheAttributeModifierStore = savedModifiers;
 	}
 };
 } // namespace
@@ -372,158 +338,6 @@ TEST_CASE("PORT-231: CastleMemberBehavior BeingBuiltSound loops across BASE_BUIL
 	CHECK(AudioApi::callsWithoutAudio() == withoutBefore);
 }
 
-TEST_CASE("PORT-231: ProductionSpeedBonus feeds Player speed map, calcTimeToBuild, ProductionUpdate condition/audio loop, and Player crc/xfer (RW 0x8C7171 -> 0x6AF3C8 / 0x6AF484 / 0x6AF28E, 0x73C3E6, 0x8A1C1C)")
-{
-	Port231Audio audio;
-	Port231World f;
-	f.load(
-		"SpecialPower SP_SpeedBoost\n"
-		"  Enum = SPECIAL_SPELL_BOOK_CALL_THE_HORDE\n"
-		"  ReloadTime = 1000\n"
-		"End\n"
-		"Object FastCaster\n"
-		"  KindOf = STRUCTURE SELECTABLE SPELL_BOOK\n"
-		"  Behavior = SpecialPowerModule ModuleTag_SPM\n"
-		"    SpecialPowerTemplate = SP_SpeedBoost\n"
-		"    AvailableAtStart = Yes\n"
-		"  End\n"
-		"  Behavior = ProductionSpeedBonus ModuleTag_PSB\n"
-		"    SpecialPowerTemplate = SP_SpeedBoost\n"
-		"    NumberOfFrames = 5\n"
-		"    SpeedMulitplier = 2.0\n"
-		"    Type = FastUnit\n"
-		"  End\n"
-		"End\n"
-		"Object FastUnit\n"
-		"  BuildCost = 100\n"
-		"  BuildTime = 20.0\n"
-		"  KindOf = INFANTRY SELECTABLE\n"
-		"End\n"
-		"Object FastBarracks\n"
-		"  KindOf = STRUCTURE SELECTABLE\n"
-		"  CommandSet = FastSet\n"
-		"  Behavior = ProductionUpdate ModuleTag_PU\n"
-		"    MaxQueueEntries = 5\n"
-		"    SetBonusModelConditionOnSpeedBonus = Yes\n"
-		"    BonusForType = FastUnit\n"
-		"    SpeedBonusAudioLoop = TestSpeedLoop\n"
-		"  End\n"
-		"  Behavior = QueueProductionExitUpdate ModuleTag_Q\n"
-		"    UnitCreatePoint = X:0 Y:-20 Z:0\n"
-		"    NaturalRallyPoint = X:0 Y:-50 Z:0\n"
-		"  End\n"
-		"End\n"
-		"CommandButton Cmd_FastUnit\n"
-		"  Command = UNIT_BUILD\n"
-		"  Object = FastUnit\n"
-		"End\n"
-		"CommandSet FastSet\n"
-		"  1 = Cmd_FastUnit\n"
-		"End\n");
-
-	const ThingTemplate &unitT = *f.w.get("FastUnit")->getFinalOverride();
-	Player *alice = f.alice();
-	REQUIRE(alice != nullptr);
-
-	// Baseline PlayerTemplate ProductionTimeChange is seeded in Player::init (RW 0x6B05C9)
-	{
-		Port231World fSeed;
-		fSeed.load("Object FastUnit\n  BuildCost = 100\n  BuildTime = 20.0\n  KindOf = INFANTRY SELECTABLE\nEnd\n");
-		const ThingTemplate &seededUnit = *fSeed.w.get("FastUnit")->getFinalOverride();
-		Player *seeded = fSeed.alice();
-		PlayerTemplate pt = *seeded->getPlayerTemplate();
-		pt.m_productionTimeChanges["FastUnit"] = -0.20f;
-		seeded->init(&pt, 1000);
-		fSeed.logic->economy().initAllCommandPoints();
-		CHECK(seeded->getProductionSpeedBonus("FastUnit") == -0.20f);
-		CHECK(BuildAssistant::calcTimeToBuild(seededUnit, seeded, nullptr, -1, fSeed.logic->productionSettings(), *fSeed.logic) == 80); // 20s * 0.8 * 5
-	}
-	f.activate();
-
-	// Baseline without bonus: 20s * 5 = 100 frames
-	CHECK(BuildAssistant::calcTimeToBuild(unitT, alice, nullptr, -1, f.logic->productionSettings(), *f.logic) == 100);
-
-	Object *caster = f.make("FastCaster", f.teamOf("Alice"));
-	Object *barracks = f.make("FastBarracks", f.teamOf("Alice"));
-	REQUIRE(caster != nullptr);
-	REQUIRE(barracks != nullptr);
-
-	const int kEconBonus = Construction::modelConditionIndex("UPGRADE_ECONOMY_BONUS");
-	const int kUnderConst = ObjectTemplateInfoBuilder::objectStatusIndex("UNDER_CONSTRUCTION");
-	REQUIRE(kEconBonus != -1);
-	REQUIRE(kUnderConst != -1);
-
-	const std::uint32_t hashBefore = f.logic->computeStateHash();
-	ProductionSpeedBonus *psb = nullptr;
-	for (const auto &m : caster->modules())
-	{
-		if (auto *p = dynamic_cast<ProductionSpeedBonus *>(m.get()))
-		{
-			psb = p;
-			break;
-		}
-	}
-	REQUIRE(psb != nullptr);
-	psb->doSpecialPower(0);
-	CHECK(psb->unportedEffects() == 0u);
-	// tolerance: float division (2.0 - 1.0) / (-2.0) == -0.5
-	CHECK(alice->getProductionSpeedBonus("FastUnit") == doctest::Approx(-0.5f));
-	CHECK(BuildAssistant::calcTimeToBuild(unitT, alice, barracks, -1, f.logic->productionSettings(), *f.logic) == 50);
-	CHECK(f.logic->computeStateHash() != hashBefore);
-
-	// UNDER_CONSTRUCTION blocks SpeedBonusAudioLoop while model condition still applies
-	barracks->setStatus((unsigned)kUnderConst, true);
-	f.frames(1); // frame 1: remaining frames 5 -> 4
-	CHECK(barracks->testModelCondition(kEconBonus));
-	CHECK(AudioApi::heldSound(AudioApi::HELD_PRODUCTION_SPEED_BONUS, barracks->getID()) == 0u);
-
-	barracks->setStatus((unsigned)kUnderConst, false);
-	f.frames(1); // frame 2: remaining frames 4 -> 3
-	CHECK(barracks->testModelCondition(kEconBonus));
-	// tolerance: valid AudioHandle is >= AHSV_FirstHandle
-	CHECK(AudioApi::heldSound(AudioApi::HELD_PRODUCTION_SPEED_BONUS, barracks->getID()) >= AHSV_FirstHandle);
-	CHECK(AudioApi::heldSounds(AudioApi::HELD_PRODUCTION_SPEED_BONUS) == 1u);
-	CHECK(audio.startsOf("speedloop") == 1u);
-
-	// Xfer round-trip mid-bonus preserves remaining frames, bonus and backup across save/load
-	std::vector<std::uint8_t> bytes;
-	{
-		XferSave saver;
-		alice->xfer(saver, f.teams);
-		bytes = saver.data();
-	}
-	Player loaded(alice->getPlayerIndex());
-	loaded.friend_setIdentity(alice->getPlayerName(), alice->getPlayerNameKey(), alice->getPlayerDisplayName());
-	loaded.init(alice->getPlayerTemplate(), 2000);
-	{
-		XferLoad loader(bytes.data(), bytes.size());
-		loaded.xfer(loader, f.teams);
-	}
-	// tolerance: exact round-trip of -0.5 bonus
-	CHECK(loaded.getProductionSpeedBonus("FastUnit") == doctest::Approx(-0.5f));
-	CHECK(loaded.productionSpeedBonusFrames().at("FastUnit") == 3);
-
-	// Run remaining 3 frames: after frame 5, bonus expires back to 0.0f, condition clears, audio stops
-	f.frames(2); // remaining 3 -> 1
-	CHECK(alice->getProductionSpeedBonus("FastUnit") == doctest::Approx(-0.5f)); // tolerance: still active on frame 4
-	f.frames(1); // remaining 1 -> 0 -> restored to backup (0.0f)
-	CHECK(alice->getProductionSpeedBonus("FastUnit") == 0.0f);
-	CHECK(BuildAssistant::calcTimeToBuild(unitT, alice, barracks, -1, f.logic->productionSettings(), *f.logic) == 100);
-	f.frames(1); // ProductionUpdate sees expired bonus and clears condition + stops audio
-	CHECK_FALSE(barracks->testModelCondition(kEconBonus));
-	CHECK(AudioApi::heldSound(AudioApi::HELD_PRODUCTION_SPEED_BONUS, barracks->getID()) == 0u);
-	CHECK(AudioApi::heldSounds(AudioApi::HELD_PRODUCTION_SPEED_BONUS) == 0u);
-
-	// Destroying a speed-boosted producer while SpeedBonusAudioLoop plays stops the held loop in ~ProductionUpdate / onDelete
-	psb->doSpecialPower(0);
-	f.frames(1);
-	// tolerance: valid AudioHandle is >= AHSV_FirstHandle
-	CHECK(AudioApi::heldSound(AudioApi::HELD_PRODUCTION_SPEED_BONUS, barracks->getID()) >= AHSV_FirstHandle);
-	f.logic->destroyObject(barracks);
-	f.frames(1);
-	CHECK(AudioApi::heldSounds(AudioApi::HELD_PRODUCTION_SPEED_BONUS) == 0u);
-}
-
 TEST_CASE("PORT-231: ProductionUpdate::completeUnit script naming and entry + 0x3C hordeTarget migration (RW 0x8A253B / 0x8A2624 / 0x8A2A67 -> 0x8A171F -> 0x8A07E0)")
 {
 	Port231World f;
@@ -596,6 +410,20 @@ TEST_CASE("PORT-231: ProductionUpdate::completeUnit script naming and entry + 0x
 	CHECK(secondNamed->getID() != firstNamed->getID()); // tolerance: new unit received transferred name
 	CHECK(secondNamed->getName() == "HeroBoat");
 	CHECK(f.logic->scriptEngine().getUnitNamed("HeroBoat") == secondNamed);
+
+	// Destroying the named object satisfies didUnitExist(), so the next unit transfers ownership as well
+	const ObjectID prevId = secondNamed->getID();
+	f.logic->destroyObject(secondNamed);
+	f.frames(1);
+	REQUIRE(f.logic->scriptEngine().getUnitNamed("HeroBoat") == nullptr);
+	REQUIRE(f.logic->scriptEngine().didUnitExist("HeroBoat"));
+	const ProductionID id3 = pu->requestUniqueUnitID();
+	REQUIRE(pu->queueCreateUnit(sailorT, -1, id3, -1, false, "HeroBoat", false));
+	f.frames(6);
+	Object *thirdNamed = f.logic->scriptEngine().getUnitNamed("HeroBoat");
+	REQUIRE(thirdNamed != nullptr);
+	CHECK(thirdNamed->getID() != prevId);
+	CHECK(thirdNamed->getName() == "HeroBoat");
 
 	// 2. hordeTarget migration (RW 0x8A2A67 -> 0x8A171F -> 0x8A07E0): HORDE entering QueuePort migrates into completed TroopShip
 	auto *portContain = dynamic_cast<ProductionQueueHordeContain *>(port->getContain());

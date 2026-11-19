@@ -14,9 +14,13 @@
 #include "Common/Team.h"
 #include "Common/Upgrade.h"
 #include "Common/Xfer.h"
+#include "GameLogic/GameLogic.h"
+#include "GameLogic/Module/BehaviorModule.h"
+#include "GameLogic/Object/Object.h"
 #include "GameLogic/ObjectFilter.h"
 #include "GameLogic/ObjectFilterMatch.h"
 
+#include <cstring>
 #include <stdexcept>
 
 Relationship Player::getRelationship(const Team *that) const
@@ -84,7 +88,7 @@ void Player::removeTeamRelationship(const Team *that)
 	}
 }
 
-// ZH Player::init(const PlayerTemplate *) (Player.cpp:360-470, the parts this layer has)
+// RW 0x6B0239: ZH Player::init(const PlayerTemplate *) (Player.cpp:360-470, the parts this layer has)
 void Player::init(const PlayerTemplate *pt, std::uint32_t defaultStartingCash)
 {
 	m_observer = false;
@@ -112,19 +116,10 @@ void Player::init(const PlayerTemplate *pt, std::uint32_t defaultStartingCash)
 	m_upgradesCompleted = UpgradeMaskType{};
 	m_costModifiers.clear();
 	m_upgradeDiscounts.clear();
-	m_heroes.clear(); // HERO-1: the list is filled at the game start (RW 0x6B16EC)
-	// PORT-231 (RW 0x6B05C9 .. 0x6B0634): seed production speed bonuses and backup from PlayerTemplate::m_productionTimeChanges
-	m_productionSpeedBonuses.clear();
-	m_productionSpeedBonusBackup.clear();
-	m_productionSpeedBonusFrames.clear();
+	m_heroes.clear();                 // HERO-1: the list is filled at the game start (RW 0x6B16EC)
+	resetProductionTimeChanges(pt);   // PORT-280: RW 0x6B05C9 .. 0x6B0634 (with pt) / RW 0x6B06C9 .. 0x6B06E5 (without pt)
 	if (pt)
 	{
-		m_productionSpeedBonuses = pt->m_productionTimeChanges;
-		m_productionSpeedBonusBackup = m_productionSpeedBonuses;
-		for (const auto &kv : m_productionSpeedBonuses)
-		{
-			m_productionSpeedBonusFrames[kv.first] = 0;
-		}
 		m_side = pt->m_side;
 		// ZH RGBColor::getAsInt: each channel (Int)(c * 255.0f), then | 0xff000000
 		const RGBColor &c = pt->m_preferredColor;
@@ -227,23 +222,44 @@ void Player::crc(StateHasher &h) const
 		h.addU32(0x338);
 		m_lightPoints.crc(h); // PORT-113: hashed only while the player holds points or a level (a game without light points keeps its hash)
 	}
-	if (!m_productionSpeedBonuses.empty() || !m_productionSpeedBonusBackup.empty() || !m_productionSpeedBonusFrames.empty())
+	if (!m_battlePlanBonuses.isUntouched() || hasActiveBattlePlans())
 	{
-		h.addU32(0x2B4);
-		h.addU32((std::uint32_t)m_productionSpeedBonuses.size());
-		for (const auto &kv : m_productionSpeedBonuses)
+		h.addU32(0xB8000001u);
+		h.addI32(m_bombardmentBattlePlans);
+		h.addI32(m_holdTheLineBattlePlans);
+		h.addI32(m_searchAndDestroyBattlePlans);
+		h.addFloat(m_battlePlanBonuses.armorScalar);
+		h.addI32(m_battlePlanBonuses.bombardment);
+		h.addI32(m_battlePlanBonuses.searchAndDestroy);
+		h.addI32(m_battlePlanBonuses.holdTheLine);
+		h.addFloat(m_battlePlanBonuses.sightRangeScalar);
+		for (std::uint32_t w : m_battlePlanBonuses.validKindOf)
+		{
+			h.addU32(w);
+		}
+		for (std::uint32_t w : m_battlePlanBonuses.invalidKindOf)
+		{
+			h.addU32(w);
+		}
+	}
+	if (!isProductionTimeUntouched())
+	{
+		// PORT-280: RW + 0x2B4 / + 0x2C8 / + 0x2DC; hashed only once a production speed bonus touched them so unaffected games keep their hash
+		h.addU32(0x2B400001u);
+		h.addU32((std::uint32_t)m_productionTimeChanges.size());
+		for (const auto &kv : m_productionTimeChanges)
 		{
 			h.addString(kv.first);
 			h.addFloat(kv.second);
 		}
-		h.addU32((std::uint32_t)m_productionSpeedBonusBackup.size());
-		for (const auto &kv : m_productionSpeedBonusBackup)
+		h.addU32((std::uint32_t)m_startingProductionTimeChanges.size());
+		for (const auto &kv : m_startingProductionTimeChanges)
 		{
 			h.addString(kv.first);
 			h.addFloat(kv.second);
 		}
-		h.addU32((std::uint32_t)m_productionSpeedBonusFrames.size());
-		for (const auto &kv : m_productionSpeedBonusFrames)
+		h.addU32((std::uint32_t)m_productionTimeTimers.size());
+		for (const auto &kv : m_productionTimeTimers)
 		{
 			h.addString(kv.first);
 			h.addI32(kv.second);
@@ -752,13 +768,16 @@ void Player::checkLoadedIndices(int playerCount) const
 	}
 }
 
+// RW 0x6B205F (Player::xfer; OpenBFME native snapshot layout)
 void Player::xfer(Xfer &x, TeamFactory &teams)
 {
 	// lane LUMBER1: version 2 adds the ResourceGatheringManager (RW + 0x304) at the end. PORT-113: version 3 adds the light points (RW + 0x338) after it;
-	// PORT-231: version 4 adds the production speed bonus maps (RW + 0x2B4 / + 0x2C8 / + 0x2DC) when any are non-empty; a player without keeps version 2 / 3.
-	const bool hasSpeedBonuses = !m_productionSpeedBonuses.empty() || !m_productionSpeedBonusBackup.empty() || !m_productionSpeedBonusFrames.empty();
-	const std::uint8_t writeVersion = hasSpeedBonuses ? 4 : (!m_lightPoints.isUntouched() ? 3 : 2);
-	XferVersion v{ 1, (std::uint8_t)(x.isLoading() ? 4 : writeVersion) };
+	// PORT-237: version 4 adds BattlePlanBonuses (+ 0xAC .. + 0xB8); PORT-280: version 5 adds the three production time change maps (RW + 0x2B4 / + 0x2C8 /
+	// + 0x2DC, RW 0x6B2B8D .. 0x6B2BBB via RW 0x6AFD2D / RW 0x6AFE32); untouched players save earlier versions so existing streams stay unchanged.
+	const bool hasProductionTime = !isProductionTimeUntouched();
+	const bool hasBattlePlans = !m_battlePlanBonuses.isUntouched() || hasActiveBattlePlans();
+	const std::uint8_t saveVer = hasProductionTime ? 5 : (hasBattlePlans ? 4 : (!m_lightPoints.isUntouched() ? 3 : 2));
+	XferVersion v{ 1, (std::uint8_t)(x.isLoading() ? 5 : saveVer) };
 	x.xferVersion(v);
 	// the identity the START made: checked, never overwritten
 	std::int32_t index = m_index;
@@ -924,113 +943,180 @@ void Player::xfer(Xfer &x, TeamFactory &teams)
 	}
 	if (v.current >= 4)
 	{
-		auto xferFloatMap = [&](std::map<std::string, float> &m, const char *what) {
-			std::uint32_t count = x.isLoading() ? 0u : (std::uint32_t)m.size();
-			x.xferCount(&count, 1 + 4, sizeof(float) + Xfer::kNodeBytes);
-			if (!x.isLoading())
-			{
-				for (auto &kv : m)
-				{
-					std::string key = kv.first;
-					x.xferAsciiString(&key);
-					x.xferReal(&kv.second);
-				}
-			}
-			else
-			{
-				m.clear();
-				for (std::uint32_t i = 0; i < count; ++i)
-				{
-					std::string key;
-					float val = 0.0f;
-					x.xferAsciiString(&key);
-					x.xferReal(&val);
-					if (m.count(key))
-					{
-						throw XferException("player '" + m_name + "': duplicate " + what + " entry '" + key + "'");
-					}
-					m[key] = val;
-				}
-			}
-		};
-		xferFloatMap(m_productionSpeedBonuses, "production speed bonus");
-		xferFloatMap(m_productionSpeedBonusBackup, "production speed bonus backup");
-		std::uint32_t count = x.isLoading() ? 0u : (std::uint32_t)m_productionSpeedBonusFrames.size();
-		x.xferCount(&count, 1 + 4, sizeof(std::int32_t) + Xfer::kNodeBytes);
-		if (!x.isLoading())
+		x.xferInt(&m_bombardmentBattlePlans);
+		x.xferInt(&m_holdTheLineBattlePlans);
+		x.xferInt(&m_searchAndDestroyBattlePlans);
+		x.xferReal(&m_battlePlanBonuses.armorScalar);
+		x.xferInt(&m_battlePlanBonuses.bombardment);
+		x.xferInt(&m_battlePlanBonuses.searchAndDestroy);
+		x.xferInt(&m_battlePlanBonuses.holdTheLine);
+		x.xferReal(&m_battlePlanBonuses.sightRangeScalar);
+		for (std::uint32_t &w : m_battlePlanBonuses.validKindOf)
 		{
-			for (auto &kv : m_productionSpeedBonusFrames)
-			{
-				std::string key = kv.first;
-				std::int32_t frames = kv.second;
-				x.xferAsciiString(&key);
-				x.xferInt(&frames);
-			}
+			x.xferUnsignedInt(&w);
 		}
-		else
+		for (std::uint32_t &w : m_battlePlanBonuses.invalidKindOf)
 		{
-			m_productionSpeedBonusFrames.clear();
-			for (std::uint32_t i = 0; i < count; ++i)
-			{
-				std::string key;
-				std::int32_t frames = 0;
-				x.xferAsciiString(&key);
-				x.xferInt(&frames);
-				if (m_productionSpeedBonusFrames.count(key))
-				{
-					throw XferException("player '" + m_name + "': duplicate production speed bonus frame entry '" + key + "'");
-				}
-				m_productionSpeedBonusFrames[key] = frames;
-			}
+			x.xferUnsignedInt(&w);
 		}
 	}
 	else if (x.isLoading())
 	{
-		m_productionSpeedBonuses.clear();
-		m_productionSpeedBonusBackup.clear();
-		m_productionSpeedBonusFrames.clear();
-		if (m_template)
-		{
-			m_productionSpeedBonuses = m_template->m_productionTimeChanges;
-			m_productionSpeedBonusBackup = m_productionSpeedBonuses;
-			for (const auto &kv : m_productionSpeedBonuses)
+		m_bombardmentBattlePlans = 0;
+		m_holdTheLineBattlePlans = 0;
+		m_searchAndDestroyBattlePlans = 0;
+		m_battlePlanBonuses = BattlePlanBonuses{};
+	}
+	if (v.current >= 5)
+	{
+		// PORT-280: RW 0x6B2B8D .. 0x6B2BBB (retail v>=4): m_productionTimeChanges (+0x2B4, RW 0x6AFD2D), m_startingProductionTimeChanges (+0x2C8,
+		// RW 0x6AFD2D) and m_productionTimeTimers (+0x2DC, RW 0x6AFE32). Fewest encoded bytes per entry: 1-byte string length + 4-byte scalar = 5.
+		auto xferNamedMap = [&](auto &mapRef, const char *what, auto xferVal) {
+			using Map = std::decay_t<decltype(mapRef)>;
+			std::uint32_t n = x.isLoading() ? 0 : (std::uint32_t)mapRef.size();
+			x.xferCount(&n, 5, sizeof(typename Map::value_type) + Xfer::kNodeBytes);
+			if (!x.isLoading())
 			{
-				m_productionSpeedBonusFrames[kv.first] = 0;
+				for (auto &kv : mapRef)
+				{
+					std::string k = kv.first;
+					x.xferAsciiString(&k);
+					xferVal(kv.second);
+				}
+				return;
 			}
+			Map loaded;
+			for (std::uint32_t i = 0; i < n; ++i)
+			{
+				std::string k;
+				x.xferAsciiString(&k);
+				if (loaded.count(k))
+				{
+					throw XferException("player '" + m_name + "': " + std::string(what) + " key '" + k + "' is listed twice");
+				}
+				xferVal(loaded[k]);
+			}
+			mapRef.swap(loaded);
+		};
+		xferNamedMap(m_productionTimeChanges, "a production time change", [&](float &delta) { x.xferReal(&delta); });
+		xferNamedMap(m_startingProductionTimeChanges, "a starting production time change", [&](float &baseline) { x.xferReal(&baseline); });
+		xferNamedMap(m_productionTimeTimers, "a production time timer", [&](int &timerFrames) { x.xferInt(&timerFrames); });
+	}
+	else if (x.isLoading())
+	{
+		resetProductionTimeChanges(m_template);
+	}
+}
+
+namespace
+{
+bool sameRealMap(const std::map<std::string, float> &a, const std::map<std::string, float> &b)
+{
+	if (a.size() != b.size())
+	{
+		return false;
+	}
+	for (auto ia = a.begin(), ib = b.begin(); ia != a.end(); ++ia, ++ib)
+	{
+		if (ia->first != ib->first || std::memcmp(&ia->second, &ib->second, sizeof(float)) != 0)
+		{
+			return false;
 		}
 	}
+	return true;
 }
+} // namespace
 
-// PORT-231: RW 0x006AF3C8
-void Player::setProductionSpeedBonus(const std::string &templateName, float factor, int frames)
+// PORT-280 (fork issue 647): RW 0x6B05C9 .. 0x6B0634 (with pt: copies PlayerTemplate + 0x100, parsed by RW 0x5FD7D9, to Player + 0x2B4 and + 0x2C8, clears
+// + 0x2DC and sets timer 0 per entry) and RW 0x6B06C9 .. 0x6B06E5 (without pt: clears all three maps).
+void Player::resetProductionTimeChanges(const PlayerTemplate *pt)
 {
-	if (m_productionSpeedBonusBackup.find(templateName) == m_productionSpeedBonusBackup.end())
+	m_productionTimeChanges.clear();
+	m_startingProductionTimeChanges.clear();
+	m_productionTimeTimers.clear();
+	if (!pt)
 	{
-		m_productionSpeedBonusBackup[templateName] = 0.0f;
+		return;
 	}
-	m_productionSpeedBonusFrames[templateName] = frames;
-	m_productionSpeedBonuses[templateName] = factor;
+	m_productionTimeChanges = pt->m_productionTimeChanges;
+	m_startingProductionTimeChanges = pt->m_productionTimeChanges;
+	for (const auto &kv : pt->m_productionTimeChanges)
+	{
+		m_productionTimeTimers[kv.first] = 0;
+	}
 }
 
-// PORT-231: RW 0x006AF484
-float Player::getProductionSpeedBonus(const std::string &templateName) const
+bool Player::isProductionTimeUntouched() const
 {
-	auto it = m_productionSpeedBonuses.find(templateName);
-	return it != m_productionSpeedBonuses.end() ? it->second : 0.0f;
+	static const std::map<std::string, float> kEmpty;
+	const std::map<std::string, float> &initial = m_template ? m_template->m_productionTimeChanges : kEmpty;
+	if (m_productionTimeTimers.size() != initial.size() || !sameRealMap(m_startingProductionTimeChanges, initial)
+		|| !sameRealMap(m_productionTimeChanges, m_startingProductionTimeChanges))
+	{
+		return false;
+	}
+	auto ii = initial.begin();
+	for (auto it = m_productionTimeTimers.begin(); it != m_productionTimeTimers.end(); ++it, ++ii)
+	{
+		if (it->first != ii->first || it->second != 0)
+		{
+			return false;
+		}
+	}
+	return true;
 }
 
-// PORT-231: RW 0x006AF269 -> 0x006AF28E
-void Player::updateProductionSpeedBonuses()
+// PORT-280 (fork issue 647): RW 0x6AF3C8 (STL hash_map helpers RW 0x5DD47E find, RW 0x5FD6A5 / RW 0x5FD431 float operator[] / insert, RW 0x6AEFBE /
+// RW 0x6AE82A int operator[] / insert, RW 0x60D23A bucket grow). When `templateName` is absent from m_startingProductionTimeChanges (+0x2C8, RW 0x6AF3E7),
+// records a 0.0f baseline (RW 0x6AF3ED .. 0x6AF3F8) while keeping an existing PlayerTemplate baseline intact; then overwrites m_productionTimeTimers[name]
+// (+0x2DC, RW 0x6AF3FC .. 0x6AF40B) with `frames` and m_productionTimeChanges[name] (+0x2B4, RW 0x6AF40D .. 0x6AF422) with `bonus`.
+void Player::setProductionSpeedBonus(const std::string &templateName, float bonus, int frames)
 {
-	for (auto &kv : m_productionSpeedBonusFrames)
+	if (m_startingProductionTimeChanges.find(templateName) == m_startingProductionTimeChanges.end())
+	{
+		m_startingProductionTimeChanges[templateName] = 0.0f;
+	}
+	m_productionTimeTimers[templateName] = frames;
+	m_productionTimeChanges[templateName] = bonus;
+}
+
+// PORT-280 (fork issue 647): RW 0x6AF429: when `templateName` is in m_productionTimeChanges (+0x2B4, RW 0x6AF445), erases it from +0x2C8, +0x2DC and +0x2B4.
+void Player::removeProductionSpeedBonus(const std::string &templateName)
+{
+	if (m_productionTimeChanges.find(templateName) != m_productionTimeChanges.end())
+	{
+		m_startingProductionTimeChanges.erase(templateName);
+		m_productionTimeTimers.erase(templateName);
+		m_productionTimeChanges.erase(templateName);
+	}
+}
+
+// PORT-280 (fork issue 647): RW 0x6AF484: looks up `templateName` in m_productionTimeChanges (+0x2B4, RW 0x6AF498); returns its float or 0.0f when absent.
+float Player::getProductionTimeChange(const std::string &templateName) const
+{
+	const auto it = m_productionTimeChanges.find(templateName);
+	return it == m_productionTimeChanges.end() ? 0.0f : it->second;
+}
+
+int Player::getProductionTimeTimer(const std::string &templateName) const
+{
+	const auto it = m_productionTimeTimers.find(templateName);
+	return it == m_productionTimeTimers.end() ? 0 : it->second;
+}
+
+// PORT-280 (fork issue 647): RW 0x6AF269 (Player::update, timer walk RW 0x6AF28E .. 0x6AF2DD): each non-zero entry in m_productionTimeTimers (+0x2DC,
+// RW 0x6AF297) is decremented by 1 (RW 0x6AF29D); reaching 0 (RW 0x6AF2A0) restores m_productionTimeChanges[name] from m_startingProductionTimeChanges[name]
+// (RW 0x6AF2A5 .. 0x6AF2C8).
+void Player::updateProductionTimeTimers()
+{
+	for (auto &kv : m_productionTimeTimers)
 	{
 		if (kv.second != 0)
 		{
-			--kv.second;
+			kv.second = (int)((std::uint32_t)kv.second - 1u);
 			if (kv.second == 0)
 			{
-				auto it = m_productionSpeedBonusBackup.find(kv.first);
-				m_productionSpeedBonuses[kv.first] = it != m_productionSpeedBonusBackup.end() ? it->second : 0.0f;
+				m_productionTimeChanges[kv.first] = m_startingProductionTimeChanges[kv.first];
 			}
 		}
 	}
@@ -1062,6 +1148,100 @@ void Player::giveLightPointLevel(const std::string &levelName)
 	if (TheLightPointSystem)
 	{
 		TheLightPointSystem->giveLevel(m_lightPoints, levelName);
+	}
+}
+
+namespace
+{
+bool kindOfIntersects(const KindOfMaskType &a, const KindOfMaskType &b)
+{
+	for (size_t i = 0; i < a.size(); ++i)
+	{
+		if ((a[i] & b[i]) != 0)
+		{
+			return true;
+		}
+	}
+	return false;
+}
+
+void localApplyBattlePlanBonusesToObject(Object &obj, const BattlePlanBonuses &bonus)
+{
+	const bool isProjectile = obj.isKindOfName("PROJECTILE");
+	Object *objectToValidate = isProjectile ? obj.logic().findObjectByID(obj.getProducerID()) : &obj;
+	if (!objectToValidate || !kindOfIntersects(objectToValidate->getKindOf(), bonus.validKindOf))
+	{
+		return;
+	}
+	if (kindOfIntersects(objectToValidate->getKindOf(), bonus.invalidKindOf))
+	{
+		return;
+	}
+	if (!isProjectile)
+	{
+		if (bonus.armorScalar != 1.0f)
+		{
+			if (BodyModuleInterface *body = obj.getBodyModule())
+			{
+				body->applyDamageScalar(bonus.armorScalar); // RW vslot 0x6C
+			}
+		}
+		if (bonus.sightRangeScalar != 1.0f)
+		{
+			obj.setShroudClearingRange(SimMath::mulf32(obj.getBaseShroudClearingRange(), bonus.sightRangeScalar));
+		}
+	}
+	// RW Object + 0x39C/0x39D: WEAPONBONUSCONDITION_BATTLEPLAN_BOMBARDMENT=12, HOLDTHELINE=13, SEARCHANDDESTROY=14
+	obj.setWeaponBonusCondition(12, bonus.bombardment > 0);
+	obj.setWeaponBonusCondition(13, bonus.holdTheLine > 0);
+	obj.setWeaponBonusCondition(14, bonus.searchAndDestroy > 0);
+}
+} // namespace
+
+// RW 0x6AD2B5
+void Player::applyBattlePlanBonusesForObject(Object &obj) const
+{
+	localApplyBattlePlanBonusesToObject(obj, m_battlePlanBonuses);
+}
+
+// RW 0x6AD360
+void Player::removeBattlePlanBonusesForObject(Object &obj) const
+{
+	BattlePlanBonuses inv = m_battlePlanBonuses;
+	inv.armorScalar = SimMath::divf32(1.0f, std::max(inv.armorScalar, 0.01f));
+	inv.sightRangeScalar = SimMath::divf32(1.0f, std::max(inv.sightRangeScalar, 0.01f));
+	inv.bombardment = -1000000;
+	inv.searchAndDestroy = -1000000;
+	inv.holdTheLine = -1000000;
+	localApplyBattlePlanBonusesToObject(obj, inv);
+}
+
+// RW 0x6AD4AE
+void Player::applyBattlePlanBonusesForPlayerObjects(const BattlePlanBonuses &bonus, GameLogic &logic)
+{
+	if (m_battlePlanBonuses.isUntouched())
+	{
+		m_battlePlanBonuses = bonus;
+	}
+	else
+	{
+		m_battlePlanBonuses.armorScalar = SimMath::mulf32(m_battlePlanBonuses.armorScalar, bonus.armorScalar);
+		m_battlePlanBonuses.sightRangeScalar = SimMath::mulf32(m_battlePlanBonuses.sightRangeScalar, bonus.sightRangeScalar);
+		m_battlePlanBonuses.bombardment = std::max(0, m_battlePlanBonuses.bombardment + bonus.bombardment);
+		m_battlePlanBonuses.holdTheLine = std::max(0, m_battlePlanBonuses.holdTheLine + bonus.holdTheLine);
+		m_battlePlanBonuses.searchAndDestroy = std::max(0, m_battlePlanBonuses.searchAndDestroy + bonus.searchAndDestroy);
+		for (size_t i = 0; i < m_battlePlanBonuses.validKindOf.size(); ++i)
+		{
+			m_battlePlanBonuses.validKindOf[i] |= bonus.validKindOf[i];
+			m_battlePlanBonuses.invalidKindOf[i] |= bonus.invalidKindOf[i];
+		}
+	}
+	for (Object *obj = logic.getFirstObject(); obj; obj = obj->getNextObject())
+	{
+		if (obj->getControllingPlayer() == this)
+		{
+			localApplyBattlePlanBonusesToObject(*obj, bonus);
+		}
 	}
 }
 

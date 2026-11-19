@@ -25,9 +25,12 @@
 // countdown 4 * LOGICFRAMES_PER_SECOND, NO_COLLISIONS RW 0x6907D7), cancel by index (RW 0x8A047B / 0x8A03EC) and the record's cancel (RW 0x8A1460).
 // Lane PRODUCTION1: the producer's experience from a made unit and a finished upgrade (RW 0x8A27F9 / 0x8A2015), VeteranUnitsFromVeteranFactory (RW 0x8A27D4),
 // the PRODUCTION rate (RW 0x8A1EBC), the entry's upgrade bit and the upgrade modules of the new unit (RW 0x8A2922 .. 0x8A2946).
+// PORT-280 (fork issue 647): SetBonusModelConditionOnSpeedBonus (data + 0x41 -> UPGRADE_ECONOMY_BONUS bit 332 when Player::getProductionTimeChange(BonusForType)
+// < 0, RW 0x8A1C30 .. 0x8A1C77) and SpeedBonusAudioLoop (data + 0x48, handle module + 0x12C: RW 0x8A1C7C .. 0x8A1D4F starts when bonus < 0 and the producer is
+// neither effectively dead nor UNDER_CONSTRUCTION, else removes; dtor RW 0x8A198B / RW 0x8A1B36 removes at RW 0x8A19FF; xfer RW 0x8A3111 transfers at RW 0x8A35A6).
+// PORT-231 (#554): script naming of produced objects (RW 0x8A253B / 0x8A2624) and horde join of entry + 0x3C (RW 0x8A2A67 -> 0x8A171F -> 0x8A07E0).
 // NOT PORTED (stop S-203): audio (voices), the EVA messages, the BuildFadeInOnCreateList extra objects' drawables, SecondaryQueue selection of the
-// dispatcher is ported but hero queues are not, the pending template name set (RW +0x130) and the score keeper. PORT-231 ported the speed bonus model condition
-// and audio loop (RW 0x8A1C25 .. 0x8A1D4F), script naming of a produced object (RW 0x8A253B / 0x8A2624), and the horde join of entry + 0x3C (RW 0x8A2A67 -> 0x8A171F -> 0x8A07E0).
+// dispatcher is ported but hero queues are not, the pending template name set (RW +0x130) and the score keeper.
 
 #pragma once
 
@@ -169,16 +172,15 @@ public:
 class ProductionUpdate : public UpdateModule, public ProductionUpdateInterface
 {
 public:
-	OBFME_MODULE_XFER(ProductionUpdate) // lane SAVE-4b
-	ProductionUpdate(Thing *thing, const ProductionUpdateModuleData *data);
-	~ProductionUpdate() override;
+	OBFME_MODULE_XFER(ProductionUpdate) // lane SAVE-4b (RW 0x8A3111)
+	ProductionUpdate(Thing *thing, const ProductionUpdateModuleData *data); // RW 0x8A17D8
+	~ProductionUpdate() override;                                           // RW 0x8A198B (deleting RW 0x8A1B36)
 
-	static void registerClass(ModuleFactory &modules);
+	static void registerClass(ModuleFactory &modules); // RW 0x8A18DA name, RW 0x8A192A name key; data dtors RW 0x8A1A9D / RW 0x8A3084
 
 	ProductionUpdateInterface *getProductionUpdateInterface() override { return this; }
-	void onDelete() override;
-	UpdateSleepTime update() override;
-	DisabledMaskType getDisabledTypesToProcess() const override { return m_data->m_disabledTypesToProcess; }
+	UpdateSleepTime update() override;                                                           // RW 0x8A1B9F
+	DisabledMaskType getDisabledTypesToProcess() const override { return m_data->m_disabledTypesToProcess; } // RW 0x8A196F
 	void crc(StateHasher &hasher) const override;
 
 	// ProductionUpdateInterface
@@ -197,10 +199,10 @@ public:
 	bool isSecondaryQueue() const override { return m_data->m_secondaryQueue; }
 	int getProductionCount() const override { return (int)m_queue.size(); }
 	const ProductionEntry *firstProduction() const override { return m_queue.empty() ? nullptr : m_queue.front().get(); }
-	const ProductionEntry *nextProduction(const ProductionEntry *e) const override;
+	const ProductionEntry *nextProduction(const ProductionEntry *e) const override; // RW 0x8A1904
 	void setHoldDoorOpen(int door, bool hold) override;
-	void setFactoryDisabled(bool disabled) override { m_factoryDisabled = disabled; }
-	bool isFactoryDisabled() const override { return m_factoryDisabled; }
+	void setFactoryDisabled(bool disabled) override { m_factoryDisabled = disabled; } // RW 0x8A1916
+	bool isFactoryDisabled() const override { return m_factoryDisabled; }             // RW 0x8A1923
 	float productionCostMultiplier(const ThingTemplate *type) const override;
 	float productionTimeMultiplier(const ThingTemplate *type) const override;
 	void cancelAllProduction() override;
@@ -215,6 +217,9 @@ public:
 	void cancelUnitCreateByBuildIndex(int buildIndex) override;
 	unsigned heroCountdown() const { return m_heroCountdown; } ///< RW + 0x128 (lane HERO-1)
 	unsigned postExitDelay() const { return m_postExitDelay; } ///< RW + 0x118 (lane HERO-1 review: tests)
+	// PORT-280: SpeedBonusAudioLoop handle (RW + 0x12C, kept on the audio side in AudioApi::HELD_PRODUCTION_SPEED_BONUS_LOOP as SpecialAbilityUpdate + 0x38)
+	std::uint32_t speedBonusAudioKey() const { return m_speedBonusAudioKey; }
+	bool speedBonusAudioHeld() const { return m_speedBonusAudioHeld; }
 
 	const ProductionUpdateModuleData *data() const { return m_data; }
 	ObjectID exitingObjectID() const { return m_exitingObjectID; }
@@ -243,6 +248,8 @@ private:
 	void flushModelConditions();
 	void pauseHeroEntries();                                   ///< RW 0x8A0669 (lane HERO-1)
 	void cancelFirstUnitOfType(const ThingTemplate *type);     ///< slot 11, RW 0x8A03EC
+	void startSpeedBonusAudioLoop(int owningPlayerIndex);      ///< RW 0x8A1CDC .. 0x8A1D33 (PORT-280)
+	void stopSpeedBonusAudioLoop();                            ///< RW 0x8A1D35 .. 0x8A1D4F / RW 0x8A19FF (PORT-280)
 
 	const ProductionUpdateModuleData *m_data;
 	std::vector<std::unique_ptr<ProductionEntry>> m_queue; ///< RW +0x28 head .. +0x2C tail
@@ -258,6 +265,6 @@ private:
 	bool m_cancellingAll = false;                          ///< RW +0x11D
 	bool m_factoryDisabled = false;                        ///< RW +0x13C
 	unsigned m_heroCountdown = 0;                          ///< RW +0x128 (lane HERO-1: frames between two revives, RW 0x8A2C1E)
-	bool m_speedBonusSoundActive = false;                  ///< PORT-231: audio-side held handle tracking for HELD_PRODUCTION_SPEED_BONUS
-	std::uint32_t speedBonusSoundKey() const;
+	std::uint32_t m_speedBonusAudioKey;                    ///< PORT-280: audio-side holder key for SpeedBonusAudioLoop (retail handle RW + 0x12C)
+	bool m_speedBonusAudioHeld = false;                    ///< PORT-280: retail + 0x12C != 1 (saved in xfer RW 0x8A35A6, not hashed)
 };

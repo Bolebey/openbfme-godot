@@ -133,8 +133,9 @@ int BuildAssistant::calcTimeToBuild(const ThingTemplate &tt, const Player *playe
 	const float h = 1.0f; // RW 0x7B19BF handicap (S-204)
 	int t = truncToInt(base);
 	t = truncToInt(NumericState::pc24Mul(h, (float)t)); // fimul + _ftol
-	// PORT-231 (RW 0x0073C39E -> 0x006AF484): read player's live speed bonus map (seeded from ProductionTimeChange and updated by ProductionSpeedBonus)
-	const float pct = player ? player->getProductionSpeedBonus(tt.getName()) : 0.0f;
+	// PORT-280: RW 0x73C3E5 .. 0x73C3FF: Player::getProductionTimeChange(tt.getName()) (RW 0x6AF484, called at RW 0x73C3EC) returns the player's live
+	// production time delta (seeded from PlayerTemplate::m_productionTimeChanges by Player::init and overridden while ProductionSpeedBonus runs).
+	const float pct = player ? player->getProductionTimeChange(tt.getName()) : 0.0f;
 	t = truncToInt(NumericState::pc24Mul(NumericState::pc24Add(1.0f, pct), (float)t));
 	if (producer)
 	{

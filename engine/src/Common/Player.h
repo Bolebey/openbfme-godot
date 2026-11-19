@@ -52,6 +52,39 @@ enum PlayerType
 	PLAYER_COMPUTER
 };
 
+struct BattlePlanBonuses
+{
+	float armorScalar = 1.0f;
+	int bombardment = 0;
+	int searchAndDestroy = 0;
+	int holdTheLine = 0;
+	float sightRangeScalar = 1.0f;
+	KindOfMaskType validKindOf{};
+	KindOfMaskType invalidKindOf{};
+	bool isUntouched() const
+	{
+		if (armorScalar != 1.0f || bombardment != 0 || searchAndDestroy != 0 || holdTheLine != 0 || sightRangeScalar != 1.0f)
+		{
+			return false;
+		}
+		for (std::uint32_t w : validKindOf)
+		{
+			if (w != 0)
+			{
+				return false;
+			}
+		}
+		for (std::uint32_t w : invalidKindOf)
+		{
+			if (w != 0)
+			{
+				return false;
+			}
+		}
+		return true;
+	}
+};
+
 class Player
 {
 public:
@@ -138,10 +171,11 @@ public:
 		m_nameKey = key;
 		m_displayName = displayName;
 	}
-	void setPlayerType(PlayerType type, bool skirmish)
+	// RW 0x6AA450: type == PLAYER_COMPUTER (1) upgrades to AISkirmishPlayer when skirmish || AIData.ForceSkirmishAI (+ 0x65)
+	void setPlayerType(PlayerType type, bool skirmish, bool forceSkirmishAI = false)
 	{
 		m_type = type;
-		m_skirmish = skirmish;
+		m_skirmish = skirmish || (type == PLAYER_COMPUTER && forceSkirmishAI);
 	}
 	void setMultiplayerStartIndex(int i) { m_mpStartIndex = i; }
 
@@ -345,19 +379,35 @@ public:
 	void giveLightPointLevel(const std::string &levelName);
 	void removeLightPointLevel(const std::string &levelName);
 
-	// PORT-231 (RW 0x006AF3C8 / 0x006AF484 / 0x006AF269 -> 0x006AF28E): per-template production speed bonuses (seeded from
-	// PlayerTemplate::ProductionTimeChange in init, written by ProductionSpeedBonus::doSpecialPower, ticked down in phase 6).
-	void setProductionSpeedBonus(const std::string &templateName, float factor, int frames);
-	float getProductionSpeedBonus(const std::string &templateName) const;
-	void updateProductionSpeedBonuses();
-	const std::map<std::string, float> &productionSpeedBonuses() const { return m_productionSpeedBonuses; }
-	const std::map<std::string, std::int32_t> &productionSpeedBonusFrames() const { return m_productionSpeedBonusFrames; }
+	// PORT-237 (S-1712): RW 0x6AD2B5 / 0x6AD360 / 0x6AD4AE (Player + 0xAC / 0xB0 / 0xB4 / 0xB8)
+	bool hasActiveBattlePlans() const { return (m_bombardmentBattlePlans + m_holdTheLineBattlePlans + m_searchAndDestroyBattlePlans) > 0; }
+	void applyBattlePlanBonusesForObject(Object &obj) const;
+	void removeBattlePlanBonusesForObject(Object &obj) const;
+	void applyBattlePlanBonusesForPlayerObjects(const BattlePlanBonuses &bonus, GameLogic &logic);
+	const BattlePlanBonuses &battlePlanBonuses() const { return m_battlePlanBonuses; }
+	void setBattlePlanCounts(int bombardment, int holdTheLine, int searchAndDestroy)
+	{
+		m_bombardmentBattlePlans = bombardment;
+		m_holdTheLineBattlePlans = holdTheLine;
+		m_searchAndDestroyBattlePlans = searchAndDestroy;
+	}
+
+	// PORT-280 (fork issue 647): the per-template production time change maps of RW Player + 0x2B4 (active change), + 0x2C8 (template baseline from
+	// PlayerTemplate::m_productionTimeChanges, copied in Player::init RW 0x6B0239 at RW 0x6B05C9 .. 0x6B0634) and + 0x2DC (remaining logic frames).
+	// Key equality is case-sensitive (RW 0x42B6C1 hash / RW 0x4052F9 memcmp).
+	void setProductionSpeedBonus(const std::string &templateName, float bonus, int frames); // RW 0x6AF3C8
+	void removeProductionSpeedBonus(const std::string &templateName);                       // RW 0x6AF429
+	float getProductionTimeChange(const std::string &templateName) const;                   // RW 0x6AF484
+	int getProductionTimeTimer(const std::string &templateName) const;                      // test read of RW + 0x2DC (0 when absent)
+	void updateProductionTimeTimers();                                                      // RW 0x6AF269 (loop RW 0x6AF28E .. 0x6AF2DD)
 
 	void setEconomyHost(PlayerEconomyHost *host) { m_host = host; }
 	PlayerEconomyHost *economyHost() const { return m_host; }
 
 private:
 	PlayerEconomyHost &host() const;
+	void resetProductionTimeChanges(const PlayerTemplate *pt);
+	bool isProductionTimeUntouched() const;
 
 	int m_index;
 	std::string m_name;
@@ -410,8 +460,11 @@ private:
 	std::shared_ptr<TunnelTracker> m_tunnelTracker; ///< lane GARRISON-2 (RW + 0x308)
 	ResourceGatheringManager m_resourceGathering; ///< lane LUMBER1 (RW + 0x304)
 	LightPointTracker m_lightPoints;              ///< PORT-113 (RW + 0x338)
-	// PORT-231 (RW +0x2B4 / +0x2C8 / +0x2DC): active bonus, template baseline backup, remaining frames
-	std::map<std::string, float> m_productionSpeedBonuses;
-	std::map<std::string, float> m_productionSpeedBonusBackup;
-	std::map<std::string, std::int32_t> m_productionSpeedBonusFrames;
+	int m_bombardmentBattlePlans = 0;             ///< PORT-237: RW + 0xAC
+	int m_holdTheLineBattlePlans = 0;             ///< PORT-237: RW + 0xB0
+	int m_searchAndDestroyBattlePlans = 0;        ///< PORT-237: RW + 0xB4
+	BattlePlanBonuses m_battlePlanBonuses;        ///< PORT-237: RW + 0xB8
+	std::map<std::string, float> m_productionTimeChanges;         ///< PORT-280: RW + 0x2B4 (active build time percent delta per ThingTemplate name)
+	std::map<std::string, float> m_startingProductionTimeChanges; ///< PORT-280: RW + 0x2C8 (PlayerTemplate baseline restored when a timer expires)
+	std::map<std::string, int> m_productionTimeTimers;            ///< PORT-280: RW + 0x2DC (remaining frames per ThingTemplate name; 0 = none)
 };

@@ -341,15 +341,17 @@ bool BuildPlacement::isLocationClearOfObjects(GameLogic &logic, const Coord3D &p
 	static const int blockingGate = ObjectTemplateInfoBuilder::kindOfIndex("BLOCKING_GATE");
 	static const int attachedStatus = ObjectTemplateInfoBuilder::objectStatusIndex("ATTACHED");
 
-	const CastleBehaviorModuleData *buildCastle = nullptr;
-	for (const auto &n : build.getFinalOverride()->behaviorModules().nuggets())
-	{
-		if (const auto *cb = dynamic_cast<const CastleBehaviorModuleData *>(n.data.get()))
+	auto templateCastleData = [](const ThingTemplate &t) -> const CastleBehaviorModuleData * {
+		for (const auto &n : t.getFinalOverride()->behaviorModules().nuggets())
 		{
-			buildCastle = cb;
-			break;
+			if (const auto *cb = dynamic_cast<const CastleBehaviorModuleData *>(n.data.get()))
+			{
+				return cb;
+			}
 		}
-	}
+		return nullptr;
+	};
+	const CastleBehaviorModuleData *buildCastle = templateCastleData(build);
 
 	float searchRadius = 0.0f;
 	if (buildCastle)
@@ -359,19 +361,19 @@ bool BuildPlacement::isLocationClearOfObjects(GameLogic &logic, const Coord3D &p
 	}
 	else
 	{
-		// RW 0x796DEE .. 0x796E07: build->getTemplateGeometryInfo().getBoundingSphereRadius() + TheGlobalData->m_maxCastleRadius
-		float buildSphere = 0.0f;
+		// RW 0x796DEE .. 0x796E07: build->getTemplateGeometryInfo().getBoundingCircleRadius() + TheGlobalData->m_maxCastleRadius
+		float buildCircle = 0.0f;
 		if (AIWorld *ai = logic.aiWorld())
 		{
-			buildSphere = ai->movementInfo(*build.getFinalOverride()).geometry.boundingSphereRadius();
+			buildCircle = ai->movementInfo(*build.getFinalOverride()).geometry.boundingCircleRadius();
 		}
 		else
 		{
 			PathfindGeometry pg;
 			ObjectGeometry::fillPathfindGeometry(buildShapes, pg);
-			buildSphere = pg.boundingSphereRadius();
+			buildCircle = pg.boundingCircleRadius();
 		}
-		searchRadius = SimMath::addf32(logic.settings().maxCastleRadius, buildSphere);
+		searchRadius = SimMath::addf32(logic.settings().maxCastleRadius, buildCircle);
 	}
 
 	const bool checkThemCastle = !buildCastle && !(wallSegment >= 0 && templateKindOf(logic, build, "WALL_SEGMENT"));
@@ -399,16 +401,16 @@ bool BuildPlacement::isLocationClearOfObjects(GameLogic &logic, const Coord3D &p
 		}
 
 		// collideFilter RW 0x00661A02
-		if (checkThemCastle)
+		if (checkThemCastle && them.getTemplate())
 		{
-			if (const CastleBehavior *themCastle = CastleBehavior::of(them))
+			if (const CastleBehaviorModuleData *themCastleData = templateCastleData(*static_cast<const ThingTemplate *>(them.getTemplate())))
 			{
 				ObjectGeometry::Shape cyl;
 				cyl.type = ObjectGeometry::SHAPE_CYLINDER;
 				cyl.height = kCastleHeight;
-				cyl.majorRadius = themCastle->data()->m_maxCastleRadius;
-				cyl.minorRadius = themCastle->data()->m_maxCastleRadius;
-				if (NotifyCrushModules::geometriesOverlap(buildShapes, pos, angle, { cyl }, *them.getPosition(), 0.0f))
+				cyl.majorRadius = themCastleData->m_maxCastleRadius;
+				cyl.minorRadius = themCastleData->m_maxCastleRadius;
+				if (NotifyCrushModules::geometriesOverlap(buildShapes, pos, angle, { cyl }, *them.getPosition(), them.getOrientation()))
 				{
 					return true;
 				}

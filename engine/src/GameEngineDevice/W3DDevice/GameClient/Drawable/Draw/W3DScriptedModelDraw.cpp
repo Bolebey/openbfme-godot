@@ -96,6 +96,57 @@ void W3DScriptedModelDraw::rebuildTextureSwaps()
 }
 
 // RW 0x4C1068 (slot 0x84): push 1; push [esi+0x14]; call [eax+0x100] (force = 1)
+const char *W3DScriptedModelDraw::terrainDecalTexture(int type)
+{
+	// RW 0xD99F40 (seven entries; entry 6 repeats EXHordeB_UP as a filler: type 6 is the custom texture of slot 19, Drawable RW 0x672BBB)
+	static const char *const kTextures[6] = { "TERRAIN_DECAL_DEMORALIZED_OBSOLETE", "EXHorde", "EXHorde_UP", "EXHordeB", "EXHordeB_UP", "EXJunkCrate" };
+	return type >= 0 && type < 6 ? kTextures[type] : nullptr;
+}
+
+void W3DScriptedModelDraw::setTerrainDecal(int type, float sizeX, float sizeY, float offsetX, float offsetY)
+{
+	m_hasTerrainDecal = false; // RW 0x4B94CD .. 0x4B94DC: the old decal released
+	if (type >= 7)             // RW 0x4B94E0: TERRAIN_DECAL_NONE
+	{
+		return;
+	}
+	const char *texture = type == 6 ? "EXHordeB_UP" : terrainDecalTexture(type); // RW 0x4B94F8: the table entry, filler included
+	if (!texture)
+	{
+		return;
+	}
+	m_terrainDecal = TerrainDecal{ texture, sizeX, sizeY, offsetX, offsetY, 255 };
+	m_hasTerrainDecal = true;
+}
+
+void W3DScriptedModelDraw::setTerrainDecalTexture(const std::string &texture, float sizeX, float sizeY, float offsetX, float offsetY)
+{
+	m_hasTerrainDecal = false; // RW 0x4B95BE .. 0x4B95CF
+	if (texture.empty())       // RW 0x4B95D2
+	{
+		return;
+	}
+	m_terrainDecal = TerrainDecal{ texture, sizeX, sizeY, offsetX, offsetY, 255 };
+	m_hasTerrainDecal = true;
+}
+
+void W3DScriptedModelDraw::setTerrainDecalSize(float x, float y)
+{
+	if (m_hasTerrainDecal) // RW 0x4B2A1B: the decal's +0x58 / +0x5C
+	{
+		m_terrainDecal.sizeX = x;
+		m_terrainDecal.sizeY = y;
+	}
+}
+
+void W3DScriptedModelDraw::setTerrainDecalOpacity(float opacity)
+{
+	if (m_hasTerrainDecal) // RW 0x4B2A3B -> RadiusDecal::setOpacity RW 0x73228B
+	{
+		m_terrainDecal.opacity = (int)(opacity * 255.0f);
+	}
+}
+
 void W3DScriptedModelDraw::setUpgradeTextureSwaps(const std::vector<std::pair<std::string, std::string>> &swaps)
 {
 	m_upgradeTextureSwaps = swaps;
@@ -641,6 +692,9 @@ void W3DScriptedModelDraw::apply(const AnimationStateInfo *prevState, float frac
 	const int n = (int)S->animations.size();
 	if (n <= 0 && !hasScript)
 	{
+		m_movementRepairInfo = nullptr;
+		m_movementRepairAnimation = nullptr;
+		m_movementRepairQueued = false;
 		// RW 0x4BE602-0x4BE62C
 		if (renderObject)
 		{
@@ -652,6 +706,9 @@ void W3DScriptedModelDraw::apply(const AnimationStateInfo *prevState, float frac
 	}
 	if (renderObject && n == 0)
 	{
+		m_movementRepairInfo = nullptr;
+		m_movementRepairAnimation = nullptr;
+		m_movementRepairQueued = false;
 		clearTrack(0);
 		clearTrack(1);
 	}
@@ -768,7 +825,7 @@ void W3DScriptedModelDraw::apply(const AnimationStateInfo *prevState, float frac
 
 	// RW 0x4BE9FD-0x4BEA4B: the same state and the same animation again does not restart while it plays (unless SimilarRestart)
 	const int idx = m_whichAnim;
-	const W3DAnimationInfo &info = S->animations[(size_t)idx];
+	const W3DAnimationInfo &requestedInfo = S->animations[(size_t)idx];
 	if (prevState == S && !S->similarRestart && idx == prevIdx)
 	{
 		if (m_tracks[0].anim && m_tracks[1].anim)
@@ -784,10 +841,13 @@ void W3DScriptedModelDraw::apply(const AnimationStateInfo *prevState, float frac
 	// RW 0x4BEA51-0x4BEC98: resolve; a missing animation is reported and the others of the state are tried in order
 	std::string resolved;
 	std::string err;
-	const HAnimClass *handle = resolveAnimation(info, &resolved, &err);
+	m_movementRepairInfo = nullptr;
+	m_movementRepairAnimation = nullptr;
+	m_movementRepairQueued = false;
+	const HAnimClass *handle = resolveAnimation(requestedInfo, &resolved, &err);
 	if (!handle)
 	{
-		error("animation " + (info.animationNames.empty() ? info.labelOriginal : info.animationNames[0]) + " of state " + S->stateName + ": " + err);
+		error("animation " + (requestedInfo.animationNames.empty() ? requestedInfo.labelOriginal : requestedInfo.animationNames[0]) + " of state " + S->stateName + ": " + err);
 		if (n > 1)
 		{
 			for (int i = 0; i < n; ++i)
@@ -808,8 +868,13 @@ void W3DScriptedModelDraw::apply(const AnimationStateInfo *prevState, float frac
 	m_lastAnim = m_whichAnim; // RW 0x4BEC9B
 	if (!handle)
 	{
+		handle = repairMissingMovementAnimation(*S, &resolved);
+	}
+	if (!handle)
+	{
 		return;
 	}
+	const W3DAnimationInfo &info = m_movementRepairInfo ? *m_movementRepairInfo : requestedInfo;
 
 	// RW 0x4BECAC-0x4BEDD1: the start frame
 	const int frames = handle->Get_Num_Frames();
@@ -944,6 +1009,105 @@ const HAnimClass *W3DScriptedModelDraw::resolveAnimation(const W3DAnimationInfo 
 	return m_assets.animation(lookup, resolved, err);
 }
 
+// Owner-requested visual repair (S-5920), all editions. TARGET RW 0x4BEC9B..0x4BECA6 (S-001 caveat),
+// DONOR BFME2 0x4BEE25 adjustAnimation (W3DScriptedModelDrawAnimationFrameCount.cpp): no resolved clip leaves
+// the old track. Under MOVING that can hold a completed idle/attack pose while the object slides.
+// This deliberately differs from that failure path: recover a loop on the displayed model, keeping the
+// original error, state, scripts and flags. An omitted Skeleton may be qualified with the loaded hierarchy;
+// an explicit Skeleton is never overridden. A last-resort plain MOVING MOUNTED cycle may supply the pose
+// when the data explicitly binds MOUNTED to the identical model / Skeleton / prefix (Eowyn's disguise does
+// this even without MOUNTED). These are reported presentation inferences, not retail state-selection rules.
+const HAnimClass *W3DScriptedModelDraw::repairMissingMovementAnimation(const AnimationStateInfo &state, std::string *resolved)
+{
+	static const int moving = ModelCondition::indexOf("MOVING");
+	static const int dying = ModelCondition::indexOf("DYING");
+	static const int mounted = ModelCondition::indexOf("MOUNTED");
+	if (state.kind != AnimationStateInfo::KIND_NORMAL || !state.conditions.test(moving) || !m_pendingFlags.test(moving) ||
+		m_pendingFlags.test(dying) || !m_model)
+	{
+		return nullptr;
+	}
+	std::string qualification;
+	auto loop = [&](const W3DAnimationInfo &info) -> const HAnimClass *
+	{
+		if ((info.mode != W3D_ANIM_MODE_LOOP && info.mode != W3D_ANIM_MODE_LOOP_BACKWARDS && info.mode != W3D_ANIM_MODE_LOOP_PINGPONG) ||
+			!(info.speedFactorMin > 0.0f) || !(info.speedFactorMax > 0.0f))
+		{
+			return nullptr;
+		}
+		qualification.clear();
+		std::string error;
+		const HAnimClass *animation = resolveAnimation(info, resolved, &error);
+		if (!animation && m_curModelInfo->skeleton.empty())
+		{
+			W3DAnimationLookup lookup;
+			lookup.skeleton = m_model->HierarchyName;
+			lookup.modelAnimationPrefix = m_curModelInfo->modelAnimationPrefix;
+			for (const std::string &name : info.animationNames)
+			{
+				if (name.find('.') == std::string::npos) lookup.names.push_back(name);
+			}
+			lookup.numbered = m_data.m_staticModelLODMode || m_data.m_switchModelLODMode;
+			lookup.number = m_options.animationLodNumber;
+			if (!lookup.names.empty()) animation = m_assets.animation(lookup, resolved, &error);
+			qualification = "; qualified bare name with displayed hierarchy " + m_model->HierarchyName;
+		}
+		return animation && animation->Get_Num_Frames() >= 2 &&
+			AsciiStringUtil::compareNoCase(animation->Get_HName(), m_model->HierarchyName) == 0 ? animation : nullptr;
+	};
+	auto accept = [&](const W3DAnimationInfo &info, const HAnimClass *animation, const std::string &reason)
+	{
+		m_movementRepairInfo = &info;
+		m_movementRepairAnimation = animation;
+		stop("S-5920", "missing movement animation for " + ModelCondition::describe(state.conditions) + " on model " +
+			m_curModelInfo->modelName() + "; using declared movement cycle " + *resolved + qualification + reason +
+			" (presentation repair, not retail animation parity)");
+		return animation;
+	};
+	auto sameBinding = [&](const ModelConditionInfo *binding)
+	{
+		return binding && binding->modelNames == m_curModelInfo->modelNames && binding->skeleton == m_curModelInfo->skeleton &&
+			binding->modelAnimationPrefix == m_curModelInfo->modelAnimationPrefix;
+	};
+	// Prefer the requested directional / combat cycle when the only missing piece is its hierarchy qualifier.
+	if (m_curModelInfo->skeleton.empty())
+	{
+		for (size_t offset = 0; offset < state.animations.size(); ++offset)
+		{
+			const auto &info = state.animations[((size_t)m_whichAnim + offset) % state.animations.size()];
+			if (const HAnimClass *animation = loop(info)) return accept(info, animation, "");
+		}
+	}
+	for (const AnimationStateInfo &candidate : m_data.m_animationStates)
+	{
+		if (&candidate == &state || candidate.kind != AnimationStateInfo::KIND_NORMAL || !candidate.conditions.test(moving) ||
+			!m_pendingFlags.testForAll(candidate.conditions) || !sameBinding(m_data.findBestInfo(candidate.conditions)))
+		{
+			continue; // Never borrow a foot cycle for a mounted model, even if they share a hierarchy.
+		}
+		for (const W3DAnimationInfo &info : candidate.animations)
+		{
+			if (const HAnimClass *animation = loop(info)) return accept(info, animation, "");
+		}
+	}
+	if (!m_pendingFlags.test(mounted))
+	{
+		for (const AnimationStateInfo &candidate : m_data.m_animationStates)
+		{
+			if (candidate.kind != AnimationStateInfo::KIND_NORMAL || candidate.conditions.count() != 2 ||
+				!candidate.conditions.test(moving) || !candidate.conditions.test(mounted)) continue;
+			const ModelConditionInfo *binding = m_data.findBestInfo(candidate.conditions);
+			if (!sameBinding(binding) || !binding->conditions.test(mounted)) continue;
+			for (const W3DAnimationInfo &info : candidate.animations)
+			{
+				if (const HAnimClass *animation = loop(info))
+					return accept(info, animation, "; current model also has a declared MOUNTED binding");
+			}
+		}
+	}
+	return nullptr;
+}
+
 // ---------------------------------------------------------------------------------------------------------------------
 // The three tracks (RW 0x4B55D5 startAnimation, 0x4B349F set, 0x4B3531 clear, 0x4B359F move)
 // ---------------------------------------------------------------------------------------------------------------------
@@ -975,6 +1139,7 @@ void W3DScriptedModelDraw::promote()
 		m_tracks[1] = m_tracks[2];
 		clearTrack(2);
 		initBlend(m_tracks[1]);
+		activateQueuedMovementRepair();
 	}
 	else
 	{
@@ -982,9 +1147,20 @@ void W3DScriptedModelDraw::promote()
 	}
 }
 
+// S-5920 only: the queued repair's speed takes effect when ESC(1,2) makes it visible.
+void W3DScriptedModelDraw::activateQueuedMovementRepair()
+{
+	if (m_movementRepairQueued)
+	{
+		m_speedFactor = m_queuedMovementRepairSpeedFactor;
+		m_movementRepairQueued = false;
+	}
+}
+
 void W3DScriptedModelDraw::startAnimation(const HAnimClass *anim, const std::string &clipName, const W3DAnimationInfo &info, int animationIndex, float startFrame,
 	float speedFactor)
 {
+	const float previousSpeedFactor = m_speedFactor;
 	m_speedFactor = speedFactor; // RW 0x4B55E9
 	W3DDrawTrack t;
 	t.anim = anim;
@@ -1028,6 +1204,12 @@ void W3DScriptedModelDraw::startAnimation(const HAnimClass *anim, const std::str
 			if (m_tracks[1].mustCompleteBlend)
 			{
 				setTrack(2, t); // RW 0x4B56A0: AnimationMustCompleteBlend queues the request in track 2
+				if (m_movementRepairAnimation == anim && m_movementRepairInfo == &info)
+				{
+					m_queuedMovementRepairSpeedFactor = speedFactor;
+					m_movementRepairQueued = true;
+					m_speedFactor = previousSpeedFactor;
+				}
 				return;
 			}
 			if (m_blendCountdown / m_blendInitial < 0.5f)
@@ -1220,12 +1402,17 @@ float W3DScriptedModelDraw::constructionHeightOffset(float objectPercent, bool r
 // ratio of the animation's natural duration to the time the object needs for that distance (200 ms per logic frame).
 void W3DScriptedModelDraw::syncSpeedToMovement()
 {
+	if (m_movementRepairQueued) return; // Preserve the visible blend's sync until the repair leaves track 2.
 	m_speedSync = 1.0f;
-	if (!m_curAnimState || m_whichAnim < 0 || m_whichAnim >= (int)m_curAnimState->animations.size() || !m_options.objectSpeed || !m_tracks[0].anim)
+	const W3DAnimationInfo *playing = playbackAnimationInfo();
+	// S-5920 adaptation only: pair the replacement's Distance with its own handle while it blends in
+	// once it leaves track 2. Ordinary playback retains RW 0x4B67D4's track-0 duration rule.
+	const HAnimClass *animation = m_movementRepairAnimation ? m_movementRepairAnimation : m_tracks[0].anim;
+	if (!playing || !m_options.objectSpeed || !animation)
 	{
 		return;
 	}
-	const float distance = m_curAnimState->animations[(size_t)m_whichAnim].distance;
+	const float distance = playing->distance;
 	if (!(distance > 0.0f))
 	{
 		return;
@@ -1236,7 +1423,7 @@ void W3DScriptedModelDraw::syncSpeedToMovement()
 		return;
 	}
 	const float desiredMs = distance / speed * 200.0f; // RW 0xD9F614
-	const float naturalMs = (float)m_tracks[0].anim->Get_Num_Frames() * 1000.0f / m_tracks[0].anim->Get_Frame_Rate();
+	const float naturalMs = (float)animation->Get_Num_Frames() * 1000.0f / animation->Get_Frame_Rate();
 	if (naturalMs > 0.0f && desiredMs > 0.0f)
 	{
 		m_speedSync = naturalMs / desiredMs;
@@ -1336,6 +1523,7 @@ void W3DScriptedModelDraw::advance(double elapsedMsD)
 			m_tracks[1] = m_tracks[2];
 			clearTrack(2);
 			initBlend(m_tracks[1]);
+			activateQueuedMovementRepair();
 		}
 	}
 	for (W3DDrawTrack &t : m_tracks)
@@ -1383,9 +1571,9 @@ void W3DScriptedModelDraw::advance(double elapsedMsD)
 	}
 
 	// RW 0x4B5497: the opacity ramp of FadeBeginFrame / FadeEndFrame / FadingIn (it needs a begin frame above 0)
-	if (m_whichAnim >= 0 && m_whichAnim < (int)m_curAnimState->animations.size() && m_tracks[0].anim)
+	if (const W3DAnimationInfo *playing = m_tracks[0].anim ? playbackAnimationInfo() : nullptr)
 	{
-		const W3DAnimationInfo &info = m_curAnimState->animations[(size_t)m_whichAnim];
+		const W3DAnimationInfo &info = *playing;
 		if (info.fadeBeginFrame > 0.0f && info.fadeEndFrame > info.fadeBeginFrame)
 		{
 			const float frame = m_tracks[0].frame;

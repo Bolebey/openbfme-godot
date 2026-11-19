@@ -63,20 +63,6 @@ const SpecialPowerTemplate *powerOf(const CommandButton &b)
 	return TheSpecialPowerStore && !b.m_specialPowerName.empty() ? TheSpecialPowerStore->findSpecialPowerTemplate(b.m_specialPowerName) : nullptr;
 }
 
-// the UnitCost test (RW 0x82E000 / 0x82D605): with a cost, the object's horde interface (Object + 0x258 slot 0x7C) member count (slot 0x188, RW 0x82D659)
-// must reach it; no contain or no horde interface: no test. Lane NECRODIE-1: slot 0x188 is RW 0x86C09B, the members without the banner carrier
-// (HordeContain::payloadCount), as the trigger's payment reads it (RW 0x855273)
-bool unitCostMet(const Object &obj, const SpecialPowerTemplate &t)
-{
-	if (t.m_unitCost == 0)
-	{
-		return true;
-	}
-	ContainModuleInterface *c = obj.getContain();
-	const HordeContain *h = c && c->getHordeContainInterface() ? dynamic_cast<const HordeContain *>(c) : nullptr;
-	return !h || h->payloadCount() >= (unsigned)t.m_unitCost;
-}
-
 // RW 0x82C366 (lane WALL-2): the pathfinder exists; the object's AI follows a path (RW 0x6628CD: AIUpdate + 0x1FC 1 or 4, a path, and a node of it carries a
 // waypoint id, RW 0x765522); the ground grid's layer at the object's position (RW 0x6EACB9, the point raised by RW 0xBDD97C: the cell is read at x, y) is a
 // wall top (0x11 and up): every power is refused
@@ -187,12 +173,18 @@ int shroudAt(Object &obj, const Coord3D &loc)
 bool moduleAllows(Object &obj, SpecialPowerModuleInterface &m, const SpecialPowerTemplate &t, const Coord3D *locOrNull)
 {
 	GameLogic &logic = obj.logic();
+	// PORT-249: the module's own location tests come first (RW 0x8C744B, OCLSpecialPower's slot 0x48, which answers on the caster's disabled mask and its
+	// list's nuggets and then calls the base RW 0x897E01 below); every other class inherits the true of SpecialPowerModule
+	SpecialPowerModule *spm = dynamic_cast<SpecialPowerModule *>(&m);
+	if (locOrNull && spm && !spm->locationRequirementsMet(obj, *locOrNull))
+	{
+		return false;
+	}
 	if (!m.requirementsMet())
 	{
 		return false;
 	}
-	const SpecialPowerModule *spm = dynamic_cast<const SpecialPowerModule *>(&m);
-	if (locOrNull && spm && spm->spData()->m_useDistanceFromCommandCenter)
+	if (locOrNull && spm && spm->spData()->m_useDistanceFromCommandCenter) // RW 0x00896A70 (called at RW 0x897E1E)
 	{
 		const Coord3D &loc = *locOrNull;
 		// RW 0x897D2D: no controlling player -> passes; else the player's COMMANDCENTER objects (RW 0x6B00F3: template + 0x10A bit 1) in the player's object
@@ -228,7 +220,7 @@ bool moduleAllows(Object &obj, SpecialPowerModuleInterface &m, const SpecialPowe
 		const SpecialPowerUpdateInterface *u = dynamic_cast<const SpecialPowerUpdateInterface *>(b.get());
 		if (u && u->drivesSpecialPower(&t)) // slot 0x1C with the module's power (module data + 0x8)
 		{
-			return u->allowsSpecialPowerUse(); // slot 0x20
+			return u->allowsSpecialPowerUse(locOrNull); // slot 0x20; the place: RW 0x897E82 pushes the requirements' first argument (PORT-260: RW 0x893D61 reads it)
 		}
 	}
 	return true;
@@ -537,6 +529,20 @@ bool unportedAnswer(bool *unported, GameLogic &logic, int type)
 
 namespace ActionManager
 {
+// the UnitCost test (RW 0x82E000 / 0x82D605; the control bar's availability arm at RW 0x943439 .. 0x943480 runs the same test): with a cost, the object's
+// horde interface (Object + 0x258 slot 0x7C) member count (slot 0x188, RW 0x82D659) must reach it; no contain or no horde interface: no test. Lane
+// NECRODIE-1: slot 0x188 is RW 0x86C09B, the members without the banner carrier (HordeContain::payloadCount), as the trigger's payment reads it (RW 0x855273)
+bool unitCostMet(const Object &obj, const SpecialPowerTemplate &t)
+{
+	if (t.m_unitCost == 0)
+	{
+		return true;
+	}
+	ContainModuleInterface *c = obj.getContain();
+	const HordeContain *h = c && c->getHordeContainInterface() ? dynamic_cast<const HordeContain *>(c) : nullptr;
+	return !h || h->payloadCount() >= (unsigned)t.m_unitCost;
+}
+
 Stats &stats()
 {
 	static thread_local Stats s;
@@ -620,6 +626,49 @@ bool canUseCommandButton(Object &obj, const CommandButton &button)
 			return false; // RW 0x75CC5A
 		}
 		return logic.getFrame() >= obj.getFireWeaponDeadline(); // RW 0x75CC69
+	}
+	return canDoSpecialPower(obj, powerOf(button));
+}
+
+bool canUseCommandButtonAtObject(Object &obj, const CommandButton &button, Object &target, CommandSourceType source)
+{
+	// RW 0x75CF21(this = button, obj, &target, loc 0, source)
+	GameLogic &logic = obj.logic();
+	if (const UpgradeTemplate *upgrade = buttonUpgrade(button); upgrade && button.m_command != GUI_COMMAND_FIRE_WEAPON)
+	{
+		return upgradeButtonUsable(obj, *upgrade);
+	}
+	const std::uint32_t options = button.m_options;
+	if (options & COMMAND_OPTION_NEED_TARGET_POS)
+	{
+		return false; // RW 0x75CFA1: a location is needed and loc == null
+	}
+	if (options & 7u)
+	{
+		if (const SpecialPowerTemplate *power = powerOf(button))
+		{
+			return canDoSpecialPowerAtObject(obj, &target, source, power, options, false); // RW 0x75CFBF -> RW 0x82D925
+		}
+		// RW 0x75CFD8 -> ActionManager::canFireWeaponAtObject (RW 0x82C3D7): not ported here; fall through to true only when FIRE_WEAPON is ready
+		if (button.m_command == GUI_COMMAND_FIRE_WEAPON)
+		{
+			++stats().fireWeaponButtons;
+			if (const UpgradeTemplate *upgrade = buttonUpgrade(button); upgrade && !obj.hasUpgrade(upgrade))
+			{
+				return false;
+			}
+			return logic.getFrame() >= obj.getFireWeaponDeadline();
+		}
+		return false;
+	}
+	if (button.m_command == GUI_COMMAND_FIRE_WEAPON)
+	{
+		++stats().fireWeaponButtons;
+		if (const UpgradeTemplate *upgrade = buttonUpgrade(button); upgrade && !obj.hasUpgrade(upgrade))
+		{
+			return false;
+		}
+		return logic.getFrame() >= obj.getFireWeaponDeadline();
 	}
 	return canDoSpecialPower(obj, powerOf(button));
 }
@@ -718,7 +767,7 @@ bool canDoSpecialPowerAtLocation(Object &obj, const Coord3D &loc, const SpecialP
 		if (!ai || !world)
 		{
 			// RW 0x6F5BB0 without an AI (+ 0x260) and no set: "Failure 2". Its earlier tests give the same answer: IMMOBILE -> false, and Object + 0x4AC
-			// (RW 0x68C053) is never set in the port (S-4851)
+			// (RW 0x68C053) is written by HordeContain's transform reaction in retail; this shared transient ground override is not set in the port (S-4851)
 			return false;
 		}
 		if (!world->pathfinder().quickDoesPathExist(ai->adapter(), obj.getPosition(), &loc, nullptr))
