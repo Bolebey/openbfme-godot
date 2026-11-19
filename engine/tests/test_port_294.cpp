@@ -146,6 +146,11 @@ TEST_CASE("PORT-294: ObjectCreationUpgrade makes its object at Offset and Angle,
 	CHECK(fortress->hasUpgrade("Port294SpikesKept"));
 	CHECK(watcher->getSlaveID() == spikes->getID());
 
+	// RW 0x8B82AB has no "already ran" test, so the object answers RW 0x694914 with yes for the upgrade that made the module run: the
+	// control bar's upgrade button (RW 0x942733's affectedByUpgrade branch) treats it as applied on this object, where the mux base's
+	// RW 0x8D26F3 would have said no
+	CHECK(fortress->affectedByUpgrade(Player::resolveUpgrade("Port294SpikesBought", false)));
+
 	// a second completion event while the trigger is still there: postUpgradeCheck RW 0x8B8329 answers yes and nothing is pending, so
 	// nothing is made twice and nothing is taken away
 	alice->addCompletedUpgrade("Port294OtherBought");
