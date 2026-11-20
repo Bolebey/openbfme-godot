@@ -8,6 +8,8 @@
 #include "Common/NameKeyGenerator.h"
 #include "GameEngineDevice/W3DDevice/GameClient/Drawable/Draw/W3DScriptedModelDraw.h"
 #include "W3DDrawTestUtil.h"
+#include "EnnorathScenario.h"
+#include "GameClient/DrawableManager.h"
 #include "W3dSynth.h"
 
 #include <cctype>
@@ -252,4 +254,182 @@ TEST_CASE("LOCAL-95: playing animation queries (RW 0x004C0B38 / 0x004C0B88 / 0x0
 	CHECK(frames == 15);
 	CHECK_FALSE(draw.getAnimationFrameCount("NO_SUCH_CLIP", &frames));
 	CHECK_FALSE(draw.getAnimationFrameCount("L9UNIT_RUN", nullptr));
+}
+
+TEST_CASE("LOCAL-95: getPortraitImage (RW 0x004B6789) and getButtonImage (RW 0x004B9460)")
+{
+	const char *ini = R"(
+		DefaultModelConditionState
+			Model = L9UNIT_SKN
+			Skeleton = L9UNIT_SKL
+		End
+		ModelConditionState = USER_1
+			Model = L9UNIT_SKN
+			Skeleton = L9UNIT_SKL
+			ButtonImageName = UPButton_NoPortrait
+		End
+		ModelConditionState = USER_2
+			Model = L9UNIT_SKN
+			Skeleton = L9UNIT_SKL
+			PortraitImageName = UPPortrait_Alt
+			ButtonImageName = UPButton_Alt
+		End
+		IdleAnimationState
+			StateName = STATE_Idle
+			Animation = IDLA
+				AnimationName = L9UNIT_IDLE
+				AnimationMode = LOOP
+			End
+		End
+	End
+	)";
+
+	Rig rig(kAnims, ini);
+	W3DScriptedModelDraw::Options opt;
+	opt.buildBones = false;
+	W3DScriptedModelDraw draw(*rig.data, *rig.drawAssets, rig.random, nullptr, opt);
+
+	CHECK(draw.portraitImageName().empty());
+	CHECK(draw.buttonImageName().empty());
+
+	// USER_1 has ButtonImageName but empty PortraitImageName: RW 0x004B948A..0x004B94AA clears button image.
+	draw.setModelConditionFlags(flagsOf({ "USER_1" }));
+	CHECK(draw.portraitImageName().empty());
+	CHECK(draw.buttonImageName().empty());
+
+	// USER_2 has both PortraitImageName and ButtonImageName: both refresh.
+	draw.setModelConditionFlags(flagsOf({ "USER_2" }));
+	CHECK(draw.portraitImageName() == "UPPortrait_Alt");
+	CHECK(draw.buttonImageName() == "UPButton_Alt");
+}
+
+TEST_CASE("LOCAL-95: shadows/hidden (RW 0x004B26F9 / 0x004B26E4 / 0x004B26E0), mesh overloads (RW 0x004B5809 / 0x004B5814 / 0x004B582B) and decals (RW 0x004B94BC / 0x004B95AD / 0x004B2A1B / 0x004B2A3B)")
+{
+	const char *ini = R"(
+		DefaultModelConditionState
+			Model = L9UNIT_SKN
+			Skeleton = L9UNIT_SKL
+			Shadow = SHADOW_DECAL
+		End
+		IdleAnimationState
+			StateName = STATE_Idle
+			Animation = IDLA
+				AnimationName = L9UNIT_IDLE
+				AnimationMode = LOOP
+			End
+		End
+	End
+	)";
+
+	Rig rig(kAnims, ini);
+	W3DScriptedModelDraw::Options opt;
+	opt.buildBones = false;
+	W3DScriptedModelDraw draw(*rig.data, *rig.drawAssets, rig.random, nullptr, opt);
+
+	// Shadows enabled by default when model state has Shadow (RW 0x004B26F9).
+	CHECK(draw.hasShadow());
+	CHECK(draw.shadowsEnabled());
+	CHECK(draw.shadowRenderEnabled());
+
+	// Shroud obscures shadow render even while shadowsEnabled() stays true (RW 0x004B270B).
+	draw.setFullyObscuredByShroud(true);
+	CHECK(draw.shadowsEnabled());
+	CHECK_FALSE(draw.shadowRenderEnabled());
+	draw.setShadowsEnabled(true);
+	CHECK_FALSE(draw.shadowRenderEnabled());
+	draw.setFullyObscuredByShroud(false);
+	CHECK(draw.shadowRenderEnabled());
+
+	draw.setShadowsEnabled(false);
+	CHECK_FALSE(draw.shadowsEnabled());
+	CHECK_FALSE(draw.shadowRenderEnabled());
+
+	// releaseShadows (RW 0x004B26E4) drops the active shadow.
+	draw.releaseShadows();
+	CHECK_FALSE(draw.hasShadow());
+	CHECK_FALSE(draw.shadowRenderEnabled());
+
+	// isHidden (RW 0x004B26E0).
+	CHECK_FALSE(draw.isHidden());
+	draw.setHidden(true);
+	CHECK(draw.isHidden());
+
+	// Wall/ramp mesh overloads (RW 0x004B5809 / 0x004B5814 / 0x004B582B).
+	CHECK_FALSE(draw.hasWallBoundsMeshOverload());
+	draw.setWallBoundsMeshOverload("WALL_P1");
+	CHECK(draw.hasWallBoundsMeshOverload());
+	CHECK(draw.wallBoundsMeshOverload() == "WALL_P1");
+	draw.setRampMeshOverload("RAMP_L", 0);
+	draw.setRampMeshOverload("RAMP_R", 1);
+	draw.setRampMeshOverload("IGNORED", 2);
+	CHECK(draw.rampMeshOverload(0) == "RAMP_L");
+	CHECK(draw.rampMeshOverload(1) == "RAMP_R");
+	CHECK(draw.rampMeshOverload(2).empty());
+
+	// Terrain decals (RW 0x004B94BC / 0x004B95AD / 0x004B2A1B / 0x004B2A3B).
+	draw.setTerrainDecal(1, 10.0f, 12.0f, 0.0f, 0.0f);
+	REQUIRE(draw.terrainDecal() != nullptr);
+	CHECK(draw.terrainDecal()->texture == "EXHorde");
+	draw.setTerrainDecalSize(20.0f, 24.0f);
+	CHECK(draw.terrainDecal()->sizeX == 20.0f);
+	CHECK(draw.terrainDecal()->sizeY == 24.0f);
+	draw.setTerrainDecalOpacity(0.5f);
+	CHECK(draw.terrainDecal()->opacity == 127);
+	draw.setTerrainDecalTexture("CustomDecal", 5.0f, 5.0f, 0.0f, 0.0f);
+	REQUIRE(draw.terrainDecal() != nullptr);
+	CHECK(draw.terrainDecal()->texture == "CustomDecal");
+	draw.setTerrainDecal(7, 1.0f, 1.0f, 0.0f, 0.0f);
+	CHECK(draw.terrainDecal() == nullptr);
+}
+
+TEST_CASE("LOCAL-95 ENNORATH scenario W3DScriptedModelDraw and W3DHordeModelDraw: real mod unit and horde member through drawable harness")
+{
+	ennorathscenario::World world;
+	if (!world.load("LOCAL-95 ENNORATH scenario W3DScriptedModelDraw"))
+	{
+		return;
+	}
+	hudtest::Rig game(world.shared);
+	std::string error;
+	Object *fighter = game.game->createObject("GondorFighter", game.index(), Coord3D{ 1200.0f, 1200.0f, 0.0f }, 0.0f, &error);
+	REQUIRE_MESSAGE(fighter != nullptr, error);
+	Object *hero = game.game->createObject("GondorAragorn", game.index(), Coord3D{ 1300.0f, 1200.0f, 0.0f }, 0.0f, &error);
+	REQUIRE_MESSAGE(hero != nullptr, error);
+
+	game.logic().runLogicFrame();
+	game.game->refreshClient(1000.0 / 30.0, 0.0);
+
+	auto findPrimaryDraw = [&](Object *obj) -> W3DScriptedModelDraw * {
+		Drawable *d = game.game->drawables().findByObject(obj->getID());
+		if (!d) return nullptr;
+		for (auto &e : d->entries())
+		{
+			if (e.draw) return e.draw.get();
+		}
+		return nullptr;
+	};
+
+	W3DScriptedModelDraw *fighterDraw = findPrimaryDraw(fighter);
+	W3DScriptedModelDraw *heroDraw = findPrimaryDraw(hero);
+	REQUIRE(fighterDraw != nullptr);
+	REQUIRE(heroDraw != nullptr);
+	CHECK(dynamic_cast<W3DHordeModelDraw *>(fighterDraw) != nullptr);
+
+	// Track 0 queries & pause/skip work on real Ennorath GondorFighter (W3DHordeModelDraw) and GondorAragorn (W3DScriptedModelDraw).
+	CHECK_FALSE(fighterDraw->getPlayingAnimationName(0).empty());
+	CHECK_FALSE(heroDraw->getPlayingAnimationName(0).empty());
+
+	std::string animStr, stateStr;
+	heroDraw->buildPlayingAnimationStringInfo(0, &animStr, &stateStr);
+	CHECK(animStr.find("frames(") != std::string::npos);
+	CHECK(stateStr == "(ModelState and AnimState info not available in release)");
+
+	// Pause freezes track 0 frame on real Ennorath hero drawable (RW 0x004B304E / RW 0x004BF62A).
+	const float frameBefore = heroDraw->track(0).frame;
+	heroDraw->setPauseAnimation(true);
+	heroDraw->advance(100.0);
+	CHECK(heroDraw->isAnimationPaused());
+	CHECK(heroDraw->track(0).frame == frameBefore);
+	heroDraw->setPauseAnimation(false);
+	CHECK_FALSE(heroDraw->isAnimationPaused());
 }

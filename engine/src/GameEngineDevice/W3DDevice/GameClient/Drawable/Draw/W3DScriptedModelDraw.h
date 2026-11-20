@@ -376,6 +376,22 @@ public:
 	NameKeyType getPlayingAnimationNameKey(int track, NameKeyGenerator &keys) const; ///< RW 0x004C0B88 (slot +0x2C)
 	void buildPlayingAnimationStringInfo(int track, std::string *outAnim, std::string *outState) const; ///< RW 0x004C0BC0 (slot +0x30)
 	bool getAnimationFrameCount(const std::string &animName, int *outFrames) const; ///< RW 0x004BF0B5 (slot +0x38)
+	// LOCAL-95 (issue #760): portrait/button images, shadow/hidden state and wall/ramp mesh overloads
+	std::string portraitImageName();                       ///< RW 0x004B6789 (primary +0xCC): cached ModelConditionInfo::portraitImageName
+	std::string buttonImageName();                         ///< RW 0x004B9460 (primary +0xD0): cached buttonImageName gated by !portraitImageName.empty()
+	void setShadowsEnabled(bool enable);                   ///< RW 0x004B26F9 (primary +0x30): sets +0x4A and active shadow render flag
+	void releaseShadows();                                 ///< RW 0x004B26E4 (primary +0x34): releases active shadow (+0x58)
+	void setFullyObscuredByShroud(bool obscured);          ///< updates +0x4B shroud mask used by setShadowsEnabled (RW 0x004B270B)
+	bool shadowsEnabled() const { return m_shadowEnabled; }
+	bool shadowRenderEnabled() const { return m_shadowRenderEnabled; }
+	bool hasShadow() const { return m_hasShadow; }
+	bool isHidden() const { return m_hidden; }             ///< RW 0x004B26E0 (primary +0x44): +0x4C
+	void setHidden(bool hidden) { m_hidden = hidden; }
+	void setWallBoundsMeshOverload(const std::string &name); ///< RW 0x004B5809 (primary +0xD4): +0x260
+	void setRampMeshOverload(const std::string &name, int index); ///< RW 0x004B5814 (primary +0xD8): +0x264[index]
+	bool hasWallBoundsMeshOverload() const;                ///< RW 0x004B582B (primary +0xDC): !(+0x260).empty()
+	const std::string &wallBoundsMeshOverload() const { return m_wallBoundsMeshOverload; }
+	const std::string &rampMeshOverload(int index) const;
 
 	// Introspection for tests and tools.
 	const ModelConditionInfo *currentModelState() const { return m_curModelInfo; }
@@ -539,6 +555,17 @@ private:
 	int m_savedAnimMode = W3D_ANIM_MODE_MANUAL; // RW +0x84 (saved mode while paused)
 	bool m_sequentialAnim = false;           // RW +0x28C (set by RW 0x004BF4D9/0x004BF501, cleared by RW 0x004C09C7)
 	bool setAnimationLoopDurationMs(float durationMs); // RW 0x004B2808
+	bool m_shadowEnabled = true;             // RW +0x4A (setShadowsEnabled RW 0x004B26F9)
+	bool m_fullyObscuredByShroud = false;    // RW +0x4B
+	bool m_hidden = false;                   // RW +0x4C (isHidden RW 0x004B26E0)
+	bool m_hasShadow = false;                // RW +0x58 != nullptr
+	bool m_shadowRenderEnabled = false;      // RW (+0x58)->+0x04
+	bool m_portraitImageDirty = true;        // RW +0x2D9 (getPortraitImage RW 0x004B6789)
+	std::string m_cachedPortraitImage;       // RW +0x2DC
+	std::string m_cachedButtonImage;         // RW +0x2E0
+	std::string m_cachedButtonImageKey;      // RW +0x2E4 (getButtonImage RW 0x004B9460)
+	std::string m_wallBoundsMeshOverload;    // RW +0x260 (RW 0x004B5809)
+	std::string m_rampMeshOverload[2];       // RW +0x264 (RW 0x004B5814)
 	float m_opacity = 1.0f;
 	bool m_hiddenByFade = false;
 	float m_constructionPercent = 0.0f;      // RW +0x26C (the object's percent, cached on the first client frame of a logic frame)

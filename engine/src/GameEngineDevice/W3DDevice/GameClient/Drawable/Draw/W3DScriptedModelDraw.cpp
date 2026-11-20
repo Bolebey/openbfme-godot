@@ -104,6 +104,7 @@ const char *W3DScriptedModelDraw::terrainDecalTexture(int type)
 	return type >= 0 && type < 6 ? kTextures[type] : nullptr;
 }
 
+// RW 0x004B94BC (primary vtable slot +0x50, DONOR BFME2 W3DModelDraw_setTerrainDecal.cpp)
 void W3DScriptedModelDraw::setTerrainDecal(int type, float sizeX, float sizeY, float offsetX, float offsetY)
 {
 	m_hasTerrainDecal = false; // RW 0x4B94CD .. 0x4B94DC: the old decal released
@@ -120,6 +121,7 @@ void W3DScriptedModelDraw::setTerrainDecal(int type, float sizeX, float sizeY, f
 	m_hasTerrainDecal = true;
 }
 
+// RW 0x004B95AD (primary vtable slot +0x4C)
 void W3DScriptedModelDraw::setTerrainDecalTexture(const std::string &texture, float sizeX, float sizeY, float offsetX, float offsetY)
 {
 	m_hasTerrainDecal = false; // RW 0x4B95BE .. 0x4B95CF
@@ -131,6 +133,7 @@ void W3DScriptedModelDraw::setTerrainDecalTexture(const std::string &texture, fl
 	m_hasTerrainDecal = true;
 }
 
+// RW 0x004B2A1B (primary vtable slot +0x54)
 void W3DScriptedModelDraw::setTerrainDecalSize(float x, float y)
 {
 	if (m_hasTerrainDecal) // RW 0x4B2A1B: the decal's +0x58 / +0x5C
@@ -140,6 +143,7 @@ void W3DScriptedModelDraw::setTerrainDecalSize(float x, float y)
 	}
 }
 
+// RW 0x004B2A3B (primary vtable slot +0x58)
 void W3DScriptedModelDraw::setTerrainDecalOpacity(float opacity)
 {
 	if (m_hasTerrainDecal) // RW 0x4B2A3B -> RadiusDecal::setOpacity RW 0x73228B
@@ -154,6 +158,7 @@ void W3DScriptedModelDraw::setUpgradeTextureSwaps(const std::vector<std::pair<st
 	setModelState(m_curModelInfo, true);
 }
 
+// RW 0x004C091D (primary vtable slot +0x18, onDrawableBoundToObject; BirthFadeAdditive at +0x154 is Port 245)
 void W3DScriptedModelDraw::initializeState()
 {
 	if (!m_data.findBestInfo(ModelConditionFlags()))
@@ -458,6 +463,9 @@ bool W3DScriptedModelDraw::setModelState(const ModelConditionInfo *state, bool f
 	{
 		m_curModelInfo = state;
 		m_resolvedModelName = resolvedName;
+		m_portraitImageDirty = true; // RW +0x2D9
+		m_hasShadow = state->hasShadow;
+		m_shadowRenderEnabled = m_hasShadow && m_shadowEnabled && !m_fullyObscuredByShroud;
 		if (m_options.buildBones)
 		{
 			m_bones.build(*state, m_model, m_data.m_extraPublicBones, m_options.standardPublicBones, m_options.scale, nullptr, 0.0f);
@@ -468,6 +476,9 @@ bool W3DScriptedModelDraw::setModelState(const ModelConditionInfo *state, bool f
 	// RW 0x4C4679: Rebuild path
 	m_curModelInfo = state;
 	m_resolvedModelName = resolvedName;
+	m_portraitImageDirty = true; // RW +0x2D9
+	m_hasShadow = state->hasShadow;
+	m_shadowRenderEnabled = m_hasShadow && m_shadowEnabled && !m_fullyObscuredByShroud;
 	rebuildTextureSwaps();
 	if (state && (!state->particleSysBones.empty() || !state->fxEvents.empty()))
 	{
@@ -2084,6 +2095,104 @@ bool W3DScriptedModelDraw::getAnimationFrameCount(const std::string &animName, i
 	return true;
 }
 
+// RW 0x004B6789 (primary vtable slot +0xCC, DONOR BFME2 Rva000B7029::GetPortraitImage):
+// lazily refreshes cached portrait image name (+0x2DC) when dirty flag (+0x2D9) is set.
+std::string W3DScriptedModelDraw::portraitImageName()
+{
+	if (m_portraitImageDirty) // RW 0x004B6792
+	{
+		m_portraitImageDirty = false; // RW 0x004B6797
+		if (m_curModelInfo) // RW 0x004B679A..0x004B679F
+		{
+			if (!m_curModelInfo->portraitImageName.empty()) // RW 0x004B67A7..0x004B67AE
+			{
+				m_cachedPortraitImage = m_curModelInfo->portraitImageName; // RW 0x004B67BC
+			}
+			else
+			{
+				m_cachedPortraitImage.clear(); // RW 0x004B67C4
+			}
+		}
+	}
+	return m_cachedPortraitImage; // RW 0x004B67CC
+}
+
+// RW 0x004B9460 (primary vtable slot +0xD0, DONOR BFME2 W3DScriptedModelDraw_getButtonImage.cpp):
+// refreshes cached button image (+0x2E0) whenever buttonImageName (+0x5C) differs case-insensitively from +0x2E4;
+// matches retail's check on !portraitImageName.empty() (+0x60) at RW 0x004B948A..0x004B94AA.
+std::string W3DScriptedModelDraw::buttonImageName()
+{
+	if (m_curModelInfo) // RW 0x004B9464..0x004B9469
+	{
+		if (AsciiStringUtil::compareNoCase(m_cachedButtonImageKey, m_curModelInfo->buttonImageName) != 0) // RW 0x004B9479..0x004B9480
+		{
+			m_cachedButtonImageKey = m_curModelInfo->buttonImageName; // RW 0x004B9485
+			if (!m_curModelInfo->portraitImageName.empty()) // RW 0x004B948A..0x004B9494
+			{
+				m_cachedButtonImage = m_curModelInfo->buttonImageName; // RW 0x004B94A2
+			}
+			else
+			{
+				m_cachedButtonImage.clear(); // RW 0x004B94AA
+			}
+		}
+	}
+	return m_cachedButtonImage;
+}
+
+// RW 0x004B26F9 (primary vtable slot +0x30): stores m_shadowEnabled (+0x4A) and updates active shadow's enabled byte (+0x58 -> +0x04 = enable && !shroud).
+void W3DScriptedModelDraw::setShadowsEnabled(bool enable)
+{
+	m_shadowEnabled = enable; // RW 0x004B2715
+	if (m_hasShadow) // RW 0x004B26FE..0x004B2705
+	{
+		m_shadowRenderEnabled = enable && !m_fullyObscuredByShroud; // RW 0x004B2707..0x004B2712
+	}
+}
+
+// RW 0x004B26E4 (primary vtable slot +0x34): releases active shadow (+0x58) and clears it.
+void W3DScriptedModelDraw::releaseShadows()
+{
+	m_hasShadow = false; // RW 0x004B26F3
+	m_shadowRenderEnabled = false;
+}
+
+void W3DScriptedModelDraw::setFullyObscuredByShroud(bool obscured)
+{
+	m_fullyObscuredByShroud = obscured; // RW +0x4B
+	if (m_hasShadow)
+	{
+		m_shadowRenderEnabled = m_shadowEnabled && !m_fullyObscuredByShroud;
+	}
+}
+
+// RW 0x004B5809 (primary vtable slot +0xD4): assigns WallBoundsMesh overload string (+0x260).
+void W3DScriptedModelDraw::setWallBoundsMeshOverload(const std::string &name)
+{
+	m_wallBoundsMeshOverload = name;
+}
+
+// RW 0x004B5814 (primary vtable slot +0xD8): assigns RampMesh overload string (+0x264[index]).
+void W3DScriptedModelDraw::setRampMeshOverload(const std::string &name, int index)
+{
+	if (index >= 0 && index < 2)
+	{
+		m_rampMeshOverload[index] = name;
+	}
+}
+
+// RW 0x004B582B (primary vtable slot +0xDC): returns true when WallBoundsMesh overload (+0x260) is non-empty.
+bool W3DScriptedModelDraw::hasWallBoundsMeshOverload() const
+{
+	return !m_wallBoundsMeshOverload.empty();
+}
+
+const std::string &W3DScriptedModelDraw::rampMeshOverload(int index) const
+{
+	static const std::string empty;
+	return (index >= 0 && index < 2) ? m_rampMeshOverload[index] : empty;
+}
+
 // ---------------------------------------------------------------------------------------------------------------------
 // W3DHordeModelDraw
 // ---------------------------------------------------------------------------------------------------------------------
@@ -2096,6 +2205,7 @@ int W3DHordeModelDraw::checkedLevel(int lodLevel)
 	return lodLevel;
 }
 
+// RW 0x0047A043 (primary vtable slot +0x18, W3DHordeModelDraw::onDrawableBoundToObject)
 W3DHordeModelDraw::W3DHordeModelDraw(const W3DHordeModelDrawModuleData &data, int lodLevel, W3DDrawAssets &assets, W3DDrawRandom &random,
 	W3DDrawScriptHost *scripts, const Options &options)
 	: W3DScriptedModelDraw(data, assets, random, scripts, options, false)
