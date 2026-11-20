@@ -43,12 +43,6 @@ jobs:
       CCACHE_MAXSIZE: 2G
       CCACHE_NOHASHDIR: "1"
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-          # GitHub's merge of the pull request into main: its first parent is main, so HEAD^1..HEAD is exactly the pull request
-          ref: ${{ github.event_name == 'workflow_dispatch' && format('refs/pull/{0}/merge', inputs.pr) || '' }}
-          fetch-depth: 2
       - name: The pull request of a manual run
         id: manual
         if: github.event_name == 'workflow_dispatch'
@@ -66,6 +60,13 @@ jobs:
           with open(os.environ["GITHUB_OUTPUT"], "a") as f:
               f.write(f"head={p['head']['sha']}\n")
           EOF
+          # a pull request in conflict with main has no refs/pull/<pr>/merge: the checkout below fails, and the report job still marks the head red
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          # GitHub's merge of the pull request into main: its first parent is main, so HEAD^1..HEAD is exactly the pull request
+          ref: ${{ github.event_name == 'workflow_dispatch' && format('refs/pull/{0}/merge', inputs.pr) || '' }}
+          fetch-depth: 2
       - name: Install the build tools
         run: |
           sudo apt-get update -q
