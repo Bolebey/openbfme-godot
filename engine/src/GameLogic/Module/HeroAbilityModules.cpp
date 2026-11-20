@@ -1284,7 +1284,7 @@ void WeaponModeSpecialPowerUpdate::initiate()
 	Object *obj = getObject();
 	if (m_data->m_lockWeaponSlot == 5)
 	{
-		// RW 0x89843E: RW 0x68FDF7 is a popcount over the data's four WeaponSetFlags words (cmp edi, 4); an empty mask skips the loop
+		// RW 0x89843E: RW 0x68FDF7 is a popcount over the data's four WeaponSetFlags words (cmp edi, 4); an empty mask skips the loop. Each set bit goes through RW 0x691059 on the OBJECT (RW 0x89843E .. 0x898470)
 		bool anyFlag = false;
 		for (std::uint32_t word : m_data->m_weaponSetFlags)
 		{
@@ -1296,9 +1296,7 @@ void WeaponModeSpecialPowerUpdate::initiate()
 			{
 				if ((m_data->m_weaponSetFlags[(size_t)bit >> 5] >> (bit & 31)) & 1u)
 				{
-					// RW 0x691059 is an OBJECT method (this + 0x38C, then the weapon set update RW 0x6C99E2 and the model condition mirror
-					// RW 0xC16958): an object without a weapon set keeps the bits in its own words and mirrors the condition just the same.
-					obj->setWeaponSetFlag(bit, true);
+					obj->setWeaponSetFlag(bit, true); // RW 0x691059 is an OBJECT method (Object + 0x38C; weapon set update RW 0x6C99E2, model condition mirror RW 0xC16958): weaponless included
 				}
 			}
 		}
@@ -1328,6 +1326,7 @@ UpdateSleepTime WeaponModeSpecialPowerUpdate::update()
 	Object *obj = getObject();
 	// P-141 (RW 0x8983C1 -> 0x68DF11, Both editions): release lock through Contain/HordeContain even when a horde container itself has no weapons
 	ObjectWeapons::releaseObjectWeaponLock(*obj, LOCKED_PERMANENTLY);
+	// RW 0x8983C8 .. 0x8983EC: the mask's bits, each through RW 0x691106 on the OBJECT
 	for (int bit = 0; bit < 0x68; ++bit)
 	{
 		if ((m_data->m_weaponSetFlags[(size_t)bit >> 5] >> (bit & 31)) & 1u)
@@ -1386,17 +1385,13 @@ DualWeaponBehavior::DualWeaponBehavior(Thing *thing, const DualWeaponBehaviorMod
 UpdateSleepTime DualWeaponBehavior::setClose(bool close)
 {
 	Object *obj = getObject();
-	ObjectWeapons *weapons = obj->getWeapons();
 	static const int kMcClose = modelConditionIndex("WEAPONSTATE_CLOSE_RANGE");
-	const bool isClose = weapons && MaskTest(weapons->weaponSetFlags(), (unsigned)kWeaponSetCloseRange);
+	const bool isClose = MaskTest(obj->getWeaponSetFlags(), (unsigned)kWeaponSetCloseRange); // RW 0x668303 reads the OBJECT's word
 	if (close == isClose)
 	{
 		return (UpdateSleepTime)LOGICFRAMES_PER_SECOND; // RW 0x85E119 / 0x85E16B
 	}
-	if (weapons)
-	{
-		weapons->setWeaponSetFlag(kWeaponSetCloseRange, close); // RW 0x691059 / 0x691106 (7)
-	}
+	obj->setWeaponSetFlag(kWeaponSetCloseRange, close); // RW 0x691059 / 0x691106 (7) on the OBJECT
 	if (obj->testModelCondition(kMcClose) != close) // Object + 0x120 bit 0, then RW 0x68B53C
 	{
 		Object::ModelConditionBits clearBits{}, setBits{};
@@ -1416,8 +1411,7 @@ UpdateSleepTime DualWeaponBehavior::update()
 		return UPDATE_SLEEP_FOREVER;
 	}
 	const int fps = LOGICFRAMES_PER_SECOND;
-	ObjectWeapons *weapons = obj->getWeapons();
-	const bool rampage = weapons && MaskTest(weapons->weaponSetFlags(), (unsigned)kWeaponSetRampage);
+	const bool rampage = MaskTest(obj->getWeaponSetFlags(), (unsigned)kWeaponSetRampage);
 	if (rampage)
 	{
 		return (UpdateSleepTime)fps;
@@ -1430,7 +1424,7 @@ UpdateSleepTime DualWeaponBehavior::update()
 	}
 	if (m_data->m_useHordeRangeWeapon && hordeContainer)
 	{
-		return setClose(weapons && MaskTest(weapons->weaponSetFlags(), (unsigned)kWeaponSetCloseRange)); // RW 0x85E003 .. 0x85E019
+		return setClose(MaskTest(obj->getWeaponSetFlags(), (unsigned)kWeaponSetCloseRange)); // RW 0x85E003 .. 0x85E019
 	}
 	static const int kUsingAbility = modelConditionIndex("USING_SPECIAL_ABILITY"), kMounted = modelConditionIndex("MOUNTED");
 	if (obj->testModelCondition(kUsingAbility))
@@ -2718,6 +2712,7 @@ void ActivateModuleSpecialPower::xfer(Xfer &x)
 	x.xferUnsignedInt(&m_activations);
 }
 
+// RW 0x00894327 (slot 3): SpecialAbilityUpdate::xfer (RW 0x00852782), version 1, m_targets (+0x88), m_current (+0x8C), m_shotsAtCurrent (+0x90), m_done (+0x98), m_shots (+0x94).
 void ArrowStormUpdate::xfer(Xfer &x)
 {
 	SnapshotXfer::version(x, 1, 1);
@@ -2746,6 +2741,7 @@ void FellBeastSwoopPower::xfer(Xfer &x)
 	x.xferUnsignedInt(&m_commands);
 }
 
+// RW 0x008B0923 (slot 3): SpecialAbilityUpdate::xfer (RW 0x00852782), version 2, m_followers (+0x88), m_started (+0x90), m_endFrame (+0x8C), m_inner (+0x94), m_outer (+0x98).
 void RousingSpeechUpdate::xfer(Xfer &x)
 {
 	SnapshotXfer::version(x, 1, 1);
@@ -2758,7 +2754,7 @@ void RousingSpeechUpdate::xfer(Xfer &x)
 	x.xferUnsignedInt(&m_inspired);
 }
 
-// RW 0x0089659F (slot 3): version 1, delegates to SpecialAbilityUpdate::xfer (RW 0x00852782).
+// RW 0x0089659F (slot 3): version 1, delegates to SpecialAbilityUpdate::xfer (RW 0x00852782); RW 0x0089643F (getModuleNameKey).
 // Inherited base tail-calls: RW 0x00896435 (finishAbility -> 0x008530BA), RW 0x0089643A (update -> 0x00854DF7),
 // RW 0x008B0BAC (continuePreparation -> 0x00852A3E), RW 0x00896484 (dtor -> 0x00896415 -> ~SpecialAbilityUpdate 0x00854D9A).
 void TeleportSpecialAbilityUpdate::xfer(Xfer &x)

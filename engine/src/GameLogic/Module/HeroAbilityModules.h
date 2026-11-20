@@ -364,6 +364,8 @@ public:
 	bool active() const { return m_active; }
 
 	const SpecialPowerTemplate *getSpecialPowerTemplate() const override { return m_data->m_specialPowerTemplate; }
+	// RW 0xC873E0 (this class's interface) slot 0x50 = 0x43B160, a CRT pure-call stub (this module keeps no target id)
+	ObjectID getTargetId() const override { return INVALID_ID; }
 	bool isReady() const override { return readyImpl(true); }                          // RW 0x99135D
 	float getPercentReady() const override { return percentImpl(true); }               // RW 0x9913BC
 	unsigned getReadyFrame() const override;                                           // RW 0x991473
@@ -480,6 +482,7 @@ public:
 };
 
 // RW 0x008D0DE6 (ctor), RW 0x008E38D8 (loadPostProcess -> no-op RW 0x0063F3BF)
+// Local 87: RW 0x008D0F50 (scalar deleting destructor).
 class DominateEnemySpecialPower : public SpecialAbilityUpdate
 {
 public:
@@ -509,6 +512,7 @@ public:
 	static void buildFieldParse(MultiIniFieldParse &p);
 };
 
+// Local 87: RW 0x008D21A3 (getModuleName), RW 0x008D21C9 (getModuleNameKey), RW 0x008D220E (dtor).
 class ActivateModuleSpecialPower : public SpecialAbilityUpdate
 {
 public:
@@ -540,6 +544,7 @@ public:
 	static void buildFieldParse(MultiIniFieldParse &p);
 };
 
+// RW 0x00893E7D (getModuleName), RW 0x00893E83 (getModuleNameKey), RW 0x008940E4 (scalar deleting dtor -> 0x00893E4C).
 class ArrowStormUpdate : public SpecialAbilityUpdate
 {
 public:
@@ -582,6 +587,7 @@ public:
 };
 
 // RW 0x008D11DD (ctor), RW 0x008E38D8 (loadPostProcess -> no-op RW 0x0063F3BF)
+// Local 87: RW 0x008D128E (scalar deleting destructor).
 class CurseSpecialPower : public SpecialAbilityUpdate
 {
 public:
@@ -599,6 +605,7 @@ private:
 	unsigned m_cursed = 0;
 };
 
+// Local 87: RW 0x008CB0E0 (getModuleName), RW 0x008CB106 (getModuleNameKey), RW 0x008CB14B (dtor).
 class FellBeastSwoopPower : public SpecialAbilityUpdate
 {
 public:
@@ -633,6 +640,7 @@ public:
 	static void buildFieldParse(MultiIniFieldParse &p);
 };
 
+// RW 0x008B0546 (getModuleName), RW 0x008B054C (getModuleNameKey), RW 0x008B0671 (scalar deleting dtor -> 0x008B050A).
 class RousingSpeechUpdate : public SpecialAbilityUpdate
 {
 public:
@@ -691,6 +699,7 @@ private:
 };
 
 // RW 0x00654884 (create), RW 0x0065197C (ctor)
+// Local 87: RW 0x006548BC (dtor), RW 0x008C6583 (base dtor thunk).
 class SpecialPowerTimerRefreshSpecialPower : public SpecialPowerModule
 {
 public:

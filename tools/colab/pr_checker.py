@@ -127,6 +127,8 @@ def ensure_tree() -> None:
     if not (WT / ".git").exists():
         sh(["git", "worktree", "prune"], cwd=REPO)  # a Colab restart leaves the old tree's registration behind
         sh(["git", "worktree", "add", "--detach", str(WT), "origin/main"], cwd=REPO).check_returncode()
+    # docs/STOPS.md merges by stop id (tools/stops_merge.py, .gitattributes merge=stops; owner 2026-11-19: a line union doubled 67 rows)
+    sh(["git", "config", "merge.stops.driver", "python3 tools/stops_merge.py %O %A %B"], cwd=REPO)
 
 
 def build() -> tuple[bool, str]:
@@ -367,6 +369,28 @@ def own_tests(diff: str, title: str) -> list[str]:
     return sorted(pats)
 
 
+def own_test_missing(pr: dict, diff: str) -> list[str]:
+    """tools/ci/own_test_check.py's rule on this PR (opened after the rule): the added test prefixes no text shows passing."""
+    for d in (Path(__file__).resolve().parents[1] / "ci", WT / "tools" / "ci"):  # a checkout's own, else the checker tree's
+        if (d / "own_test_check.py").exists() and str(d) not in sys.path:
+            sys.path.insert(0, str(d))
+    try:
+        import own_test_check as ot
+    except ImportError:
+        return []
+    if (pr.get("createdAt") or "") < ot.RULE_SINCE:
+        return []
+    texts = [pr.get("body") or ""]
+    try:
+        texts += [c.get("body") or "" for c in json.loads(gh("pr", "view", str(pr["number"]), "--json", "comments")).get("comments") or []]
+        m = re.search(r"(?:closes|fixes|resolves)\s+#(\d+)", pr.get("body") or "", re.I)
+        if m:
+            texts += [c.get("body") or "" for c in json.loads(gh("issue", "view", m.group(1), "--json", "comments")).get("comments") or []]
+    except Exception:
+        pass
+    return ot.missing(diff, [t for t in texts if not ot.BOT.match(t)])
+
+
 def check_pr(pr: dict, state: dict, main_sha: str, open_prs: list[dict], comment: bool) -> str:
     n, sha = pr["number"], pr["headRefOid"]
     sh(["git", "fetch", "-q", "origin", f"+pull/{n}/head:refs/prcheck/{n}"]).check_returncode()
@@ -427,6 +451,14 @@ def check_pr(pr: dict, state: dict, main_sha: str, open_prs: list[dict], comment
             "❌ **Матрица ухудшает кнопки, проходившие на main**, без объяснения в `docs/ennorath/matrix_explain.d/<задача>.md` " \
             "(строка `` `<объект> <кнопка>`: почему ``; ошибка теста — чинить тест, а не объяснять)"
         lines += [head, "```", out[:3500], "```"]
+    # owner 2026-11-19: a PR that adds tests shows them passing (tools/ci/own_test_check.py, the same rule as the Actions check "Own test
+    # shown passing"): without the line it goes back at once, no build spent on it (PR 721's test had never compiled)
+    miss = own_test_missing(pr, diff)
+    if miss:
+        lines.append("❌ **Свой тест не показан пройденным**: для " + ", ".join(f"`{m}*`" for m in miss) + " нет строки итога doctest "
+                     "(`[doctest] test cases: N | N passed | 0 failed`) в описании PR, его комментариях или отчёте в issue. Собери, прогони свой "
+                     "тест и вставь итог в описание PR. Сборка не запускалась.")
+        return finish(n, sha, lines, comment, state)
     t_build = time.time()
     status("prcheck", f"PR #{n} ({pr['title'][:60]}): сборка")
     ok, err = build()
@@ -669,6 +701,27 @@ def sync_from_comments(p: dict, state: dict) -> None:
     save_state(state)
 
 
+# Owner 2026-11-20: GitHub Actions builds every PR and runs its own tests first (.github/workflows/fork-pr.yml, the job of this name, for this
+# repository's PRs too); the sandbox checks a PR only when that job is green on its head, so a build failure or a red own test costs a runner,
+# not an hour of the sandbox. A head pushed before the rule (no run of the job) is checked as before.
+ACTIONS_CHECK = "Fork PR: build and own tests"
+ACTIONS_FROM = 1795208400   # 2026-11-20 21:00 UTC: heads committed earlier have no run of the job for all PRs
+
+
+def actions_check(head: str) -> str:
+    """The job's conclusion on this commit ('success', 'failure', ...), 'running', or '' when it has not run."""
+    name = ACTIONS_CHECK.replace(" ", "%20").replace(":", "%3A")
+    done = subprocess.run(["gh", "api", f"repos/{GH}/commits/{head}/check-runs?check_name={name}"], capture_output=True, text=True,
+                          encoding="utf-8", errors="replace", env=dict(os.environ, GH_TOKEN=token()))
+    if done.returncode:
+        raise RuntimeError(f"gh api check-runs: {done.stderr.strip()[:300]}")
+    runs = json.loads(done.stdout).get("check_runs") or []
+    if not runs:
+        return ""
+    last = max(runs, key=lambda r: r.get("started_at") or "")
+    return last.get("conclusion") or "running"
+
+
 def head_time(n: int | str) -> int:
     """The committer time of the PR's head (refs/prcheck/N, fetched each cycle): when its agent last pushed. Not updatedAt, which every
     comment moves, the checker's own report too."""
@@ -695,7 +748,7 @@ def cycle(args) -> int:
     sh(["git", "fetch", "-q", "origin"], cwd=REPO).check_returncode()
     main_sha = sh(["git", "rev-parse", "origin/main"], cwd=REPO).stdout.strip()
     prs = json.loads(gh("pr", "list", "--state", "open", "--limit", "100", "--json",
-                        "number,title,body,headRefOid,headRefName,files,isDraft,updatedAt,isCrossRepository,headRepositoryOwner"))
+                        "number,title,body,headRefOid,headRefName,files,isDraft,updatedAt,createdAt,isCrossRepository,headRepositoryOwner"))
     sh(["git", "fetch", "-q", "origin", "+refs/pull/*/head:refs/prcheck/*"], cwd=REPO)  # the heads, for the batch test below
     # A red PR whose description changed is checked again without a new commit: an agent that only names a pin's cause in the PR body
     # (the named-pin rule reads the body) gets its new verdict (PR 583, 2026-11-17).
@@ -743,6 +796,25 @@ def cycle(args) -> int:
                        f"⏸️ **PR #{p['number']} не проверялся заново** (песочница {SANDBOX}, голова {p['headRefOid'][:8]}): {what}."],
                        not args.no_comment, state)
             continue
+        if args.pr is None:
+            n, head = str(p["number"]), p["headRefOid"]
+            ci = actions_check(head)
+            if ci in ("", "running") and (ci == "running" or head_time(n) >= ACTIONS_FROM):
+                if state.setdefault("actions_wait", {}).get(n) != head:
+                    print(f"#{n}: waits for GitHub Actions ({ci or 'not started'})", flush=True)
+                    state["actions_wait"][n] = head
+                    save_state(state)
+                continue
+            if ci not in ("", "success", "neutral", "skipped"):
+                if state.setdefault("actions_red", {}).get(n) != head:
+                    print(f"#{n}: GitHub Actions {ci}: not checked here", flush=True)
+                    if not args.no_comment:
+                        gh("pr", "comment", n, "--body", f"<!-- prcheck {head} -->\n❌ **PR #{n} не проверялся в песочнице** (голова {head[:8]}): "
+                           f"в GitHub Actions красная проверка «{ACTIONS_CHECK}» ({ci}) — сборка или свои тесты. Ошибки — в аннотациях проверки "
+                           "на вкладке Checks этого PR. Исправь и запушь: Actions проверит заново, песочница возьмёт PR после зелёного результата.")
+                    state["actions_red"][n] = head
+                    save_state(state)
+                continue
         keep.append(p)
     todo = keep
     held = check_claims()

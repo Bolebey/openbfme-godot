@@ -1243,7 +1243,7 @@ void Object::setCapturedTeam(Team *team)
 	// owner's P-122), the unit in the doorway leaves for the old team and releaseLastExit frees a partial horde
 	if (ProductionUpdateInterface *production = getProductionUpdate())
 	{
-		production->cancelAndReleaseAllProduction(); // RW 0x69974D -> RW 0x8A1666
+		production->cancelAndReleaseAllProduction(); // RW 0x69974D -> getDie RW 0x008A18ED -> onDie RW 0x008A05A7 -> RW 0x8A1666
 	}
 	// S-1225, still unported: RW 0x699750 .. 0x6997A7 counts the structure in the old and the new player's score keeper (RW 0x79F0E1 on Player + 0x3DC,
 	// for two active players) and tells the client (RW 0x6D9A71, a local player only); RW 0x699792 sets the undetected-defector bit (+ 0x458 bit 1,
@@ -2029,11 +2029,11 @@ void Object::giveUpgrade(const UpgradeTemplate *upgrade)
 	}
 	giveUpgradeSelf(upgrade);
 	ContainModuleInterface *contain = getContain();
-	if (!contain || !contain->getHordeContainInterface())
+	if (!contain)
 	{
-		return; // INFERENCE: only HordeContain's slot 0x174 (RW 0x87566B) was read; the other contain classes' slot is not ported (S-483)
+		return;
 	}
-	// RW 0x87566B: the templates of the set bits in bit order, then every member in list order (the second list at HordeContain + 0x150 is S-486)
+	// RW 0x006938B3 (contain slot 0x174): HordeContain RW 0x87566B and HordeTransportContain / HordeSiegeEngineContain RW 0x0087A988
 	std::vector<const UpgradeTemplate *> granted;
 	for (unsigned bit = 0; bit < UpgradeMaskType::BITS; ++bit)
 	{
@@ -2044,6 +2044,11 @@ void Object::giveUpgrade(const UpgradeTemplate *upgrade)
 				granted.push_back(t);
 			}
 		}
+	}
+	if (!contain->getHordeContainInterface())
+	{
+		contain->onContainerUpgrade(granted);
+		return;
 	}
 	if (const ContainModuleInterface::ContainedItemsList *items = contain->getContainedItemsList())
 	{
@@ -2307,6 +2312,13 @@ void Object::setArmorSetFlag(int bit, bool on)
 	if (bit < 0 || bit >= 32)
 	{
 		throw std::logic_error("Object::setArmorSetFlag: bit out of range");
+	}
+	// PORT-302: retail writes an armor-set condition through the body: ArmorUpgrade calls body slot 0x34 / 0x38
+	// (RW 0x8B761E, call at RW 0x8B76A5). InactiveBody's slots are the `ret 4` stub RW 0x9F3A3C and slot 0x3C
+	// returns zero flags (RW 0x8C1AC3), so the condition must not reach this object's mask.
+	if (getBodyModule() && getBodyModule()->ignoresArmorSetFlagChanges())
+	{
+		return;
 	}
 	if (on)
 	{

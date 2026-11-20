@@ -14,6 +14,7 @@
 #include "GameLogic/SnapshotXfer.h"
 #include "Common/Thing/ThingTemplate.h"
 #include "GameLogic/AI/AIWorld.h"
+#include "GameLogic/AttributeModifiers.h"
 #include "GameLogic/AI/TurretAI.h"
 #include "GameLogic/Combat/CombatNames.h"
 #include "GameLogic/Combat/CombatQueries.h"
@@ -89,6 +90,18 @@ void addBit(Object::ModelConditionBits &bits, int bit)
 {
 	bits[(size_t)bit >> 5] |= 1u << (bit & 31);
 }
+
+// RW 0x6C97F9 / 0x6C98E6: the five weapon lock conditions are a single mask, not independent slot state.
+// DONOR BFME2 0x002C8AAE / 0x002C8B9B (WeaponSetSetWeaponLock.cpp).
+void clearWeaponLockConditions(Object &owner)
+{
+	Object::ModelConditionBits clear{};
+	for (int i = 0; i < 5; ++i)
+	{
+		addBit(clear, slotConditions(i).lockBit);
+	}
+	owner.clearAndSetModelConditionFlags(clear, Object::ModelConditionBits{});
+}
 } // namespace
 
 // RW 0x73D89F / 0x73D917 (the same best match as FindArmorTemplateSet over the 128 bit set conditions): the most conditions met first, then the fewest unmet
@@ -133,7 +146,14 @@ public:
 	// PORT-114 (issue #298): GameData's global WeaponBonus set (RW 0x6CA7CF: `mov ecx,[eax+0xAD0]` with eax = [0xDE4364], tested before the add at
 	// RW 0x6CA4B5); null when no GameData block of the load set named WeaponBonus, which is RW's own null test
 	const WeaponBonusSet *globalWeaponBonusSet() override { return m_w.owner().logic().settings().globalWeaponBonusSet.get(); }
-	float rateOfFireAttributeProduct() override { return 1.0f; }              // the attribute modifiers (S-320)
+	// RW 0x6CEF6D (Weapon::privateFireWeapon) -> RW 0x6CF042: source->getAttributeModifierProduct(0x15, &factor, nullptr, true) (RW 0x68C82D).
+	// Pure const read on the owner's pool (safe on the PERF-WS logic job pool).
+	float rateOfFireAttributeProduct() override
+	{
+		float rof = 1.0f;
+		m_w.owner().attributeModifierProduct(ATTRIBUTE_RATE_OF_FIRE, nullptr, true, rof);
+		return rof;
+	}
 	// lane PERF-WS: the two reads below run on the logic job pool (computeWeaponStatusConditions through Weapon::getStatus): keep them reads when
 	// S-320 is ported
 	// ProjectileFilterInContainer (Weapon template + 0x120), RW 0x6CD298: the owner (RW 0x449681 of [weapon + 8]) whose template's filter is set
@@ -253,7 +273,9 @@ class ObjectWeapons::RangeHost : public WeaponRangeHost
 public:
 	explicit RangeHost(ObjectWeapons &w) : m_w(w) {}
 	ObjectWeapons &m_w;
-	bool rangeAttributeSum(float &) override { return false; }
+	// RW 0x6CA61F (WeaponRangeScale) -> RW 0x6CA641: source->getAttributeModifierSum(7, &sum, nullptr) (RW 0x68C818).
+	// Pure const read on the owner's pool (safe on the PERF-WS logic job pool).
+	bool rangeAttributeSum(float &sum) override { return m_w.owner().attributeModifierSum(ATTRIBUTE_RANGE, nullptr, sum); }
 	// lane GARRISON-1: GameData GarrisonedRangeMultiplier (RW + 0x1224; RW 0x6CA61F applies it when >= 0 and the source is INSIDE_GARRISON)
 	float garrisonRangeScale() override { return m_w.owner().logic().settings().garrisonedRangeMultiplier; }
 	// lane GARRISON-1: RW 0x6FF412(source, 3): with an AI, the bounding radius plus the vision range (RW 0x68E43B: Object + 0x1B0, the template's VisionRange; its
@@ -557,6 +579,9 @@ WeaponRangeHost &ObjectWeapons::rangeHost()
 // ---------------------------------------------------------------------------------------------------------------------------------
 // the set
 // ---------------------------------------------------------------------------------------------------------------------------------
+// lane ANIM-1: RW 0x68DECA (set) / 0x6911B7 (clear) Object::setWeaponSetFlags / clearWeaponSetFlags: every bit of the mask, then ONE weapon set update (RW
+// 0x6C99E2); the clear, then RW 0x6911B7's second loop: every bit the mask names whose mapped model condition the owner has, cleared one by one (RW 0x68B53C).
+// The set touches no model condition (RW does not there either)
 void ObjectWeapons::setWeaponSetFlags(const WeaponSetFlags &mask, bool on)
 {
 	for (size_t i = 0; i < m_flags.size(); ++i)
@@ -564,6 +589,21 @@ void ObjectWeapons::setWeaponSetFlags(const WeaponSetFlags &mask, bool on)
 		m_flags[i] = on ? (m_flags[i] | mask[i]) : (m_flags[i] & ~mask[i]);
 	}
 	updateWeaponSet();
+	if (on || !m_owner)
+	{
+		return;
+	}
+	for (int bit = 0; bit < 128; ++bit) // RW's loop is bits 0..0x67; WeaponSetModelCondition answers -1 beyond the table
+	{
+		if ((mask[(size_t)bit >> 5] >> (bit & 31)) & 1u)
+		{
+			const int condition = WeaponSetModelCondition(bit);
+			if (condition >= 0 && m_owner->testModelCondition(condition))
+			{
+				m_owner->setModelConditionState(condition, false); // RW 0x6911B7's per-bit mirror
+			}
+		}
+	}
 }
 
 // lane ANIM-1: RW 0x691059 (set) / 0x691106 (clear) Object::setWeaponSetFlag / clearWeaponSetFlag: the flag, the set update (RW 0x6C99E2), then the model
@@ -661,7 +701,7 @@ void ObjectWeapons::rebuildWeapons(const WeaponTemplateSet *set)
 	m_set = set;
 	if (!(old && set && set->m_isWeaponLockSharedAcrossSets))
 	{
-		m_lockType = NOT_LOCKED;
+		releaseWeaponLock(LOCKED_PERMANENTLY); // RW 0x6C99E2, non-shared lock on a weapon set change
 		m_curSlot = PRIMARY_WEAPON;
 	}
 	if (!set)
@@ -800,16 +840,17 @@ bool ObjectWeapons::setWeaponLock(int slot, WeaponLockType type)
 	{
 		return false;
 	}
-	if (m_lockType == LOCKED_PERMANENTLY && type == LOCKED_TEMPORARILY)
+	if (type == LOCKED_PERMANENTLY || (type == LOCKED_TEMPORARILY && m_lockType != LOCKED_PERMANENTLY))
 	{
-		return false; // a temporary lock never overrides a permanent one
+		m_curSlot = slot;
+		m_lockedSlot = slot;
+		m_lockType = type;
 	}
-	m_curSlot = slot;
-	m_lockedSlot = slot;
-	m_lockType = type;
-	if (slot < 5)
+	// A temporary request against a permanent lock succeeds without changing the selected slot (RW 0x6C983E).
+	clearWeaponLockConditions(*m_owner);
+	if (m_curSlot < 5)
 	{
-		m_owner->setModelConditionState(slotConditions(slot).lockBit, true);
+		m_owner->setModelConditionState(slotConditions(m_curSlot).lockBit, true);
 	}
 	return true;
 }
@@ -849,11 +890,8 @@ void ObjectWeapons::releaseWeaponLock(WeaponLockType type)
 	}
 	if (type == LOCKED_PERMANENTLY || (type == LOCKED_TEMPORARILY && m_lockType == LOCKED_TEMPORARILY))
 	{
-		if (m_lockedSlot < 5)
-		{
-			m_owner->setModelConditionState(slotConditions(m_lockedSlot).lockBit, false);
-		}
 		m_lockType = NOT_LOCKED;
+		clearWeaponLockConditions(*m_owner);
 	}
 }
 
