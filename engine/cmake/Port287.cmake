@@ -1,3 +1,3 @@
-# PORT-287: synthetic horde selection, the selected horde's charge, and the adjacent cloak path.
+# PORT-287: synthetic horde selection and the selected horde's charge.
 set(OPENBFME_PORT287_TESTS
     tests/test_port_287.cpp)

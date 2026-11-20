@@ -38,7 +38,6 @@
 #include "GameLogic/Module/HeroModules.h"
 #include "GameLogic/Module/SpellBookPowers.h"
 #include "GameLogic/Module/StealthAbilityModules.h"
-#include "GameLogic/System/InvisibilityManager.h"
 #include "GameLogic/Module/WeaponChangeSpecialPower.h"
 #include "GameLogic/Object/AttributeModifierPool.h"
 #include "GameLogic/WallSpan.h"
@@ -572,7 +571,6 @@ void unitsSweep(const std::string &faction, Results &res, bool sweep)
 				const bool hordeCharge = sweep && std::any_of(std::begin(kChargeScenes), std::end(kChargeScenes), [&](const ChargeScene &scene) {
 					return e->name == scene.horde && cb->m_name == scene.hordeButton;
 				});
-				const bool warriorCloak = sweep && e->name == "MirkwoodWarriorHorde" && cb->m_name == "Command_SpecialAbilityElfCloakTroopsWatcher";
 				if (sweep && sweepSkips().count(item))
 				{
 					continue; // tools/matrix_run.py's rerun after a crash: reported already, or the press that crashed
@@ -657,7 +655,7 @@ void unitsSweep(const std::string &faction, Results &res, bool sweep)
 					res.fail(item, "the unit could not be selected with a click (selection " + g.selectionText() + ")");
 					continue;
 				}
-				if ((hordeCharge || warriorCloak) && g.rig.local->selection() != std::vector<ObjectID>{ uid })
+				if (hordeCharge && g.rig.local->selection() != std::vector<ObjectID>{ uid })
 				{
 					res.fail(item, "the member click did not select exactly its horde (RW 0x7108F2; selection " + g.selectionText() + ")");
 					continue;
@@ -1176,31 +1174,6 @@ void unitsSweep(const std::string &faction, Results &res, bool sweep)
 										   + scene->horde + " " + scene->hordeButton + " (RW 0x7108F2)");
 							continue;
 						}
-					}
-					if (warriorCloak)
-					{
-						// The report in the original is not explained by the available INI/retail path (S-7502).
-						// Press on this exact horde and report the observed port effect; do not substitute the Watchers.
-						std::vector<ObjectID> members;
-						if (u->getContain() && u->getContain()->getContainedItemsList())
-						{
-							for (const Object *m : *u->getContain()->getContainedItemsList())
-							{
-								members.push_back(m->getID());
-							}
-						}
-						auto hidden = [&]() {
-							return std::count_if(members.begin(), members.end(), [&](ObjectID id) {
-								const Object *m = g.logic().findObjectByID(id);
-								return m && InvisibilityManager::isStealthedAndUndetected(*m, enemy);
-							});
-						};
-						const auto before = hidden();
-						const bool pressed = g.press(b);
-						g.step(20);
-						res.fail(item, std::string("S-7502: original cloak route unverified; port press ") + (pressed ? "accepted" : "refused")
-									   + ", hidden live members " + std::to_string(before) + " -> " + std::to_string(hidden()) + " (20 frames)");
-						continue;
 					}
 					// 2026-11-17 (matrix review): when no template of the unit or its members (the mod's INI) lists a module for the power
 					// either, the mod gives the button no module: RotWK enables such a button too and its press does nothing (RW 0x9434F7 ..

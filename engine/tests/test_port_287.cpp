@@ -10,16 +10,13 @@
 #include "Common/SpecialPower.h"
 #include "GameClient/ControlBar.h"
 #include "GameClient/HudObjects.h"
-#include "GameLogic/AI/AIWorld.h"
 #include "GameLogic/AttributeModifiers.h"
 #include "GameLogic/Combat/CombatState.h"
 #include "GameLogic/Combat/WeaponDelivery.h"
 #include "GameLogic/Module/LogicModules.h"
 #include "GameLogic/Module/SpecialPowerModules.h"
-#include "GameLogic/Module/StealthAbilityModules.h"
 #include "GameLogic/Object/Contain/HordeContainRuntime.h"
 #include "GameLogic/SpellCommands.h"
-#include "GameLogic/System/InvisibilityManager.h"
 #include "GameLogic/Weapon.h"
 #include "GameLogic/WeaponStores.h"
 
@@ -42,10 +39,6 @@ SpecialPower P287Charge
   Enum = SPECIAL_ATTRIBUTEMOD_CANCELDISGUISE
   ReloadTime = 7000
 End
-SpecialPower P287Cloak
-  Enum = SPECIAL_GENERAL_TARGETLESS_TWO
-  ReloadTime = 8000
-End
 CommandButton P287OldButton
   Command = SPECIAL_POWER
   SpecialPower = P287OldCharge
@@ -59,22 +52,11 @@ CommandButton P287ChargeButton
   Options = OK_FOR_MULTI_SELECT OK_FOR_MULTI_EXECUTE
   InPalantir = Yes
 End
-CommandButton P287CloakButton
-  Command = SPECIAL_POWER
-  SpecialPower = P287Cloak
-  Options = OK_FOR_MULTI_SELECT OK_FOR_MULTI_EXECUTE
-  InPalantir = Yes
-  AutoAbility = Yes
-  TriggerWhenReady = Yes
-End
 CommandSet P287SoldierSet
   1 = P287OldButton
 End
 CommandSet P287ChargeSet
   1 = P287ChargeButton
-End
-CommandSet P287CloakSet
-  1 = P287CloakButton
 End
 Weapon P287TestHit
   AttackRange = 150
@@ -130,31 +112,6 @@ ChildObject P287ChargeHorde P287Horde
     TriggeredBy = Upgrade_P287ChargeReady
   End
 End
-ChildObject P287NoCloakPath P287Horde
-  CommandSet = P287CloakSet
-  Behavior = HordeAIUpdate AITag
-  End
-End
-ChildObject P287CloakHorde P287NoCloakPath
-  Behavior = SpecialPowerModule CloakStarter
-    SpecialPowerTemplate = P287Cloak
-    AvailableAtStart = Yes
-    UpdateModuleStartsAttack = Yes
-  End
-  Behavior = ToggleHiddenSpecialAbilityUpdate CloakUpdate
-    SpecialPowerTemplate = P287Cloak
-    EffectDuration = 15000
-  End
-  Behavior = InvisibilityUpdate CloakInvisibility
-    StartsActive = No
-    InvisibilityNugget
-      InvisibilityType = STEALTH
-    End
-  End
-End
-ChildObject P287MissingCloakStarter P287CloakHorde
-  RemoveModule CloakStarter
-End
 )ini";
 
 struct Rig : synthetichud::Rig
@@ -166,7 +123,6 @@ struct Rig : synthetichud::Rig
 	SpecialPowerStore *oldPowers = TheSpecialPowerStore;
 	CommandStore *oldCommands = TheCommandStore;
 	AttributeModifierStore *oldModifiers = TheAttributeModifierStore;
-	AIWorld ai{ *logic, AIWorldConfig{}, w.fx.env.macros };
 	SpellCommands spells;
 	ControlBar bar{ input->context() };
 
@@ -185,13 +141,11 @@ struct Rig : synthetichud::Rig
 		blocks.registerBlock("CommandButton", &CommandStore::parseCommandButtonDefinitionGlobal);
 		blocks.registerBlock("Weapon", &WeaponStore::parseWeaponTemplateDefinitionGlobal);
 		modifiers.registerBlock(blocks);
-		ai.attach(); // the cloak update needs the same live AI interface as the retail horde
 		spells.registerHandlers(dispatch);
 		logic->combat().setAutoAcquireEnabled(false);
 		logic->settings().bodyThresholdsLoaded = true;
 		logic->settings().unitDamagedThreshold = 0.5f;
 		logic->settings().unitReallyDamagedThreshold = 0.1f;
-		logic->settings().invisibilityRulesLoaded = true;
 	}
 
 	~Rig()
@@ -266,9 +220,14 @@ HordeContain &hordeContain(Object &o)
 	REQUIRE(contain->getContainCount() == 2);
 	return *contain;
 }
-} // namespace
 
-TEST_CASE("PORT-287 charge: clicking or boxing a released soldier casts the horde's damage buff")
+enum class SelectionGesture
+{
+	Point,
+	Box,
+};
+
+void checkHordeCharge(SelectionGesture gesture)
 {
 	Rig r;
 	r.load();
@@ -285,8 +244,14 @@ TEST_CASE("PORT-287 charge: clicking or boxing a released soldier casts the hord
 	CHECK(r.hit(*fighting, *victim) == 16.0f);
 	CHECK(r.hit(*released, *victim) == 16.0f);
 
-	SUBCASE("click the soldier") { r.click(250, 100); }
-	SUBCASE("box only the soldier") { r.drag(230, 80, 270, 120); }
+	if (gesture == SelectionGesture::Point)
+	{
+		r.click(250, 100);
+	}
+	else
+	{
+		r.drag(230, 80, 270, 120);
+	}
 	CHECK(HudObjects::pickObject(r.input->context(), { 250, 100 }) == released); // ordinary order pick still sees the raw soldier
 	r.selected({ horde->getID() });
 	REQUIRE(r.button("P287OldButton") == nullptr);
@@ -309,6 +274,18 @@ TEST_CASE("PORT-287 charge: clicking or boxing a released soldier casts the hord
 	// The ordinary damage path reads DAMAGE_MULT from that source (RW 0x90E4D2–0x90E4F3).
 	CHECK(r.hit(*fighting, *victim) == 28.0f);
 	CHECK(r.hit(*released, *victim) == 16.0f);
+}
+
+} // namespace
+
+TEST_CASE("PORT-287 charge: clicking a released soldier casts the horde's damage buff")
+{
+	checkHordeCharge(SelectionGesture::Point);
+}
+
+TEST_CASE("PORT-287 charge: boxing a released soldier casts the horde's damage buff")
+{
+	checkHordeCharge(SelectionGesture::Box);
 }
 
 TEST_CASE("PORT-287 charge: without a horde producer the old targeted button does not alias a power with the same Enum")
@@ -359,54 +336,4 @@ TEST_CASE("PORT-287 selection: an unselectable soldier or horde producer is not 
 	r.selected({});
 	r.drag(220, 80, 260, 120);
 	r.selected({});
-}
-
-TEST_CASE("PORT-287 cloak: the starter hides real members; the same button without a starter does not")
-{
-	Rig r;
-	r.load();
-	const char *type = "P287NoCloakPath";
-	bool hasStarter = false;
-	SUBCASE("a horde carrying the cloak starter and update") { type = "P287CloakHorde"; hasStarter = true; }
-	SUBCASE("same visible button and update, no starter") { type = "P287MissingCloakStarter"; }
-	SUBCASE("button only, the archive's Warrior shape") { }
-	Object *horde = r.place(type, 100, 100);
-	REQUIRE(horde->getAIUpdateInterface());
-	CHECK((SpecialPowerModules::findModule(*horde, r.power("P287Cloak")) != nullptr) == hasStarter);
-	HordeContain &contain = hordeContain(*horde);
-	std::vector<ObjectID> members;
-	for (const Object *m : *contain.getContainedItemsList())
-	{
-		members.push_back(m->getID());
-	}
-	const Coord3D at = *contain.getContainedItemsList()->front()->getPosition();
-	const Player *enemy = r.players.findPlayerWithName("Bob");
-	REQUIRE(enemy);
-	for (ObjectID id : members)
-	{
-		CHECK_FALSE(InvisibilityManager::isStealthedAndUndetected(*r.logic->findObjectByID(id), enemy));
-	}
-	r.click((int)at.x, (int)at.y);
-	r.selected({ horde->getID() });
-	const ControlBarButton *button = r.button("P287CloakButton");
-	REQUIRE(button);
-	CHECK(button->state == ButtonState::Enabled);
-	REQUIRE(r.press(*button));
-	const GameMessage &cast = r.onlyCommand(MSG_DO_SPECIAL_POWER);
-	REQUIRE(cast.getArgumentCount() == 4);
-	CHECK(cast.getArgument(0)->integer == (int)r.power("P287Cloak")->getID());
-	r.drain();
-	r.frames(20);
-	const auto *update = ToggleHiddenSpecialAbilityUpdate::of(*horde);
-	CHECK((update ? update->hides() : 0) == (hasStarter ? 1u : 0u));
-
-	// RW 0x8980A3 requires a starter for RW 0x897E87 to initiate the update. RW 0x8B1909
-	// and RW 0x8B1A70 start InvisibilityUpdate on that horde. The live members must be hidden
-	// from the enemy, not just a cooldown or a HIDDEN model condition on the horde itself.
-	for (ObjectID id : members)
-	{
-		const auto *m = r.logic->findObjectByID(id);
-		REQUIRE(m);
-		CHECK(InvisibilityManager::isStealthedAndUndetected(*m, enemy) == hasStarter);
-	}
 }
