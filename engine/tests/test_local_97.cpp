@@ -17,6 +17,7 @@
 #include "GameLogic/Damage.h"
 #include "GameLogic/GameLogic.h"
 #include "GameLogic/Module/ActiveBody.h"
+#include "GameLogic/Module/DamageFieldUpdate.h"
 #include "GameLogic/Module/PoisonedBehavior.h"
 #include "GameLogic/Object/Object.h"
 
@@ -229,4 +230,84 @@ TEST_CASE("LOCAL-97 ENNORATH scenario PoisonedBehavior: CINE_Gloin_TEMP carries 
 		arena.logic.runLogicFrame();
 	}
 	CHECK(gloin->getBodyModule()->getHealth() == hpAfterHit - dealt);
+}
+
+namespace
+{
+const char *kDamageFieldShortRangeIni = R"(
+Weapon Local97ShortRangeFieldWeapon
+	AttackRange = 10.0
+	DamageNugget
+		Damage = 25
+		DamageType = MAGIC
+		DeathType = NORMAL
+	End
+End
+
+Object Local97DamageFieldTower
+	Side = Men
+	KindOf = STRUCTURE SELECTABLE IMMOBILE
+	Geometry = BOX
+	GeometryMajorRadius = 10
+	GeometryMinorRadius = 10
+	GeometryHeight = 20
+	Body = ActiveBody ModuleTag_Body
+		MaxHealth = 500
+	End
+	Behavior = DamageFieldUpdate ModuleTag_DF
+		FireWeaponNugget
+			WeaponName = Local97ShortRangeFieldWeapon
+			FireDelay = 0
+			OneShot = No
+		End
+		Radius = 150.0
+		ObjectFilter = ANY +INFANTRY ENEMIES
+	End
+End
+
+Object Local97FieldVictim
+	Side = Mordor
+	KindOf = SELECTABLE INFANTRY
+	Geometry = CYLINDER
+	GeometryMajorRadius = 5
+	GeometryHeight = 15
+	Body = ActiveBody ModuleTag_Body
+		MaxHealth = 100
+	End
+End
+)";
+} // namespace
+
+TEST_CASE("LOCAL-97 DamageFieldUpdate: fires via forceFireWeapon ignoring weapon AttackRange (RW 0x0089483A -> RW 0x006CF407) and xfer round-trips (RW 0x00894C09)")
+{
+	combattest::CombatWorld world;
+	DamageFieldUpdate::registerClass(world.w.modules);
+	const std::string err = world.w.load(kDamageFieldShortRangeIni, INI_LOAD_OVERWRITE, "local97_df.ini");
+	REQUIRE_MESSAGE(err.empty(), err);
+
+	Object *tower = world.unit("Local97DamageFieldTower", 'A', 200.0f, 200.0f);
+	Object *enemy = world.unit("Local97FieldVictim", 'B', 260.0f, 200.0f); // distance 60 > weapon AttackRange 10, but <= Radius 150
+	REQUIRE(tower != nullptr);
+	REQUIRE(enemy != nullptr);
+
+	auto *df = dynamic_cast<DamageFieldUpdate *>(tower->findModule("DamageFieldUpdate"));
+	REQUIRE(df != nullptr);
+
+	// Advance 1 frame: RW 0x006CF407 ignores weapon AttackRange (10) because victim is inside DamageFieldUpdate Radius (150).
+	world.frames(1);
+	CHECK(enemy->getBodyModule()->getHealth() == 75.0f);
+	REQUIRE(df->victims().size() == 1u);
+	CHECK(df->victims()[0] == enemy->getID());
+
+	// Xfer round-trip (RW 0x00894C09).
+	XferSave save;
+	df->xfer(save);
+	StateHasher hBefore;
+	df->crc(hBefore);
+
+	XferLoad load(save.data());
+	df->xfer(load);
+	StateHasher hAfter;
+	df->crc(hAfter);
+	CHECK(hAfter.value() == hBefore.value());
 }
