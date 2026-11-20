@@ -2,6 +2,8 @@
 //   - StructureCollapseUpdate::getDisabledTypesToProcess (RW 0x00654FD1): collapses while DISABLED_USER_FROZEN.
 #include "doctest.h"
 #include "CombatTestUtil.h"
+#include "EnnorathScenario.h"
+#include "GameLogic/Module/CombatModules.h"
 
 #include "GameLogic/Module/StructureModules.h"
 #include "GameLogic/Module/TransitionDamageFX.h"
@@ -168,4 +170,68 @@ TEST_CASE("LOCAL-98 TransitionDamageFX: onDrawableBoundToObject applies damaged 
 	CHECK(hooks.calls == std::vector<std::string>{
 		"DOOR_OK hide permanent", "DOOR_D2 hide permanent", "DOOR_D1 show permanent" });
 	o->friend_bindToClient(nullptr);
+}
+
+TEST_CASE("LOCAL-98 ENNORATH scenario: IsengardOrthancDoor Pristine subobjects on bind (RW 0x008BDEE5), GondorBarracks collapse while DISABLED_USER_FROZEN (RW 0x00654FD1), GondorFighter SlowDeathBehavior")
+{
+	ennorathscenario::World world;
+	if (!world.load("LOCAL-98 Ennorath death modules scenario"))
+	{
+		return;
+	}
+
+	hudtest::Rig game(world.shared, "map mp fall back 8p", "FactionMen");
+	game.logic().combat().setAutoAcquireEnabled(false);
+	const int p1 = game.index();
+	std::string err;
+
+	// 1. Real Ennorath object with TransitionDamageFX PristineHide/ShowSubObject: IsengardOrthancDoor
+	Object *door = game.game->createObject("IsengardOrthancDoor", p1, Coord3D{ 1700.0f, 2200.0f, 0.0f }, 0.0f, &err);
+	REQUIRE_MESSAGE(door != nullptr, err);
+	Local98SubObjectHooks hooks;
+	door->friend_bindToClient(&hooks);
+	CHECK(hooks.calls == std::vector<std::string>{
+		"IBGATEDOORR_D1 hide permanent",
+		"IBGATEDOORR_D2 hide permanent",
+		"IBGATEDOORL_D1 hide permanent",
+		"IBGATEDOORL_D2 hide permanent",
+		"IBGATEDOORL show permanent",
+		"IBGATEDOORR show permanent" });
+	door->friend_bindToClient(nullptr);
+
+	// 2. Real Ennorath building with StructureCollapseUpdate: GondorBarracks under DISABLED_USER_FROZEN
+	Object *barracks = game.game->createObject("GondorBarracks", p1, Coord3D{ 1850.0f, 2200.0f, 0.0f }, 0.0f, &err);
+	REQUIRE_MESSAGE(barracks != nullptr, err);
+	StructureCollapseUpdate *scu = findCollapse(*barracks);
+	REQUIRE(scu != nullptr);
+	CHECK(scu->getDisabledTypesToProcess() == (DisabledMaskType)(1u << DISABLED_USER_FROZEN));
+	const ObjectID barracksId = barracks->getID();
+	barracks->setDisabled(DISABLED_USER_FROZEN, 1000);
+	barracks->kill(DAMAGE_UNRESISTABLE, DEATH_NORMAL);
+	for (int f = 0; f < 120 && game.logic().findObjectByID(barracksId) != nullptr; ++f)
+	{
+		game.logic().runLogicFrame();
+	}
+	// DestroyObjectWhenDone = Yes -> destroyed once collapse completes despite DISABLED_USER_FROZEN
+	CHECK(game.logic().findObjectByID(barracksId) == nullptr);
+
+	// 3. Real Ennorath unit with SlowDeathBehavior: GondorFighter
+	Object *fighter = game.game->createObject("GondorFighter", p1, Coord3D{ 1950.0f, 2200.0f, 0.0f }, 0.0f, &err);
+	REQUIRE_MESSAGE(fighter != nullptr, err);
+	const ObjectID fighterId = fighter->getID();
+	fighter->kill(DAMAGE_UNRESISTABLE, DEATH_NORMAL);
+	bool activated = false;
+	for (const std::unique_ptr<BehaviorModule> &m : fighter->modules())
+	{
+		if (auto *sd = dynamic_cast<SlowDeathBehavior *>(m.get()))
+		{
+			activated = activated || sd->isSlowDeathActivated();
+		}
+	}
+	CHECK(activated);
+	for (int f = 0; f < 200 && game.logic().findObjectByID(fighterId) != nullptr; ++f)
+	{
+		game.logic().runLogicFrame();
+	}
+	CHECK(game.logic().findObjectByID(fighterId) == nullptr);
 }
