@@ -187,6 +187,18 @@ DozerAIUpdate::~DozerAIUpdate()
 	finishBuildingSound(); // RW 0x88D1F6
 }
 
+void DozerAIUpdate::onOwnerDie()
+{
+	// RW 0x0088BF7A (DozerAIUpdate primary vslot +0x24C; DONOR BFME2 0x00488CF0 DozerAIUpdateCtor.cpp:1811):
+	// if an unplaced phantom structure exists (+0x568 != 0), tail-call DozerAIInterface slot +0x6C (removeUnplacedStructure RW 0x0088CFFE).
+	// Otherwise RW 0x0088BF8E .. 0x0088BFA8 reads m_dozerMachine->getGoalObject() (RW 0x008DBACE) and kills it with
+	// DAMAGE_UNRESISTABLE (8), DEATH_NORMAL (0) (RW 0x00698EC3); in the port DozerPrimaryStateMachine is inlined and has no separate goalObject.
+	if (m_unplacedStructure != INVALID_ID)
+	{
+		removeUnplacedStructure(); // RW 0x0088BF83 .. 0x0088BF8B -> RW 0x0088CFFE
+	}
+}
+
 void DozerAIUpdate::onDelete()
 {
 	AIUpdateInterface::onDelete();

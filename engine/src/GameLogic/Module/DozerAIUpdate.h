@@ -108,7 +108,9 @@ public:
 	~DozerAIUpdate() override; // RW 0x88D1AC: finishBuildingSound (RW 0x88BFA9) first
 	// lane BFME2CAMP1 (review): RW 0x88D1AC's tail: a dozer that still has an unplaced phantom (+ 0x568) removes it (RW 0x88CFFE: the price back, the phantom
 	// destroyed). The port runs it when the dozer is destroyed in the game (Module::onDelete), not in the destructor, which also runs at the logic's teardown
-	void onDelete() override;
+	void onDelete() override; // RW 0x0088CF96
+	// RW 0x0088BF7A (primary vslot +0x24C, called by Object::onDie RW 0x00698FB5): removes an unplaced phantom structure on builder death.
+	void onOwnerDie() override;
 	// RW 0x88E44F (DozerAIUpdate::aiDoCommand): a PLAYER command other than repair (0x13), resume construction (0x14) and move away (0x34) cancels the current task
 	// before it runs (dozer interface slot 0x34) and resets the primary machine
 	void commandAccepted(CommandSourceType source, int command, Object *target) override;
