@@ -813,7 +813,7 @@ TEST_CASE("PORT-198 WeaponSet range uses the combined anti-mask (RW 0x6C8724)")
 	REQUIRE(longAir->getTemplate() != nullptr);
 	REQUIRE(shortGround->getTemplate() != nullptr);
 	CHECK((longAir->getTemplate()->m_antiMask & WEAPON_ANTI_GROUND) == 0);
-	CHECK((shortGround->getTemplate()->m_antiMask & WEAPON_ANTI_GROUND) != 0);
+	CHECK((shortGround->getTemplate()->m_antiMask & WEAPON_ANTI_GROUND) == WEAPON_ANTI_GROUND);
 
 	// The long-range slot is air-only, but the set contains an anti-ground slot. Retail tests the set mask, not the current slot's mask, at 0x6C8724,
 	// so the long range makes this immobile tower's ground/object shot POSSIBLE even though the short ground-only slot cannot reach the target.
