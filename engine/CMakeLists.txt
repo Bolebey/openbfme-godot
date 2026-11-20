@@ -1036,6 +1036,7 @@ add_executable(openbfme_tests
     ${OPENBFME_PORT75_TESTS}
     ${OPENBFME_PORT79_TESTS}
     ${OPENBFME_PORT89_TESTS}
+    tests/test_port_299.cpp # PORT-299: reachable object-level crush revenge
     ${OPENBFME_PORT54_TESTS}
     ${OPENBFME_PORT83_TESTS}
     ${OPENBFME_PORT29_TESTS}
