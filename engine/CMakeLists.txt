@@ -235,6 +235,7 @@ include(cmake/Port213.cmake)    # PORT-213: Multi-select Palantir context picks 
 include(cmake/Port272.cmake)    # PORT-272: update the text of the visible command help on a toggle
 include(cmake/Port221.cmake)    # PORT-221: multi-selected horde abilities, weapon toggles, and mixed-selection HUD/dispatch (issue #531, P-140; OPENBFME_PORT221_TESTS)
 include(cmake/Port270.cmake)    # PORT-270: several units selected, a bought upgrade they all have greys at once (issue #637, P-152; OPENBFME_PORT270_TESTS)
+include(cmake/Port232.cmake)    # PORT-232: HordeDispatchSpecialPower::doSpecialPowerAtObject hands the horde's base call the member's kept target (issue #555; OPENBFME_PORT232_TESTS)
 include(cmake/Port159.cmake)    # PORT-159: SHADOW_VOLUME_NON_SELF_1/2/3 cast a shadow (the mumak, the dwarven battle wagon; issue #377; OPENBFME_PORT159_TESTS)
 include(cmake/Port170.cmake)    # PORT-170: the placement seal flickers red/white with a stationary cursor (issue #399; OPENBFME_PORT170_TESTS)
 include(cmake/Port171.cmake)    # PORT-171: the online tests' temporary folder, removed after what writes into it (fork issue 400, P-37; OPENBFME_PORT171_TESTS)
@@ -257,10 +258,13 @@ include(cmake/Port109.cmake) # OPENBFME_PORT109_TESTS
 include(cmake/Port47.cmake) # OPENBFME_PORT47_TESTS
 include(cmake/Play2.cmake) # OPENBFME_PLAY2_TESTS (lane PLAY-2)
 include(cmake/Port300.cmake) # OPENBFME_PORT300_TESTS (lane PORT-300, issue #692)
+include(cmake/Port302.cmake) # PORT-302: InactiveBody's armor-set flags and its damage answers (fork issue 694)
 include(cmake/Port248.cmake) # OPENBFME_PORT248_TESTS
 include(cmake/Port264.cmake) # OPENBFME_PORT264_TESTS (lane PORT-264)
+include(cmake/Port286.cmake) # OPENBFME_PORT286_TESTS (lane PORT-286)
 include(cmake/Port211.cmake) # PORT-211: the economy group S-250 .. S-260 swept against main (fork issue 493; OPENBFME_PORT211_TESTS)
 include(cmake/Port242.cmake) # PORT-242: SpecialPowerModule RequirementsFilterStrategic (fork issue 566; OPENBFME_PORT242_TESTS)
+include(cmake/Port305.cmake) # PORT-305: ClearanceTestingSlowDeathBehavior room for a fall (OPENBFME_PORT305_TESTS)
 include(cmake/Port207.cmake) # OPENBFME_PORT207_TESTS (lane PORT-207)
 include(cmake/Port196.cmake) # PORT-196: the AI spell book's ARMY_BREAKER decision (issue 463; OPENBFME_PORT196_TESTS)
 include(cmake/Port256.cmake) # PORT-256: the weapon-switching powers (fork issue 604; OPENBFME_PORT256_TESTS)
@@ -337,6 +341,7 @@ include(cmake/Port168.cmake) # PORT-168: the troll grab's heal percentage and th
 include(cmake/Port80.cmake) # PORT-80: InvisibilityUpdate/UnitSpecificSoundNameToUseAsVoiceMoveToStealthyArea, the stealthy-area move voice (issue #212; OPENBFME_PORT80_TESTS)
 include(cmake/Port72.cmake) # PORT-72: FactionVictoryData, stop verdict S-7216 (issue #186; OPENBFME_PORT72_TESTS)
 include(cmake/Port96.cmake) # PORT-96: SlavedUpdate client fade on the master's guard point (issue #244; OPENBFME_PORT96_TESTS)
+include(cmake/Port255.cmake) # PORT-255: SlavedUpdate suspension slots (fork issue #603; OPENBFME_PORT255_TESTS)
 include(cmake/Port67.cmake) # PORT-67: Weapon/CanSwoop and the Locomotor Swoop rows (issue #181; OPENBFME_PORT67_TESTS)
 include(cmake/Port40.cmake) # PORT-40: AIData/MaxRecruitRadius (issue #125; OPENBFME_PORT40_TESTS)
 include(cmake/Port65.cmake) # PORT-65: SpellRechargeModifierUpgrade (issue #177; OPENBFME_PORT65_TESTS)
@@ -561,6 +566,8 @@ include(cmake/Port275.cmake)    # PORT-275: the command set swap re-evaluates th
 include(cmake/Port280.cmake)    # PORT-280: ProductionSpeedBonus consumer on Player, calcTimeToBuild and ProductionUpdate (fork issue 647; OPENBFME_PORT280_TESTS)
 include(cmake/Threatlevel1.cmake) # THREATLEVEL-1: the map scripts' threat conditions and counters (appends to OPENBFME_SIM_SOURCES; OPENBFME_THREATLEVEL1_TESTS)
 include(cmake/Buildclear1.cmake) # BUILDCLEAR-1: the placement's clear-of-objects test RW 0x796D37 (OPENBFME_BUILDCLEAR1_TESTS)
+include(cmake/Port297.cmake)    # PORT-297: resources — SupplyWarehouseDockUpdate::setDockCrippled and the resource modules' own functions (fork issue 689; OPENBFME_PORT297_TESTS)
+include(cmake/Port293.cmake)    # PORT-293: ActiveBody's last-healing timestamp (body slot 0x48) and AutoHealBehavior NonStackable (issue #685; OPENBFME_PORT293_TESTS)
 add_library(openbfme_core STATIC
     ${OPENBFME_PLAY2_SOURCES}
     ${OPENBFME_APT_SOURCES}
@@ -995,8 +1002,10 @@ add_executable(openbfme_tests
     ${OPENBFME_PLAY2_TESTS}
     ${OPENBFME_PORT248_TESTS}
     ${OPENBFME_PORT264_TESTS}
+    ${OPENBFME_PORT286_TESTS}
     ${OPENBFME_PORT211_TESTS}
     ${OPENBFME_PORT242_TESTS}
+    ${OPENBFME_PORT305_TESTS}
     ${OPENBFME_PORT196_TESTS}
     ${OPENBFME_PORT256_TESTS}
     ${OPENBFME_PORT427_TESTS}
@@ -1114,6 +1123,7 @@ add_executable(openbfme_tests
     ${OPENBFME_PORT80_TESTS}
     ${OPENBFME_PORT72_TESTS}
     ${OPENBFME_PORT96_TESTS}
+    ${OPENBFME_PORT255_TESTS}
     ${OPENBFME_PORT67_TESTS}
     ${OPENBFME_PORT40_TESTS}
     ${OPENBFME_PORT65_TESTS}
@@ -1184,6 +1194,7 @@ add_executable(openbfme_tests
     ${OPENBFME_PORT272_TESTS}
     ${OPENBFME_PORT221_TESTS}
     ${OPENBFME_PORT270_TESTS}
+    ${OPENBFME_PORT232_TESTS}
     ${OPENBFME_RENDER_TESTS}
     ${OPENBFME_SKIRMISH_AI_TESTS}
     ${OPENBFME_VIS_TESTS}
@@ -1350,6 +1361,9 @@ add_executable(openbfme_tests
     ${OPENBFME_PORT280_TESTS}
     ${OPENBFME_THREATLEVEL1_TESTS}
     ${OPENBFME_BUILDCLEAR1_TESTS}
+    ${OPENBFME_PORT297_TESTS}
+    ${OPENBFME_PORT302_TESTS}
+    ${OPENBFME_PORT293_TESTS}
     tests/test_main.cpp
     tests/test_big_archive.cpp
     tests/test_parser_fuzz_regressions.cpp
