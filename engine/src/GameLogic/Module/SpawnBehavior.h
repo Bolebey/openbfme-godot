@@ -29,8 +29,8 @@
 //     RW 0x66137C) below the best (from 1.0e8 RW 0xC58D30)): its producer becomes the spawner, its slaved interface onEnslave, its id joins the spawns.
 //   * createSpawn (RW 0x862B07): the spawner's exit (RW 0x68BB14) and a reserved door (exit slot 1); the template of the next name (RW 0x6D1305);
 //     RespectCommandLimit: the player's free command points (RW 0x6A7F6A: limit - usage) below the template's CommandPoints (+ 0x628): no; the object (RW
-//     0x6D165E) on the spawner's team; Player::onUnitCreated (RW 0x6AA688, PORT-198: its skirmish-AI half RW 0x6C77C9 -> RW 0x8F06FF is ported,
-//     the AIPlayer vslot 0x1C queue is not); SpawnInsideBuilding: its AI ignores the spawner as an obstacle (RW
+//     0x6D165E) on the spawner's team; Player::onUnitCreated (RW 0x6AA688: skirmish-AI half ported, AIPlayer vslot 0x1C not ported);
+//     SpawnInsideBuilding: its AI ignores the spawner as an obstacle (RW
 //     0x66831A); PORT-76 (issue #208): its drawable fades in over ftol(FadeInTime * [RW 0xD9F624] = 0.03f) client frames (RW 0x862C18 .. 0x862C43: fild
 //     + 0x18C, fmul, _ftol RW 0xA3CFA4, the drawable RW 0x70E013, Drawable::fadeIn RW 0x670AA2); the same block first hides the drawable when the spawner's
 //     shroud status for the local player (RW 0x68D8F7, the player list RW 0xDE4928 + 0x10 -> + 0x54) is at least FOGGED (RW 0x862BF0 .. 0x862C13 -> RW
@@ -40,8 +40,9 @@
 //     1).
 //   * the spawn interface (RW 0xC58D94): slot 1 onSpawnDeath (RW 0x862DAB: a spawn of the list leaves it, a replacement frame now + SpawnReplaceDelay is
 //     queued, the count - 1; AggregateHealth and no spawn left: the killer scores the spawner (RW 0x6955BC) and the spawner dies (RW 0x698EC3(8, 0))),
-//     slots 3 / 4 the attack orders (RW 0x8637BE / 0x863807), 5 / 6 the can-attack getters (RW 0x862990 / 0x8629ED), 8 idle (RW 0x863850),
-//     9 stopSpawning (RW 0x8623D6), 10 re-enslave (RW 0x862E4F), 11 isSpawnerActive (+ 0x50), 12 reclaimDueOrphans (RW 0x86327C).
+//     slots 2 / 3 / 4 / 5 / 6 are closest slave / force attack / attack position / can attack target / can attack position (RW 0x86292C / 0x8637BE /
+//     0x863807 / 0x862990 / 0x8629ED); slot 8 is idle (RW 0x863850), slot 9 stopSpawning (RW 0x8623D6), slot 10 re-enslaves (RW 0x862E4F),
+//     slot 11 isSpawnerActive (+ 0x50), slot 12 reclaimDueOrphans (RW 0x86327C).
 //   * onDie (RW 0x862865): when the die mux applies (RW 0x8D29A9) every spawn gets onSlaverDie and loses its producer; SpawnedRequireSpawner: every live spawn
 //     dies (RW 0x698EC3(8, 0)). onDelete (RW 0x86280D): SpawnedRequireSpawner: every spawn loses its producer and a live one is destroyed (RW 0x62BBAB).
 //     onDamage (RW 0x862EA3): every spawn's onSlaverDamage. onBodyDamageStateChange (RW 0x863585, KillSpawnsBasedOnModelConditionState): PRISTINE ->
@@ -50,19 +51,19 @@
 //   * Object::onDie (RW 0x698F06) calls RW 0x6938BD at RW 0x699082: the producer's spawn interface (RW 0x68C3A3) onSpawnDeath(id, damage info) (the horde
 //     branch without one is HordeContain's, not run from here).
 // INFERENCE / NOT PORTED (stop S-1425, stopLines()): AggregateHealth (RW 0x862F4A: the spawner's body and drawable follow the spawns; no retail object sets
-// it), ExitByBudding (no retail use), Player::onUnitCreated's AIPlayer vslot 0x1C (RW 0x6AA6A1; the AIPlayer team-build queue is not ported), the
-// orphan search walks the logic's object list filtered to the player (retail's Player::iterateObjects walks its teams: only a tie in distance could differ).
+// it), ExitByBudding (no retail use), Player::onUnitCreated's AIPlayer vslot 0x1C (RW 0x6AA6A1; the AIPlayer team-build queue is not ported), and the orphan
+// search walks the logic's object list filtered to the player (retail's Player::iterateObjects walks its teams: only a tie in distance could differ).
 
 #pragma once
 
 #include "Common/INI.h"
 #include "GameLogic/AI/AICommandSink.h"
-#include "GameLogic/Combat/ObjectWeapons.h"
 #include "GameLogic/Module/DamageModule.h"
 #include "GameLogic/Module/DieModule.h"
 #include "GameLogic/Module/MoneyEventModules.h"
 #include "GameLogic/Module/UpdateModule.h"
 #include "GameLogic/Module/UpgradeModule.h"
+#include "GameLogic/WeaponSet.h"
 
 #include <list>
 #include <string>
@@ -78,31 +79,24 @@ class SpawnBehaviorInterface
 {
 public:
 	virtual ~SpawnBehaviorInterface() = default;
-	virtual void onSpawnDeath(ObjectID deadSpawn, const DieModuleInterface::Event *info) = 0; // slot 1
-	// slot 3 (RW 0x8637BE, DONOR BFME2 SpawnBehavior_orderSlavesToAttackTarget.cpp 0x46070E): every live spawn with an AI (+ 0x260) gets
-	// aiForceAttackObject(target, maxShots, source) (RW 0x771380); a spawn that no longer resolves and one without an AI are skipped
-	virtual void orderSlavesToAttackTarget(Object *target, int maxShotsToFire, CommandSourceType source) = 0;
-	// slot 4 (RW 0x863807): the same walk with aiAttackPosition (RW 0x6961F1), reached from AIGroup::groupAttackPosition RW 0x772369
-	virtual void orderSlavesToAttackPosition(const Coord3D &pos, int maxShotsToFire, CommandSourceType source) = 0;
-	// slots 5 / 6 (RW 0x862990 / 0x8629ED): asks each spawn's weapons (RW 0x68D6A6 / 0x68B5FA) about the target; POSSIBLE or
-	// POSSIBLE_AFTER_MOVING answers at once (RW 0x8629CC / 0x862A2D), INVALID_SHOT is remembered and returned only if no spawn can
-	// attack (RW 0x8629D3 / 0x8629E0 / 0x862A34 / 0x862A41)
-	virtual CanAttackResult canAnySlavesAttackSpecificTarget(int attackType, const Object *target, CommandSourceType source) const = 0;
-	virtual CanAttackResult canAnySlavesUseWeaponAgainstTarget(int attackType, const Object *target, const Coord3D *pos,
-	                                                           CommandSourceType source) const = 0;
-	virtual bool canAnySlavesAttack() const = 0;                                           // slot 7 (lane DECOMP-3, Object::isAbleToAttack RW 0x691413)
+	virtual void onSpawnDeath(ObjectID deadSpawn, const DieModuleInterface::Event *info) = 0; // slot 1 (RW 0x862DAB)
+	virtual Object *getClosestSlave(const Coord3D *pos) = 0;                                  // slot 2 (RW 0x86292C)
+	virtual void orderSlavesToAttackTarget(Object *target, int maxShotsToFire, CommandSourceType source) = 0;     // slot 3 (RW 0x8637BE)
+	virtual void orderSlavesToAttackPosition(const Coord3D *pos, int maxShotsToFire, CommandSourceType source) = 0; // slot 4 (RW 0x863807)
+	virtual CanAttackResult getCanAnySlavesAttackSpecificTarget(AbleToAttackType attackType, const Object *target, CommandSourceType source) const = 0; // slot 5 (RW 0x862990)
+	virtual CanAttackResult getCanAnySlavesUseWeaponAgainstTarget(AbleToAttackType attackType, const Object *victim, const Coord3D *pos, CommandSourceType source) const = 0; // slot 6 (RW 0x8629ED)
+	virtual bool canAnySlavesAttack() const = 0;                                              // slot 7 (RW 0x862A4E, Object::isAbleToAttack RW 0x691413)
 	// slot 8 (RW 0x863850; lane SCRIPT-4, AIGroup::groupIdle RW 0x771F49): every slave of the list that is in the world and has an AI idles (RW 0x5E821A)
 	virtual void orderSlavesToGoIdle(CommandSourceType source) = 0;
-	virtual void stopSpawning() = 0;                                                       // slot 9
-	// slot 10 (RW 0x862E4F, from GettingBuiltBehavior RW 0x8569D7): every live spawn's SlavedUpdate is re-enslaved to the spawner (RW 0x8A510B)
-	virtual void reEnslaveSpawns() = 0;
-	virtual bool isSpawnerActive() const = 0;                                              // slot 11
-		// slot 12 (RW 0x86327C; lane BACKLOG4, Object::defect RW 0x699401): every replacement that is due (its frame is before now) takes an orphan when one can
-		// be reclaimed (RW 0x862A88) and leaves the list
-		virtual void reclaimDueOrphans() = 0;
+	virtual void stopSpawning() = 0;                                                          // slot 9 (RW 0x8623D6)
+	virtual void reEnslaveSlaves() = 0;                                                       // slot 10 (RW 0x862E4F, GettingBuiltBehavior::finishConstruction RW 0x8569C7)
+	virtual bool isSpawnerActive() const = 0;                                                 // slot 11 (RW 0x86277F)
+	// slot 12 (RW 0x86327C; lane BACKLOG4, Object::defect RW 0x699401): every replacement that is due (its frame is before now) takes an orphan when one can
+	// be reclaimed (RW 0x862A88) and leaves the list
+	virtual void reclaimDueOrphans() = 0;
 	// RW 0x670983: iterate all spawned slave IDs (for marking Eva sighting)
 	virtual void forEachSpawnID(const std::function<void(ObjectID)> &fn) const { (void)fn; }
-	static SpawnBehaviorInterface *of(Object &obj);                                        // RW 0x68C3A3
+	static SpawnBehaviorInterface *of(Object &obj);                                           // RW 0x68C3A3
 	static const SpawnBehaviorInterface *of(const Object &obj);
 	// RW 0x6938BD (Object::onDie at RW 0x699082): the producer's spawn interface hears of the death
 	static void notifyProducerOfDeath(Object &dead, const DieModuleInterface::Event &info);
@@ -144,17 +138,17 @@ public:
 	void onDamage(const DamageInfo &info) override;                      // RW 0x862EA3
 	void onBodyDamageStateChange(const DamageInfo *info, BodyDamageType oldState, BodyDamageType newState) override; // RW 0x863585
 	void onSpawnDeath(ObjectID deadSpawn, const DieModuleInterface::Event *info) override;   // RW 0x862DAB
+	Object *getClosestSlave(const Coord3D *pos) override;                                  // RW 0x86292C
+	void orderSlavesToAttackTarget(Object *target, int maxShotsToFire, CommandSourceType source) override;     // RW 0x8637BE
+	void orderSlavesToAttackPosition(const Coord3D *pos, int maxShotsToFire, CommandSourceType source) override; // RW 0x863807
+	CanAttackResult getCanAnySlavesAttackSpecificTarget(AbleToAttackType attackType, const Object *target, CommandSourceType source) const override; // RW 0x862990
+	CanAttackResult getCanAnySlavesUseWeaponAgainstTarget(AbleToAttackType attackType, const Object *victim, const Coord3D *pos, CommandSourceType source) const override; // RW 0x8629ED
 	void stopSpawning() override { m_active = false; }                   // RW 0x8623D6
+	void reEnslaveSlaves() override;                                     // RW 0x862E4F
 	void reclaimDueOrphans() override;                                   // RW 0x86327C
 	bool isSpawnerActive() const override { return m_active; }           // RW 0x86277F
 	bool canAnySlavesAttack() const override;                            // RW 0x862A4E
-	void orderSlavesToAttackTarget(Object *target, int maxShotsToFire, CommandSourceType source) override; // RW 0x8637BE
-	void orderSlavesToAttackPosition(const Coord3D &pos, int maxShotsToFire, CommandSourceType source) override; // RW 0x863807
-	CanAttackResult canAnySlavesAttackSpecificTarget(int attackType, const Object *target, CommandSourceType source) const override; // RW 0x862990
-	CanAttackResult canAnySlavesUseWeaponAgainstTarget(int attackType, const Object *target, const Coord3D *pos,
-	                                                   CommandSourceType source) const override;            // RW 0x8629ED
 	void orderSlavesToGoIdle(CommandSourceType source) override;         // RW 0x863850 (lane SCRIPT-4)
-	void reEnslaveSpawns() override;                                    // RW 0x862E4F
 	void forEachSpawnID(const std::function<void(ObjectID)> &fn) const override;
 	void crc(StateHasher &h) const override;
 	static void registerClass(ModuleFactory &modules);

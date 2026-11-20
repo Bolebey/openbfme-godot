@@ -431,6 +431,17 @@ int Player::applyHandicapMoney(int amount) const
 	return host().applyHandicapMoney(*this, amount);
 }
 
+// RW 0x6AA688: the script's object-change frame is implicit in this port; AIPlayer vslot 0x1C remains unported (S-1425).
+// The skirmish-AI half forwards the notified player, factory and unit to RW 0x6C77C9 -> RW 0x8F06FF(..., 0).
+void Player::onUnitCreated(Object *factory, Object *unit)
+{
+	if (!unit || !m_host)
+	{
+		return;
+	}
+	m_host->onUnitCreated(*this, factory, *unit); // PORT-198 (RW 0x6AA688 -> 0x6C77C9)
+}
+
 void Player::addCostModifier(std::shared_ptr<const ObjectFilter> filter, const std::vector<float> &percents, ObjectID source, bool slaughter)
 {
 	CostModifier c; // RW 0x6AD845: a new entry at the end of the list
@@ -1757,19 +1768,4 @@ void Player::computeSuperweaponTarget(GameLogic &logic, const SpecialPowerTempla
 	}
 	veryBestPos.z = logic.getGroundHeight(veryBestPos.x, veryBestPos.y);
 	retPos = veryBestPos;
-}
-
-// PORT-198: RW 0x6AA688 (Player::onUnitCreated, called by RW 0x862BC5 after a spawn and RW 0x62B147 after a starting-base unit):
-//   * RW 0x6AA68B .. 0x6AA69F refreshes the script engine's object-change frame (RW 0x603300); this port evaluates the object-count conditions
-//     afresh (SCRIPT-1), so there is no cached frame to refresh, and Object::friend_objectEnteredWorld already registered the new object.
-//   * RW 0x6AA6A1 .. 0x6AA6AF forwards (factory, unit) to the player's AIPlayer vslot 0x1C; the AIPlayer team-build queue is not ported (S-1425).
-//   * RW 0x6AA6B2 .. 0x6AA6CA finds this player's skirmish AI (RW 0x6A950B) and, unless it is disabled (RW 0x6C77C9), calls RW 0x8F06FF
-//     with built = 0. That call is ported as SkirmishAIManager::unitCreated -> AIBaseBuilder::onStructureBuilt(..., false).
-void Player::onUnitCreated(Object *factory, Object *unit)
-{
-	if (!factory || !unit)
-	{
-		return; // both RW callees RW 0x8F0703 and RW 0x6C77C9 return before using a null factory
-	}
-	unit->logic().skirmishAI().unitCreated(*factory, *unit);
 }

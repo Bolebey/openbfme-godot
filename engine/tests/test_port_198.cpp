@@ -308,10 +308,10 @@ TEST_CASE("PORT-198 SpawnBehavior: slots 5 / 6 ask the guards whether the spawne
 
 	// ATTACK_NEW_TARGET_FORCED (RW 0x6C9147): the synthetic world has no map relationships, and a forced attack skips the
 	// player-relationship veto; UNATTACKABLE is refused even when forced (RW 0x6C9207)
-	CHECK(si->canAnySlavesAttackSpecificTarget(ATTACK_NEW_TARGET_FORCED, victim, CMD_FROM_PLAYER) == ATTACKRESULT_POSSIBLE);
-	CHECK(si->canAnySlavesUseWeaponAgainstTarget(ATTACK_NEW_TARGET_FORCED, victim, nullptr, CMD_FROM_PLAYER) == ATTACKRESULT_POSSIBLE);
-	CHECK(si->canAnySlavesAttackSpecificTarget(ATTACK_NEW_TARGET_FORCED, unattackable, CMD_FROM_PLAYER) == ATTACKRESULT_NOT_POSSIBLE);
-	CHECK(si->canAnySlavesUseWeaponAgainstTarget(ATTACK_NEW_TARGET_FORCED, unattackable, nullptr, CMD_FROM_PLAYER) == ATTACKRESULT_NOT_POSSIBLE);
+	CHECK(si->getCanAnySlavesAttackSpecificTarget(ATTACK_NEW_TARGET_FORCED, victim, CMD_FROM_PLAYER) == ATTACKRESULT_POSSIBLE);
+	CHECK(si->getCanAnySlavesUseWeaponAgainstTarget(ATTACK_NEW_TARGET_FORCED, victim, nullptr, CMD_FROM_PLAYER) == ATTACKRESULT_POSSIBLE);
+	CHECK(si->getCanAnySlavesAttackSpecificTarget(ATTACK_NEW_TARGET_FORCED, unattackable, CMD_FROM_PLAYER) == ATTACKRESULT_NOT_POSSIBLE);
+	CHECK(si->getCanAnySlavesUseWeaponAgainstTarget(ATTACK_NEW_TARGET_FORCED, unattackable, nullptr, CMD_FROM_PLAYER) == ATTACKRESULT_NOT_POSSIBLE);
 }
 
 // Neighbour behaviour: the ground order the AIGroup already gave (RW 0x772369 -> slot 4 RW 0x863807) and the idle order

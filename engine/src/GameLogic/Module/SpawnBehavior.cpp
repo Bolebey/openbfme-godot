@@ -32,11 +32,12 @@ namespace
 {
 const char *const kStop =
 	"[S-1425] SpawnBehavior (lane MOD-4): the spawning (RW 0x8633A4 / 0x862456 / 0x862B07), the orphan reclaim (RW 0x862A88 / 0x86255C), the deaths "
-	"(RW 0x862DAB from Object::onDie RW 0x6938BD, RW 0x862865), onDelete, onDamage, ShareUpgrades, KillSpawnsBasedOnModelConditionState and the spawn's "
-	"drawable fade (PORT-76, RW 0x862C18 .. 0x862C43: FadeInTime * 0.03 client frames, RW 0x670AA2) run; not ported: "
-	"AggregateHealth (RW 0x862F4A), ExitByBudding (exit slot 3), Player::onUnitCreated's AIPlayer half (RW 0x6AA6A1, vslot 0x1C); the spawn "
-	"interface's attack / idle orders (RW 0x8637BE / 0x863807 / 0x863850 / 0x862E4F) and Player::onUnitCreated's skirmish-AI half (RW 0x6C77C9) "
-	"are ported by PORT-198; INFERENCE: the orphan search walks the logic's object list filtered to the player (RW 0x6ABABD walks its teams)";
+	"(RW 0x862DAB from Object::onDie RW 0x6938BD, RW 0x862865), onDelete, onDamage, ShareUpgrades, KillSpawnsBasedOnModelConditionState, the spawn's "
+	"drawable fade (PORT-76, RW 0x862C18 .. 0x862C43: FadeInTime * 0.03 client frames, RW 0x670AA2), the spawn interface slots 2 .. 12 and "
+	"the skirmish-AI half of Player::onUnitCreated (PORT-198, RW 0x6AA688 -> 0x6C77C9) run; not ported: "
+	"AggregateHealth (RW 0x862F4A), ExitByBudding (exit slot 3), and the AIPlayer vslot 0x1C (RW 0x6AA6A1); "
+	"INFERENCE: the orphan search walks the logic's object list filtered to the player "
+	"(RW 0x6ABABD walks its teams)";
 
 const int kSpawnUpdateRate = LOGICFRAMES_PER_SECOND / 2; // RW 0xDE9008 (RW 0xBC5FF9: [0xD9F608] / 2)
 
@@ -126,48 +127,84 @@ public:
 	{
 		each([&](SpawnBehaviorInterface &s) { s.onSpawnDeath(deadSpawn, info); return false; });
 	}
-	bool canAnySlavesAttack() const override { return each([](SpawnBehaviorInterface &s) { return s.canAnySlavesAttack(); }); } // slot 7 (0xEDC291)
-	// slots 3 .. 6 of the edain-unchained proxy: each order reaches every SpawnBehavior, each getter answers the best of theirs (RW's priority is the
-	// enum order: POSSIBLE and POSSIBLE_AFTER_MOVING return at once, INVALID_SHOT only when no module can attack)
-	void orderSlavesToAttackTarget(Object *target, int maxShotsToFire, CommandSourceType source) override
+	Object *getClosestSlave(const Coord3D *pos) override // slot 2
+	{
+		if (!pos)
+		{
+			return nullptr;
+		}
+		Object *best = nullptr;
+		double bestDist = 0.0;
+		for (const std::unique_ptr<BehaviorModule> &m : m_obj->modules())
+		{
+			if (SpawnBehaviorInterface *s = dynamic_cast<SpawnBehaviorInterface *>(m.get()))
+			{
+				if (Object *cand = s->getClosestSlave(pos))
+				{
+					const double d = (double)SimMath::fstpDword(distSq2D(*cand, *pos));
+					if (!best || d < bestDist)
+					{
+						best = cand;
+						bestDist = d;
+					}
+				}
+			}
+		}
+		return best;
+	}
+	void orderSlavesToAttackTarget(Object *target, int maxShotsToFire, CommandSourceType source) override // slot 3
 	{
 		each([&](SpawnBehaviorInterface &s) { s.orderSlavesToAttackTarget(target, maxShotsToFire, source); return false; });
 	}
-	void orderSlavesToAttackPosition(const Coord3D &pos, int maxShotsToFire, CommandSourceType source) override
+	void orderSlavesToAttackPosition(const Coord3D *pos, int maxShotsToFire, CommandSourceType source) override // slot 4
 	{
 		each([&](SpawnBehaviorInterface &s) { s.orderSlavesToAttackPosition(pos, maxShotsToFire, source); return false; });
 	}
-	CanAttackResult canAnySlavesAttackSpecificTarget(int attackType, const Object *target, CommandSourceType source) const override
+	CanAttackResult getCanAnySlavesAttackSpecificTarget(AbleToAttackType attackType, const Object *target, CommandSourceType source) const override // slot 5
 	{
-		CanAttackResult best = ATTACKRESULT_NOT_POSSIBLE;
-		each([&](SpawnBehaviorInterface &s) {
-			const CanAttackResult r = s.canAnySlavesAttackSpecificTarget(attackType, target, source);
-			if (r > best)
+		bool invalidShot = false;
+		for (const std::unique_ptr<BehaviorModule> &m : m_obj->modules())
+		{
+			if (const SpawnBehaviorInterface *s = dynamic_cast<const SpawnBehaviorInterface *>(m.get()))
 			{
-				best = r;
+				const CanAttackResult r = s->getCanAnySlavesAttackSpecificTarget(attackType, target, source);
+				if (r == ATTACKRESULT_POSSIBLE || r == ATTACKRESULT_POSSIBLE_AFTER_MOVING)
+				{
+					return r;
+				}
+				if (r == ATTACKRESULT_INVALID_SHOT)
+				{
+					invalidShot = true;
+				}
 			}
-			return false;
-		});
-		return best;
+		}
+		return invalidShot ? ATTACKRESULT_INVALID_SHOT : ATTACKRESULT_NOT_POSSIBLE;
 	}
-	CanAttackResult canAnySlavesUseWeaponAgainstTarget(int attackType, const Object *target, const Coord3D *pos,
-	                                                   CommandSourceType source) const override
+	CanAttackResult getCanAnySlavesUseWeaponAgainstTarget(AbleToAttackType attackType, const Object *victim, const Coord3D *pos, CommandSourceType source) const override // slot 6
 	{
-		CanAttackResult best = ATTACKRESULT_NOT_POSSIBLE;
-		each([&](SpawnBehaviorInterface &s) {
-			const CanAttackResult r = s.canAnySlavesUseWeaponAgainstTarget(attackType, target, pos, source);
-			if (r > best)
+		bool invalidShot = false;
+		for (const std::unique_ptr<BehaviorModule> &m : m_obj->modules())
+		{
+			if (const SpawnBehaviorInterface *s = dynamic_cast<const SpawnBehaviorInterface *>(m.get()))
 			{
-				best = r;
+				const CanAttackResult r = s->getCanAnySlavesUseWeaponAgainstTarget(attackType, victim, pos, source);
+				if (r == ATTACKRESULT_POSSIBLE || r == ATTACKRESULT_POSSIBLE_AFTER_MOVING)
+				{
+					return r;
+				}
+				if (r == ATTACKRESULT_INVALID_SHOT)
+				{
+					invalidShot = true;
+				}
 			}
-			return false;
-		});
-		return best;
+		}
+		return invalidShot ? ATTACKRESULT_INVALID_SHOT : ATTACKRESULT_NOT_POSSIBLE;
 	}
+	bool canAnySlavesAttack() const override { return each([](SpawnBehaviorInterface &s) { return s.canAnySlavesAttack(); }); } // slot 7 (0xEDC291)
 	// slot 8 (SCRIPT-4's orderSlavesToGoIdle; merge queue q24: reaches every SpawnBehavior as the proxy's other void slots do; its address in the proxy is not read)
 	void orderSlavesToGoIdle(CommandSourceType source) override { each([&](SpawnBehaviorInterface &s) { s.orderSlavesToGoIdle(source); return false; }); }
 	void stopSpawning() override { each([](SpawnBehaviorInterface &s) { s.stopSpawning(); return false; }); }                 // slot 9 (0xEDC316)
-	void reEnslaveSpawns() override { each([](SpawnBehaviorInterface &s) { s.reEnslaveSpawns(); return false; }); }           // slot 10
+	void reEnslaveSlaves() override { each([](SpawnBehaviorInterface &s) { s.reEnslaveSlaves(); return false; }); }           // slot 10
 	bool isSpawnerActive() const override { return each([](SpawnBehaviorInterface &s) { return s.isSpawnerActive(); }); }     // slot 11 (0xEDC384)
 	void reclaimDueOrphans() override { each([](SpawnBehaviorInterface &s) { s.reclaimDueOrphans(); return false; }); }       // slot 12 (0xEDC3CC)
 	void forEachSpawnID(const std::function<void(ObjectID)> &fn) const override
@@ -239,6 +276,133 @@ void SpawnBehavior::forEachSpawnID(const std::function<void(ObjectID)> &fn) cons
 	}
 }
 
+// RW 0x86292C (PORT-198): closest live slave to *pos by 2D squared distance (RW 0x66137C, strict <)
+Object *SpawnBehavior::getClosestSlave(const Coord3D *pos)
+{
+	if (!pos)
+	{
+		return nullptr;
+	}
+	Object *closest = nullptr;
+	double closestDist = 0.0;
+	GameLogic &logic = getObject()->logic();
+	for (ObjectID id : m_spawnIDs)
+	{
+		if (Object *o = logic.findObjectByID(id))
+		{
+			const double d = (double)SimMath::fstpDword(distSq2D(*o, *pos));
+			if (!closest || d < closestDist)
+			{
+				closest = o;
+				closestDist = d;
+			}
+		}
+	}
+	return closest;
+}
+
+// RW 0x8637BE (PORT-198): order each live slave to force-attack `target`
+void SpawnBehavior::orderSlavesToAttackTarget(Object *target, int maxShotsToFire, CommandSourceType source)
+{
+	GameLogic &logic = getObject()->logic();
+	const std::vector<ObjectID> ids(m_spawnIDs.begin(), m_spawnIDs.end());
+	for (ObjectID id : ids)
+	{
+		if (Object *o = logic.findObjectByID(id); o && !o->isDestroyed())
+		{
+			if (AIUpdateInterface *ai = o->getAIUpdateInterface())
+			{
+				ai->aiForceAttackObject(target, source, maxShotsToFire);
+			}
+		}
+	}
+}
+
+// RW 0x863807 (PORT-198 & PORT-208): order each live slave to attack position `*pos`
+void SpawnBehavior::orderSlavesToAttackPosition(const Coord3D *pos, int maxShotsToFire, CommandSourceType source)
+{
+	if (!pos)
+	{
+		return;
+	}
+	GameLogic &logic = getObject()->logic();
+	const std::vector<ObjectID> ids(m_spawnIDs.begin(), m_spawnIDs.end());
+	for (ObjectID id : ids)
+	{
+		if (Object *o = logic.findObjectByID(id); o && !o->isDestroyed())
+		{
+			if (AIUpdateInterface *ai = o->getAIUpdateInterface())
+			{
+				ai->aiAttackPosition(*pos, maxShotsToFire, source);
+			}
+		}
+	}
+}
+
+// RW 0x862990 (PORT-198): can any slave attack `target`
+CanAttackResult SpawnBehavior::getCanAnySlavesAttackSpecificTarget(AbleToAttackType attackType, const Object *target, CommandSourceType source) const
+{
+	bool invalidShot = false;
+	const GameLogic &logic = getObject()->logic();
+	for (ObjectID id : m_spawnIDs)
+	{
+		if (const Object *o = logic.findObjectByID(id))
+		{
+			const CanAttackResult result = o->getAbleToAttackSpecificObject(attackType, target, source);
+			if (result == ATTACKRESULT_POSSIBLE || result == ATTACKRESULT_POSSIBLE_AFTER_MOVING)
+			{
+				return result;
+			}
+			if (result == ATTACKRESULT_INVALID_SHOT)
+			{
+				invalidShot = true;
+			}
+		}
+	}
+	return invalidShot ? ATTACKRESULT_INVALID_SHOT : ATTACKRESULT_NOT_POSSIBLE;
+}
+
+// RW 0x8629ED (PORT-198): can any slave use its weapon against `victim`/`pos`
+CanAttackResult SpawnBehavior::getCanAnySlavesUseWeaponAgainstTarget(AbleToAttackType attackType, const Object *victim, const Coord3D *pos, CommandSourceType source) const
+{
+	bool invalidShot = false;
+	const GameLogic &logic = getObject()->logic();
+	for (ObjectID id : m_spawnIDs)
+	{
+		if (const Object *o = logic.findObjectByID(id))
+		{
+			const CanAttackResult result = o->getAbleToUseWeaponAgainstTarget(attackType, victim, pos, source);
+			if (result == ATTACKRESULT_POSSIBLE || result == ATTACKRESULT_POSSIBLE_AFTER_MOVING)
+			{
+				return result;
+			}
+			if (result == ATTACKRESULT_INVALID_SHOT)
+			{
+				invalidShot = true;
+			}
+		}
+	}
+	return invalidShot ? ATTACKRESULT_INVALID_SHOT : ATTACKRESULT_NOT_POSSIBLE;
+}
+
+// RW 0x862E4F (PORT-198): re-enslave all spawns to this spawner
+void SpawnBehavior::reEnslaveSlaves()
+{
+	Object *obj = getObject();
+	GameLogic &logic = obj->logic();
+	const std::vector<ObjectID> ids(m_spawnIDs.begin(), m_spawnIDs.end());
+	for (ObjectID id : ids)
+	{
+		if (Object *o = logic.findObjectByID(id))
+		{
+			if (SlavedUpdateInterface *s = SlavedUpdateInterface::of(*o))
+			{
+				s->onEnslave(obj);
+			}
+		}
+	}
+}
+
 // RW 0x862A4E (BFME2 decomp SpawnBehavior_canAnySlavesAttack.cpp, tier A; lane DECOMP-3): the first spawn, in list order, that resolves and is able to attack
 // (Object::isAbleToAttack RW 0x691269)
 bool SpawnBehavior::canAnySlavesAttack() const
@@ -264,108 +428,6 @@ void SpawnBehavior::orderSlavesToGoIdle(CommandSourceType source)
 		if (o && o->getAIUpdateInterface())
 		{
 			o->getAIUpdateInterface()->aiIdle(source);
-		}
-	}
-}
-
-// RW 0x8637BE (slot 3, DONOR BFME2 SpawnBehavior_orderSlavesToAttackTarget.cpp 0x46070E): the spawn list in order, each id resolved through
-// GameLogic::findObjectByID (RW 0x449681), the AI read at Object + 0x260 and called through its command half at + 0x20 (RW 0x771380):
-// aiForceAttackObject(target, maxShotsToFire, source). No alive flag and no weapon eligibility test: those live in the AI's own command gate.
-void SpawnBehavior::orderSlavesToAttackTarget(Object *target, int maxShotsToFire, CommandSourceType source)
-{
-	const std::vector<ObjectID> ids(m_spawnIDs.begin(), m_spawnIDs.end());
-	for (ObjectID id : ids)
-	{
-		if (Object *o = getObject()->logic().findObjectByID(id); o && o->getAIUpdateInterface())
-		{
-			o->getAIUpdateInterface()->aiForceAttackObject(target, source, maxShotsToFire);
-		}
-	}
-}
-
-// RW 0x863807 (slot 4, from AIGroup::groupAttackPosition RW 0x772369): the same walk with aiAttackPosition (RW 0x6961F1)
-void SpawnBehavior::orderSlavesToAttackPosition(const Coord3D &pos, int maxShotsToFire, CommandSourceType source)
-{
-	const std::vector<ObjectID> ids(m_spawnIDs.begin(), m_spawnIDs.end());
-	for (ObjectID id : ids)
-	{
-		if (Object *o = getObject()->logic().findObjectByID(id); o && o->getAIUpdateInterface())
-		{
-			o->getAIUpdateInterface()->aiAttackPosition(pos, maxShotsToFire, source);
-		}
-	}
-}
-
-// RW 0x862990 (slot 5) / 0x8629ED (slot 6), DONOR BFME2 SpawnBehavior_getCanAnySlavesAttackSpecificTarget.cpp 0x45F8E0 and
-// SpawnBehavior_getCanAnySlavesUseWeaponAgainstTarget.cpp 0x45F93D: ask every resolved spawn's weapons (RW 0x68D6A6 / 0x68B5FA);
-// POSSIBLE (3) / POSSIBLE_AFTER_MOVING (2) answer at once (RW 0x8629CC / 0x862A2D), INVALID_SHOT (1) is remembered (RW 0x8629D3 / 0x862A34)
-// and returned only when no spawn can attack (RW 0x8629E0 / 0x862A41).
-CanAttackResult SpawnBehavior::canAnySlavesAttackSpecificTarget(int attackType, const Object *target, CommandSourceType source) const
-{
-	bool invalidShot = false;
-	for (ObjectID id : m_spawnIDs)
-	{
-		Object *o = getObject()->logic().findObjectByID(id);
-		if (!o || !o->getWeapons())
-		{
-			continue;
-		}
-		switch (o->getWeapons()->getAbleToUseWeaponAgainstTarget(attackType, target, nullptr, source))
-		{
-		case ATTACKRESULT_POSSIBLE:
-		case ATTACKRESULT_POSSIBLE_AFTER_MOVING:
-			return ATTACKRESULT_POSSIBLE; // the port's weapon test stands in for RW's two possible results (S-325)
-		case ATTACKRESULT_INVALID_SHOT:
-			invalidShot = true;
-			break;
-		default:
-			break;
-		}
-	}
-	return invalidShot ? ATTACKRESULT_INVALID_SHOT : ATTACKRESULT_NOT_POSSIBLE;
-}
-
-CanAttackResult SpawnBehavior::canAnySlavesUseWeaponAgainstTarget(int attackType, const Object *target, const Coord3D *pos,
-                                                                 CommandSourceType source) const
-{
-	bool invalidShot = false;
-	for (ObjectID id : m_spawnIDs)
-	{
-		Object *o = getObject()->logic().findObjectByID(id);
-		if (!o || !o->getWeapons())
-		{
-			continue;
-		}
-		switch (o->getWeapons()->getAbleToUseWeaponAgainstTarget(attackType, target, pos, source))
-		{
-		case ATTACKRESULT_POSSIBLE:
-		case ATTACKRESULT_POSSIBLE_AFTER_MOVING:
-			return ATTACKRESULT_POSSIBLE;
-		case ATTACKRESULT_INVALID_SHOT:
-			invalidShot = true;
-			break;
-		default:
-			break;
-		}
-	}
-	return invalidShot ? ATTACKRESULT_INVALID_SHOT : ATTACKRESULT_NOT_POSSIBLE;
-}
-
-// RW 0x862E4F (slot 10, caller GettingBuiltBehavior RW 0x8569CA / RW 0x8569D7): every resolved spawn walks its behaviour list (RW 0x68C3A3 is
-// not needed here: the port's SlavedUpdateInterface::of is the same slot 0x68) and the first SlavedUpdate is re-enslaved to the spawner
-// (RW 0x8A510B). No new simulation state: this rewrites the slave's producer, which already has xfer and crc.
-void SpawnBehavior::reEnslaveSpawns()
-{
-	Object *spawner = getObject();
-	for (ObjectID id : m_spawnIDs)
-	{
-		Object *o = spawner->logic().findObjectByID(id);
-		if (o)
-		{
-			if (SlavedUpdateInterface *s = SlavedUpdateInterface::of(*o))
-			{
-				s->onEnslave(spawner);
-			}
 		}
 	}
 }
@@ -531,9 +593,7 @@ bool SpawnBehavior::createSpawn()
 		logic.reportError("SpawnBehavior: newObject made nothing for " + tt->getName());
 		return false;
 	}
-	// PORT-198: RW 0x862BB8 .. 0x862BC5: the new spawn's controlling player (RW 0x68B678) is told Player::onUnitCreated(spawner, spawn)
-	// (RW 0x6AA688), which forwards to its skirmish AI (RW 0x6C77C9 -> RW 0x8F06FF(..., 0)) and, in retail, to the player's AIPlayer
-	// (not ported, S-1425). This is before the exit reservation (RW 0x862BCA) and the drawable fade (RW 0x862BE5).
+	// RW 0x862BB8..0x862BC5 calls RW 0x68B678 on the NEW spawn, then notifies that player's AI with the spawner as factory.
 	if (Player *spawnPlayer = spawn->getControllingPlayer())
 	{
 		spawnPlayer->onUnitCreated(obj, spawn);

@@ -1,5 +1,4 @@
-# PORT-198 (fork issue 465): the spawn interface's attack / idle orders (RW 0xC58D94 slots 3 .. 6, 8, 10) and
-# Player::onUnitCreated (RW 0x6AA688 -> RW 0x6C77C9 -> RW 0x8F06FF). Synthetic-INI tests only.
-
+# PORT-198 (issue 465): spawn-interface slots, SPAWNS_ARE_THE_WEAPONS targeting and Player::onUnitCreated.
 set(OPENBFME_PORT198_TESTS
-    tests/test_port_198.cpp)
+    tests/test_port_198.cpp
+    tests/test_port_198_combat.cpp)

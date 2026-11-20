@@ -744,18 +744,20 @@ void SkirmishAIManager::structureBuilt(Object &builder, Object &structure)
 	// RW 0x86C1ED: the AI of the structure's controlling player; RW 0x6C77E4: nothing for a disabled AI
 	if (AISkirmishPlayer *ai = eventAI(structure))
 	{
-		AIBaseBuilder::onStructureBuilt(m_logic, *ai, builder, structure, true);
+		AIBaseBuilder::onStructureBuilt(m_logic, *ai, &builder, structure, true);
 	}
 }
 
-void SkirmishAIManager::unitCreated(Object &builder, Object &unit)
+void SkirmishAIManager::unitCreated(const Player &player, Object *factory, const Object &unit)
 {
-	// PORT-198: RW 0x6AA6B2 -> RW 0x6A950B picks the AI of the unit's controlling player, RW 0x6C77C9 skips a disabled one, then
-	// RW 0x8F06FF(builder, unit, 0) completes an in-progress request with that factory and template. eventAI holds both the AI lookup
-	// and the disabled gate (RW 0x6C7779); ON_UNIT_CREATED is the false branch of onStructureBuilt (RW 0x8F0733 onwards).
-	if (AISkirmishPlayer *ai = eventAI(unit))
+	// RW 0x6C77C9: the AI of the player; nothing when not started, missing or disabled
+	if (!m_started)
 	{
-		AIBaseBuilder::onStructureBuilt(m_logic, *ai, builder, unit, false);
+		return;
+	}
+	if (AISkirmishPlayer *ai = findAI(player.getPlayerIndex()); ai && !ai->disabled)
+	{
+		AIBaseBuilder::onStructureBuilt(m_logic, *ai, factory, unit, false);
 	}
 }
 
