@@ -567,6 +567,9 @@ WeaponRangeHost &ObjectWeapons::rangeHost()
 // ---------------------------------------------------------------------------------------------------------------------------------
 // the set
 // ---------------------------------------------------------------------------------------------------------------------------------
+// lane ANIM-1: RW 0x68DECA (set) / 0x6911B7 (clear) Object::setWeaponSetFlags / clearWeaponSetFlags: every bit of the mask, then ONE weapon set update (RW
+// 0x6C99E2); the clear, then RW 0x6911B7's second loop: every bit the mask names whose mapped model condition the owner has, cleared one by one (RW 0x68B53C).
+// The set touches no model condition (RW does not there either)
 void ObjectWeapons::setWeaponSetFlags(const WeaponSetFlags &mask, bool on)
 {
 	for (size_t i = 0; i < m_flags.size(); ++i)
@@ -574,6 +577,21 @@ void ObjectWeapons::setWeaponSetFlags(const WeaponSetFlags &mask, bool on)
 		m_flags[i] = on ? (m_flags[i] | mask[i]) : (m_flags[i] & ~mask[i]);
 	}
 	updateWeaponSet();
+	if (on || !m_owner)
+	{
+		return;
+	}
+	for (int bit = 0; bit < 128; ++bit) // RW's loop is bits 0..0x67; WeaponSetModelCondition answers -1 beyond the table
+	{
+		if ((mask[(size_t)bit >> 5] >> (bit & 31)) & 1u)
+		{
+			const int condition = WeaponSetModelCondition(bit);
+			if (condition >= 0 && m_owner->testModelCondition(condition))
+			{
+				m_owner->setModelConditionState(condition, false); // RW 0x6911B7's per-bit mirror
+			}
+		}
+	}
 }
 
 // lane ANIM-1: RW 0x691059 (set) / 0x691106 (clear) Object::setWeaponSetFlag / clearWeaponSetFlag: the flag, the set update (RW 0x6C99E2), then the model

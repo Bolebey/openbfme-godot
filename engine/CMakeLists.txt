@@ -234,6 +234,7 @@ include(cmake/Port213.cmake)    # PORT-213: Multi-select Palantir context picks 
 include(cmake/Port272.cmake)    # PORT-272: update the text of the visible command help on a toggle
 include(cmake/Port221.cmake)    # PORT-221: multi-selected horde abilities, weapon toggles, and mixed-selection HUD/dispatch (issue #531, P-140; OPENBFME_PORT221_TESTS)
 include(cmake/Port270.cmake)    # PORT-270: several units selected, a bought upgrade they all have greys at once (issue #637, P-152; OPENBFME_PORT270_TESTS)
+include(cmake/Port232.cmake)    # PORT-232: HordeDispatchSpecialPower::doSpecialPowerAtObject hands the horde's base call the member's kept target (issue #555; OPENBFME_PORT232_TESTS)
 include(cmake/Port159.cmake)    # PORT-159: SHADOW_VOLUME_NON_SELF_1/2/3 cast a shadow (the mumak, the dwarven battle wagon; issue #377; OPENBFME_PORT159_TESTS)
 include(cmake/Port170.cmake)    # PORT-170: the placement seal flickers red/white with a stationary cursor (issue #399; OPENBFME_PORT170_TESTS)
 include(cmake/Port171.cmake)    # PORT-171: the online tests' temporary folder, removed after what writes into it (fork issue 400, P-37; OPENBFME_PORT171_TESTS)
@@ -1181,6 +1182,7 @@ add_executable(openbfme_tests
     ${OPENBFME_PORT272_TESTS}
     ${OPENBFME_PORT221_TESTS}
     ${OPENBFME_PORT270_TESTS}
+    ${OPENBFME_PORT232_TESTS}
     ${OPENBFME_RENDER_TESTS}
     ${OPENBFME_SKIRMISH_AI_TESTS}
     ${OPENBFME_VIS_TESTS}
