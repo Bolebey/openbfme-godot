@@ -131,8 +131,7 @@ DrawMessageClass classifyDrawMessage(const std::string &message)
 
 bool isLuaSyntaxAlert(const std::string &message)
 {
-	return message.find("LUA Alert: ") != std::string::npos && message.find(";
-  last token read: `") != std::string::npos;
+	return message.find("LUA Alert: ") != std::string::npos && message.find(";\n  last token read: `") != std::string::npos;
 }
 
 void MapObjectRuntime::classifyRuntimeError(const std::string &object, const std::string &className, const std::string &message)

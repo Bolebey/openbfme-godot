@@ -95,8 +95,7 @@ struct DrawMessageClass
 	std::string subObject; ///< HIDE_MISS: the lower-cased sub object name
 };
 DrawMessageClass classifyDrawMessage(const std::string &message);
-// True for the message of a Lua 4.0.1 syntax error (llex.c luaX_error: "<msg>;
-  last token read: `<token>' at line <n> in <chunk>"), the only
+// True for the message of a Lua 4.0.1 syntax error (llex.c luaX_error: "<msg>;\n  last token read: `<token>' at line <n> in <chunk>"), the only
 // error that format comes from. A BeginScript body is the INI lines joined without separators (RW 0x42D423 .. 0x42D474 on lines whose CR / LF
 // TextFile::ParseFile turned into NULs, RW 0xA159AA), so a `--` comment in a body swallows the rest of it and retail's compile fails the same way
 // (Ennorath's RohanArcherRangeMod idle script); retail drops the alert (RW 0x734E41) and the drawable plays on. A runtime error (a CurDrawable*

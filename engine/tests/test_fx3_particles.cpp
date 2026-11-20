@@ -145,10 +145,8 @@ TEST_CASE("fx3: retail's unknown-transition log line is a data defect of the dra
 
 TEST_CASE("fx3: a BeginScript that does not compile is a data defect (retail drops the alert, RW 0x734E41); a runtime Lua error stays an error")
 {
-	// Lua 4.0.1 llex.c luaX_error: "<msg>;
-  last token read: `<token>' at line <n> in <chunk>" (the parser's only format)
-	const std::string syntax = "LUA Alert: error: `end' expected;
-  last token read: `<eof>' at line 1 in string \"RohanArcherRangeModPlayer\"";
+	// Lua 4.0.1 llex.c luaX_error: "<msg>;\n  last token read: `<token>' at line <n> in <chunk>" (the parser's only format)
+	const std::string syntax = "LUA Alert: error: `end' expected;\n  last token read: `<eof>' at line 1 in string \"RohanArcherRangeModPlayer\"";
 	const std::string runtime = "LUA Alert: error: attempt to call global `CurDrawableNoSuchFunction' (a nil value)";
 	CHECK(isLuaSyntaxAlert(syntax));
 	CHECK_FALSE(isLuaSyntaxAlert(runtime));
