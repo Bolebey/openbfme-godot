@@ -4,6 +4,8 @@
 #include "CombatTestUtil.h"
 
 #include "GameLogic/Module/StructureModules.h"
+#include "GameLogic/Module/TransitionDamageFX.h"
+#include <vector>
 #include "GameLogic/ObjectTypes.h"
 
 #include <string>
@@ -94,4 +96,76 @@ TEST_CASE("LOCAL-98 StructureCollapseUpdate: stays paused while DISABLED_HELD (R
 	}
 	// DISABLED_HELD is not in RW 0x00654FD1's mask, so the update stays paused.
 	CHECK(scu->state() == COLLAPSESTATE_WAITINGFORCOLLAPSESTART);
+}
+
+namespace
+{
+const char *kTdfxIni =
+	"Object Local98TdfxDoor\n"
+	"  Body = ActiveBody ModuleTag_Body\n"
+	"    MaxHealth = 100\n"
+	"    MaxHealthDamaged = 75\n"
+	"    MaxHealthReallyDamaged = 50\n"
+	"  End\n"
+	"  Behavior = TransitionDamageFX ModuleTag_Tdfx\n"
+	"    PristineShowSubObject = DOOR_OK\n"
+	"    PristineHideSubObject = DOOR_D1 DOOR_D2\n"
+	"    DamagedShowSubObject = DOOR_D1\n"
+	"    DamagedHideSubObject = DOOR_OK DOOR_D2\n"
+	"  End\n"
+	"  Geometry = BOX\n"
+	"  GeometryMajorRadius = 10\n"
+	"  GeometryMinorRadius = 10\n"
+	"  GeometryHeight = 10\n"
+	"End\n";
+
+class Local98SubObjectHooks : public ObjectClientHooks
+{
+public:
+	std::vector<std::string> calls;
+	void objectCreated(Object &) override {}
+	void objectDestroyed(Object &) override {}
+	void showSubObject(Object &, const std::string &name, bool visible, bool permanent) override
+	{
+		calls.push_back(name + (visible ? " show" : " hide") + (permanent ? " permanent" : ""));
+	}
+};
+} // namespace
+
+TEST_CASE("LOCAL-98 TransitionDamageFX: onDrawableBoundToObject applies pristine subobjects (RW 0x008BDEE5)")
+{
+	CombatWorld cw;
+	TransitionDamageFXModule::registerClass(cw.w.modules);
+	const std::string err = cw.w.load(kTdfxIni, INI_LOAD_OVERWRITE, "local98_tdfx.ini");
+	REQUIRE_MESSAGE(err.empty(), err);
+
+	Object *o = cw.unit("Local98TdfxDoor", 'A', 400.0f, 400.0f);
+	REQUIRE(o != nullptr);
+	Local98SubObjectHooks hooks;
+	o->friend_bindToClient(&hooks);
+	CHECK(hooks.calls == std::vector<std::string>{
+		"DOOR_D1 hide permanent", "DOOR_D2 hide permanent", "DOOR_OK show permanent" });
+	o->friend_bindToClient(nullptr);
+}
+
+TEST_CASE("LOCAL-98 TransitionDamageFX: onDrawableBoundToObject applies damaged subobjects when already damaged (RW 0x008BDEE5)")
+{
+	CombatWorld cw;
+	TransitionDamageFXModule::registerClass(cw.w.modules);
+	const std::string err = cw.w.load(kTdfxIni, INI_LOAD_OVERWRITE, "local98_tdfx_dmg.ini");
+	REQUIRE_MESSAGE(err.empty(), err);
+
+	Object *o = cw.unit("Local98TdfxDoor", 'A', 400.0f, 400.0f);
+	REQUIRE(o != nullptr);
+	DamageInfo hit;
+	hit.m_input.m_amount = 30.0f;
+	hit.m_input.m_damageType = DAMAGE_FLAME;
+	o->attemptDamage(hit);
+	REQUIRE(o->getBodyModule()->getDamageState() == BODY_DAMAGED);
+
+	Local98SubObjectHooks hooks;
+	o->friend_bindToClient(&hooks);
+	CHECK(hooks.calls == std::vector<std::string>{
+		"DOOR_OK hide permanent", "DOOR_D2 hide permanent", "DOOR_D1 show permanent" });
+	o->friend_bindToClient(nullptr);
 }
