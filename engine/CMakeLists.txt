@@ -201,6 +201,7 @@ include(cmake/Port253.cmake)   # PORT-253: Upgrade modules (issue #601; OPENBFME
 include(cmake/Port277.cmake)   # PORT-277: rangefinder reproduction
 include(cmake/Port205.cmake)   # PORT-205: a HordeAttackNugget's member pick and the contain slot 0x1C (fork issue 472; OPENBFME_PORT205_TESTS)
 include(cmake/Port265.cmake)   # PORT-265: HordeContain's own slot +0x7C, the once-every-5th-frame split check (fork issue 613; OPENBFME_PORT265_TESTS)
+include(cmake/Port307.cmake)   # PORT-307: the gates' and the wall hubs' uncited own functions (fork issue 699; OPENBFME_PORT307_TESTS)
 include(cmake/Port217.cmake)   # PORT-217: a builder turns to face the structure it builds or repairs (fork issue 507; OPENBFME_PORT217_TESTS)
 include(cmake/Port282.cmake)   # PORT-282: the repair orders of the dozer and the worker (fork issue 649; OPENBFME_PORT282_TESTS)
 include(cmake/Port113.cmake)    # PORT-113: the light points of the War of the Ring (issue #280; appends to OPENBFME_SIM_SOURCES; OPENBFME_PORT113_TESTS)
@@ -569,6 +570,7 @@ include(cmake/Threatlevel1.cmake) # THREATLEVEL-1: the map scripts' threat condi
 include(cmake/Buildclear1.cmake) # BUILDCLEAR-1: the placement's clear-of-objects test RW 0x796D37 (OPENBFME_BUILDCLEAR1_TESTS)
 include(cmake/Port297.cmake)    # PORT-297: resources — SupplyWarehouseDockUpdate::setDockCrippled and the resource modules' own functions (fork issue 689; OPENBFME_PORT297_TESTS)
 include(cmake/Port293.cmake)    # PORT-293: ActiveBody's last-healing timestamp (body slot 0x48) and AutoHealBehavior NonStackable (issue #685; OPENBFME_PORT293_TESTS)
+include(cmake/Port309.cmake)    # PORT-309: ExperienceLevel level-up tint verdict re-check (issue #701, S-7196 / PORT-44; OPENBFME_PORT309_TESTS)
 add_library(openbfme_core STATIC
     ${OPENBFME_PLAY2_SOURCES}
     ${OPENBFME_APT_SOURCES}
@@ -1040,6 +1042,7 @@ add_executable(openbfme_tests
     ${OPENBFME_PORT277_TESTS}
     ${OPENBFME_PORT205_TESTS}
     ${OPENBFME_PORT265_TESTS}
+    ${OPENBFME_PORT307_TESTS}
     ${OPENBFME_PORT217_TESTS}
     ${OPENBFME_PORT282_TESTS}
     ${OPENBFME_PORT102_TESTS}
@@ -1366,6 +1369,7 @@ add_executable(openbfme_tests
     ${OPENBFME_PORT297_TESTS}
     ${OPENBFME_PORT302_TESTS}
     ${OPENBFME_PORT293_TESTS}
+    ${OPENBFME_PORT309_TESTS}
     tests/test_main.cpp
     tests/test_big_archive.cpp
     tests/test_parser_fuzz_regressions.cpp
