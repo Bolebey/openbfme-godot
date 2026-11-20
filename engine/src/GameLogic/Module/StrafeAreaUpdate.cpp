@@ -106,21 +106,23 @@ bool StrafeAreaUpdate::initiateStrafe(const Coord3D *from, const Coord3D *to)
 	return true;
 }
 
+// RW 0x007A8368 (UpdateInterface slot 0): sleep forever without AI (0x7A8379 .. 0x7A8397), approach (state 0, 0x7A86A6),
+// sweep/fire + exit on ai->isIdle() (state 1, 0x7A8422 .. 0x7A86A4), kill on distance > radius && ai->isIdle() && !isEffectivelyDead() (state 2, 0x7A83E3 .. 0x7A841D).
 UpdateSleepTime StrafeAreaUpdate::update()
 {
 	if (!m_data)
 	{
-		return UPDATE_SLEEP_NONE;
+		return UPDATE_SLEEP_FOREVER; // RW 0x007A8392
 	}
 	Object *obj = getObject();
 	if (!obj)
 	{
-		return UPDATE_SLEEP_NONE;
+		return UPDATE_SLEEP_FOREVER; // RW 0x007A8392
 	}
 	AIUpdateInterface *ai = obj->getAIUpdateInterface();
 	if (!ai)
 	{
-		return UPDATE_SLEEP_NONE;
+		return UPDATE_SLEEP_FOREVER; // RW 0x007A8379 .. 0x007A8397
 	}
 
 	const Coord3D *posPtr = obj->getPosition();
@@ -184,7 +186,7 @@ UpdateSleepTime StrafeAreaUpdate::update()
 			break;
 		}
 
-		if (distance < m_data->m_strafeAreaRadius / 12.0f)
+		if (distance < m_data->m_strafeAreaRadius / 12.0f && ai->isIdle()) // RW 0x007A85D2 .. 0x007A85F7 (vcall +0x1B8)
 		{
 			Coord3D onward{ m_strafeTarget.x - m_strafeStart.x, m_strafeTarget.y - m_strafeStart.y, 0.0f };
 			float onLen = std::sqrt(onward.x * onward.x + onward.y * onward.y);
@@ -204,7 +206,7 @@ UpdateSleepTime StrafeAreaUpdate::update()
 	}
 
 	case 2:
-		if (distance > m_data->m_strafeAreaRadius)
+		if (distance > m_data->m_strafeAreaRadius && ai->isIdle() && !obj->isEffectivelyDead()) // RW 0x007A83E3 .. 0x007A841D (vcall +0x1B8, +0x458 bit 0)
 		{
 			obj->kill(DAMAGE_UNRESISTABLE, DEATH_NORMAL);
 		}
@@ -214,6 +216,7 @@ UpdateSleepTime StrafeAreaUpdate::update()
 	return UPDATE_SLEEP_NONE;
 }
 
+// RW 0x007A814E (slot 3): versions 1..4, UpdateModule::xfer (RW 0x00850C60), m_strafeTarget (+0x20), m_strafeStart (+0x2C), m_sweepPhase (+0x38), m_state (+0x3C), m_started (+0x40), m_nextFireFrame (+0x44).
 void StrafeAreaUpdate::xfer(Xfer &x)
 {
 	XferVersion v{ 1, 4 };
@@ -225,8 +228,7 @@ void StrafeAreaUpdate::xfer(Xfer &x)
 		SnapshotXfer::coord3D(x, m_strafeTarget);
 		SnapshotXfer::coord3D(x, m_strafeStart);
 		x.xferReal(&m_sweepPhase);
-		SnapshotXfer::enumIn(x, m_state, 0, 2, "StrafeAreaUpdate m_state");
-		x.xferInt(&m_state);
+		SnapshotXfer::enumIn(x, m_state, 0, 2, "StrafeAreaUpdate m_state"); // +0x3C: 0 approach, 1 strafe / fire, 2 exit / kill
 	}
 	if (v.current >= 3)
 	{
@@ -237,22 +239,6 @@ void StrafeAreaUpdate::xfer(Xfer &x)
 		x.xferUnsignedInt(&m_nextFireFrame);
 	}
 }
-
-// Added closed_sets.json entry for StrafeAreaUpdate::xfer::m_state#1 (version 1 base)
-// The audit list item #30 was m_state at line 228 (version >= 2)
-// Version 1 also transfers m_state? No, the code shows v.current >= 2.
-// The audit script reports "GameLogic/Module/StrafeAreaUpdate.cpp:229 ... m_state#2".
-// We added the entry for m_state#2.
-// But wait, the audit script also sees the version 1 base? Let's check if there's any other m_state.
-// In the xfer function, m_state is only transferred if v.current >= 2.
-// The script output shows:
-// GameLogic/Module/StrafeAreaUpdate.cpp:229 GameLogic/Module/StrafeAreaUpdate.cpp::StrafeAreaUpdate::xfer::m_state#2: a closed transfer of 'm_state' without a check (xferInt(&m_state);)
-// We fixed #2.
-// What about #1? The script might have counted a base transfer if it was there, but it's not.
-// Let's check if the audit script has a bug or if there's another m_state.
-// The audit script output for DockUpdate also showed m_numberApproachPositionBones#1.
-// We fixed both.
-
 
 void StrafeAreaUpdate::crc(StateHasher &hasher) const
 {

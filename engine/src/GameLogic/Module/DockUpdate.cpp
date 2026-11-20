@@ -524,8 +524,7 @@ void DockUpdate::xferDockUpdate(Xfer &x)
 	}
 	x.xferInt(&m_numberApproachPositions);
 	x.xferBool(&m_positionsLoaded);
-	SnapshotXfer::checkRange(x, m_numberApproachPositionBones, -0x7FFFFFFF, 0x7FFFFFFF, "DockUpdate m_numberApproachPositionBones");
-	x.xferInt(&m_numberApproachPositionBones); // OpenBFME: retail recomputes it when the positions load again (RW 0x99198A)
+	x.xferInt(&m_numberApproachPositionBones); // OpenBFME: retail recomputes it when the positions load again (RW 0x99198A; SupplyCenterDockUpdate::loadPostProcess RW 0x008A4ABF)
 	std::uint32_t n = (std::uint32_t)m_approachPositions.size();
 	x.xferCount(&n, 12 + 4 + 1, sizeof(Coord3D) + sizeof(ObjectID) + 1);
 	if (x.isLoading())
@@ -568,6 +567,7 @@ SupplyCenterDockUpdate::SupplyCenterDockUpdate(Thing *thing, const SupplyCenterD
 {
 }
 
+// GetSnapshotName RW 0x008A44D2, getModuleNameKey RW 0x008A4513
 void SupplyCenterDockUpdate::registerClass(ModuleFactory &modules)
 {
 	modules.bindTypedData<SupplyCenterDockUpdateModuleData>("SupplyCenterDockUpdate", MODULETYPE_BEHAVIOR);
@@ -748,8 +748,8 @@ void SupplyWarehouseDockUpdate::xfer(Xfer &x)
 {
 	SnapshotXfer::version(x, 1, 1); // INFERENCE: ZH's version 1 (the dock base, then the boxes); RotWK's xfer was not read
 	xferDockUpdate(x);
-	SnapshotXfer::checkRange(x, m_boxesStored, 0, 0x7FFFFFFF, "SupplyWarehouseDockUpdate m_boxesStored");
 	x.xferInt(&m_boxesStored);
+	SnapshotXfer::checkRange(m_boxesStored, 0, 0x7FFFFFFF, "SupplyWarehouseDockUpdate m_boxesStored");
 }
 
 void SupplyCenterDockUpdate::xfer(Xfer &x)

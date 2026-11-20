@@ -147,10 +147,8 @@ void OCLUpdate::xfer(Xfer &x)
 {
 	SnapshotXfer::version(x, 1, 1);
 	xferUpdateModule(x);
-	SnapshotXfer::checkRange(x, m_nextFrame, 0, 0xFFFFFFFFu, "OCLUpdate m_nextFrame");
 	x.xferUnsignedInt(&m_nextFrame);
-	SnapshotXfer::checkRange(x, m_scheduledAt, 0, 0xFFFFFFFFu, "OCLUpdate m_scheduledAt");
 	x.xferUnsignedInt(&m_scheduledAt);
-	SnapshotXfer::checkRange(x, m_created, -0x7FFFFFFF, 0x7FFFFFFF, "OCLUpdate m_created");
 	x.xferInt(&m_created);
+	SnapshotXfer::checkRange(m_created, 0, 0x7FFFFFFF, "OCLUpdate m_created");
 }
