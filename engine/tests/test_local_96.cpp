@@ -6,6 +6,7 @@
 #include "doctest.h"
 
 #include "CombatTestUtil.h"
+#include "EnnorathScenario.h"
 #include "ProdTestUtil.h"
 
 #include "Common/Player.h"
@@ -199,4 +200,96 @@ TEST_CASE("LOCAL-96 canAcceptNewRepair (RW 0x0088CB8A / RW 0x008AE0FE): null str
 
 	CHECK_FALSE(dozer->canAcceptNewRepair(nullptr));
 	CHECK_FALSE(worker->canAcceptNewRepair(nullptr));
+}
+
+TEST_CASE("LOCAL-96 WorkerAIUpdate::newTask (RW 0x008AE4A9) and internalTaskCompleteOrCancelled (RW 0x008AE17C) toggle WORKER_REPAIRING (0x61)")
+{
+	Local96World w;
+	Object *workerObj = w.spawnAt("L96Worker", 200.0f, 200.0f);
+	Object *bldg = w.spawnAt("L96Structure", 500.0f, 500.0f);
+	WorkerAIUpdate *worker = dynamic_cast<WorkerAIUpdate *>(workerObj->getAIUpdateInterface());
+	REQUIRE(worker != nullptr);
+
+	const int kWorkerRepairing = ObjectTemplateInfoBuilder::objectStatusIndex("WORKER_REPAIRING");
+	REQUIRE(kWorkerRepairing == 0x61);
+	CHECK_FALSE(workerObj->testStatus((unsigned)kWorkerRepairing));
+
+	ActiveBody *body = dynamic_cast<ActiveBody *>(bldg->getBodyModule());
+	REQUIRE(body != nullptr);
+	body->internalChangeHealth(-100.0f);
+
+	// Ordering a repair enters WorkerAIUpdate::newTask (RW 0x008AE4A9) and sets WORKER_REPAIRING (0x61).
+	REQUIRE(worker->repair(*bldg));
+	CHECK(workerObj->testStatus((unsigned)kWorkerRepairing));
+
+	// Cancelling the task enters WorkerAIUpdate::cancelTask (RW 0x008ACEE3) -> internalCancelTask (RW 0x008AE74B)
+	// -> internalTaskCompleteOrCancelled (RW 0x008AE17C) and clears WORKER_REPAIRING (0x61).
+	worker->cancelTask();
+	CHECK_FALSE(workerObj->testStatus((unsigned)kWorkerRepairing));
+	CHECK_FALSE(worker->isTaskPending(DozerAIUpdate::DOZER_TASK_REPAIR));
+}
+
+TEST_CASE("LOCAL-96 ENNORATH scenario: MenPorter killed after placing GondorFarm removes phantom immediately and refunds cost (P-157, RW 0x0088BF7A)")
+{
+	ennorathscenario::World world;
+	if (!world.load("LOCAL-96 ENNORATH scenario"))
+	{
+		return;
+	}
+	hudtest::Rig game(world.shared);
+	const int player1 = game.index();
+	Player *p1 = game.game->players().getNthPlayer(player1);
+	REQUIRE(p1 != nullptr);
+	p1->depositMoney(5000, false);
+
+	std::string error;
+	Object *porter = game.game->createObject("MenPorter", player1, Coord3D{ 1200.0f, 1200.0f, 0.0f }, 0.0f, &error);
+	REQUIRE_MESSAGE(porter != nullptr, error);
+	DozerAIUpdate *dozer = dynamic_cast<DozerAIUpdate *>(porter->getAIUpdateInterface());
+	REQUIRE(dozer != nullptr);
+
+	const ThingTemplate *farmTmpl = world.shared.world->things().findTemplate("GondorFarm");
+	REQUIRE(farmTmpl != nullptr);
+
+	game.logic().runLogicFrame();
+	game.logic().runLogicFrame();
+	game.logic().runLogicFrame();
+
+	// Pick a legal build site ~200..400 units away from the porter so it has to walk there.
+	Coord3D site{ 0.0f, 0.0f, 0.0f };
+	bool foundSite = false;
+	for (float dx : { 250.0f, -250.0f, 320.0f, -320.0f, 0.0f })
+	{
+		for (float dy : { 0.0f, 250.0f, -250.0f, 320.0f, -320.0f })
+		{
+			if (dx == 0.0f && dy == 0.0f) continue;
+			Coord3D cand{ 1200.0f + dx, 1200.0f + dy, 0.0f };
+			if (dozer->siteIsLegal(*farmTmpl, cand, 0.0f, *p1))
+			{
+				site = cand;
+				foundSite = true;
+				break;
+			}
+		}
+		if (foundSite) break;
+	}
+	REQUIRE(foundSite);
+
+	const std::uint32_t moneyBefore = p1->getMoney()->countMoney();
+	Object *phantom = dozer->construct(*farmTmpl, site, 0.0f, *p1, false);
+	REQUIRE(phantom != nullptr);
+	const ObjectID phantomId = phantom->getID();
+	REQUIRE(dozer->unplacedStructure() == phantomId);
+	const std::uint32_t moneyAfterOrder = p1->getMoney()->countMoney();
+	REQUIRE(moneyAfterOrder < moneyBefore); // tolerance: precondition that GondorFarm build cost was charged before checking exact refund to moneyBefore
+
+	// Kill MenPorter while walking to the site: SlowDeathBehavior keeps the corpse alive,
+	// so without RW 0x0088BF7A the phantom would linger until SlowDeathBehavior deletes the corpse.
+	porter->kill(DAMAGE_UNRESISTABLE, DEATH_NORMAL);
+	CHECK(porter->isEffectivelyDead());
+	CHECK_FALSE(porter->isDestroyed());
+	CHECK(dozer->unplacedStructure() == INVALID_ID);
+	CHECK(p1->getMoney()->countMoney() == moneyBefore);
+	game.logic().runLogicFrame();
+	CHECK(game.logic().findObjectByID(phantomId) == nullptr);
 }

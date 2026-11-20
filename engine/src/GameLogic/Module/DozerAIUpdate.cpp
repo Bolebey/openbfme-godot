@@ -391,13 +391,19 @@ void DozerAIUpdate::newTask(int task, Object &target)
 	primaryReset();
 }
 
-void DozerAIUpdate::internalTaskComplete(int task)
+void DozerAIUpdate::internalTaskCompleteOrCancelled(int task)
 {
-	// RW 0x88BE18: slot 0x40 (RW 0x88C93C: the BUILD / REPAIR tasks clear ACTIVELY_CONSTRUCTING), the task and its dock points cleared
+	// RW 0x0088C93C (dozer interface slot 0x40): BUILD / REPAIR clear ACTIVELY_CONSTRUCTING
 	if (task == DOZER_TASK_BUILD || task == DOZER_TASK_REPAIR)
 	{
 		setWorking(false);
 	}
+}
+
+void DozerAIUpdate::internalTaskComplete(int task)
+{
+	// RW 0x0088BE18 (Dozer) / RW 0x008ACF19 (Worker): slot 0x40 (internalTaskCompleteOrCancelled), then clear task and dock points
+	internalTaskCompleteOrCancelled(task);
 	if (task < 0 || task >= DOZER_NUM_TASKS)
 	{
 		return;
@@ -772,7 +778,7 @@ void DozerAIUpdate::commandAccepted(CommandSourceType source, int command, Objec
 
 void DozerAIUpdate::startBuildingSound(Object &structure, const char *soundField)
 {
-	// RW startBuildingSound (dozer interface slot 0x5C, RW 0x88C4A3): the structure's UnitSpecificSounds entry (RW 0x674FFE) replaces the sound this dozer kept
+	// RW startBuildingSound (dozer interface slot 0x5C, RW 0x0088C4A3 Dozer / RW 0x008AD533 Worker): the structure's UnitSpecificSounds entry (RW 0x674FFE) replaces the sound this dozer kept
 	const std::string sound = UnitSpecificSound::rawValue(*structure.getTemplate(), soundField);
 	if (!sound.empty())
 	{
@@ -781,7 +787,7 @@ void DozerAIUpdate::startBuildingSound(Object &structure, const char *soundField
 	}
 }
 
-// RW 0x88BFA9: TheAudio->removeAudioEvent(handle at + 0x24), the handle reset to 1
+// RW 0x0088BFA9 (Dozer) / RW 0x008AD106 (Worker): TheAudio->removeAudioEvent(handle), reset to 1
 void DozerAIUpdate::finishBuildingSound()
 {
 	if (m_buildingSoundHolder != INVALID_ID)
