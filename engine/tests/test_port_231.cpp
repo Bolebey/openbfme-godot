@@ -1,6 +1,5 @@
 // OpenBFME unit tests (PORT-231, issue #554): building, producing and earning layer.
 // Expected behaviour and values are proven from RotWK 2.01 game.dat (md5 daed3668):
-//   - GameData::MaxCastleRadius (+0x1220) & BuildAssistant::isLocationClearOfObjects (RW 0x00796D37, 0x00661A02, 0x00661C13, 0x007940A6)
 //   - GameData::SellPercentage ctor default 1.0f (RW 0x006429AD -> 0x00643160 / 0x00643222, S-1981)
 //   - CastleMemberBehavior::BeingBuiltSound (RW 0x00799F0F -> 0x00798057 -> 0x00797C40, HELD_CASTLE_BEING_BUILT = 6)
 //   - ProductionUpdate::completeUnit script naming (RW 0x008A253B / 0x008A2624) & entry + 0x3C hordeTarget migration (RW 0x008A2A67 -> 0x008A171F -> 0x008A07E0)
@@ -14,9 +13,7 @@
 #include "Common/Audio/AudioRequests.h"
 #include "Common/Audio/GameAudio.h"
 #include "Common/Audio/SimulatedAudioDevice.h"
-#include "Common/StateHash.h"
 #include "GameLogic/BuildAssistantSell.h"
-#include "GameLogic/BuildPlacement.h"
 #include "GameLogic/Construction.h"
 #include "GameLogic/Map/CastleTemplates.h"
 #include "GameLogic/Module/CastleModules.h"
@@ -137,112 +134,6 @@ struct Port231World : ProdWorld
 	}
 };
 } // namespace
-
-TEST_CASE("PORT-231: GameData MaxCastleRadius and BuildPlacement::isLocationClearOfObjects 3D / castle range checks (RW 0x796D37 / 0x661C13 / 0x661A02)")
-{
-	GameLogicSettings parsed;
-	std::string err;
-	const std::string gd =
-		"GameData\n"
-		"  ForceModelsToFollowTimeOfDay = Yes\n"
-		"  ForceModelsToFollowWeather = No\n"
-		"  UnitDamagedThreshold = 0.5\n"
-		"  UnitReallyDamagedThreshold = 0.25\n"
-		"  DefaultStartingCash = 1000\n"
-		"  MaxCastleRadius = 130.0\n"
-		"End\n";
-	REQUIRE_MESSAGE(GameLogicSettingsLoader::scanGameData(gd, parsed, &err), err);
-	CHECK(parsed.maxCastleRadius == 130.0f);
-
-	StateHasher ha, hb;
-	parsed.crc(ha);
-	GameLogicSettings zeroed = parsed;
-	zeroed.maxCastleRadius = 0.0f;
-	zeroed.crc(hb);
-	CHECK(ha.value() != hb.value());
-
-	Port231World f;
-	f.logic->settings().maxCastleRadius = 130.0f;
-	f.load(
-		"Object CastleSite\n"
-		"  KindOf = STRUCTURE IMMOBILE BASE_SITE\n"
-		"  Geometry = BOX\n"
-		"  GeometryMajorRadius = 10\n"
-		"  GeometryMinorRadius = 10\n"
-		"  GeometryHeight = 20\n"
-		"  Behavior = CastleBehavior ModuleTag_CB\n"
-		"    CastleToUnpackForFaction = Alpha Base_A\n"
-		"    MaxCastleRadius = 130.0\n"
-		"  End\n"
-		"End\n"
-		"Object PlainBuilding\n"
-		"  KindOf = STRUCTURE IMMOBILE\n"
-		"  Geometry = BOX\n"
-		"  GeometryMajorRadius = 10\n"
-		"  GeometryMinorRadius = 10\n"
-		"  GeometryHeight = 20\n"
-		"End\n"
-		"Object WallSeg\n"
-		"  KindOf = STRUCTURE IMMOBILE WALL_SEGMENT\n"
-		"  Geometry = BOX\n"
-		"  GeometryMajorRadius = 10\n"
-		"  GeometryMinorRadius = 10\n"
-		"  GeometryHeight = 20\n"
-		"End\n"
-		"Object ClearedProp\n"
-		"  KindOf = IMMOBILE CLEARED_BY_BUILD\n"
-		"  Geometry = CYLINDER\n"
-		"  GeometryMajorRadius = 20\n"
-		"  GeometryHeight = 20\n"
-		"End\n"
-		"Object GateBlocker\n"
-		"  KindOf = STRUCTURE IMMOBILE BLOCKING_GATE\n"
-		"  Geometry = BOX\n"
-		"  GeometryMajorRadius = 5\n"
-		"  GeometryMinorRadius = 30\n"
-		"  GeometryHeight = 5\n"
-		"End\n");
-
-	Object *existingCastle = f.make("CastleSite", f.teamOf("Alice"));
-	Coord3D cPos{ 1000.0f, 1000.0f, 0.0f };
-	existingCastle->setPosition(&cPos);
-	f.logic->partition().update();
-
-	const ThingTemplate &castleT = *f.w.get("CastleSite")->getFinalOverride();
-	const ThingTemplate &plainT = *f.w.get("PlainBuilding")->getFinalOverride();
-	const ThingTemplate &wallT = *f.w.get("WallSeg")->getFinalOverride();
-
-	// RW 0x661C13: two castles collide iff 2D dist^2 < (130 + 130)^2 = 260^2
-	CHECK_FALSE(BuildPlacement::isLocationClearOfObjects(*f.logic, Coord3D{ 1250.0f, 1000.0f, 0.0f }, castleT, 0.0f, nullptr, LLF_NO_OBJECT_OVERLAP));
-	CHECK(BuildPlacement::isLocationClearOfObjects(*f.logic, Coord3D{ 1260.0f, 1000.0f, 0.0f }, castleT, 0.0f, nullptr, LLF_NO_OBJECT_OVERLAP));
-
-	// RW 0x661A30: non-WALL_SEGMENT checks castle cylinder (r=130, h=20); WALL_SEGMENT skips castle cylinder
-	CHECK_FALSE(BuildPlacement::isLocationClearOfObjects(*f.logic, Coord3D{ 1135.0f, 1000.0f, 0.0f }, plainT, 0.0f, nullptr, LLF_NO_OBJECT_OVERLAP));
-	CHECK(BuildPlacement::isLocationClearOfObjects(*f.logic, Coord3D{ 1135.0f, 1000.0f, 0.0f }, wallT, 0.0f, nullptr, LLF_NO_OBJECT_OVERLAP));
-
-	// 3D geometriesOverlap (RW 0xAD2CE0): separated in Z (0..20 vs 50..70) is clear; overlapping Z (10..30) blocks
-	Object *plain = f.make("PlainBuilding", f.teamOf("Bob"));
-	Coord3D pPos{ 2000.0f, 2000.0f, 0.0f };
-	plain->setPosition(&pPos);
-	f.logic->partition().update();
-	CHECK_FALSE(BuildPlacement::isLocationClearOfObjects(*f.logic, Coord3D{ 2005.0f, 2000.0f, 10.0f }, plainT, 0.0f, nullptr, LLF_NO_OBJECT_OVERLAP));
-	CHECK(BuildPlacement::isLocationClearOfObjects(*f.logic, Coord3D{ 2005.0f, 2000.0f, 50.0f }, plainT, 0.0f, nullptr, LLF_NO_OBJECT_OVERLAP));
-
-	// RW 0x7940A6: CLEARED_BY_BUILD does not block
-	Object *cleared = f.make("ClearedProp", f.teamOf("Alice"));
-	Coord3D clPos{ 2500.0f, 2500.0f, 0.0f };
-	cleared->setPosition(&clPos);
-	f.logic->partition().update();
-	CHECK(BuildPlacement::isLocationClearOfObjects(*f.logic, Coord3D{ 2500.0f, 2500.0f, 0.0f }, plainT, 0.0f, nullptr, LLF_NO_OBJECT_OVERLAP));
-
-	// RW 0x661AE1: BLOCKING_GATE blocks within 0.66 * boundingCircleRadius^2 even without 3D shape overlap
-	Object *gate = f.make("GateBlocker", f.teamOf("Bob"));
-	Coord3D gPos{ 3000.0f, 3000.0f, 0.0f };
-	gate->setPosition(&gPos);
-	f.logic->partition().update();
-	CHECK_FALSE(BuildPlacement::isLocationClearOfObjects(*f.logic, Coord3D{ 3020.0f, 3000.0f, 30.0f }, plainT, 0.0f, nullptr, LLF_NO_OBJECT_OVERLAP));
-	CHECK(BuildPlacement::isLocationClearOfObjects(*f.logic, Coord3D{ 3026.0f, 3000.0f, 30.0f }, plainT, 0.0f, nullptr, LLF_NO_OBJECT_OVERLAP));
-}
 
 TEST_CASE("PORT-231: CastleMemberBehavior BeingBuiltSound loops across BASE_BUILD and stops on completion or delete (RW 0x799F0F -> 0x798057 / 0x797C40)")
 {

@@ -533,7 +533,7 @@ include(cmake/Port250.cmake) # PORT-250: the SPECIAL_POWER availability arm and 
 include(cmake/Port464.cmake)    # PORT-464: the per-frame steering of a summoned helper (issue #464; OPENBFME_PORT464_TESTS)
 include(cmake/Port199.cmake)    # PORT-199: GiveUpgradeUpdate contained targets, producer-linked pairs, deselection and flash (issue #466; OPENBFME_PORT199_TESTS)
 include(cmake/Port203.cmake)    # PORT-203: tunnel nemesis, removeFromContain(exposeStealthUnits), TunnelContain ExitInterface, AITNGuard (issue #470; OPENBFME_PORT203_TESTS)
-include(cmake/Port231.cmake)    # PORT-231: building/producing/earning layer: MaxCastleRadius/3D overlap, BeingBuiltSound, naming/hordeTarget, S-652/S-1981 (issue #554; OPENBFME_PORT231_TESTS)
+include(cmake/Port231.cmake)    # PORT-231: building/producing/earning layer: BeingBuiltSound, naming/hordeTarget, S-652/S-1981 (issue #554; OPENBFME_PORT231_TESTS)
 include(cmake/Port230.cmake)    # PORT-230: DynamicPortalBehaviour TopAttackPos uses RotWK's full 3D axis norm (fork issue 553; OPENBFME_PORT230_TESTS)
 include(cmake/Port252.cmake)    # PORT-252: SpecialAbilityUpdate & subclass RotWK 2.01 parity (issue #600; OPENBFME_PORT252_TESTS)
 include(cmake/Port236.cmake)    # PORT-236: Victory, score and crates (issue #559; OPENBFME_PORT236_TESTS)
@@ -558,6 +558,8 @@ include(cmake/Port271.cmake)    # PORT-271: several units and heroes selected â€
 include(cmake/Port294.cmake)    # PORT-294: ObjectCreationUpgrade's own mux slots â€” wouldUpgrade, postUpgradeCheck, isPermanent (fork issue #686; OPENBFME_PORT294_TESTS)
 include(cmake/Port275.cmake)    # PORT-275: the command set swap re-evaluates the bar in the same update (fork issue 642; OPENBFME_PORT275_TESTS)
 include(cmake/Port280.cmake)    # PORT-280: ProductionSpeedBonus consumer on Player, calcTimeToBuild and ProductionUpdate (fork issue 647; OPENBFME_PORT280_TESTS)
+include(cmake/Threatlevel1.cmake) # THREATLEVEL-1: the map scripts' threat conditions and counters (appends to OPENBFME_SIM_SOURCES; OPENBFME_THREATLEVEL1_TESTS)
+include(cmake/Buildclear1.cmake) # BUILDCLEAR-1: the placement's clear-of-objects test RW 0x796D37 (OPENBFME_BUILDCLEAR1_TESTS)
 add_library(openbfme_core STATIC
     ${OPENBFME_PLAY2_SOURCES}
     ${OPENBFME_APT_SOURCES}
@@ -1344,6 +1346,8 @@ add_executable(openbfme_tests
     ${OPENBFME_PORT294_TESTS}
     ${OPENBFME_PORT275_TESTS}
     ${OPENBFME_PORT280_TESTS}
+    ${OPENBFME_THREATLEVEL1_TESTS}
+    ${OPENBFME_BUILDCLEAR1_TESTS}
     tests/test_main.cpp
     tests/test_big_archive.cpp
     tests/test_parser_fuzz_regressions.cpp
@@ -1493,6 +1497,7 @@ add_executable(openbfme_tests
     tests/test_local_24.cpp
     # lane LOCAL-28 (W3DLightDraw as retail: object lights, issue #190)
     tests/test_local_28.cpp
+    tests/test_local_88.cpp
     # lane LOCAL-38 (object lights as retail: LightEnvironmentClass per render object, issue #294)
     tests/test_local_38.cpp
     # lane LOCAL-25 (locomotor ground motion presentation and unread simulation stops S-7221, issue #187)
@@ -1539,8 +1544,15 @@ add_executable(openbfme_tests
     tests/test_local_81.cpp
     tests/test_local_82.cpp
     tests/test_local_84.cpp
+    tests/test_local_87.cpp
+    tests/test_local_85.cpp
+    tests/test_local_86.cpp
     # lane LOCAL-89 (issue #715, the model draw's terrain decal: RW 0x4B94BC / 0x4B95AD / 0x672B96 / 0x675C25)
     tests/test_local_89.cpp
+    tests/test_local_92.cpp
+    tests/test_local_91.cpp
+    # lane LOCAL-90 (SymbioticStructuresBody getDamageState & body delegates, body citations: RW 0x8C4FF9 / 0x8C4FB5 / 0x8C505F / 0x8C5146 / 0x8C5250 / 0x8C5284 / 0x8C52DB)
+    tests/test_local_90.cpp
     # lane LOCAL-27 (bridges as retail: Bridge block, damage models, towers, scaffold, radar color, issue #189)
     tests/test_local_27.cpp
     # lane LOCAL-33 (castle gates and 'man the walls' as retail: GateProxyBehavior, ManTheWallsSpecialPower, issue #283)
