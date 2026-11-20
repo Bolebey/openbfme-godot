@@ -20,6 +20,8 @@
 #include "GameLogic/Module/DamageFieldUpdate.h"
 #include "GameLogic/Module/PoisonedBehavior.h"
 #include "GameLogic/Module/ThreatFinderUpdate.h"
+#include "GameLogic/AttributeModifiers.h"
+#include "GameLogic/Object/AttributeModifierPool.h"
 #include "GameLogic/System/ThreatFinder.h"
 #include "GameLogic/Object/Object.h"
 
@@ -348,4 +350,112 @@ TEST_CASE("LOCAL-97 ThreatFinderUpdate: update tracks owner position and ThreatF
 	// RW 0x007EE258: ThreatFinderManager::reset clears all registered finders.
 	world.logic->threatFinders().reset();
 	CHECK(world.logic->threatFinders().find(*world.logic, "Local97Area") == nullptr);
+}
+
+namespace
+{
+const char *kAttrPoolIni = R"(
+ModifierList Local97DamageBuff
+	Category = BUFF
+	Modifier = DAMAGE_MULT 150%
+	Modifier = ARMOR 25%
+	Duration = 1000
+End
+
+Object Local97BuffUnit
+	Side = Men
+	KindOf = SELECTABLE INFANTRY
+	Body = ActiveBody ModuleTag_Body
+		MaxHealth = 100
+	End
+	Behavior = AttributeModifierPoolUpdate ModuleTag_Pool
+	End
+End
+)";
+} // namespace
+
+static float poolProduct(const AttributeModifierPool &pool, int type)
+{
+	float out = 1.0f;
+	if (!pool.product(type, nullptr, false, out))
+	{
+		return 1.0f;
+	}
+	return out;
+}
+
+static float poolSum(const AttributeModifierPool &pool, int type)
+{
+	float out = 0.0f;
+	if (!pool.sum(type, nullptr, out))
+	{
+		return 0.0f;
+	}
+	return out;
+}
+
+TEST_CASE("LOCAL-97 AttributeModifierPoolUpdate: timed ModifierList applies multipliers and expires after Duration (RW 0x0080585F, RW 0x00805A8E)")
+{
+	combattest::CombatWorld world;
+	AttributeModifierStore modifiers;
+	modifiers.registerBlock(world.w.fx.env.blocks);
+	AttributeModifierStore *savedStore = TheAttributeModifierStore;
+	TheAttributeModifierStore = &modifiers;
+	struct RestoreStore
+	{
+		AttributeModifierStore *saved;
+		~RestoreStore() { TheAttributeModifierStore = saved; }
+	} restore{ savedStore };
+
+	const std::string err = world.w.load(kAttrPoolIni, INI_LOAD_OVERWRITE, "local97_pool.ini");
+	REQUIRE_MESSAGE(err.empty(), err);
+
+	Object *u = world.unit("Local97BuffUnit", 'A', 100.0f, 100.0f);
+	REQUIRE(u != nullptr);
+	auto *pool = dynamic_cast<AttributeModifierPool *>(u->attributeModifierPoolModule());
+	REQUIRE(pool != nullptr);
+
+	// Step past frame 0 so frame > m_categoryDisabled[cat] (0).
+	world.frames(1);
+	CHECK(poolProduct(*pool, ATTRIBUTE_MODIFIER_DAMAGE_MULT) == 1.0f);
+	CHECK(poolSum(*pool, ATTRIBUTE_MODIFIER_ARMOR) == 0.0f);
+
+	REQUIRE(u->addAttributeModifier("Local97DamageBuff", -1));
+	CHECK(poolProduct(*pool, ATTRIBUTE_MODIFIER_DAMAGE_MULT) == 1.5f);
+	CHECK(poolSum(*pool, ATTRIBUTE_MODIFIER_ARMOR) == 0.25f);
+
+	// Duration = 1000 ms = 5 frames at 5 Hz: expires after 5 frames.
+	world.frames(5);
+	CHECK(poolProduct(*pool, ATTRIBUTE_MODIFIER_DAMAGE_MULT) == 1.0f);
+	CHECK(poolSum(*pool, ATTRIBUTE_MODIFIER_ARMOR) == 0.0f);
+}
+
+TEST_CASE("LOCAL-97 ENNORATH scenario AttributeModifierPoolUpdate: DainMightyRageBuff applies DAMAGE_MULT 150% and ARMOR 50% through the pool and expires (RW 0x0080585F)")
+{
+	ennorathscenario::World world;
+	if (!world.load("LOCAL-97 ENNORATH scenario AttributeModifierPoolUpdate"))
+	{
+		return;
+	}
+	structtest::Arena arena(world.shared, "FactionDwarves", "FactionMordor");
+
+	Object *gloin = world.place(arena, "CINE_Gloin_TEMP", 0, 400.0f, 400.0f);
+	REQUIRE(gloin != nullptr);
+	auto *pool = dynamic_cast<AttributeModifierPool *>(gloin->attributeModifierPoolModule());
+	REQUIRE(pool != nullptr);
+
+	// Step past frame 0 so frame > m_categoryDisabled[cat] (0).
+	arena.logic.runLogicFrame();
+
+	// data/ini/attributemodifier.ini: DainMightyRageBuff (ARMOR 50%, DAMAGE_MULT 150%, Duration = 30000 = 150 frames)
+	REQUIRE(gloin->addAttributeModifier("DainMightyRageBuff", -1));
+	CHECK(poolProduct(*pool, ATTRIBUTE_MODIFIER_DAMAGE_MULT) == 1.5f);
+	CHECK(poolSum(*pool, ATTRIBUTE_MODIFIER_ARMOR) == 0.5f);
+
+	for (int i = 0; i < 150; ++i)
+	{
+		arena.logic.runLogicFrame();
+	}
+	CHECK(poolProduct(*pool, ATTRIBUTE_MODIFIER_DAMAGE_MULT) == 1.0f);
+	CHECK(poolSum(*pool, ATTRIBUTE_MODIFIER_ARMOR) == 0.0f);
 }
