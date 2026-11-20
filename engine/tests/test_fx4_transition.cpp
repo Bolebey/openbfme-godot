@@ -444,7 +444,7 @@ TEST_CASE("fx4 save: the last damage record's type round-trips in ActiveBody's x
 	// version 2 (before Local 30): without the noEffect byte (loads cleanly with default false)
 	std::vector<std::uint8_t> v2 = v3;
 	v2[0] = 2;
-	v2.resize(v2.size() - 5);
+	v2.resize(v2.size() - 1);
 	XferLoad oldV2(v2);
 	bc->xfer(oldV2);
 	REQUIRE(oldV2.atEnd());
