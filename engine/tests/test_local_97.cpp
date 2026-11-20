@@ -19,6 +19,8 @@
 #include "GameLogic/Module/ActiveBody.h"
 #include "GameLogic/Module/DamageFieldUpdate.h"
 #include "GameLogic/Module/PoisonedBehavior.h"
+#include "GameLogic/Module/ThreatFinderUpdate.h"
+#include "GameLogic/System/ThreatFinder.h"
 #include "GameLogic/Object/Object.h"
 
 #include <utility>
@@ -310,4 +312,40 @@ TEST_CASE("LOCAL-97 DamageFieldUpdate: fires via forceFireWeapon ignoring weapon
 	StateHasher hAfter;
 	df->crc(hAfter);
 	CHECK(hAfter.value() == hBefore.value());
+}
+
+namespace
+{
+const char *kThreatFinderIni = R"(
+Object Local97ThreatMarker
+	Side = Men
+	KindOf = IMMOBILE
+	Behavior = ThreatFinderUpdate ModuleTag_TF
+		DefaultRadius = 120.0
+	End
+End
+)";
+} // namespace
+
+TEST_CASE("LOCAL-97 ThreatFinderUpdate: update tracks owner position and ThreatFinderManager::reset clears registry (RW 0x007EDDB6, RW 0x007EE258)")
+{
+	combattest::CombatWorld world;
+	ThreatFinderUpdate::registerModule(world.w.modules);
+	const std::string err = world.w.load(kThreatFinderIni, INI_LOAD_OVERWRITE, "local97_tf.ini");
+	REQUIRE_MESSAGE(err.empty(), err);
+
+	Object *marker = world.unit("Local97ThreatMarker", 'A', 150.0f, 250.0f);
+	REQUIRE(marker != nullptr);
+	auto *tfu = dynamic_cast<ThreatFinderUpdate *>(marker->findModule("ThreatFinderUpdate"));
+	REQUIRE(tfu != nullptr);
+	REQUIRE(tfu->data() != nullptr);
+	CHECK(tfu->data()->m_radius == 120.0f);
+
+	ThreatFinder finder("Local97Area", false);
+	world.logic->threatFinders().add(*world.logic, "Local97Area", finder);
+	CHECK(world.logic->threatFinders().find(*world.logic, "Local97Area") == &finder);
+
+	// RW 0x007EE258: ThreatFinderManager::reset clears all registered finders.
+	world.logic->threatFinders().reset();
+	CHECK(world.logic->threatFinders().find(*world.logic, "Local97Area") == nullptr);
 }
