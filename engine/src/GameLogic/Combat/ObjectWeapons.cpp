@@ -90,6 +90,18 @@ void addBit(Object::ModelConditionBits &bits, int bit)
 {
 	bits[(size_t)bit >> 5] |= 1u << (bit & 31);
 }
+
+// RW 0x6C97F9 / 0x6C98E6: the five weapon lock conditions are a single mask, not independent slot state.
+// DONOR BFME2 0x002C8AAE / 0x002C8B9B (WeaponSetSetWeaponLock.cpp).
+void clearWeaponLockConditions(Object &owner)
+{
+	Object::ModelConditionBits clear{};
+	for (int i = 0; i < 5; ++i)
+	{
+		addBit(clear, slotConditions(i).lockBit);
+	}
+	owner.clearAndSetModelConditionFlags(clear, Object::ModelConditionBits{});
+}
 } // namespace
 
 // RW 0x73D89F / 0x73D917 (the same best match as FindArmorTemplateSet over the 128 bit set conditions): the most conditions met first, then the fewest unmet
@@ -689,7 +701,7 @@ void ObjectWeapons::rebuildWeapons(const WeaponTemplateSet *set)
 	m_set = set;
 	if (!(old && set && set->m_isWeaponLockSharedAcrossSets))
 	{
-		m_lockType = NOT_LOCKED;
+		releaseWeaponLock(LOCKED_PERMANENTLY); // RW 0x6C99E2, non-shared lock on a weapon set change
 		m_curSlot = PRIMARY_WEAPON;
 	}
 	if (!set)
@@ -828,16 +840,17 @@ bool ObjectWeapons::setWeaponLock(int slot, WeaponLockType type)
 	{
 		return false;
 	}
-	if (m_lockType == LOCKED_PERMANENTLY && type == LOCKED_TEMPORARILY)
+	if (type == LOCKED_PERMANENTLY || (type == LOCKED_TEMPORARILY && m_lockType != LOCKED_PERMANENTLY))
 	{
-		return false; // a temporary lock never overrides a permanent one
+		m_curSlot = slot;
+		m_lockedSlot = slot;
+		m_lockType = type;
 	}
-	m_curSlot = slot;
-	m_lockedSlot = slot;
-	m_lockType = type;
-	if (slot < 5)
+	// A temporary request against a permanent lock succeeds without changing the selected slot (RW 0x6C983E).
+	clearWeaponLockConditions(*m_owner);
+	if (m_curSlot < 5)
 	{
-		m_owner->setModelConditionState(slotConditions(slot).lockBit, true);
+		m_owner->setModelConditionState(slotConditions(m_curSlot).lockBit, true);
 	}
 	return true;
 }
@@ -877,11 +890,8 @@ void ObjectWeapons::releaseWeaponLock(WeaponLockType type)
 	}
 	if (type == LOCKED_PERMANENTLY || (type == LOCKED_TEMPORARILY && m_lockType == LOCKED_TEMPORARILY))
 	{
-		if (m_lockedSlot < 5)
-		{
-			m_owner->setModelConditionState(slotConditions(m_lockedSlot).lockBit, false);
-		}
 		m_lockType = NOT_LOCKED;
+		clearWeaponLockConditions(*m_owner);
 	}
 }
 
