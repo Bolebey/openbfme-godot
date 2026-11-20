@@ -290,6 +290,7 @@ $env:RW_GAME_DAT = (Resolve-Path 'workspace\games-en\Vanilla_(2.01)\install\game
    - поля мода: `FIELD_GAPS.tsv` (поле без читателя → функции-кандидаты);
    - функции RotWK по модулям: `RW_FUNCTION_MAP.tsv` (статус `ported` / `partial` / `none`);
    - скрипты: `SCRIPT_MAP.md`;
+   - карты игры (2026-11-20): `MAP_SWEEP.tsv` / `MAP_SWEEP.md` — каждая карта установки Эннората стартует скирмиш и играет 60 с, одна карта на процесс (`tools/maps/map_sweep.py`, тест `ENNORATH sweep maps`); ошибки сгруппированы по тексту, одна группа — один механизм; запускается руками (около часа на ПК);
    - модификаторы атрибутов: `MODIFIER_MAP.md`, `MODIFIER_READERS.tsv`, `MODIFIER_PORT_READS.tsv` (`tools/mod/modifier_map.py`: атрибут → списки мода → читатели RotWK → читает ли порт; таблица списков — на Drive, это данные мода).
    Связь: `MODIFIER_MATRIX.tsv` — красные кнопки матрицы со списками модификаторов их модулей и атрибутами, которые порт там не читает (кнопка «ничего не делает» из-за непортированного чтения); досье задачи сводит все карты по её классам.
 2. **Свой тест до PR**: PR, который добавляет `TEST_CASE`, несёт в описании строку итога doctest каждого своего префикса (`PORT-N*: [doctest] test cases: N | N passed | 0 failed`). Нет строки — проверка GitHub Actions «Own test shown passing» и проверяльщик PR возвращают его сразу, без сборки (`tools/ci/own_test_check.py`).
