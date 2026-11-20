@@ -1453,9 +1453,9 @@ CanAttackResult ObjectWeapons::getAbleToUseWeaponAgainstTarget(int attackType, c
 		}
 		const WeaponTemplate &wt = *weapon->getTemplate();
 		hasAWeapon = true;
-		if ((wt.m_antiMask & targetAntiMask) == 0)
+		if ((setAntiMask & targetAntiMask) == 0)
 		{
-			continue; // RW 0x6C8728 .. 0x6C8735
+			continue; // RW 0x6C8724 .. 0x6C872B: the combined WeaponSet mask, not this slot's mask
 		}
 		if (victim && wt.m_bombardType)
 		{

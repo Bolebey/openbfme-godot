@@ -292,8 +292,9 @@ TEST_CASE("PORT-198 SpawnBehavior: slot 3 gives every guard the force-attack ord
 	}
 }
 
-// RW 0x862990 / 0x8629ED: the can-attack getters ask the spawns, not the spawner (which has no weapon). An UNATTACKABLE victim
-// (RW 0x6C91F7 .. 0x6C9229) makes every spawn answer NOT_POSSIBLE; a normal one is POSSIBLE through the guards' swords.
+// RW 0x862990 / 0x8629ED: the can-attack getters ask the spawns, not the spawner (which has no weapon). Slot 5 goes through
+// getAbleToAttackSpecificObject and rejects an UNATTACKABLE victim (RW 0x6C91F7 .. 0x6C9229). Slot 6 asks the lower-level
+// getAbleToUseWeaponAgainstTarget (RW 0x68B5FA -> 0x6C8652) instead, without that eligibility gate.
 TEST_CASE("PORT-198 SpawnBehavior: slots 5 / 6 ask the guards whether the spawner can shoot (RW 0x862990 / 0x8629ED)")
 {
 	ModEngineFeatures::reset();
@@ -307,11 +308,26 @@ TEST_CASE("PORT-198 SpawnBehavior: slots 5 / 6 ask the guards whether the spawne
 	REQUIRE(si != nullptr);
 
 	// ATTACK_NEW_TARGET_FORCED (RW 0x6C9147): the synthetic world has no map relationships, and a forced attack skips the
-	// player-relationship veto; UNATTACKABLE is refused even when forced (RW 0x6C9207)
+	// player-relationship veto. Slot 5 still refuses UNATTACKABLE (RW 0x6C9207); slot 6 only checks the weapon (RW 0x6C8652).
 	CHECK(si->getCanAnySlavesAttackSpecificTarget(ATTACK_NEW_TARGET_FORCED, victim, CMD_FROM_PLAYER) == ATTACKRESULT_POSSIBLE);
 	CHECK(si->getCanAnySlavesUseWeaponAgainstTarget(ATTACK_NEW_TARGET_FORCED, victim, nullptr, CMD_FROM_PLAYER) == ATTACKRESULT_POSSIBLE);
 	CHECK(si->getCanAnySlavesAttackSpecificTarget(ATTACK_NEW_TARGET_FORCED, unattackable, CMD_FROM_PLAYER) == ATTACKRESULT_NOT_POSSIBLE);
-	CHECK(si->getCanAnySlavesUseWeaponAgainstTarget(ATTACK_NEW_TARGET_FORCED, unattackable, nullptr, CMD_FROM_PLAYER) == ATTACKRESULT_NOT_POSSIBLE);
+	CHECK(si->getCanAnySlavesUseWeaponAgainstTarget(ATTACK_NEW_TARGET_FORCED, unattackable, nullptr, CMD_FROM_PLAYER) == ATTACKRESULT_POSSIBLE);
+
+	// RW 0x8629C5 / 0x862A26 return the first result 2 or 3, not the numerically largest result from all slaves.
+	const std::vector<Object *> guards = w.guards(*spawner);
+	REQUIRE(guards.size() == 2);
+	w.waitIdle(guards);
+	const Coord3D far{ 80.0f, 300.0f, 0.0f };
+	const Coord3D near{ 340.0f, 300.0f, 0.0f };
+	guards[0]->setPosition(&far);
+	guards[1]->setPosition(&near);
+	CHECK(si->getCanAnySlavesAttackSpecificTarget(ATTACK_NEW_TARGET_FORCED, victim, CMD_FROM_PLAYER) == ATTACKRESULT_POSSIBLE_AFTER_MOVING);
+	CHECK(si->getCanAnySlavesUseWeaponAgainstTarget(ATTACK_NEW_TARGET_FORCED, victim, nullptr, CMD_FROM_PLAYER) == ATTACKRESULT_POSSIBLE_AFTER_MOVING);
+	guards[0]->setPosition(&near);
+	guards[1]->setPosition(&far);
+	CHECK(si->getCanAnySlavesAttackSpecificTarget(ATTACK_NEW_TARGET_FORCED, victim, CMD_FROM_PLAYER) == ATTACKRESULT_POSSIBLE);
+	CHECK(si->getCanAnySlavesUseWeaponAgainstTarget(ATTACK_NEW_TARGET_FORCED, victim, nullptr, CMD_FROM_PLAYER) == ATTACKRESULT_POSSIBLE);
 }
 
 // Neighbour behaviour: the ground order the AIGroup already gave (RW 0x772369 -> slot 4 RW 0x863807) and the idle order

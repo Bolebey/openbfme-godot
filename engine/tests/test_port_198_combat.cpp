@@ -78,6 +78,39 @@ const char kPort198Objects[] =
 	"    WarheadTemplateName = BowWarhead\n"
 	"  End\n"
 	"End\n"
+	// RW 0x6C8724 uses the WeaponSet's combined anti-mask to decide whether to test each slot's range.
+	"Weapon P198AirLong\n"
+	"  AttackRange = 500\n"
+	"  AntiGround = No\n"
+	"  AntiAirborneVehicle = Yes\n"
+	"  DamageNugget\n"
+	"    Damage = 10\n"
+	"    DamageType = SLASH\n"
+	"    DeathType = NORMAL\n"
+	"  End\n"
+	"End\n"
+	"Weapon P198GroundShort\n"
+	"  AttackRange = 50\n"
+	"  DamageNugget\n"
+	"    Damage = 10\n"
+	"    DamageType = SLASH\n"
+	"    DeathType = NORMAL\n"
+	"  End\n"
+	"End\n"
+	"Object P198MixedRangeTower\n"
+	"  KindOf = STRUCTURE IMMOBILE SELECTABLE CAN_ATTACK\n"
+	"  Geometry = CYLINDER\n"
+	"  GeometryMajorRadius = 10\n"
+	"  GeometryHeight = 20\n"
+	"  WeaponSet\n"
+	"    Conditions = None\n"
+	"    Weapon = PRIMARY P198AirLong\n"
+	"    Weapon = SECONDARY P198GroundShort\n"
+	"  End\n"
+	"  Body = ActiveBody ModuleTag_Body\n"
+	"    MaxHealth = 1000\n"
+	"  End\n"
+	"End\n"
 	"Object P198ImmobileSlave\n"
 	"  KindOf = INFANTRY ARCHER CAN_ATTACK\n"
 	"  VisionRange = 250\n"
@@ -557,8 +590,8 @@ TEST_CASE("PORT-198 SpawnBehaviorInterface slots 2..6 union, getClosestSlave, re
 	CHECK(spawnIface->getClosestSlave(nearEnemy->getPosition()) == mobileSlave);
 	CHECK(spawnIface->getClosestSlave(&posA) == immobileSlave);
 
-	// Union slots 5 & 6 aggregate POSSIBLE > POSSIBLE_AFTER_MOVING > INVALID_SHOT > NOT_POSSIBLE across modules:
-	// at x=660, immobileSlave answers INVALID_SHOT (Speed=0 out of 200 reach), mobileSlave answers POSSIBLE_AFTER_MOVING -> union wins with POSSIBLE_AFTER_MOVING.
+	// Union slots 5 & 6 return the first POSSIBLE or POSSIBLE_AFTER_MOVING across modules; if neither occurs, INVALID_SHOT beats NOT_POSSIBLE.
+	// At x=660, immobileSlave answers INVALID_SHOT (Speed=0 out of 200 reach), mobileSlave answers POSSIBLE_AFTER_MOVING.
 	CHECK(immobileSlave->getAbleToAttackSpecificObject(ATTACK_NEW_TARGET, farEnemy, CMD_FROM_PLAYER) == ATTACKRESULT_INVALID_SHOT);
 	CHECK(mobileSlave->getAbleToAttackSpecificObject(ATTACK_NEW_TARGET, farEnemy, CMD_FROM_PLAYER) == ATTACKRESULT_POSSIBLE_AFTER_MOVING);
 	CHECK(spawnIface->getCanAnySlavesAttackSpecificTarget(ATTACK_NEW_TARGET, farEnemy, CMD_FROM_PLAYER) == ATTACKRESULT_POSSIBLE_AFTER_MOVING);
@@ -763,6 +796,30 @@ TEST_CASE("PORT-198 WeaponSet::getAbleToUseWeaponAgainstTarget & Object containm
 	CHECK(weaponSpawner->getAbleToUseWeaponAgainstTarget(ATTACK_NEW_TARGET, nearDual, nearDual->getPosition(), CMD_FROM_PLAYER) == ATTACKRESULT_INVALID_SHOT);
 	CHECK(weaponSpawner->getAbleToUseWeaponAgainstTarget(ATTACK_TUNNEL_NETWORK_GUARD, nearDual, nearDual->getPosition(), CMD_FROM_PLAYER) == ATTACKRESULT_POSSIBLE);
 	CHECK(weaponSpawner->getAbleToUseWeaponAgainstTarget(ATTACK_TUNNEL_NETWORK_GUARD, farFromDual, farFromDual->getPosition(), CMD_FROM_PLAYER) == ATTACKRESULT_INVALID_SHOT);
+}
+
+TEST_CASE("PORT-198 WeaponSet range uses the combined anti-mask (RW 0x6C8724)")
+{
+	Port198Rig r;
+	Object *tower = r.world.unit("P198MixedRangeTower", 'A', 400.0f, 400.0f);
+	Object *enemy = r.world.unit("Dummy", 'B', 700.0f, 400.0f);
+	r.world.frames(2);
+	ObjectWeapons *weapons = tower->getWeapons();
+	REQUIRE(weapons != nullptr);
+	const Weapon *longAir = weapons->weaponInSlot(PRIMARY_WEAPON);
+	const Weapon *shortGround = weapons->weaponInSlot(SECONDARY_WEAPON);
+	REQUIRE(longAir != nullptr);
+	REQUIRE(shortGround != nullptr);
+	REQUIRE(longAir->getTemplate() != nullptr);
+	REQUIRE(shortGround->getTemplate() != nullptr);
+	CHECK((longAir->getTemplate()->m_antiMask & WEAPON_ANTI_GROUND) == 0);
+	CHECK((shortGround->getTemplate()->m_antiMask & WEAPON_ANTI_GROUND) != 0);
+
+	// The long-range slot is air-only, but the set contains an anti-ground slot. Retail tests the set mask, not the current slot's mask, at 0x6C8724,
+	// so the long range makes this immobile tower's ground/object shot POSSIBLE even though the short ground-only slot cannot reach the target.
+	const Coord3D ground = *enemy->getPosition();
+	CHECK(tower->getAbleToUseWeaponAgainstTarget(ATTACK_NEW_TARGET, enemy, &ground, CMD_FROM_PLAYER) == ATTACKRESULT_POSSIBLE);
+	CHECK(tower->getAbleToUseWeaponAgainstTarget(ATTACK_NEW_TARGET, nullptr, &ground, CMD_FROM_PLAYER) == ATTACKRESULT_POSSIBLE);
 }
 
 TEST_CASE("PORT-198 Player::onUnitCreated -> SkirmishAIManager::unitCreated -> AIBaseBuilder::onStructureBuilt(..., false)")
