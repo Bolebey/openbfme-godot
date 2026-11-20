@@ -10,9 +10,11 @@
 //     TheGameLogic is the global 0x00DE412C, stored by that constructor at RW 0x62CD16), the script action 538 SET_HERO_EXPERIENCE_SHARING writes it
 //     (RW 0x7CDF99 -> RW 0x7BD3D1: mov al, [esp + 4]; mov ecx, [0xDE412C]; mov byte ptr [ecx + 0x9F], al — the parameter's int (+ 8) != 0), and the share
 //     routine reads it (RW 0x883428: cmp byte ptr [eax + 0x9F], 0) to skip a HERO candidate while it is clear (RW 0x88342F: jne; the candidate's KindOf
-//     bit 26 at RW 0x883434: test byte ptr [eax + 0x113], 4). The retail's .text holds only five +0x9F accesses (RW 0x5F1563 is a Player byte, RW 0x62D299
-//     the constructor, RW 0x7BB038 / RW 0x7BD3DB the writers, RW 0x883428 the reader), and GameLogic's xfer (RW 0x630D6F .. RW 0x630D78) reads none of them:
-//     the byte is neither saved nor hashed.
+//     bit 26 at RW 0x883434: test byte ptr [eax + 0x113], 4). The GameLogic + 0x9F accesses are RW 0x62D299 the constructor, RW 0x7BB038 the member
+//     setter, RW 0x7BD3DB the script writer, RW 0x883054 the member getter and RW 0x883428 the reader; every other .text + 0x9F displacement is foreign or
+//     non-code (RW 0x5F079D a data-table byte, RW 0x5F1563 a Player byte, RW 0x630146 another class's constructor). GameLogic's init / reset / startNewGame
+//     (RW 0x62D1CB .. RW 0x62D1E0 / RW 0x62D3CF .. RW 0x62D3E4 / RW 0x62A22F .. RW 0x62A23D) write + 0x98 .. + 0x9B only and leave the byte alone, and
+//     GameLogic's xfer (RW 0x630D6F .. RW 0x630D78) reads none of them: the byte is neither saved nor hashed.
 //   * ShareExperienceBehavior::xfer (RW 0x8E3BB1): the version (RW 0x404F15 writes (1, 1)) and the base UpdateModule xfer (RW 0x850C60) and nothing else.
 //
 // The fixture's numbers are the mod's module: Percentage 0.5, DropOff 1.0, Radius 100 (the port's HERO-2 regression test uses the same block).

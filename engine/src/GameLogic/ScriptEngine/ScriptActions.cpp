@@ -88,6 +88,9 @@ const std::set<int> &clientActions()
 			// lane PORT-439: RW 0x7CAFA5 case 0x185 (RW 0x7CB6FB) -> RW 0x7BB627(focal, seconds * 1000, easeIn * 1000, easeOut * 1000) ->
 			// TheTacticalView vslot 0xF0 = View::setFocalLength RW 0x48885E: the view's own camera animation (client, not saved)
 			"FOCAL_LENGTH_CAMERA",
+			// LOCAL-94 (issue #720): case 331 (RW 0x7CE53A) -> RW 0x7BD6E9 (DONOR BFME2 0x003BCC08, ScriptActions::doResizeViewGuardband) ->
+			// TheTacticalView vslot 0x1BC = W3DView::setGuardBandBias (RW 0x48B5FC: View + 0x78 / + 0x7C); client tactical view state only
+			"RESIZE_VIEW_GUARDBAND",
 		};
 		std::set<int> out;
 		for (const char *n : names)
@@ -105,7 +108,7 @@ const std::set<int> &clientActions()
 
 bool positionOf(ScriptEngine &engine, const std::string &name, Coord3D &out, bool cameraFirst = false)
 {
-	// lane CAMPUI-1: MOVE_CAMERA_TO's parameter (type 51) is a named camera or a waypoint; RW 0x7BB540 (BFME2 0x7BAAE4, decomp ScriptActionsRva003BACCA.cpp)
+	// lane CAMPUI-1: MOVE_CAMERA_TO's parameter (type 51) is a named camera or a waypoint; RW 0x7BB540 (BFME2 0x7BAAE4, decomp ScriptActions.cpp)
 	// looks up both and the named camera's position wins
 	if (cameraFirst)
 	{
@@ -131,8 +134,8 @@ bool positionOf(ScriptEngine &engine, const std::string &name, Coord3D &out, boo
 	return false;
 }
 
-// Lane BACKLOG3 (S-2452): the scripts' radar events. TARGET FACTS (RotWK game.dat, caveat S-001; BFME2 decomp ScriptActionsRva003BB76E.cpp /
-// ScriptActions_doObjectRadarCreateEvent.cpp / ScriptActions_doTeamRadarCreateEvent.cpp, tier A for these addresses):
+// Lane BACKLOG3 (S-2452): the scripts' radar events. TARGET FACTS (RotWK game.dat, caveat S-001; BFME2 decomp ScriptActions.cpp /
+// ScriptActions_doObjectRadarCreateEvent.cpp, tier A for these addresses):
 //   RADAR_CREATE_EVENT (RW 0x7BC221): TheRadar->createEvent(the Coord3D parameter, the type parameter, 4.0f (RW 0xBD88C0)), then TheEva's event position (RW 0x5DD1F3);
 //   OBJECT_CREATE_RADAR_EVENT (RW 0x7BC250): the same at the named unit's position (Object + 0x38); nothing without the unit;
 //   TEAM_CREATE_RADAR_EVENT (RW 0x7C0B61): the team by name (getTeamNamed), only when it has a unit (RW 0x7A07D8: a member that is not dead, not Object + 0x94
@@ -455,6 +458,12 @@ void ScriptActions::execute(ScriptEngine &engine, const ScriptActionRec &a)
 		engine.addEndRequest(false, name); // RW 0x7BF15E
 		return;
 	}
+	if (name == "DEBUG_MESSAGE_BOX" || name == "DEBUG_STRING")
+	{
+		// LOCAL-94 (issue #720): case 0 (RW 0x7CB007) / case 104 (RW 0x7CB017) -> RW 0x604D85 (DONOR BFME2 0x00205263, ScriptEngine::AppendDebugMessage):
+		// tests [0xDE87B8] (ScriptDebugMessagesDisabled) and [0xDE3B98] (TheScriptDebugWindowDLL, always null in retail 2.01), returning immediately.
+		return;
+	}
 	if (name == "OPTIONS_SET_OCCLUSION_MODE")
 	{
 		// lane OCCLUDE-1: case 298 (RW 0x7CE207): TheGameLogic + 0x99 = (param 0's int (+ 8) != 0) through RW 0x7BD549; the renderer's occluded-object
@@ -467,6 +476,33 @@ void ScriptActions::execute(ScriptEngine &engine, const ScriptActionRec &a)
 		// PORT-301: case 538 (RW 0x7CDF99): TheGameLogic + 0x9F = (param 0's int (+ 8) != 0) through RW 0x7BD3D1; ShareExperienceBehavior::share reads it
 		// (RW 0x883428) and skips a HERO candidate while it is clear
 		logic.setHeroExperienceSharing(param(a, 0).intValue != 0);
+		return;
+	}
+	if (name == "OPTIONS_SET_DRAWICON_UI_MODE")
+	{
+		// LOCAL-94 (issue #720): case 300 (RW 0x7CE222) -> RW 0x7BD55C (DONOR BFME2 0x003BCA7B): TheGameLogic + 0x9A = (param 0's int != 0),
+		// read by Drawable::drawIconUI (RW 0x679134).
+		logic.setShowDrawableIconUI(param(a, 0).intValue != 0);
+		return;
+	}
+	if (name == "OPTIONS_SET_PARTICLE_CAP_MODE")
+	{
+		// LOCAL-94 (issue #720): case 301 (RW 0x7CE2B6) -> RW 0x7BD56F (DONOR BFME2 0x003BCA8E): TheGameLogic + 0x9B = (param 0's int != 0),
+		// read by GameLogic::getParticleCapMode (RW 0x441B52 at RW 0x4438ED).
+		logic.setParticleCapMode(param(a, 0).intValue != 0);
+		return;
+	}
+	if (name == "PLAYER_REPAIR_NAMED_STRUCTURE")
+	{
+		// LOCAL-94 (issue #720): case 257 (RW 0x7CC332) -> RW 0x7C0402 (DONOR BFME2 0x003BF96F, ScriptActions::doPlayerRepairNamedStructure):
+		// resolves the named unit (RW 0x75A243) and the first player of the mask (RW 0x758F7C / 0x6A85EE), then calls Player::repairStructure
+		// (RW 0x6AA671 -> AIPlayer::repairStructure RW 0x8F78EB).
+		Object *obj = engine.getUnitNamed(param(a, 1).stringValue);
+		Player *player = obj ? ScriptConditions::firstPlayer(engine, param(a, 0).stringValue) : nullptr;
+		if (player)
+		{
+			player->repairStructure(logic, obj->getID());
+		}
 		return;
 	}
 	if (name == "RADAR_CREATE_EVENT" || name == "OBJECT_CREATE_RADAR_EVENT" || name == "TEAM_CREATE_RADAR_EVENT")

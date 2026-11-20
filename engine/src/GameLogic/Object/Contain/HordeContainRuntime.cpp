@@ -362,7 +362,6 @@ void HordeContain::createPayload()
 	GameLogic &logic = horde->logic();
 	ThingFactory &things = logic.things();
 	const TransportContainModuleData &transport = m_data->horde.m_transport;
-	ObjectStatusMaskType status{};
 	for (const InitialPayloadEntry &e : transport.m_initialPayload)
 	{
 		if (e.count <= 0)
@@ -375,6 +374,15 @@ void HordeContain::createPayload()
 		{
 			logic.reportError("HordeContain of " + horde->getTemplate()->getName() + ": InitialPayload template '" + e.name + "' does not exist");
 			continue;
+		}
+		ObjectStatusMaskType status{};
+		if (logic.settings().forceHordesToLowLOD) // RW 0x86A104 -> RW 0x86A117 .. 0x86A15E: HordeContain + !HERO (+0x113 bit 2) + !MONSTER (+0x109 bit 2) + AIData +0xBB
+		{
+			const auto &ko = logic.templateInfo(tt->getFinalOverride()).kindOf;
+			if (!MaskTest(ko, 90u) && !MaskTest(ko, 10u))
+			{
+				MaskSet(status, OBJECT_STATUS_CREATE_DRAWABLE_WITH_LOW_DETAIL, true);
+			}
 		}
 		enableLoadSounds(false); // RW 0x871BBB -> 0x86A264
 		for (int i = 0; i < e.count; ++i)
@@ -1349,7 +1357,7 @@ void HordeContain::teleportMembersTransform(const float basis[9])
 // they walk to their slots in the member pass (RW 0x87468B), and an explicit teleport moves them (contain slot 0x1B8 RW 0x86D881, teleportMembers). The port
 // had ZH OpenContain's "the contents follow the container" here: every member was put on its slot whenever the horde's transform changed outside its
 // locomotor, e.g. AIMoveToState's final-angle snap (RW 0x748E46 -> 0x70C31E), so members jumped up to 40 units at the end of a move.
-// NOT PORTED: the + 0x4AC / + 0x4B0 mark (its readers are not decoded).
+// NOT PORTED: maintain the transient + 0x4AC ground override / + 0x4B0 frame stamp. The + 0x4AC readers include Object layer and Pathfinder portal checks (S-4840 / S-4851); its HordeContain writer clears it 13 frames later (RW 0x68C05A). The + 0x4B0 reader/use remains unresolved; this is separate from the old, incorrect follow-container transform behavior.
 void HordeContain::containReactToTransformChange()
 {
 }

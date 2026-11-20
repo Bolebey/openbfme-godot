@@ -27,7 +27,7 @@ and its retail tests run in the owner's batch after the code was read (batch_bot
 says lives in this repository is the owner's.
 
 Order and skips (owner 2026-11-17: the checker ran hours behind, re-checking what Claude had already taken):
- - the most recently updated PRs first;
+ - reworked PRs (checked before) and never-checked ones in turn, each queue oldest head commit first (queue_order, 2026-11-19);
  - a PR whose head is already in a batch Claude is testing or landing (origin batch/*, land/*, agent/claude/station-0) is skipped;
  - a PR returned to its agent (a comment with <!-- returned --> or "не принят", newer than the PR's last commit) is skipped until a new
    commit arrives;
@@ -127,6 +127,8 @@ def ensure_tree() -> None:
     if not (WT / ".git").exists():
         sh(["git", "worktree", "prune"], cwd=REPO)  # a Colab restart leaves the old tree's registration behind
         sh(["git", "worktree", "add", "--detach", str(WT), "origin/main"], cwd=REPO).check_returncode()
+    # docs/STOPS.md merges by stop id (tools/stops_merge.py, .gitattributes merge=stops; owner 2026-11-19: a line union doubled 67 rows)
+    sh(["git", "config", "merge.stops.driver", "python3 tools/stops_merge.py %O %A %B"], cwd=REPO)
 
 
 def build() -> tuple[bool, str]:
@@ -210,31 +212,92 @@ def run_set(patterns: list[str]) -> dict[str, tuple[str, str]]:
         return {tc: (st, err) for tc, st, err in pool.map(run_test, patterns)}
 
 
-def main_baseline(state: dict, main_sha: str) -> dict:
-    """BASE on main itself, once per main commit."""
-    if not set(BASE) <= set(state["main"].get("results") or {}):  # BASE grew (2026-11-17: the batch's whole set): measure main again
-        state["main"] = {}
-    if not set(BASE) <= set(state["main"].get("sigs") or {}):   # measured before the signatures (2026-11-18): measure main again
-        state["main"] = {}
-    if state["main"].get("sha") == main_sha and "audit" in state["main"]:
-        return state["main"]["results"]
-    old = state["main"].get("sha")
-    if old and "audit" in state["main"]:  # main moved by docs / tools only (a landing's own commits): the engine is the same, keep its results
-        moved = sh(["git", "diff", "--name-only", f"{old}..{main_sha}"]).stdout.split()
-        if moved and not any(f.startswith(("engine/", "godot/")) or f == "tools/mod/field_audit.py" for f in moved):
-            state["main"]["sha"] = main_sha
-            save_state(state)
-            return state["main"]["results"]
+# Main's base results on demand (owner 2026-11-19): the checker used to build main and run the whole base set and the field audit after every
+# landing that touched the engine, on each sandbox: 35-80 of a check's 70-80 minutes. Now the PR goes first. A base test whose PR result
+# equals main's last known one (status and failure signature; a pinned test that passes is at its pin) is as on main; only a test that
+# differs (a PR red where main was green, green where it was red, another failure) needs this main's own result, and main is built and only
+# those tests run (the audit of main beside them). Results are kept per main commit here and on the Drive, so the other sandbox reuses them.
+MAIN_DRIVE = Path(os.environ.get("PRCHECK_MAIN_DRIVE", "/content/drive/MyDrive/openbfme-runs/prcheck/main"))
+
+
+def engine_moved(old: str, new: str) -> bool:
+    moved = sh(["git", "diff", "--name-only", f"{old}..{new}"]).stdout.split()
+    return not moved or any(f.startswith(("engine/", "godot/")) or f == "tools/mod/field_audit.py" for f in moved)
+
+
+def main_known(state: dict, main_sha: str) -> dict[str, list[str]]:
+    """{test: [status, signature]} measured on main_sha (by this sandbox or, through the Drive, the other one). A main that moved by docs /
+    tools only keeps the previous commit's results."""
+    cur = state.get("main") or {}
+    if "results" in cur and "tests" not in cur:  # the state of the whole-baseline checker: its results become the last known ones
+        state["main_last"] = {k: [v, (cur.get("sigs") or {}).get(k, v)] for k, v in cur["results"].items()}
+        if cur.get("audit"):
+            state["main_audit"] = [cur["audit"], cur.get("sha", "")]
+        cur = {"sha": cur.get("sha"), "tests": {k: list(v) for k, v in state["main_last"].items()}}
+    if cur.get("sha") != main_sha:
+        old = cur.get("sha")
+        keep = (cur.get("tests") or {}) if old and not engine_moved(old, main_sha) else {}
+        cur = {"sha": main_sha, "tests": dict(keep)}
+    try:
+        shared = json.loads((MAIN_DRIVE / f"{main_sha}.json").read_text())
+    except (OSError, ValueError):
+        shared = {}
+    for k, v in shared.items():
+        cur["tests"].setdefault(k, v)
+    state["main"] = cur
+    return cur["tests"]
+
+
+def remember_main(state: dict, main_sha: str, got: dict[str, list[str]]) -> None:
+    state["main"]["tests"].update(got)
+    state.setdefault("main_last", {}).update(got)
+    save_state(state)
+    try:  # shared with the other sandbox; merged with what it wrote meanwhile
+        MAIN_DRIVE.mkdir(parents=True, exist_ok=True)
+        path = MAIN_DRIVE / f"{main_sha}.json"
+        try:
+            have = json.loads(path.read_text())
+        except (OSError, ValueError):
+            have = {}
+        have.update(got)
+        tmp = path.with_suffix(f".{SANDBOX}.tmp")
+        tmp.write_text(json.dumps(have, indent=1))
+        os.replace(tmp, path)
+    except OSError:
+        pass
+
+
+def main_needed(pr_res: dict[str, list[str]], known: dict, last: dict) -> tuple[list[str], dict[str, list[str]]]:
+    """(the tests main must run, main's view of the rest): known on this main -> that; equal to main's last known result -> as on main;
+    otherwise main runs it."""
+    need, view = [], {}
+    for tc, (st, sig) in pr_res.items():
+        if tc in known:
+            view[tc] = list(known[tc])
+        elif tc in last and list(last[tc]) == [st, sig]:
+            view[tc] = [st, sig]
+        else:
+            need.append(tc)
+    return need, view
+
+
+def measure_main(state: dict, main_sha: str, tests: list[str]) -> None:
+    """Build main and run only `tests` on it, the field audit of main beside them."""
     sh(["git", "checkout", "-q", "-f", "--detach", main_sha]).check_returncode()
-    status("prcheck", f"main {main_sha[:8]}: сборка и эталонный набор ({len(BASE)} наборов), с ним сравниваются PR")
+    status("prcheck", f"main {main_sha[:8]}: сборка и {len(tests)} наборов, которые у PR не как на main")
     ok, err = build()
     if not ok:
         raise RuntimeError(f"main {main_sha[:8]} does not build:\n{err}")
-    res = run_set(BASE)
-    state["main"] = {"sha": main_sha, "results": {k: v[0] for k, v in res.items()}, "sigs": {k: SIGS.get(k, v[0]) for k, v in res.items()}}
-    state["main"]["audit"] = str(run_audit(HOME / "audit-main") or "")  # the field audit of this main: the PRs' audits compare with it
-    save_state(state)
-    return state["main"]["results"]
+    with cf.ThreadPoolExecutor(1) as side:
+        audit_job = side.submit(run_audit, HOME / "audit-main")
+        res = run_set(tests)
+        try:
+            audit = audit_job.result()
+        except Exception:
+            audit = None
+    if audit:
+        state["main_audit"] = [str(audit), main_sha]
+    remember_main(state, main_sha, {tc: [res[tc][0], SIGS.get(tc, res[tc][0])] for tc in tests})
 
 
 # The field audit (owner 2026-11-17: the checker sees the nightly maps' tools too): tools/mod/field_audit.py on the built tree, the engine's
@@ -306,9 +369,30 @@ def own_tests(diff: str, title: str) -> list[str]:
     return sorted(pats)
 
 
+def own_test_missing(pr: dict, diff: str) -> list[str]:
+    """tools/ci/own_test_check.py's rule on this PR (opened after the rule): the added test prefixes no text shows passing."""
+    for d in (Path(__file__).resolve().parents[1] / "ci", WT / "tools" / "ci"):  # a checkout's own, else the checker tree's
+        if (d / "own_test_check.py").exists() and str(d) not in sys.path:
+            sys.path.insert(0, str(d))
+    try:
+        import own_test_check as ot
+    except ImportError:
+        return []
+    if (pr.get("createdAt") or "") < ot.RULE_SINCE:
+        return []
+    texts = [pr.get("body") or ""]
+    try:
+        texts += [c.get("body") or "" for c in json.loads(gh("pr", "view", str(pr["number"]), "--json", "comments")).get("comments") or []]
+        m = re.search(r"(?:closes|fixes|resolves)\s+#(\d+)", pr.get("body") or "", re.I)
+        if m:
+            texts += [c.get("body") or "" for c in json.loads(gh("issue", "view", m.group(1), "--json", "comments")).get("comments") or []]
+    except Exception:
+        pass
+    return ot.missing(diff, [t for t in texts if not ot.BOT.match(t)])
+
+
 def check_pr(pr: dict, state: dict, main_sha: str, open_prs: list[dict], comment: bool) -> str:
     n, sha = pr["number"], pr["headRefOid"]
-    base = main_baseline(state, main_sha)
     sh(["git", "fetch", "-q", "origin", f"+pull/{n}/head:refs/prcheck/{n}"]).check_returncode()
     sh(["git", "checkout", "-q", "-f", "--detach", main_sha]).check_returncode()
     status("prcheck", f"PR #{n} ({pr['title'][:60]}): вливаю в main {main_sha[:8]}")
@@ -367,6 +451,14 @@ def check_pr(pr: dict, state: dict, main_sha: str, open_prs: list[dict], comment
             "❌ **Матрица ухудшает кнопки, проходившие на main**, без объяснения в `docs/ennorath/matrix_explain.d/<задача>.md` " \
             "(строка `` `<объект> <кнопка>`: почему ``; ошибка теста — чинить тест, а не объяснять)"
         lines += [head, "```", out[:3500], "```"]
+    # owner 2026-11-19: a PR that adds tests shows them passing (tools/ci/own_test_check.py, the same rule as the Actions check "Own test
+    # shown passing"): without the line it goes back at once, no build spent on it (PR 721's test had never compiled)
+    miss = own_test_missing(pr, diff)
+    if miss:
+        lines.append("❌ **Свой тест не показан пройденным**: для " + ", ".join(f"`{m}*`" for m in miss) + " нет строки итога doctest "
+                     "(`[doctest] test cases: N | N passed | 0 failed`) в описании PR, его комментариях или отчёте в issue. Собери, прогони свой "
+                     "тест и вставь итог в описание PR. Сборка не запускалась.")
+        return finish(n, sha, lines, comment, state)
     t_build = time.time()
     status("prcheck", f"PR #{n} ({pr['title'][:60]}): сборка")
     ok, err = build()
@@ -388,6 +480,24 @@ def check_pr(pr: dict, state: dict, main_sha: str, open_prs: list[dict], comment
         except Exception:  # the audit never decides the verdict
             pr_audit = None
     t_tests = time.time() - t_tests
+    known = main_known(state, main_sha)
+    last = state.get("main_last") or {}
+    if base_needed:
+        pr_res = {tc: [res[tc][0], SIGS.get(tc, res[tc][0])] for tc in BASE}  # before a main run overwrites SIGS
+        need, view = main_needed(pr_res, known, last)
+        if need:
+            t_main = time.time()
+            measure_main(state, main_sha, need)
+            t_main = time.time() - t_main
+            view.update({tc: list(state["main"]["tests"][tc]) for tc in need})
+            lines.append(f"ℹ️ Main `{main_sha[:8]}` собран для {len(need)} наборов, где PR не как прежний main: "
+                         f"{', '.join(f'`{t}`' for t in need)} ({t_main / 60:.0f} мин).")
+        for tc, (st, sig) in pr_res.items():
+            SIGS[tc] = sig
+    else:
+        view = {tc: list(known.get(tc) or last.get(tc) or ["none", "none"]) for tc in BASE}
+    base = {tc: v[0] for tc, v in view.items()}
+    main_sigs = {tc: v[1] for tc, v in view.items()}
     if not base_needed:
         res.update({tc: (base.get(tc, "none"), "") for tc in BASE})
         lines.append("ℹ️ Базовый набор не гонялся: PR не меняет движок (код, cmake, тестовые данные, godot/) и файлы базовых тестов — результат как на main.")
@@ -425,7 +535,7 @@ def check_pr(pr: dict, state: dict, main_sha: str, open_prs: list[dict], comment
             lines.append(f"⚠️ `{tc}` сдвигает пин, причина в PR названа: владелец перемерит при вливании." + (f"\n```\n{e}\n```" if e else ""))
     # the batch's split (owner 2026-11-18): a PR that moves any base test (its signature differs from main's, red on main or not) goes into
     # a batch alone, the others together; batch_bot.py reads this mark. Without the base set run (no engine change) nothing moves.
-    lines.append(moves_mark(moved_tests(res, base, state["main"].get("sigs") or {}) if base_needed else []))
+    lines.append(moves_mark(moved_tests(res, base, main_sigs) if base_needed else []))
     if not worse:
         reds = [tc for tc in BASE if base.get(tc) == "fail"]
         lines.append("✅ Базовый набор как на main" + (f" (на main и так красные: {', '.join(f'`{t}`' for t in reds)})" if reds else "") + ".")
@@ -450,7 +560,7 @@ def check_pr(pr: dict, state: dict, main_sha: str, open_prs: list[dict], comment
             except Exception:
                 pass
         try:
-            lines += audit_section(state["main"].get("audit", ""), pr_audit, claim)
+            lines += audit_section((state.get("main_audit") or ["", ""])[0], pr_audit, claim)
         except (OSError, ValueError, KeyError) as exc:
             lines.append(f"ℹ️ Аудит полей не сверен: {exc}")
     try:
@@ -591,12 +701,54 @@ def sync_from_comments(p: dict, state: dict) -> None:
     save_state(state)
 
 
+# Owner 2026-11-20: GitHub Actions builds every PR and runs its own tests first (.github/workflows/fork-pr.yml, the job of this name, for this
+# repository's PRs too); the sandbox checks a PR only when that job is green on its head, so a build failure or a red own test costs a runner,
+# not an hour of the sandbox. A head pushed before the rule (no run of the job) is checked as before.
+ACTIONS_CHECK = "Fork PR: build and own tests"
+ACTIONS_FROM = 1795208400   # 2026-11-20 21:00 UTC: heads committed earlier have no run of the job for all PRs
+
+
+def actions_check(head: str) -> str:
+    """The job's conclusion on this commit ('success', 'failure', ...), 'running', or '' when it has not run."""
+    name = ACTIONS_CHECK.replace(" ", "%20").replace(":", "%3A")
+    done = subprocess.run(["gh", "api", f"repos/{GH}/commits/{head}/check-runs?check_name={name}"], capture_output=True, text=True,
+                          encoding="utf-8", errors="replace", env=dict(os.environ, GH_TOKEN=token()))
+    if done.returncode:
+        raise RuntimeError(f"gh api check-runs: {done.stderr.strip()[:300]}")
+    runs = json.loads(done.stdout).get("check_runs") or []
+    if not runs:
+        return ""
+    last = max(runs, key=lambda r: r.get("started_at") or "")
+    return last.get("conclusion") or "running"
+
+
+def head_time(n: int | str) -> int:
+    """The committer time of the PR's head (refs/prcheck/N, fetched each cycle): when its agent last pushed. Not updatedAt, which every
+    comment moves, the checker's own report too."""
+    out = sh(["git", "log", "-1", "--format=%ct", f"refs/prcheck/{n}"], cwd=REPO).stdout.strip()
+    return int(out) if out.isdigit() else 0
+
+
+def queue_order(todo: list[dict], checked: dict, when, last_reworked: bool) -> list[dict]:
+    """Two queues, each oldest head first, taken in turn (owner 2026-11-19: in a day only reworked PRs were checked; PRs 653..671, never
+    checked, waited behind them since 2026-11-17, because reworked went first and the rest by updatedAt, which the checker's own comments
+    move). Reworked = checked before at another head (its agent waits for the answer, PR 523); new = never checked. The queue that did not
+    give the last check gives the next one."""
+    rework = sorted([p for p in todo if str(p["number"]) in checked], key=when)
+    new = sorted([p for p in todo if str(p["number"]) not in checked], key=when)
+    first, second = (new, rework) if last_reworked else (rework, new)
+    out = []
+    for i in range(max(len(first), len(second))):
+        out += first[i:i + 1] + second[i:i + 1]
+    return out
+
+
 def cycle(args) -> int:
     state = load_state()
     sh(["git", "fetch", "-q", "origin"], cwd=REPO).check_returncode()
     main_sha = sh(["git", "rev-parse", "origin/main"], cwd=REPO).stdout.strip()
     prs = json.loads(gh("pr", "list", "--state", "open", "--limit", "100", "--json",
-                        "number,title,body,headRefOid,headRefName,files,isDraft,updatedAt,isCrossRepository,headRepositoryOwner"))
+                        "number,title,body,headRefOid,headRefName,files,isDraft,updatedAt,createdAt,isCrossRepository,headRepositoryOwner"))
     sh(["git", "fetch", "-q", "origin", "+refs/pull/*/head:refs/prcheck/*"], cwd=REPO)  # the heads, for the batch test below
     # A red PR whose description changed is checked again without a new commit: an agent that only names a pin's cause in the PR body
     # (the named-pin rule reads the body) gets its new verdict (PR 583, 2026-11-17).
@@ -644,18 +796,35 @@ def cycle(args) -> int:
                        f"⏸️ **PR #{p['number']} не проверялся заново** (песочница {SANDBOX}, голова {p['headRefOid'][:8]}): {what}."],
                        not args.no_comment, state)
             continue
+        if args.pr is None:
+            n, head = str(p["number"]), p["headRefOid"]
+            ci = actions_check(head)
+            if ci in ("", "running") and (ci == "running" or head_time(n) >= ACTIONS_FROM):
+                if state.setdefault("actions_wait", {}).get(n) != head:
+                    print(f"#{n}: waits for GitHub Actions ({ci or 'not started'})", flush=True)
+                    state["actions_wait"][n] = head
+                    save_state(state)
+                continue
+            if ci not in ("", "success", "neutral", "skipped"):
+                if state.setdefault("actions_red", {}).get(n) != head:
+                    print(f"#{n}: GitHub Actions {ci}: not checked here", flush=True)
+                    if not args.no_comment:
+                        gh("pr", "comment", n, "--body", f"<!-- prcheck {head} -->\n❌ **PR #{n} не проверялся в песочнице** (голова {head[:8]}): "
+                           f"в GitHub Actions красная проверка «{ACTIONS_CHECK}» ({ci}) — сборка или свои тесты. Ошибки — в аннотациях проверки "
+                           "на вкладке Checks этого PR. Исправь и запушь: Actions проверит заново, песочница возьмёт PR после зелёного результата.")
+                    state["actions_red"][n] = head
+                    save_state(state)
+                continue
         keep.append(p)
     todo = keep
     held = check_claims()
     for p in [p for p in todo if held_elsewhere(p, held)]:
         print(f"#{p['number']}: checked on sandbox {held_elsewhere(p, held)} now", flush=True)
     todo = [p for p in todo if not held_elsewhere(p, held)]
-    # a reworked PR (checked before, new head) first: its agent waits for the answer (PR 523 waited four hours behind new PRs); then the
-    # freshest first
-    todo = sorted(todo, key=lambda p: p.get("updatedAt") or "", reverse=True)
-    todo = sorted(todo, key=lambda p: str(p["number"]) not in state["checked"])
+    todo = queue_order(todo, state["checked"], lambda p: head_time(p["number"]), state.get("last_reworked", False))
     # one PR per cycle, then the list again: a PR reworked while another is being checked waits for that one check only, not the whole queue
     for p in todo[:1]:
+        state["last_reworked"] = str(p["number"]) in state["checked"]
         if not claim_check(p):
             print(f"#{p['number']}: the other sandbox claimed it first", flush=True)
             continue

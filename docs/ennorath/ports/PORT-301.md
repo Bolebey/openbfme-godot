@@ -96,13 +96,22 @@ const bool heroesShareWithHeroes = true; // TheGameLogic + 0x9F (INFERENCE: 1 in
    (`RW 0x0062CD16`: `mov dword ptr [0xDE412C], edi` — конструктор `GameLogic`) и 1775 чтений.
    Косвенное подтверждение: `RW 0x0040116D` делает `dec dword ptr [ecx + 0x1B4]` для объекта из `[0xDE412C]`,
    а в порте `GameLogic::m_depth` — это `RW + 0x1B4` (`engine/src/GameLogic/GameLogic.h`).
-2. **Поле.** `TheGameLogic + 0x9F` — байт. В `.text` всего пять обращений со смещением `+0x9F`:
-   `RW 0x005F1563` (`cmp byte ptr [ebx + 0x9F], 0` — это `Player`, а не `GameLogic`: рядом читаются
-   `Player`'s `+0x40` (флаги `0x20000` / `0x40000`) и `+0x80` / `+0x84` / `+0x88` (float'ы)),
+2. **Поле.** `TheGameLogic + 0x9F` — байт. Реальных обращений к `GameLogic + 0x9F` ровно пять:
    `RW 0x0062D299` (конструктор `GameLogic`: `mov byte ptr [esi + 0x9F], 1` — значение по умолчанию **1**),
    `RW 0x007BB038` (членский сеттер `GameLogic`, семейство `+0x99` / `+0x9A` / `+0x9B` / `+0x9F`),
    `RW 0x007BD3DB` (сеттер через глобаль: `mov ecx, [0xDE412C]; mov byte ptr [ecx + 0x9F], al`),
+   `RW 0x00883054` (членский геттер: `mov al, byte ptr [ecx + 0x9F]; ret`),
    `RW 0x00883428` (читатель в раздаче).
+   Остальные совпадения смещения `+0x9F` в `.text` — ложные или чужие: `RW 0x005F079D` (байты таблицы данных,
+   не код), `RW 0x005F1563` (`cmp byte ptr [ebx + 0x9F], 0` — это `Player`, а не `GameLogic`: рядом читаются
+   `Player`'s `+0x40` (флаги `0x20000` / `0x40000`) и `+0x80` / `+0x84` / `+0x88` (float'ы)),
+   `RW 0x00630146` (конструктор другого класса: `mov esi, ecx` по `RW 0x630031`, дефолты `+0x9A` .. `+0x9F`;
+   конструктор `RW 0x630023` с vtable `0xBFDB68` вызывается фабрикой `RW 0x441904`, где объект наследника
+   получает vtable `0xBD8590`, — это не `GameLogic`).
+   Сбросов флага нет: default-записи `GameLogic::init` / `reset` / `startNewGame` (`RW 0x62D1CB` .. `RW 0x62D1E0`,
+   `RW 0x62D3CF` .. `RW 0x62D3E4`, `RW 0x62A22F` .. `RW 0x62A23D`) пишут только `+0x98` .. `+0x9B`; значение `1`
+   ставится один раз конструктором, флаг переживает старт новой игры (порт: `m_heroExperienceSharing` не трогает
+   ни `GameLogic::reset`, ни `startNewGame` — его меняет только действие 538).
 3. **Писатель.** Скриптовое действие `SET_HERO_EXPERIENCE_SHARING` (ID 538 в таблице шаблонов порта,
    `engine/src/GameLogic/ScriptEngine/ScriptTemplateTables.inc`; в RotWK строка `SET_HERO_EXPERIENCE_SHARING`
    лежит по `VA 0x00C48DDC`, а её описание — «Player_/Experience/Set whether heroes share experience with

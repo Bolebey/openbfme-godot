@@ -1284,7 +1284,7 @@ void WeaponModeSpecialPowerUpdate::initiate()
 	Object *obj = getObject();
 	if (m_data->m_lockWeaponSlot == 5)
 	{
-		// RW 0x89843E: RW 0x68FDF7 is a popcount over the data's four WeaponSetFlags words (cmp edi, 4); an empty mask skips the loop
+		// RW 0x89843E: RW 0x68FDF7 is a popcount over the data's four WeaponSetFlags words (cmp edi, 4); an empty mask skips the loop. Each set bit goes through RW 0x691059 on the OBJECT (RW 0x89843E .. 0x898470)
 		bool anyFlag = false;
 		for (std::uint32_t word : m_data->m_weaponSetFlags)
 		{
@@ -1296,9 +1296,7 @@ void WeaponModeSpecialPowerUpdate::initiate()
 			{
 				if ((m_data->m_weaponSetFlags[(size_t)bit >> 5] >> (bit & 31)) & 1u)
 				{
-					// RW 0x691059 is an OBJECT method (this + 0x38C, then the weapon set update RW 0x6C99E2 and the model condition mirror
-					// RW 0xC16958): an object without a weapon set keeps the bits in its own words and mirrors the condition just the same.
-					obj->setWeaponSetFlag(bit, true);
+					obj->setWeaponSetFlag(bit, true); // RW 0x691059 is an OBJECT method (Object + 0x38C; weapon set update RW 0x6C99E2, model condition mirror RW 0xC16958): weaponless included
 				}
 			}
 		}
@@ -1315,7 +1313,12 @@ void WeaponModeSpecialPowerUpdate::initiate()
 	setWakeFrame(obj, (UpdateSleepTime)m_data->m_duration); // RW 0x850C32(object, Duration)
 	m_active = true;
 	startPowerRecharge(1.0f); // slot 0x3C (1.0)
-	// RW 0x8984B7: the object's FiringTracker reset (RW 0x8E302A(1)) is COMBAT-1's: not called (S-1228)
+	// RW 0x8984AF .. 0x8984B7: the object's own FiringTracker (Object + 0x248) is read and reset hard (RW 0x8E302A, argument 1) when the mode starts, so
+	// its continuous fire count and its shot victim start over; an object without weapons (Object + 0x248 null) has nothing to reset
+	if (ObjectWeapons *weapons = obj->getWeapons())
+	{
+		weapons->resetFiringTracker(true); // RW 0x8E302A(1)
+	}
 }
 
 UpdateSleepTime WeaponModeSpecialPowerUpdate::update()
@@ -1323,6 +1326,7 @@ UpdateSleepTime WeaponModeSpecialPowerUpdate::update()
 	Object *obj = getObject();
 	// P-141 (RW 0x8983C1 -> 0x68DF11, Both editions): release lock through Contain/HordeContain even when a horde container itself has no weapons
 	ObjectWeapons::releaseObjectWeaponLock(*obj, LOCKED_PERMANENTLY);
+	// RW 0x8983C8 .. 0x8983EC: the mask's bits, each through RW 0x691106 on the OBJECT
 	for (int bit = 0; bit < 0x68; ++bit)
 	{
 		if ((m_data->m_weaponSetFlags[(size_t)bit >> 5] >> (bit & 31)) & 1u)
@@ -1381,17 +1385,13 @@ DualWeaponBehavior::DualWeaponBehavior(Thing *thing, const DualWeaponBehaviorMod
 UpdateSleepTime DualWeaponBehavior::setClose(bool close)
 {
 	Object *obj = getObject();
-	ObjectWeapons *weapons = obj->getWeapons();
 	static const int kMcClose = modelConditionIndex("WEAPONSTATE_CLOSE_RANGE");
-	const bool isClose = weapons && MaskTest(weapons->weaponSetFlags(), (unsigned)kWeaponSetCloseRange);
+	const bool isClose = MaskTest(obj->getWeaponSetFlags(), (unsigned)kWeaponSetCloseRange); // RW 0x668303 reads the OBJECT's word
 	if (close == isClose)
 	{
 		return (UpdateSleepTime)LOGICFRAMES_PER_SECOND; // RW 0x85E119 / 0x85E16B
 	}
-	if (weapons)
-	{
-		weapons->setWeaponSetFlag(kWeaponSetCloseRange, close); // RW 0x691059 / 0x691106 (7)
-	}
+	obj->setWeaponSetFlag(kWeaponSetCloseRange, close); // RW 0x691059 / 0x691106 (7) on the OBJECT
 	if (obj->testModelCondition(kMcClose) != close) // Object + 0x120 bit 0, then RW 0x68B53C
 	{
 		Object::ModelConditionBits clearBits{}, setBits{};
@@ -1411,8 +1411,7 @@ UpdateSleepTime DualWeaponBehavior::update()
 		return UPDATE_SLEEP_FOREVER;
 	}
 	const int fps = LOGICFRAMES_PER_SECOND;
-	ObjectWeapons *weapons = obj->getWeapons();
-	const bool rampage = weapons && MaskTest(weapons->weaponSetFlags(), (unsigned)kWeaponSetRampage);
+	const bool rampage = MaskTest(obj->getWeaponSetFlags(), (unsigned)kWeaponSetRampage);
 	if (rampage)
 	{
 		return (UpdateSleepTime)fps;
@@ -1425,7 +1424,7 @@ UpdateSleepTime DualWeaponBehavior::update()
 	}
 	if (m_data->m_useHordeRangeWeapon && hordeContainer)
 	{
-		return setClose(weapons && MaskTest(weapons->weaponSetFlags(), (unsigned)kWeaponSetCloseRange)); // RW 0x85E003 .. 0x85E019
+		return setClose(MaskTest(obj->getWeaponSetFlags(), (unsigned)kWeaponSetCloseRange)); // RW 0x85E003 .. 0x85E019
 	}
 	static const int kUsingAbility = modelConditionIndex("USING_SPECIAL_ABILITY"), kMounted = modelConditionIndex("MOUNTED");
 	if (obj->testModelCondition(kUsingAbility))
@@ -1462,18 +1461,12 @@ UpdateSleepTime DualWeaponBehavior::update()
 	}
 	else
 	{
-		// RW 0x701443(object, range, 0x62) -> RW 0x7006D7 (the AI's target search: INFERENCE, S-1228: the closest visible alive enemy)
-		PartitionFilterFn chain([&](Object &o) { return !o.isEffectivelyDead() && obj->getRelationship(o) == ENEMIES && EmotionModules::canSeeObject(*obj, o, range); });
-		// lane UBER-2A, Uber only: the chain accepts only ENEMIES, so the trees of the players this one does not see as enemies are skipped. The hits enter the
-		// sort in the same order (layer by layer); Uber rule change: an object whose owner changed since the frame's partition update is looked for on its old layer
-		PartitionFilterLayers enemyLayers(obj->getTeam() ? obj->getTeam()->enemyLayerMask() : 0u);
-		PartitionFilter *const chainList[] = { &chain, &enemyLayers };
-		const PartitionFilterList filters(chainList, obj->logic().uber() ? 2 : 1);
-		for (const PartitionHit &h : obj->logic().partition().iterateObjectsInRange(*obj->getPosition(), range, FROM_CENTER_2D, filters, ITER_SORTED_NEAR_TO_FAR))
-		{
-			victim = h.object;
-			break;
-		}
+		// RW 0x85E0C2 -> RW 0x701443(object, distance, 0x62, 0, 0, 0): flags CAN_ATTACK | UNFOGGED | AUTO_ACQUIRE (0x62). The search is the ported worker
+		// RW 0x7006D7 (GameLogic/AI/AIClosestEnemy.cpp): the ENEMIES head and the alive filter, CAN_ATTACK refuses a caster that cannot attack (RW 0x691269)
+		// and links the possible-to-attack filter (RW 0x660CA4), UNFOGGED adds the shroud filter (RW 0x661027), AUTO_ACQUIRE refuses the whole search for a
+		// caster with NO_AUTO_ACQUIRE and skips NOT_AUTOACQUIRABLE / ROCK_VENDOR targets (0xC1D6AC), the stealth, off-map and canSee (within the distance)
+		// filters follow; with no attack priority info the partition's closest object at 3D centres is taken and adjusted for a horde (RW 0x68D30E)
+		victim = AI::findClosestEnemy(*obj, range, AI::CAN_ATTACK | AI::UNFOGGED | AI::AUTO_ACQUIRE, nullptr, nullptr, 0);
 	}
 	if (victim)
 	{
@@ -2629,9 +2622,10 @@ std::vector<std::string> HeroAbilityModules::stopLines()
 		"StartsActive); not ported: the auto sound (client, RW 0x85D930); the control bar's "
 		"right press toggle and glow are lane AUTOCAST-1's (ControlBar::rightPressButton, S-3460)",
 		"[S-1228] WeaponModeSpecialPowerUpdate and DualWeaponBehavior (lane HERO-2): the mode runs (RW 0x89841E / 0x8983B5 over the base timer RW 0x991660 / "
-		"0x991500 / 0x9913BC) and the close range switch runs (RW 0x85DF88); not ported: the firing tracker reset at the start (RW 0x8E302A, COMBAT-1's), the "
-		"initiate sound (client); INFERENCE: DualWeaponBehavior's victim without "
-		"UseRealVictimRange (RW 0x701443 -> 0x7006D7 flags 0x62, the AI's target search) is the closest visible alive enemy; its + 0x20 request has no writer",
+		"0x991500 / 0x9913BC), its start resets the object's FiringTracker hard (RW 0x8984B7 -> 0x8E302A(1), PORT-459), its InitiateSound is answered by the "
+		"special power interface's slot 0x40 (RW 0x991626) and the close range switch runs (RW 0x85DF88) over RW 0x701443 -> 0x7006D7 with flags 0x62 "
+		"(CAN_ATTACK | UNFOGGED | AUTO_ACQUIRE, PORT-459: the closest unfogged enemy the object can attack, a nearer NOT_AUTOACQUIRABLE one skipped, a horde "
+		"victim adjusted); not ported: the + 0x20 close range request has no logic writer in RotWK 2.01 (RW 0x85DF69 / 0x85DF85 save and load it, xfer only)",
 		"[S-1224] RousingSpeechUpdate (lane HERO-2): the speech runs (RW 0x8B068D / 0x8B0485 / 0x8B0A0D / 0x8B07EA); retail's update never ends the ability "
 		"(no call of finishAbility found: the base startPreparation's USING_ABILITY / SPECIAL_ABILITY_PACKING_UNPACKING_OR_USING stay set, so the hero's "
 		"other powers are not ready, RW 0x896C83, until something finishes it; RW 0x693919 aborts only abilities in use, RW 0x851C92): kept as read, "
@@ -2650,8 +2644,8 @@ void ShareExperienceBehavior::xfer(Xfer &x)
 	xferUpdateModule(x);
 	if (v.current == 1)
 	{
-		unsigned long long shares = 0;
-		SnapshotXfer::u64(x, shares); // the port's version 1 wrote the share counter here
+		unsigned long long shareCounter = 0;
+		SnapshotXfer::u64(x, shareCounter); // the port's version 1 wrote the share counter here (read and dropped)
 	}
 }
 
@@ -2726,6 +2720,7 @@ void ActivateModuleSpecialPower::xfer(Xfer &x)
 	x.xferUnsignedInt(&m_activations);
 }
 
+// RW 0x00894327 (slot 3): SpecialAbilityUpdate::xfer (RW 0x00852782), version 1, m_targets (+0x88), m_current (+0x8C), m_shotsAtCurrent (+0x90), m_done (+0x98), m_shots (+0x94).
 void ArrowStormUpdate::xfer(Xfer &x)
 {
 	SnapshotXfer::version(x, 1, 1);
@@ -2754,6 +2749,7 @@ void FellBeastSwoopPower::xfer(Xfer &x)
 	x.xferUnsignedInt(&m_commands);
 }
 
+// RW 0x008B0923 (slot 3): SpecialAbilityUpdate::xfer (RW 0x00852782), version 2, m_followers (+0x88), m_started (+0x90), m_endFrame (+0x8C), m_inner (+0x94), m_outer (+0x98).
 void RousingSpeechUpdate::xfer(Xfer &x)
 {
 	SnapshotXfer::version(x, 1, 1);
@@ -2766,7 +2762,7 @@ void RousingSpeechUpdate::xfer(Xfer &x)
 	x.xferUnsignedInt(&m_inspired);
 }
 
-// RW 0x0089659F (slot 3): version 1, delegates to SpecialAbilityUpdate::xfer (RW 0x00852782).
+// RW 0x0089659F (slot 3): version 1, delegates to SpecialAbilityUpdate::xfer (RW 0x00852782); RW 0x0089643F (getModuleNameKey).
 // Inherited base tail-calls: RW 0x00896435 (finishAbility -> 0x008530BA), RW 0x0089643A (update -> 0x00854DF7),
 // RW 0x008B0BAC (continuePreparation -> 0x00852A3E), RW 0x00896484 (dtor -> 0x00896415 -> ~SpecialAbilityUpdate 0x00854D9A).
 void TeleportSpecialAbilityUpdate::xfer(Xfer &x)

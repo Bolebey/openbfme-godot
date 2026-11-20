@@ -590,6 +590,7 @@ void DrawableManager::advance(double elapsedMs)
 				d->advanceAnimation(elapsedMs);
 			}
 			d->updateFade(elapsedMs); // lane PROJ-2: RW 0x675AB7 (DrawableFade.cpp)
+			d->advanceTerrainDecal(m_logic.getFrame()); // Local 89 (#715): RW 0x675C25 .. 0x675D1E, the terrain decal's fade
 		}
 	}
 
@@ -1139,6 +1140,11 @@ DrawableManager::Report DrawableManager::report(const LogicSnapshot *presented) 
 	r.scriptsRun = m_services.host.scriptsRun();
 	for (const std::string &f : m_services.host.failures())
 	{
+		if (isLuaSyntaxAlert(f)) // retail drops it (RW 0x734E41): a data defect of the mod's script text, not a failed load
+		{
+			++r.dataDefects["BeginScript does not compile (retail drops the alert, RW 0x734E41): " + f.substr(0, f.find("  in: "))];
+			continue;
+		}
 		r.errors.push_back("BeginScript failed: " + f);
 	}
 	for (const LuaReportSink::Entry &e : m_services.host.reports().entries())

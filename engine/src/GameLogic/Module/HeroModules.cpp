@@ -32,6 +32,7 @@
 #include "GameLogic/GameLogic.h"
 #include "GameLogic/HeroSystem.h"
 #include "GameLogic/Module/ActiveBody.h"
+#include "GameLogic/Module/ProductionUpdate.h"
 #include "GameLogic/AI/AIGuard.h"
 #include "GameLogic/AI/AIPathfindHost.h"
 #include "GameLogic/AI/AIWorld.h"
@@ -1207,9 +1208,18 @@ void AutoHealBehavior::healOne(Object &target, bool fx)
 		return;
 	}
 	GameLogic &logic = target.logic();
-	if (m_data->m_nonStackable && target.getBodyModule())
+	// PORT-293: RW 0x855777 .. 0x8557A2: a NonStackable heal (data + 0x174) is refused while the target's last-healing frame (body vslot 0x48,
+	// ActiveBody RW 0x5DC48C) plus this module's HealingDelay (data + 0x140) is still in the future. The sum is unsigned in retail, so a body that was
+	// never healed (-1, RW 0x8C3897) refuses the first hit until HealingDelay frames have passed. The frame is not refreshed on a refusal
+	if (m_data->m_nonStackable)
 	{
-		logic.noteStop("[S-858] AutoHealBehavior NonStackable: the body's last heal frame (body vslot 0x48) is not ported; the heal stacks");
+		if (const BodyModuleInterface *body = target.getBodyModule())
+		{
+			if (body->getLastHealingFrame() + m_data->m_healingDelay > logic.getFrame())
+			{
+				return;
+			}
+		}
 	}
 	const float heal = (float)amount();
 	if (m_data->m_radius == 0)
@@ -1373,10 +1383,49 @@ void BuildableHeroListUpgrade::upgradeImplementation()
 	// (RW 0x8BC4F3: TheControlBar + 0x28 = 1, the control bar refresh; RW 0x8D28F1 the custom anim of the mux)
 }
 
+// RW 0x008BC5CB (UpgradeMux slot 8)
+void BuildableHeroListUpgrade::processUpgradeRemoval()
+{
+	Object *obj = getObject();
+	Player *player = obj ? obj->getControllingPlayer() : nullptr;
+	if (!player || !player->getPlayerTemplate())
+	{
+		return;
+	}
+	GameLogic &logic = obj->logic();
+	for (const std::string &name : player->getPlayerTemplate()->m_buildableRingHeroesMP) // template + 0x198
+	{
+		const ThingTemplate *tt = logic.things().findTemplate(name); // RW 0x6D1305
+		if (!tt)
+		{
+			logic.reportError("BuildableHeroListUpgrade: BuildableRingHeroesMP name '" + name + "' is no template");
+			continue;
+		}
+		// RW 0x008BC519: schedule cancellation of this hero on every player FS_FACTORY (template + 0x10F & 0x80) with queued entries
+		for (Object *cand = logic.getFirstObject(); cand; cand = cand->getNextObject())
+		{
+			if (cand->isDestroyed() || cand->getControllingPlayer() != player || !cand->isKindOfName("FS_FACTORY"))
+			{
+				continue;
+			}
+			if (ProductionUpdateInterface *prod = cand->getProductionUpdate())
+			{
+				if (prod->getProductionCount() > 0)
+				{
+					prod->cancelUnitCreateByTemplate(tt, false); // slot 13, RW 0x008A30A0
+				}
+			}
+		}
+		player->heroes().removePurchase(*tt); // RW 0x0078138B
+	}
+	// (RW 0x8BC624: TheControlBar + 0x28 = 1, the control bar refresh)
+	setCustomAnim(false); // RW 0x008D28F9
+}
+
 void HeroModules::registerAll(ModuleFactory &modules)
 {
 	bindRuntime<RespawnUpdate, RespawnUpdateModuleData>(modules, "RespawnUpdate");
-	bindRuntime<BuildableHeroListUpgrade, BuildableHeroListUpgradeModuleData>(modules, "BuildableHeroListUpgrade");
+	bindRuntime<BuildableHeroListUpgrade, BuildableHeroListUpgradeModuleData>(modules, "BuildableHeroListUpgrade"); // GetSnapshotName RW 0x008BC40C, getModuleNameKey RW 0x008BC412
 	bindRuntime<UnpauseSpecialPowerUpgrade, UnpauseSpecialPowerUpgradeModuleData>(modules, "UnpauseSpecialPowerUpgrade");
 	bindRuntime<AttributeModifierAuraUpdate, AttributeModifierAuraUpdateModuleData>(modules, "AttributeModifierAuraUpdate");
 	bindRuntime<AutoHealBehavior, AutoHealBehaviorModuleData>(modules, "AutoHealBehavior");
