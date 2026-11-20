@@ -517,6 +517,7 @@ include(cmake/Port82.cmake)     # PORT-82: AttributeModifierNugget/DamageFXType 
 include(cmake/Port130.cmake)   # PORT-130: CommandButton AffectsKindOf, the NEEDS_CASTLE_KINDOF button filter (OPENBFME_PORT130_TESTS)
 include(cmake/Port134.cmake)    # PORT-134: the pick casts a model's aligned box (issue #336; OPENBFME_PORT134_TESTS)
 include(cmake/Port153.cmake)  # PORT-153: SkirmishAI ArmyDefinition economy / defence / opportunity-target settings (OPENBFME_PORT153_TESTS)
+include(cmake/Port310.cmake)  # PORT-310: the ArmyDefinition settings' reader proof; the LumberMillBuild tactic's ScavangedResourceBuildings chain (OPENBFME_PORT310_TESTS)
 include(cmake/Port148.cmake)    # PORT-148: the GIANT_BIRD flyer attacks a structure (OPENBFME_PORT148_TESTS)
 include(cmake/Port145.cmake)    # PORT-145: a unit ordered into a SHIP boards it only while the ship sits idle at the shore (issue #362; OPENBFME_PORT145_TESTS)
 include(cmake/Port136.cmake)    # PORT-136: the summoned eagles attack on their own (issue #338; OPENBFME_PORT136_TESTS)
@@ -1061,6 +1062,7 @@ add_executable(openbfme_tests
     ${OPENBFME_PORT130_TESTS}
     ${OPENBFME_PORT134_TESTS}
     ${OPENBFME_PORT153_TESTS}
+    ${OPENBFME_PORT310_TESTS}
     ${OPENBFME_PORT148_TESTS}
     ${OPENBFME_PORT145_TESTS}
     ${OPENBFME_PORT5_TESTS}
