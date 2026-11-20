@@ -201,11 +201,36 @@ void DozerAIUpdate::onOwnerDie()
 
 void DozerAIUpdate::onDelete()
 {
-	AIUpdateInterface::onDelete();
+	// RW 0x0088CF96 (DozerAIUpdate::onDelete, main vslot +0x20; WorkerAIUpdate::onDelete RW 0x008AE203 has the same body):
+	// cancel every pending task (0..2), clear ACTIVELY_BEING_CONSTRUCTED (+0x114 bit 0x20) on any remaining task target,
+	// then stop the held building sound (finishBuildingSound, interface slot +0x60).
+	for (int t = 0; t < DOZER_NUM_TASKS; ++t)
+	{
+		if (isTaskPending(t))
+		{
+			cancelTaskInternal(t); // RW 0x0088CFA8..0x0088CFB4 / RW 0x008AE215..0x008AE221
+		}
+	}
+	if (Object *self = getObject())
+	{
+		static const int kActivelyBeingConstructed = modelConditionBit("ACTIVELY_BEING_CONSTRUCTED"); // RW Object +0x114 bit 0x20 (condition 0x45)
+		for (int t = 0; t < DOZER_NUM_TASKS; ++t)
+		{
+			if (Object *target = self->logic().findObjectByID(m_task[t].target))
+			{
+				if (kActivelyBeingConstructed >= 0 && target->testModelCondition(kActivelyBeingConstructed))
+				{
+					target->setModelConditionState(kActivelyBeingConstructed, false); // RW 0x0088CFD7..0x0088CFE9 / RW 0x008AE244..0x008AE256
+				}
+			}
+		}
+	}
+	finishBuildingSound(); // RW 0x0088CFF4..0x0088CFFB / RW 0x008AE261..0x008AE268
 	if (m_unplacedStructure != INVALID_ID)
 	{
 		removeUnplacedStructure(); // RW 0x88D1AC: + 0x568 (the interface's + 0xC0) != 0 -> RW 0x88CFFE
 	}
+	AIUpdateInterface::onDelete();
 }
 
 // ---- the dozer interface ------------------------------------------------------------------------------------------------------
@@ -688,11 +713,12 @@ bool WorkerAIUpdate::repair(Object &structure)
 // refused (FALSE): the running repair keeps it. Another structure is refused too while BOTH are bridge towers (the template's KindOf word + 0x108 bit 24 in
 // both, RW 0x85B874 on each side): that call is the object's bridge module (its id through the module's vslot 4) and two equal ids mean one bridge, whose
 // second tower a builder must not abandon for the first. Every other order is accepted (TRUE).
+// RW 0x0088CB8A (DozerAIUpdate, slot 0x50) / RW 0x008AE0FE (WorkerAIUpdate, slot 0x50)
 bool DozerAIUpdate::canAcceptNewRepair(const Object *structure) const
 {
 	if (!structure)
 	{
-		return true; // RW: a null target never reaches the test (the caller's guard); the port answers the accepting branch
+		return false; // RW 0x0088CB90..0x0088CB94 / RW 0x008AE104..0x008AE108: null target -> false
 	}
 	if (getCurrentTask() != DOZER_TASK_REPAIR)
 	{

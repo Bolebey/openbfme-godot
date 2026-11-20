@@ -167,3 +167,36 @@ TEST_CASE("LOCAL-96 P-157 neighbour: DozerAIUpdate::onOwnerDie with no phantom l
 	REQUIRE(stillThere != nullptr);
 	CHECK_FALSE(stillThere->isEffectivelyDead());
 }
+
+TEST_CASE("LOCAL-96 onDelete (RW 0x0088CF96): deleting a dozer cancels pending tasks")
+{
+	Local96World w;
+	Object *porter = w.spawnAt("L96Porter", 200.0f, 200.0f);
+	Object *bldg = w.spawnAt("L96Structure", 500.0f, 500.0f);
+	DozerAIUpdate *dozer = dynamic_cast<DozerAIUpdate *>(porter->getAIUpdateInterface());
+	REQUIRE(dozer != nullptr);
+
+	ActiveBody *body = dynamic_cast<ActiveBody *>(bldg->getBodyModule());
+	REQUIRE(body != nullptr);
+	body->internalChangeHealth(-100.0f);
+	REQUIRE(dozer->repair(*bldg));
+	REQUIRE(dozer->isTaskPending(DozerAIUpdate::DOZER_TASK_REPAIR));
+
+	dozer->onDelete();
+	CHECK_FALSE(dozer->isTaskPending(DozerAIUpdate::DOZER_TASK_REPAIR));
+	CHECK(dozer->getCurrentTask() == DozerAIUpdate::DOZER_TASK_INVALID);
+}
+
+TEST_CASE("LOCAL-96 canAcceptNewRepair (RW 0x0088CB8A / RW 0x008AE0FE): null structure is refused")
+{
+	Local96World w;
+	Object *porter = w.spawnAt("L96Porter", 200.0f, 200.0f);
+	Object *workerObj = w.spawnAt("L96Worker", 240.0f, 200.0f);
+	DozerAIUpdate *dozer = dynamic_cast<DozerAIUpdate *>(porter->getAIUpdateInterface());
+	WorkerAIUpdate *worker = dynamic_cast<WorkerAIUpdate *>(workerObj->getAIUpdateInterface());
+	REQUIRE(dozer != nullptr);
+	REQUIRE(worker != nullptr);
+
+	CHECK_FALSE(dozer->canAcceptNewRepair(nullptr));
+	CHECK_FALSE(worker->canAcceptNewRepair(nullptr));
+}
