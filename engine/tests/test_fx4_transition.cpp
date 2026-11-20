@@ -383,7 +383,7 @@ TEST_CASE("fx4 bones: RandomBone draws the logic random among the drawable's bon
 	w.combat().setLaunchOffsets(nullptr);
 }
 
-TEST_CASE("fx4 save: the last damage record's type round-trips in ActiveBody's xfer version 4; versions 1, 2 and 3 load with defaults")
+TEST_CASE("fx4 save: the last damage record's type round-trips in ActiveBody's xfer version 5; versions 1 to 4 load with defaults")
 {
 	FxWorld w;
 	Object *a = w.unit("TdfxProbe", 'B', 400, 300);
@@ -404,7 +404,7 @@ TEST_CASE("fx4 save: the last damage record's type round-trips in ActiveBody's x
 	XferSave saved;
 	ba->xfer(saved);
 	REQUIRE_FALSE(saved.data().empty());
-	CHECK(saved.data()[0] == 4); // includes the record's noEffect byte and its amount (PORT-296)
+	CHECK(saved.data()[0] == 5); // includes the record's noEffect byte, PORT-293's last-healing frame and PORT-296's amount
 	XferLoad load(saved.data());
 	bb->xfer(load);
 	REQUIRE(load.atEnd());
@@ -418,8 +418,20 @@ TEST_CASE("fx4 save: the last damage record's type round-trips in ActiveBody's x
 	XferSave again;
 	bb->xfer(again);
 	CHECK(again.data() == saved.data());
-	// version 3 (before PORT-296): without the trailing amount (loads cleanly with the default zero)
-	std::vector<std::uint8_t> v3 = saved.data();
+	// version 4 (before PORT-296): without the trailing amount (loads cleanly with the default zero); the noEffect byte and PORT-293's frame stay
+	std::vector<std::uint8_t> v4 = saved.data();
+	v4[0] = 4;
+	v4.resize(v4.size() - 4);
+	XferLoad oldV4(v4);
+	bc->xfer(oldV4);
+	REQUIRE(oldV4.atEnd());
+	REQUIRE(bc->lastDamageRecordType(type));
+	CHECK(type == DAMAGE_WATER);
+	REQUIRE(bc->lastDamageRecordNoEffect(noEffect));
+	CHECK_FALSE(noEffect);
+	CHECK(bc->lastDamageAmount() == 0.0f);
+	// version 3 (before PORT-293): without the trailing last-healing frame either; PORT-293 added the 4-byte frame after the noEffect byte
+	std::vector<std::uint8_t> v3 = v4;
 	v3[0] = 3;
 	v3.resize(v3.size() - 4);
 	XferLoad oldV3(v3);
@@ -429,11 +441,10 @@ TEST_CASE("fx4 save: the last damage record's type round-trips in ActiveBody's x
 	CHECK(type == DAMAGE_WATER);
 	REQUIRE(bc->lastDamageRecordNoEffect(noEffect));
 	CHECK_FALSE(noEffect);
-	CHECK(bc->lastDamageAmount() == 0.0f);
-	// version 2 (before Local 30): without the trailing noEffect byte (loads cleanly with default false)
+	// version 2 (before Local 30): without the noEffect byte (loads cleanly with default false)
 	std::vector<std::uint8_t> v2 = v3;
 	v2[0] = 2;
-	v2.pop_back();
+	v2.resize(v2.size() - 5);
 	XferLoad oldV2(v2);
 	bc->xfer(oldV2);
 	REQUIRE(oldV2.atEnd());

@@ -239,6 +239,10 @@ void ActiveBody::crc(StateHasher &h) const
 	{
 		h.addU32(0xD178u); // Local 30, RW 0x744203: record +0x78; false leaves hash unchanged
 	}
+	if (m_lastHealingFrame != 0xFFFFFFFFu)
+	{
+		h.addU32(m_lastHealingFrame ^ 0x2A47u); // PORT-293: RW + 0xB0, hashed only once a healing hit stamped it (a game without healing keeps its hash)
+	}
 }
 
 void ActiveBody::evaluateVisualCondition()
@@ -1075,6 +1079,11 @@ void ActiveBody::attemptHealing(DamageInfo &info)
 		internalChangeHealth(amount);
 		info.m_output.m_actualDamageDealt = amount;
 		info.m_output.m_actualDamageClipped = SimMath::subf32(m_previousHealth, m_currentHealth);
+		// PORT-293: RW 0x8C30A9 .. 0x8C30BA (`mov eax, [TheGameLogic + 0x40]`, `mov [esi + 0xB0], eax`) -- the hit's frame becomes the body's
+		// last-healing timestamp (the body interface's slot 0x48, RW 0x5DC48C), written before the health-up test of RW 0x8C30B1 and therefore also
+		// when the hit only restored what it took. A hit the caller clipped to zero never gets here (the amount gate above). AutoHealBehavior's
+		// NonStackable rule reads the stamp (RW 0x855797: the target's stamp plus the module's HealingDelay against the current frame, unsigned)
+		m_lastHealingFrame = obj->logic().getFrame();
 		// lane OWNERFIX-1 (the owner: no particles show the heroes healing): RW 0x8C30B1 .. 0x8C3118 (BFME2 decomp ActiveBody.cpp attemptHealing, tier B
 		// same-shape): when the health went up (after the damage modules' onHealing, which this port does not call here), the module data's healing FX (+ 0x48: HealingBuffFx, else GameData's
 		// DefaultUnitHealingBuffFxList, RW 0x8C373F) plays on the object (RW 0x4B1B5A, no secondary) unless its template is a STRUCTURE (template + 0x108
@@ -1105,7 +1114,8 @@ void ActiveBody::attemptHealing(DamageInfo &info)
 // current DamageInfo pointer is null outside a hit (a snapshot is taken between frames); the armour report flag is the report's.
 void ActiveBody::xfer(Xfer &x)
 {
-	XferVersion v{ 1, 4 }; // 2: lane FX-4's last damage type, 3: Local 30's last damage no-effect, 4: lane PORT-296's last damage amount
+	XferVersion v{ 1, 5 }; // 2: lane FX-4's last damage type, 3: Local 30's last damage no-effect, 4: PORT-293's last-healing frame,
+	                       // 5: lane PORT-296's last damage amount
 	x.xferVersion(v);
 	xferBehaviorModule(x);
 	x.xferReal(&m_currentHealth);
@@ -1142,6 +1152,14 @@ void ActiveBody::xfer(Xfer &x)
 		m_lastDamageNoEffect = false;
 	}
 	if (v.current >= 4)
+	{
+		x.xferUnsignedInt(&m_lastHealingFrame); // PORT-293: RW + 0xB0 (the body interface's slot 0x48); an older snapshot was never healed by this body
+	}
+	else
+	{
+		m_lastHealingFrame = 0xFFFFFFFFu;
+	}
+	if (v.current >= 5)
 	{
 		x.xferReal(&m_lastDamageAmount); // lane PORT-296: the record's + 0x20
 	}
