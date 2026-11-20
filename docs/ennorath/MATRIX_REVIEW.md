@@ -2,16 +2,14 @@
 
 Layer 2 (lint) flags verdicts the mod's own data contradicts; layer 3 lists every button whose verdict moved since the previous run. A flagged red is likely the sweep's; an unflagged red that moved is the one to check against RotWK.
 
-## Lint: 72 flagged, 1 of them red
+## Lint: 71 flagged, 0 of them red
 
-By rule: L1 66, L2 1, L4 5
+By rule: L1 66, L4 5
 
-- Men `GondorGandalfGeprfte` `Command_SpecialAbilityWizardBlastGeprfte` (NO-EFFECT): L2: passes in FactionImladris
 
-## Changes since 1050c3f9: 2033 buttons moved, 35 turned red
+## Changes since b8d60d3c: 2065 buttons moved, 31 turned red
 
 - Angmar `spell` `SpellBookSummonStoneGiants`: - -> FAIL — the HUD refused the scene's spot and every spot of the ring search (RotWK's location test, RW 0x82DFB7)
-- Arnor `spell` `SpellBookStarOfTheNorth`: - -> NO-RULE — cast, but no effect seen beyond the control run: no effect of CloudBreakSpecialPower is asserted;  (enemies lost 1941 with the cast, 1662 wi
 - Dwarves `spell` `SpecialAbilityDurinstag`: - -> FAIL — the spell bar's button is not castable (owned 1, usable 0, ready 1)
 - Dwarves `spell` `SpellBookBombard`: - -> FAIL — the spell bar's button is not castable (owned 1, usable 0, ready 1)
 - Dwarves `spell` `SpellBookDwarvenRiches`: - -> FAIL — the spell bar's button is not castable (owned 1, usable 0, ready 1)
@@ -25,9 +23,6 @@ By rule: L1 66, L2 1, L4 5
 - Dwarves `spell` `SpellBookZwergenbier`: - -> FAIL — the spell bar's button is not castable (owned 1, usable 0, ready 1)
 - Dwarves `spell` `SpellBookZwergenhorn`: - -> FAIL — the spell bar's button is not castable (owned 1, usable 0, ready 1)
 - Elves `LothlorienLegolas` `Command_LegolasElbenauge`: PASS -> NO-VALUE — SpecialAbilityAragornBladeMaster (target none) fired but HeroModeSpecialAbilityUpdate HeroAttributeModifier LegolasElbenauge: NO-VALUE: Lego
-- Elves `MirkwoodElkrider` `Command_SpecialAbilityElkriderNaturBuff`: PASS -> NO-VALUE — SpecialAbilityElkriderNaturBuff (target none) fired but SpecialPowerModule AttributeModifier NaturmagierTierempathieModifier: NO-VALUE: Natu
-- Elves `MirkwoodElkriderHorde` `Command_SpecialAbilityElkriderNaturBuff`: PASS -> NO-VALUE — SpecialAbilityElkriderNaturBuff (target none) fired but SpecialPowerModule AttributeModifier NaturmagierTierempathieModifier: NO-VALUE: Natu
-- Elves `MirkwoodElkriderHordeWedgeFormation` `Command_SpecialAbilityElkriderNaturBuff`: PASS -> NO-VALUE — SpecialAbilityElkriderNaturBuff (target none) fired but SpecialPowerModule AttributeModifier NaturmagierTierempathieModifier: NO-VALUE: Natu
 - Elves `TomBombadil_Summoned` `(aura) ModuleTag_Leadership`: - -> LEFT-WORLD — DISABLED: needs a holder that lives through RefreshDelay + 10 frames: InspirierendePrsenz on IsengardFighterHorde (own) at 0 of Range 1 (the
 - Evilmen `spell` `SpellBookHaradEnchArmor`: - -> FAIL — cast, but no effect seen beyond the control run: SpecialPowerModule AttributeModifier SpellBookEnchArmorModifier: no result;  (enemies lost 
 - Imladris `LothlorienLegolas_ElrondsRat` `Command_LegolasElbenauge`: PASS -> NO-VALUE — SpecialAbilityAragornBladeMaster (target none) fired but HeroModeSpecialAbilityUpdate HeroAttributeModifier LegolasElbenauge: NO-VALUE: Lego
@@ -93,6 +88,7 @@ By rule: L1 66, L2 1, L4 5
 - Angmar `AngmarGolfimbul` `(aura) ModuleTag_LeadershipUp1`: - -> DISABLED
 - Angmar `AngmarGolfimbul` `(aura) ModuleTag_PillageAura`: - -> PASS
 - Angmar `AngmarGolfimbul` `(aura) ModuleTag_PillageAuraTwo`: - -> PASS
+- Angmar `AngmarGolfimbul` `Command_SpecialAbilityGolfimbulRaid`: NO-FIRE -> PASS
 - Angmar `AngmarGolfimbul` `Command_ToggleStance`: STANCE -> PASS
 - Angmar `AngmarGrabunholdLvl2` `Command_ToggleStance`: STANCE -> PASS
 - Angmar `AngmarGrabunholdLvl3` `Command_ToggleStance`: STANCE -> PASS
@@ -143,6 +139,7 @@ By rule: L1 66, L2 1, L4 5
 - Angmar `AngmarRhudaurSpearman` `Command_ToggleStance`: STANCE -> DISABLED
 - Angmar `AngmarRhudaurSpearmen` `Command_ToggleStance`: STANCE -> PASS
 - Angmar `AngmarRhudaurSpearmenPorcupine` `Command_ToggleStance`: STANCE -> PASS
+- Angmar `AngmarRogashEnnorath` `Command_AngmarRogashLeap`: NO-EFFECT -> PASS
 - Angmar `AngmarRogashEnnorath` `Command_ToggleStance`: STANCE -> PASS
 - Angmar `AngmarSentryTower` `(aura) ModuleTag_ContainedGetExperience`: - -> DISABLED
 - Angmar `AngmarSentryTower` `(aura) ModuleTag_GateDebuff`: - -> PASS
@@ -210,3 +207,5 @@ By rule: L1 66, L2 1, L4 5
 - Angmar `RhudaurWarlord` `Command_SpecialAbilityAngmarThrallMasterSummonWolfRiders`: - -> PASS
 - Angmar `RhudaurWarlord` `Command_ToggleStance`: STANCE -> PASS
 - Angmar `RhudaurWarlord` `Command_UpgradeThrallMasterRhudaurRiders`: PASS -> DISABLED
+- Angmar `RhudaurWarlord` `Command_UpgradeThrallMasterRhudaurSlingers`: - -> PASS
+- Angmar `RhudaurWarlord` `Command_UpgradeThrallMasterRhudaurSpearmen`: - -> PASS
