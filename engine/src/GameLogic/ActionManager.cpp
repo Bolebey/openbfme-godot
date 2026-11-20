@@ -767,7 +767,7 @@ bool canDoSpecialPowerAtLocation(Object &obj, const Coord3D &loc, const SpecialP
 		if (!ai || !world)
 		{
 			// RW 0x6F5BB0 without an AI (+ 0x260) and no set: "Failure 2". Its earlier tests give the same answer: IMMOBILE -> false, and Object + 0x4AC
-			// (RW 0x68C053) is never set in the port (S-4851)
+			// (RW 0x68C053) is written by HordeContain's transform reaction in retail; this shared transient ground override is not set in the port (S-4851)
 			return false;
 		}
 		if (!world->pathfinder().quickDoesPathExist(ai->adapter(), obj.getPosition(), &loc, nullptr))
