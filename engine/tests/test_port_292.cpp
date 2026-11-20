@@ -54,3 +54,34 @@ TEST_CASE("PORT-292: empty or missing horde interface falls back and HERO takes 
 	// RW 0x6917DF branches to HERO before HORDE, even when both kind bits are present.
 	CHECK(winningRecord(hordeObject("P292Hero", "HERO HORDE", "HordeContain", "  LivingWorldOverloadTemplate = P292Ignored\n"), "P292Hero") == "P292Hero");
 }
+
+TEST_CASE("PORT-292: the recorded overload survives campaign serialization and selects the next spawned template")
+{
+	logictest::LogicWorld world;
+	world.logic->settings().bodyThresholdsLoaded = true;
+	LogicModules::registerAll(world.w.modules);
+	const std::string ini = hordeObject("P292Source", "HORDE", "HordeContain", "  LivingWorldOverloadTemplate = P292Next\n")
+		+ hordeObject("P292Next", "HORDE", "HordeContain", "");
+	const std::string error = world.w.load(ini, INI_LOAD_OVERWRITE, "synthetic.ini");
+	REQUIRE_MESSAGE(error.empty(), error);
+	Object *source = world.make("P292Source", world.teamOf("Alice"), INVALID_ID, false);
+	REQUIRE(source);
+	source->setCampaignCarryover(true);
+	CampaignCarryover::State won;
+	CampaignCarryover::onCurrentMissionWon(*world.logic, world.players, won);
+	REQUIRE(won.records.size() == 1);
+	CHECK(won.records[0].templateName == "P292Next"); // RW 0x6917BB -> RW 0x86D6FD
+
+	CampaignCarryover::State loaded;
+	std::string why;
+	REQUIRE_MESSAGE(CampaignCarryover::State::parse(won.serialize(), loaded, &why), why);
+	REQUIRE(loaded.records.size() == 1);
+	CHECK(loaded.records[0].templateName == "P292Next");
+	const CampaignCarryover::SpawnResult spawned = CampaignCarryover::addCarryoverStuffToMap(*world.logic, world.players, loaded, {});
+	REQUIRE(spawned.objects.size() == 1);
+	CHECK(static_cast<const ThingTemplate *>(spawned.objects[0]->getTemplate())->getName() == "P292Next"); // RW 0x780172
+	CHECK(spawned.objects[0]->isCampaignCarryover());
+	CHECK(loaded.records.empty());
+	REQUIRE(loaded.used.size() == 1);
+	CHECK(loaded.used[0].templateName == "P292Next");
+}
