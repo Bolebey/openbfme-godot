@@ -65,6 +65,8 @@
 #pragma once
 
 #include "GameEngineDevice/W3DDevice/GameClient/Drawable/Draw/W3DDrawServices.h"
+#include "Common/GameEdition.h"
+#include "Common/NameKeyGenerator.h"
 #include "GameEngineDevice/W3DDevice/GameClient/Drawable/Draw/W3DModelDraw.h"
 #include "GameEngineDevice/W3DDevice/GameClient/Drawable/Draw/W3DModelDrawBones.h"
 #include "GameEngineDevice/W3DDevice/GameClient/HouseColor.h"
@@ -187,6 +189,10 @@ struct W3DScriptedModelDrawOptions
 	// called from RW 0x4BF586 inside it) return at once. Set by Drawable::addEntry from W3DModelDrawModuleData::multiPlayerOnlySkipsBody;
 	// unset (no logic, e.g. the map-object runtime): the body runs, as before.
 	bool multiPlayerOnlySkipped = false;
+	// LOCAL-95 (issue #760): RotWK-only animation pause gate (RW 0x004BF608..0x004BF630 -> Drawable::getShouldAnimate RW 0x00675655).
+	// BFME2 1.06 advanceAnimation (BFME2 0x004BFDFE) has no pause return; edition selects the rule.
+	GameEdition edition = GameEdition::RotWK201;
+	std::function<bool(bool animationsRequirePower)> shouldAnimate;
 };
 
 class W3DScriptedModelDraw : public W3DDrawScriptApi
@@ -278,6 +284,10 @@ public:
 		{
 			return false; // RW 0x4BF56C / 0x4BF575: advance returns at once
 		}
+		if (m_isPaused && m_options.edition == GameEdition::RotWK201)
+		{
+			return static_cast<bool>(m_options.shouldAnimate); // LOCAL-95 (RW 0x004BF62A): paused until shouldAnimate unpauses
+		}
 		if (m_tracks[1].anim || m_tracks[2].anim)
 		{
 			return true;
@@ -353,6 +363,19 @@ public:
 	// Speed multiplier of every track (RW +0x9C: the movement speed sync, recomputed at the end of every advance). Exposed for tests.
 	void setSpeedMultiplier(float m) { m_speedSync = m; }
 	float speedMultiplier() const { return m_speedSync; } // lane SMOOTH-3: the Distance sync (RW +0x9C)
+	// LOCAL-95 (issue #760): animation control, pause and track queries
+	void setPauseAnimation(bool pause);                    ///< RW 0x004B304E (slot +0x70): pause/resume track 0 (+0x81/+0x84)
+	bool isAnimationPaused() const { return m_isPaused; }
+	bool setAnimationLoopDuration(unsigned numFrames);     ///< RW 0x004B300D (slot +0x64) -> RW 0x004B2808: scale speedSync to numFrames
+	bool setAnimationCompletionTime(unsigned numFrames);   ///< RW 0x004B3049 (slot +0x68): forwards to setAnimationLoopDuration
+	void skipToEndOfAnimation();                           ///< RW 0x004B3350 (primary +0xE4): snap track 0 to last frame
+	void showPreviousAnimationState();                     ///< RW 0x004BF4D9 (slot +0xB4) -> RW 0x004B44F3: step to previous AnimationState
+	void showNextAnimationState();                         ///< RW 0x004BF501 (slot +0xB8) -> RW 0x004B4514: step to next AnimationState
+	bool sequentialAnimation() const { return m_sequentialAnim; } ///< RW +0x28C
+	std::string getPlayingAnimationName(int track) const;  ///< RW 0x004C0B38 (slot +0x28): clip name on track 0..2
+	NameKeyType getPlayingAnimationNameKey(int track, NameKeyGenerator &keys) const; ///< RW 0x004C0B88 (slot +0x2C)
+	void buildPlayingAnimationStringInfo(int track, std::string *outAnim, std::string *outState) const; ///< RW 0x004C0BC0 (slot +0x30)
+	bool getAnimationFrameCount(const std::string &animName, int *outFrames) const; ///< RW 0x004BF0B5 (slot +0x38)
 
 	// Introspection for tests and tools.
 	const ModelConditionInfo *currentModelState() const { return m_curModelInfo; }
@@ -512,6 +535,10 @@ private:
 	float m_blendInitial = 1.0f;             // RW +0x94
 	float m_speedFactor = 1.0f;              // RW +0x98 (set by startAnimation)
 	float m_speedSync = 1.0f;                // RW +0x9C
+	bool m_isPaused = false;                 // RW +0x81 (setPauseAnimation RW 0x004B304E)
+	int m_savedAnimMode = W3D_ANIM_MODE_MANUAL; // RW +0x84 (saved mode while paused)
+	bool m_sequentialAnim = false;           // RW +0x28C (set by RW 0x004BF4D9/0x004BF501, cleared by RW 0x004C09C7)
+	bool setAnimationLoopDurationMs(float durationMs); // RW 0x004B2808
 	float m_opacity = 1.0f;
 	bool m_hiddenByFade = false;
 	float m_constructionPercent = 0.0f;      // RW +0x26C (the object's percent, cached on the first client frame of a logic frame)
