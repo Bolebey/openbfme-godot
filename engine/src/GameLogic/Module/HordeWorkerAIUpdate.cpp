@@ -61,10 +61,10 @@ bool hasLiveEnteringMember(const HordeContainInterface &hc, GameLogic &logic)
 // RW 0x00403175 (Coord3D::normalize)
 void normalizeCoord3D(Coord3D &v)
 {
-	const float lenSq = SimMath::addf32(SimMath::addf32(SimMath::mulf32(v.x, v.x), SimMath::mulf32(v.y, v.y)), SimMath::mulf32(v.z, v.z));
-	if (lenSq > 0.0f)
+	const float len = (float)SimMath::length3d(v.x, v.y, v.z);
+	if (len != 0.0f)
 	{
-		const float invLen = SimMath::divf32(1.0f, SimMath::sqrtf32(lenSq));
+		const float invLen = SimMath::divf32(1.0f, len);
 		v.x = SimMath::mulf32(v.x, invLen);
 		v.y = SimMath::mulf32(v.y, invLen);
 		v.z = SimMath::mulf32(v.z, invLen);
