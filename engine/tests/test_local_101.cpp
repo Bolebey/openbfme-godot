@@ -34,7 +34,6 @@ const char *const kLocal101Ini =
 	"Locomotor SET_NORMAL TestFootLoco\n"
 	"  Surfaces = GROUND\n"
 	"  Speed = 50\n"
-	"  TurnRate = 500\n"
 	"  Acceleration = 100\n"
 	"  Braking = 100\n"
 	"End\n"
