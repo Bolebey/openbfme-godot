@@ -654,7 +654,7 @@ GateOpenAndCloseBehavior::GeometryState GateProxyBehavior::geometryState() const
 	return resolveTarget() ? m_targetGate->geometryState() : GEOMETRY_NONE;
 }
 
-float GateProxyBehavior::percent() const // slots 11 / 12 (RW 0x656779 / 0x6567A1)
+float GateProxyBehavior::percent() const // slots 11 / 12 (RW 0x656779 / RW 0x006567A1)
 {
 	return resolveTarget() ? m_targetGate->percent() : 0.0f;
 }
@@ -664,7 +664,7 @@ UpdateSleepTime GateProxyBehavior::update() // RW 0x64DF74
 	return UPDATE_SLEEP_FOREVER;
 }
 
-void GateProxyBehavior::onObjectCreated() // RW 0x499475 / RW 0x89CB19
+void GateProxyBehavior::onObjectCreated() // RW 0x0089CC24 -> RW 0x89CB19 (DONOR BFME2 0x499475)
 {
 	GateOpenAndCloseBehavior::onObjectCreated();
 	if (m_linkedObjectId == 0 && getObject())
@@ -812,6 +812,7 @@ void AIGateUpdate::crc(StateHasher &hasher) const
 void GateModules::registerAll(ModuleFactory &modules)
 {
 	bind<GateOpenAndCloseBehavior, GateOpenAndCloseBehaviorModuleData>(modules, "GateOpenAndCloseBehavior");
+	// getModuleName RW 0x0064E03B, getModuleNameKey RW 0x0064DFF6
 	bind<GateProxyBehavior, GateProxyBehaviorModuleData>(modules, "GateProxyBehavior");
 	bind<AIGateUpdate, AIGateUpdateModuleData>(modules, "AIGateUpdate");
 }
@@ -897,6 +898,7 @@ void GateOpenAndCloseBehavior::xfer(Xfer &x)
 	}
 }
 
+// RW 0x0089C45B -> RW 0x89C37A (GateOpenAndCloseBehavior::xfer)
 void GateProxyBehavior::xfer(Xfer &x)
 {
 	SnapshotXfer::version(x, 1, 1);

@@ -563,6 +563,7 @@ include(cmake/Local95.cmake)    # LOCAL-95: W3DScriptedModelDraw / W3DHordeModel
 include(cmake/Local97.cmake)    # LOCAL-97: PoisonedBehavior, DamageFieldUpdate forceFireWeapon, ThreatFinderUpdate & AttributeModifierPoolUpdate (fork issue 762; OPENBFME_LOCAL97_TESTS)
 include(cmake/Local100.cmake)   # LOCAL-100: upgrade modules uncited functions (issue #766; OPENBFME_LOCAL100_TESTS)
 include(cmake/Local98.cmake)    # LOCAL-98: death modules (issue #763; OPENBFME_LOCAL98_TESTS)
+include(cmake/Local105.cmake)   # LOCAL-105: FadeAndDieOrnamentUpdate and small object-life modules (fork issue 776; OPENBFME_LOCAL105_TESTS)
 include(cmake/Local96.cmake)    # LOCAL-96: DozerAIUpdate and WorkerAIUpdate builder functions (fork issue 761; OPENBFME_LOCAL96_TESTS)
 include(cmake/Local99.cmake)    # LOCAL-99: unit behaviour modules uncited own functions (issue #764; OPENBFME_LOCAL99_TESTS)
 include(cmake/Local101.cmake)   # LOCAL-101: special AI modules SiegeDockingBehavior & HordeWorkerAIUpdate (fork issue 771; OPENBFME_LOCAL101_TESTS)
@@ -796,6 +797,7 @@ list(APPEND OPENBFME_SIM_SOURCES
     src/GameLogic/Module/UpdateModule.cpp
     src/GameLogic/Module/UnportedModule.cpp
     src/GameLogic/Module/SpawnUnitBehavior.cpp
+    src/GameLogic/Module/FadeAndDieOrnamentUpdate.cpp
     src/GameLogic/Module/ObjectHelper.cpp
     src/GameLogic/Module/ActiveBody.cpp
     src/GameLogic/Module/LogicModules.cpp
@@ -1380,7 +1382,7 @@ add_executable(openbfme_tests
     ${OPENBFME_LOCAL97_TESTS}
     ${OPENBFME_LOCAL100_TESTS}
     ${OPENBFME_LOCAL98_TESTS}
-    ${OPENBFME_LOCAL97_TESTS}
+    ${OPENBFME_LOCAL105_TESTS}
     ${OPENBFME_LOCAL96_TESTS}
     ${OPENBFME_LOCAL99_TESTS}
     ${OPENBFME_LOCAL101_TESTS}

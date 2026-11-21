@@ -209,7 +209,7 @@ class GateProxyBehavior : public GateOpenAndCloseBehavior
 public:
 	OBFME_MODULE_XFER(GateProxyBehavior) // lane SAVE-4b
 	GateProxyBehavior(Thing *thing, const GateProxyBehaviorModuleData *data);
-	~GateProxyBehavior() override = default;
+	~GateProxyBehavior() override = default; // RW 0x00653DE0 / RW 0x00653DC4 / thunk RW 0x006530AC
 
 	UpdateSleepTime update() override; // RW 0x64DF74: returns UPDATE_SLEEP_FOREVER
 	void crc(StateHasher &hasher) const override;
