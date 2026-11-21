@@ -85,12 +85,17 @@ def norm(msg: str) -> str:
 
 def summary(tsv: Path, docs: Path) -> None:
     rs = rows(tsv)
+    for r in rs:
+        # a map the map cache does not list cannot be started as a skirmish (campaign, War of the Ring, cinematic, tutorial maps, and the
+        # maps the mod's mapcache.ini leaves out): its own status, not a failure of the port
+        if r["status"] == "failed at prepareNewGame" and "is not in the map cache" in r["error"]:
+            r["status"] = "not in the map cache"
     by_status = collections.Counter(r["status"] for r in rs)
     groups: dict[str, set[str]] = collections.defaultdict(set)
     for r in rs:
         for col in ("error", "load_first", "mapini_first", "start_errors", "play_first"):
             for part in (r[col] or "").split(" | "):
-                if part.strip():
+                if part.strip() and not (col == "error" and r["status"] == "not in the map cache"):
                     groups[f"{col.split('_')[0]}: {norm(part)}"].add(r["map"])
     docs.mkdir(parents=True, exist_ok=True)
     (docs / "MAP_SWEEP.tsv").write_text("\t".join(COLUMNS) + "\n" + "".join("\t".join(r[c] for c in COLUMNS) + "\n" for r in sorted(rs, key=lambda r: r["map"])),
@@ -102,8 +107,11 @@ def summary(tsv: Path, docs: Path) -> None:
              f"Maps: {len(rs)}; " + ", ".join(f"{s}: {n}" for s, n in by_status.most_common()), "",
              "## Maps that do not start or play", "", "| map | status | error |", "|---|---|---|"]
     for r in sorted(rs, key=lambda r: r["map"]):
-        if r["status"] not in ("ok", "errors"):
+        if r["status"] not in ("ok", "errors", "not in the map cache"):
             lines.append(f"| `{r['map']}` | {r['status']} | {r['error'][:200]} |")
+    cache = sorted(r["map"] for r in rs if r["status"] == "not in the map cache")
+    lines += ["", f"## Not in the map cache ({len(cache)}): not a skirmish map, or left out by the mod's mapcache.ini", "",
+              ", ".join(f"`{m.split(chr(92))[1] if chr(92) in m else m}`" for m in cache)]
     lines += ["", "## Error groups (most maps first)", "", "| maps | where | error |", "|---:|---|---|"]
     for key, maps in sorted(groups.items(), key=lambda kv: (-len(kv[1]), kv[0])):
         where, text = key.split(": ", 1)
