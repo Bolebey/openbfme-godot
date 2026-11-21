@@ -625,7 +625,10 @@ TEST_CASE("perf1 bench: 4-player skirmish (medium computer players, 20 game minu
 // them changes a stop's text and a test only)
 // Local 108 (issue #786, agent/local/sb5-st1, Colab Linux GCC, measured once with OPENBFME_PERF1_REGEN=1): ActiveBody rubble reset (RW 0x8C1BB7)
 // now calls Object::clearAllAttributeModifiers (RW 0x006998D0, DONOR BFME2 0x00298E6A), clearing a dying STRUCTURE's AttributeModifierPool entries;
-// the 4-player skirmish moves from frame 845 (479e48da -> 21a4a01c); the big battle is unchanged.
+// the 4-player skirmish moves from frame 845; the big battle is unchanged.
+// pin: Locals 108, 112, 113, 114, 122-126 landing (2026-11-21, agent/claude/sb5-accept, Colab sb5 Linux GCC, the skirmish re-measured once on the merged
+// tree with OPENBFME_PERF1_REGEN=1): Local 108's RW 0x8C1BB7 -> Object::clearAllAttributeModifiers alone moves it from frame 845. Attributed by one build
+// with that call switched off (every other branch on): the previous vectors hold (perf1 11/11); the big battle and uber1 are unchanged
 // pin: the fork's merge of upstream 3e363ff9 (2026-11-06) re-measured both once on the merged tree (OPENBFME_PERF1_REGEN=1, Windows MSVC, station-1):
 // CASTLEATK-1, ATKSTATE-1a and the banner carrier rule on top of the fork; the vectors differ from both parents
 // pin: merge queue q44 re-measured all three once on the merged tree (OPENBFME_PERF1_REGEN=1), compared at each merge point: AIRBORNE-1 alone (the locomotor
