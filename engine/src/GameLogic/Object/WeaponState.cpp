@@ -967,11 +967,7 @@ int FiringTracker::getShotsAtTarget(bool hasVictim, unsigned victimID, const Coo
 void FiringTracker::shotFired(FiringTrackerHost &host, const Weapon &weapon, unsigned victimID, const Coord3D &victimPos, bool hard)
 {
 	const std::uint32_t now = host.currentFrame();
-	// DONOR BFME2 0x004DEECB (Code/GameEngine/Source/GameLogic/Object/FiringTrackerXfer.cpp, the unit's retail-matched body; RW
-	// 0x8E326D is this function in game.dat 2.01): the shot records its frame and the owner's position BEFORE the forced-reset
-	// branch, so a forced shot leaves its frame behind too (the AI wait check reads it, Object RW 0x68B645). The forced reset zeroes
-	// only the position, through coolDown(true)'s else arm, which is what reset(host, true) does below.
-	m_lastShotFrame = now;
+	m_lastShotFrame = now; // RW 0x8E326D: +0x44 is stamped even on the hard-reset branch
 	m_lastOwnerPosition = host.ownerPosition();
 	if (hard)
 	{
