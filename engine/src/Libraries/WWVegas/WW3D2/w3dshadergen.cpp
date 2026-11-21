@@ -1016,6 +1016,25 @@ std::string Generate_W3D_Shader_Code(const W3DShaderKey &k, W3DSamplerPolicy sam
 	return c;
 }
 
+bool W3D_Shadow_Pass_Key(const W3DShaderKey &base, W3DShaderKey &out)
+{
+	if (!base.DepthWrite || base.DepthTestDisabled || base.Floor || base.OcclusionPass != 0)
+	{
+		return false;
+	}
+	if (base.Blend == W3D_GODOT_BLEND_OPAQUE && !base.AlphaOverride)
+	{
+		return false;
+	}
+	out = base;
+	out.Blend = W3D_GODOT_BLEND_OPAQUE;
+	out.AlphaOverride = false;
+	out.SelectionDecals = false;
+	out.Floor = false;
+	out.OcclusionPass = 0;
+	return true;
+}
+
 int W3D_Surface_Render_Priority(int sortLevel, int pass, bool floorBlend)
 {
 	if (floorBlend)

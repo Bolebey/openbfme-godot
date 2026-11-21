@@ -128,6 +128,14 @@ enum class W3DSamplerPolicy { Anisotropic, Metal16 };
 
 std::string Generate_W3D_Shader_Code(const W3DShaderKey &key, W3DSamplerPolicy samplers = W3DSamplerPolicy::Anisotropic);
 
+// Local 117 (P-170, P-83): RotWK 2.01 DX8TextureCategoryClass::Render (RW 0x525E1F -> 0x5284C0..0x5284F7)
+// switches depth-writing meshes to an opaque or alpha-tested shadow shader ([0xdd42ac] when AlphaTest && Texturing,
+// else [0xdd42b0]) during WW3D::IsCurrentlyRenderingShadowMap (0xdd1e44), ignoring SRC_ALPHA / INV_SRC_ALPHA blend.
+// In Godot 4, a ShaderMaterial writing ALPHA (blend_mix / AlphaOverride) goes to the transparent pipeline and is
+// skipped in the directional shadow pass. Returns true and fills `out` with an opaque shadow-pass key when `base`
+// needs a dedicated shadow-only material (depth-writing, non-floor, non-occlusion surface with blend or AlphaOverride).
+bool W3D_Shadow_Pass_Key(const W3DShaderKey &base, W3DShaderKey &out);
+
 // RENDER-2: simple.fxo vs_1_1 (blob 1): oT0.xy = uv * TexCoordTransform_0.xy + Time * TexCoordTransform_0.zw (the preshader's c4 = Time * zw).
 // Rows 0 and 1 of the stage matrix (applied to (u, v, 1, 0)) for `timeSeconds`. INFERENCE (S-023): Time is the effect's seconds clock.
 void W3D_SimpleFx_Uv_Matrix(const float transform[4], float timeSeconds, float row0[4], float row1[4]);

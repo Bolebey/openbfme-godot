@@ -1008,6 +1008,8 @@ void GameWorld::build_static_layer(const Ref<RetailFileSystem> &fs, Dictionary &
 	m_morphTrees.clear();
 	m_morphShrubs.clear();
 	m_footprintViews.clear(); // lane TREES1
+	m_staticShadows.clear();
+	m_staticShadowUseMapping = W3DInstancer::shadow_maps_enabled();
 	m_vegSway.reset(); // lane VISUAL-2
 	m_swayTypeCounts.fill(0);
 	m_treeEventsSeen = 0;
@@ -1067,9 +1069,11 @@ void GameWorld::build_static_layer(const Ref<RetailFileSystem> &fs, Dictionary &
 		if (p.kind != W3D_DRAWKIND_FLOOR)
 		{
 			const auto *module = p.module < d.draws.size() ? dynamic_cast<const W3DModelDrawModuleData *>(d.draws[p.module].data) : nullptr;
-			const bool useShadowMapping = W3DInstancer::shadow_maps_enabled();
-			castShadow = ObjectShadow::castsMap(d.info ? d.info->tmpl : nullptr, module, p.draw ? p.draw->currentModelState() : nullptr, useShadowMapping);
+			const ThingTemplate *tmpl = d.info ? d.info->tmpl : nullptr;
+			const ModelConditionInfo *state = p.draw ? p.draw->currentModelState() : nullptr;
+			castShadow = ObjectShadow::castsMap(tmpl, module, state, m_staticShadowUseMapping, isTree);
 			staticInst->set_instance_cast_shadow(instance, castShadow);
+			m_staticShadows.push_back(StaticShadowEntry{ instance, tmpl, module, state, isTree });
 		}
 		if (d.fate == MAPOBJ_CLIENT_SHRUB || d.fate == MAPOBJ_CLIENT_PROP)
 		{
@@ -1107,6 +1111,7 @@ void GameWorld::build_static_layer(const Ref<RetailFileSystem> &fs, Dictionary &
 				v.scale = d.scale;
 				v.model = p.modelName; // S-921
 				v.texture = p.textureName; // RW 0x4EC9B5
+				v.tmpl = d.info ? d.info->tmpl : nullptr;
 				v.swayType = swayType;
 				v.castShadow = castShadow;
 				m_treeViewOfId[(std::uint32_t)d.objectIndex + 1u] = m_treeViews.size();
@@ -3124,6 +3129,7 @@ void GameWorld::heldClientWork()
 		m_liveFX->updateAttachedSystems();
 		m_fxPlayer->advance(m_fxPendingDt);
 		syncBuffs(m_fxPendingDt); // lane SPELL-4
+		syncStaticShadows(); // Local 117 (P-166): static layer (trees/shrubs/props) tracks UseShadowMapping changes
 		if (W3DInstancer *st = instancerOf(m_staticId))
 		{
 			st->refresh_object_lights(); // lane LOCAL-38: the static layer updates by hand; its objects' light environments follow the lights every frame
@@ -3271,6 +3277,43 @@ bool sameModel(const std::string &a, const std::string &b)
 	return AsciiStringUtil::lowered(a) == AsciiStringUtil::lowered(b);
 }
 } // namespace
+
+// Local 117 (P-166): loadClientOnly builds static instances before _apply_lighting sets ShadowLOD
+// (and options may toggle UseShadowMapping mid-game, RW 0x601D4C). Re-evaluate cast_shadow when it changes.
+void GameWorld::syncStaticShadows()
+{
+	const bool useShadowMapping = W3DInstancer::shadow_maps_enabled();
+	if (useShadowMapping == m_staticShadowUseMapping)
+	{
+		return;
+	}
+	m_staticShadowUseMapping = useShadowMapping;
+	W3DInstancer *st = instancerOf(m_staticId);
+	if (!st)
+	{
+		return;
+	}
+	for (const StaticShadowEntry &e : m_staticShadows)
+	{
+		st->set_instance_cast_shadow(e.instance, ObjectShadow::castsMap(e.tmpl, e.module, e.state, useShadowMapping, e.isTree));
+	}
+	for (ToppleTreeView &v : m_treeViews)
+	{
+		v.castShadow = ObjectShadow::castsMap(v.tmpl, nullptr, nullptr, useShadowMapping, true);
+		if (v.instance >= 0) st->set_instance_cast_shadow(v.instance, v.castShadow);
+		if (v.morphInstance >= 0) st->set_instance_cast_shadow(v.morphInstance, v.castShadow);
+	}
+	for (FootprintView &f : m_footprintViews)
+	{
+		f.castShadow = ObjectShadow::castsMap(f.drawTmpl, nullptr, nullptr, useShadowMapping, !f.prop);
+		if (!f.removed)
+		{
+			if (f.instance >= 0) st->set_instance_cast_shadow(f.instance, f.castShadow);
+			if (f.morphInstance >= 0) st->set_instance_cast_shadow(f.morphInstance, f.castShadow);
+		}
+	}
+	st->update_now();
+}
 
 // the tree buffer's model of a type at the tree's placement (RW 0x4EC505 .. 0x4EC5F5: W3DAssetManager's render object of the type's ModelName and TextureName)
 int64_t GameWorld::addTreeModelInstance(const std::string &model, const std::string &texture, const float basis[9], const Coord3D &pos, float scale, bool castShadow, int swayType)

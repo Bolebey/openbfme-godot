@@ -970,6 +970,7 @@ private:
 		// S-921: the Taint / Elven Wood morph (TerrainTrees MORPH / MORPH_END): the model drawn now, the target's instance (model B) fading in
 		std::string model;           ///< the drawn model (W3DTreeDraw ModelName)
 		std::string texture;         ///< the drawn texture (W3DTreeDraw TextureName, RW 0x4EC9B5)
+		const class ThingTemplate *tmpl = nullptr;
 		int swayType = 0;
 		bool castShadow = false;
 		int64_t morphInstance = -1;
@@ -1007,6 +1008,20 @@ private:
 		std::int32_t morphTime = 0;
 	};
 	std::vector<FootprintView> m_footprintViews;
+	// Local 117 (P-166): static layer instances (trees, shrubs, props) whose shadow-map casting tracks
+	// W3DInstancer::shadow_maps_enabled() (loadClientOnly runs before _apply_lighting sets ShadowLOD,
+	// and options may toggle UseShadowMapping mid-game, RW 0x601D4C).
+	struct StaticShadowEntry
+	{
+		int64_t instance = -1;
+		const class ThingTemplate *tmpl = nullptr;
+		const class W3DModelDrawModuleData *module = nullptr;
+		const struct ModelConditionInfo *state = nullptr;
+		bool isTree = false;
+	};
+	std::vector<StaticShadowEntry> m_staticShadows;
+	bool m_staticShadowUseMapping = false;
+	void syncStaticShadows();
 	void clearFootprint(const Coord3D &pos, float angle, const std::vector<ObjectGeometry::Shape> &shapes, bool propsOnly);
 	// S-921: the tree and shrub morph of Taint / Elven Wood (TerrainTrees.h)
 	int64_t addTreeModelInstance(const std::string &model, const std::string &texture, const float basis[9], const Coord3D &pos, float scale, bool castShadow, int swayType);
