@@ -559,6 +559,7 @@ include(cmake/Local80.cmake)    # LOCAL-80: script library rank actions and PLAY
 include(cmake/Local94.cmake)    # LOCAL-94: the last 8 condition / action types of the script map (issue #720; OPENBFME_LOCAL94_TESTS)
 include(cmake/Local95.cmake)    # LOCAL-95: W3DScriptedModelDraw / W3DHordeModelDraw uncited functions (issue #760; OPENBFME_LOCAL95_TESTS)
 include(cmake/Local100.cmake)   # LOCAL-100: upgrade modules uncited functions (issue #766; OPENBFME_LOCAL100_TESTS)
+include(cmake/Local107.cmake)   # LOCAL-107: AIUpdateInterface, ThreatFinderUpdate, AIGateUpdate (fork issue 785; OPENBFME_LOCAL107_TESTS)
 include(cmake/Local98.cmake)    # LOCAL-98: death modules (issue #763; OPENBFME_LOCAL98_TESTS)
 include(cmake/Local97.cmake)    # LOCAL-97: PoisonedBehavior, DamageFieldUpdate forceFireWeapon, ThreatFinderUpdate & AttributeModifierPoolUpdate (fork issue 762; OPENBFME_LOCAL97_TESTS)
 include(cmake/Local96.cmake)    # LOCAL-96: DozerAIUpdate and WorkerAIUpdate builder functions (fork issue 761; OPENBFME_LOCAL96_TESTS)
@@ -1369,6 +1370,7 @@ add_executable(openbfme_tests
     ${OPENBFME_LOCAL94_TESTS}
     ${OPENBFME_LOCAL95_TESTS}
     ${OPENBFME_LOCAL100_TESTS}
+    ${OPENBFME_LOCAL107_TESTS}
     ${OPENBFME_LOCAL98_TESTS}
     ${OPENBFME_LOCAL97_TESTS}
     ${OPENBFME_LOCAL96_TESTS}
