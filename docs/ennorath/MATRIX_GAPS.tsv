@@ -341,9 +341,9 @@ FactionWild	WildSmaugNewRingFly	Command_SmaugIncinerateNew	ORDER	SPECIAL_POWER	s
 FactionWild	WildMarauderSwordHorde	Command_HalftrollChargeAttack	NO-EFFECT	SPECIAL_POWER	specialabilityangmarcharge	WildMarauderSwordHorde	ModuleTag_ChargeNoAimUpdate	WeaponModeSpecialPowerUpdate	108	0	4		yes
 FactionWild	WildMarauderSwordHorde	Command_HalftrollChargeAttack	NO-EFFECT	SPECIAL_POWER	specialabilityangmarcharge	WildMarauderSwords	ModuleTag_ChargeNoAimUpdate	WeaponModeSpecialPowerUpdate	108	0	4		yes
 FactionWild	WildMarauderSwords	Command_AngmarTrollChargeAttack	NO-SEND	SPECIAL_POWER	specialabilityangmarcharge	WildMarauderSwords	ModuleTag_ChargeNoAimUpdate	WeaponModeSpecialPowerUpdate	108	0	4		yes
-FactionAngmar	AngmarDarkDunedain	Command_AngmarChargeAttack	MOD-DATA	SPECIAL_POWER	specialabilityangmarcharge			-				no module of the object or its members names it	
+FactionAngmar	AngmarDarkDunedain	Command_AngmarChargeAttack	MEMBER	SPECIAL_POWER	specialabilityangmarcharge			-				no module of the object or its members names it	
 FactionAngmar	AngmarNecromancerHordePlague	Command_NecromancerDevastation	NO-FIRE	SPECIAL_POWER	specialabilitynecrodevastation			-				no module of the object or its members names it	
-FactionAngmar	AngmarSnowTroll	Command_AngmarTrollChargeAttack	MOD-DATA	SPECIAL_POWER	specialabilityangmarcharge			-				no module of the object or its members names it	
+FactionAngmar	AngmarSnowTroll	Command_AngmarTrollChargeAttack	MEMBER	SPECIAL_POWER	specialabilityangmarcharge			-				no module of the object or its members names it	
 FactionAngmar	AngmarWolfRider	Command_SpecialAbilityWargHowl	MEMBER	SPECIAL_POWER	specialabilitywarghowl			-				no module of the object or its members names it	
 FactionAngmar	RhudaurWolfRider	Command_SpecialAbilityWargHowl	MOD-DATA	SPECIAL_POWER	specialabilitywarghowl			-				no module of the object or its members names it	
 FactionAngmar	spell	SpellBookSummonStoneGiants	FAIL					-				no power or upgrade on the button	
