@@ -169,3 +169,12 @@ removed before the deferred update can register them. This adapts the existing
 OpenBFME snapshot layout rather than claiming byte compatibility with retail.
 
 Tests and the completed full-target build are still pending at this checkpoint.
+
+Checkpoint 4713a5074: six synthetic PORT-161 cases and Port161.cmake are
+committed. GCC -fsyntax-only passes both the new test source and the changed
+FireLogicSystem.cpp with the full target's generated compiler flags. Full
+openbfme_tests compilation is running single-threaded; no executed-test pass
+or negative-control result is claimed yet. The initial build was interrupted
+after 135/1913 steps to regenerate with the new test lane, then resumed from
+its object cache. CMake warns about unavailable lame/mpg123 fixtures (five
+unrelated MP3 cases); neither requested test filter uses them.
