@@ -2,7 +2,7 @@
 
 Command: `python tools/mod/rw_function_map.py --game /content/game_assets/bfme_assets/RotWK/game.dat --ini /content/drive/MyDrive/for-arena/ennorath-ini-1.9.8.3.zip --inventory workspace/rebuild_inventory.json --decomp workspace/rebuild/xmap/rw_map.csv --out docs/ennorath/RW_FUNCTION_MAP`
 
-Rows: 52638; ported 28616, partial 779, none 23243.
+Rows: 52638; ported 28633, partial 779, none 23226.
 Counts are per module/function pair, not unique functions.
 
 ## Stop list
@@ -618,45 +618,32 @@ calls; their targets are not followed.
 | TemporarilyDefectUpdate | 8914 | 18 | 0x00645716 | 12 | none | Rva0027EA49::operator= (tier A) |
 | W3DScriptedModelDraw | 8022 | 0 | 0x004BACA2 | 133 | none | W3DScriptedModelDraw::rva000BB4CE (tier B) |
 | W3DScriptedModelDraw | 8022 | 0 | 0x004B8803 | 98 | none |  |
-| W3DScriptedModelDraw | 8022 | 0 | 0x004B4FFD | 78 | none |  |
 | W3DScriptedModelDraw | 8022 | 0 | 0x004B48E0 | 76 | none |  |
 | W3DScriptedModelDraw | 8022 | 0 | 0x004C436D | 73 | none | Rva000C4C73::rva000C4C73 (tier B) |
-| W3DScriptedModelDraw | 8022 | 0 | 0x004BF0B5 | 57 | none |  |
 | W3DScriptedModelDraw | 8022 | 0 | 0x004B5A01 | 46 | none |  |
-| W3DScriptedModelDraw | 8022 | 0 | 0x004B9460 | 34 | none | W3DScriptedModelDraw::getButtonImage (tier A) |
 | W3DScriptedModelDraw | 8022 | 0 | 0x004B2B41 | 31 | none |  |
 | W3DScriptedModelDraw | 8022 | 0 | 0x004C6D93 | 31 | none |  |
-| W3DScriptedModelDraw | 8022 | 0 | 0x004B6789 | 25 | none | Rva000B7029::GetPortraitImage (tier A) |
-| W3DScriptedModelDraw | 8022 | 0 | 0x004B4FBC | 21 | none |  |
 | W3DScriptedModelDraw | 8022 | 0 | 0x004B7A22 | 19 | none |  |
-| W3DScriptedModelDraw | 8022 | 0 | 0x004B304E | 17 | none |  |
 | W3DScriptedModelDraw | 8022 | 0 | 0x004B86BA | 17 | none | W3DScriptedModelDraw::rva000B8F5A (tier A) |
 | W3DScriptedModelDraw | 8022 | 0 | 0x004BB86C | 15 | none |  |
 | W3DScriptedModelDraw | 8022 | 0 | 0x004B2BDC | 13 | none |  |
-| W3DScriptedModelDraw | 8022 | 0 | 0x004B300D | 12 | none |  |
 | W3DScriptedModelDraw | 8022 | 0 | 0x004BC171 | 12 | none | Rva000BCA55::rva000BCA55 (tier A) |
-| W3DScriptedModelDraw | 8022 | 0 | 0x004B3350 | 11 | none |  |
 | W3DScriptedModelDraw | 8022 | 0 | 0x004B2A68 | 10 | none |  |
 | W3DScriptedModelDraw | 8022 | 0 | 0x004B2BBF | 10 | none |  |
 | W3DScriptedModelDraw | 8022 | 0 | 0x004B32FD | 8 | none |  |
 | W3DScriptedModelDraw | 8022 | 0 | 0x004B2BA7 | 6 | none |  |
-| W3DScriptedModelDraw | 8022 | 0 | 0x004B582B | 6 | none |  |
 | W3DScriptedModelDraw | 8022 | 0 | 0x004B2A89 | 5 | none |  |
 | W3DScriptedModelDraw | 8022 | 0 | 0x004B2B92 | 5 | none |  |
-| W3DScriptedModelDraw | 8022 | 0 | 0x004B5814 | 5 | none |  |
 | W3DScriptedModelDraw | 8022 | 0 | 0x0047836C | 3 | none |  |
 | W3DScriptedModelDraw | 8022 | 0 | 0x00478374 | 3 | none |  |
 | W3DScriptedModelDraw | 8022 | 0 | 0x004783D1 | 3 | none |  |
 | W3DScriptedModelDraw | 8022 | 0 | 0x004B2A03 | 3 | none |  |
 | W3DScriptedModelDraw | 8022 | 0 | 0x007B2EFE | 3 | none |  |
 | W3DScriptedModelDraw | 8022 | 0 | 0x00478381 | 2 | none | BfmeContainerRecord00462D62::~BfmeContainerRecord00462D62 (tier A) |
-| W3DScriptedModelDraw | 8022 | 0 | 0x004B26E0 | 2 | none |  |
 | W3DScriptedModelDraw | 8022 | 0 | 0x004B2A5D | 2 | none |  |
 | W3DScriptedModelDraw | 8022 | 0 | 0x004B2B36 | 2 | none |  |
 | W3DScriptedModelDraw | 8022 | 0 | 0x004B2C0D | 2 | none |  |
-| W3DScriptedModelDraw | 8022 | 0 | 0x004B3049 | 2 | none |  |
 | W3DScriptedModelDraw | 8022 | 0 | 0x004B30DC | 2 | none |  |
-| W3DScriptedModelDraw | 8022 | 0 | 0x004B5809 | 2 | none |  |
 | W3DScriptedModelDraw | 8022 | 1 | 0x004B6F12 | 179 | none |  |
 | W3DScriptedModelDraw | 8022 | 1 | 0x004C70C3 | 137 | none | W3DScriptedModelDraw::~W3DScriptedModelDraw (tier B) |
 | W3DScriptedModelDraw | 8022 | 1 | 0x00536310 | 135 | none |  |
@@ -699,13 +686,11 @@ calls; their targets are not followed.
 | W3DScriptedModelDraw | 8022 | 1 | 0x0040511A | 16 | none |  |
 | W3DScriptedModelDraw | 8022 | 1 | 0x0040655B | 16 | none | D::StringBase<>::concat (tier A) |
 | W3DScriptedModelDraw | 8022 | 1 | 0x004AD9D4 | 15 | none |  |
-| W3DScriptedModelDraw | 8022 | 1 | 0x004B4514 | 14 | none | Rva000B4BED::rva000B4CBE (tier A) |
 | W3DScriptedModelDraw | 8022 | 1 | 0x004B291B | 13 | none |  |
 | W3DScriptedModelDraw | 8022 | 1 | 0x00732828 | 13 | none | RadiusDecal::setPosition (tier A) |
 | W3DScriptedModelDraw | 8022 | 1 | 0x00732840 | 13 | none |  |
 | W3DScriptedModelDraw | 8022 | 1 | 0x004380C0 | 12 | none | _bfme_debugRecordCallsite (tier D) |
 | W3DScriptedModelDraw | 8022 | 1 | 0x004790B5 | 12 | none | PAVAsciiString::find<> (tier A) |
-| W3DScriptedModelDraw | 8022 | 1 | 0x004B44F3 | 12 | none | Rva000B4BED::rva000B4C9D (tier A) |
 | W3DScriptedModelDraw | 8022 | 1 | 0x0088FCBB | 12 | none | Rva0043B23E::Rva0043B23E (tier A) |
 | W3DScriptedModelDraw | 8022 | 1 | 0x004B9696 | 11 | none |  |
 | W3DScriptedModelDraw | 8022 | 1 | 0x00732858 | 11 | none |  |
@@ -817,7 +802,6 @@ calls; their targets are not followed.
 | W3DScriptedModelDraw | 8022 | 3 | 0x00536B39 | 44 | none | SplitString (tier A) |
 | W3DScriptedModelDraw | 8022 | 3 | 0x004088C0 | 30 | none |  |
 | W3DScriptedModelDraw | 8022 | 3 | 0x005488D4 | 29 | none | NameKeyGenerator::Rva00148F02 (tier A) |
-| W3DScriptedModelDraw | 8022 | 3 | 0x00675655 | 27 | none | Rva0027532F::rva0027532F (tier B) |
 | W3DScriptedModelDraw | 8022 | 3 | 0x00A3CD70 | 25 | none |  |
 | W3DScriptedModelDraw | 8022 | 3 | 0x00478A7C | 23 | none | Rva000791EDCopy (tier A) |
 | W3DScriptedModelDraw | 8022 | 3 | 0x004797F0 | 23 | none | _STL::D::DV?$char_traits::PBV?$basic_string::__copy<> (tier A) |
@@ -8554,7 +8538,6 @@ calls; their targets are not followed.
 | W3DTruckDraw | 155 | 3 | 0x007AEAFD | 2 | none | SecondBase005D2111::~SecondBase005D2111 (tier A) |
 | W3DTruckDraw | 155 | 3 | 0x00732801 | 1 | none | RadiusDecal::~RadiusDecal (tier A) |
 | W3DTruckDraw | 155 | 3 | 0x00A3ED38 | 1 | none | _D3DXGetFVFVertexSize@4 (tier A) |
-| W3DTruckDraw | 155 | 4 | 0x00675655 | 27 | none | Rva0027532F::rva0027532F (tier B) |
 | W3DTruckDraw | 155 | 4 | 0x004BF529 | 22 | none |  |
 | W3DTruckDraw | 155 | 4 | 0x004C44B6 | 22 | none | Rva000C24EAVector::eraseRange (tier A) |
 | W3DTruckDraw | 155 | 4 | 0x0085A4B3 | 21 | none |  |
