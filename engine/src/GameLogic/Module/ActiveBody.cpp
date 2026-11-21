@@ -667,6 +667,19 @@ void ActiveBody::attemptDamage(DamageInfo &info)
 			notifyDamageStateChange(&info, stateBefore, m_curDamageState);
 			playDamageStateSound(obj, m_curDamageState);
 		}
+		// LOCAL-116 (P-159, both editions): RW 0x8C44F6 .. 0x8C4585 (DONOR BFME2 ActiveBody.cpp:2220):
+		// when health crosses below 35% (previous/max >= 0.35f && current/max < 0.35f && current > 0.0f),
+		// post VOICE_EVENT_FEAR (0x7E0 -> VoiceFear, e.g. hero *VoiceHelpMe) through pickAndPlayUnitVoiceResponse (RW 0x8DEDBB).
+		if (m_maxHealth > 0.0f && m_currentHealth > 0.0f)
+		{
+			const float invMax = SimMath::divf32(1.0f, m_maxHealth);
+			const float prevRatio = SimMath::mulf32(m_previousHealth, invMax);
+			const float curRatio = SimMath::mulf32(m_currentHealth, invMax);
+			if (prevRatio >= 0.35f && curRatio < 0.35f && obj.clientHooks())
+			{
+				AudioApi::postUnitVoice(0x7E0, obj.getID());
+			}
+		}
 		// (18) death: health <= 0 and the hit took health; TOP20 #21, RW 0x8C458A .. 0x8C45C0: a capped hit scores the kill too (RW 0x6955BC(obj, 1)) and
 		// skips the death (the unit dies when its burning death ends)
 		if (clipped || (m_currentHealth <= 0.0f && previous > 0.0f))
