@@ -9,7 +9,7 @@
 #include "doctest.h"
 
 #include "CombatTestUtil.h"
-#include "EnnorathScenarioUtil.h"
+#include "EnnorathScenario.h"
 #include "HudTestUtil.h"
 
 #include "Common/Player.h"
@@ -18,6 +18,7 @@
 #include "Common/XferLoad.h"
 #include "Common/XferSave.h"
 #include "GameLogic/AI/AIStateMachine.h"
+#include "GameLogic/Damage.h"
 #include "GameLogic/GameLogic.h"
 #include "GameLogic/Module/BodyModule.h"
 #include "GameLogic/Module/DozerAIUpdate.h"
