@@ -261,6 +261,7 @@ include(cmake/Port47.cmake) # OPENBFME_PORT47_TESTS
 include(cmake/Play2.cmake) # OPENBFME_PLAY2_TESTS (lane PLAY-2)
 include(cmake/Port300.cmake) # OPENBFME_PORT300_TESTS (lane PORT-300, issue #692)
 include(cmake/Port302.cmake) # PORT-302: InactiveBody's armor-set flags and its damage answers (fork issue 694)
+include(cmake/Port287.cmake) # PORT-287: horde producer selection and charge (OPENBFME_PORT287_TESTS)
 include(cmake/Port248.cmake) # OPENBFME_PORT248_TESTS
 include(cmake/Port264.cmake) # OPENBFME_PORT264_TESTS (lane PORT-264)
 include(cmake/Port286.cmake) # OPENBFME_PORT286_TESTS (lane PORT-286)
@@ -518,6 +519,7 @@ include(cmake/Port82.cmake)     # PORT-82: AttributeModifierNugget/DamageFXType 
 include(cmake/Port130.cmake)   # PORT-130: CommandButton AffectsKindOf, the NEEDS_CASTLE_KINDOF button filter (OPENBFME_PORT130_TESTS)
 include(cmake/Port134.cmake)    # PORT-134: the pick casts a model's aligned box (issue #336; OPENBFME_PORT134_TESTS)
 include(cmake/Port153.cmake)  # PORT-153: SkirmishAI ArmyDefinition economy / defence / opportunity-target settings (OPENBFME_PORT153_TESTS)
+include(cmake/Port310.cmake)  # PORT-310: the ArmyDefinition settings' reader proof; the LumberMillBuild tactic's ScavangedResourceBuildings chain (OPENBFME_PORT310_TESTS)
 include(cmake/Port148.cmake)    # PORT-148: the GIANT_BIRD flyer attacks a structure (OPENBFME_PORT148_TESTS)
 include(cmake/Port145.cmake)    # PORT-145: a unit ordered into a SHIP boards it only while the ship sits idle at the shore (issue #362; OPENBFME_PORT145_TESTS)
 include(cmake/Port136.cmake)    # PORT-136: the summoned eagles attack on their own (issue #338; OPENBFME_PORT136_TESTS)
@@ -552,6 +554,7 @@ include(cmake/Port257.cmake)    # PORT-257: GiantBirdAIUpdate onCollide/collisio
 include(cmake/Port261.cmake)    # PORT-261: the player-side powers PlayerHealSpecialPower and StoreObjectsSpecialPower (issue #609; OPENBFME_PORT261_TESTS)
 include(cmake/Local80.cmake)    # LOCAL-80: script library rank actions and PLAYER_COMPARE_RANK (issue #704; OPENBFME_LOCAL80_TESTS)
 include(cmake/Local94.cmake)    # LOCAL-94: the last 8 condition / action types of the script map (issue #720; OPENBFME_LOCAL94_TESTS)
+include(cmake/Local95.cmake)    # LOCAL-95: W3DScriptedModelDraw / W3DHordeModelDraw uncited functions (issue #760; OPENBFME_LOCAL95_TESTS)
 include(cmake/Local96.cmake)    # LOCAL-96: DozerAIUpdate and WorkerAIUpdate builder functions (fork issue 761; OPENBFME_LOCAL96_TESTS)
 include(cmake/Port224.cmake)    # PORT-224: destroying a creep lair or worker-rebuilt structure mid-rebuild fades the hole without money or treasure (issue #534; OPENBFME_PORT224_TESTS)
 include(cmake/Port222.cmake)    # PORT-222: a LevelGrantSpecialPower fills a horde's experience pool (fork issue 532; OPENBFME_PORT222_TESTS)
@@ -1005,6 +1008,7 @@ add_executable(openbfme_tests
     ${OPENBFME_PORT47_TESTS}
     ${OPENBFME_PORT439_TESTS}
     ${OPENBFME_PLAY2_TESTS}
+    ${OPENBFME_PORT287_TESTS}
     ${OPENBFME_PORT248_TESTS}
     ${OPENBFME_PORT264_TESTS}
     ${OPENBFME_PORT286_TESTS}
@@ -1065,6 +1069,7 @@ add_executable(openbfme_tests
     ${OPENBFME_PORT130_TESTS}
     ${OPENBFME_PORT134_TESTS}
     ${OPENBFME_PORT153_TESTS}
+    ${OPENBFME_PORT310_TESTS}
     ${OPENBFME_PORT148_TESTS}
     ${OPENBFME_PORT145_TESTS}
     ${OPENBFME_PORT5_TESTS}
@@ -1351,6 +1356,7 @@ add_executable(openbfme_tests
     ${OPENBFME_PORT261_TESTS}
     ${OPENBFME_LOCAL80_TESTS}
     ${OPENBFME_LOCAL94_TESTS}
+    ${OPENBFME_LOCAL95_TESTS}
     ${OPENBFME_LOCAL96_TESTS}
     ${OPENBFME_PORT224_TESTS}
     ${OPENBFME_PORT222_TESTS}
