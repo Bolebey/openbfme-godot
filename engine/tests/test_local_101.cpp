@@ -17,6 +17,7 @@
 #include "Common/StateHash.h"
 #include "Common/XferLoad.h"
 #include "Common/XferSave.h"
+#include "GameLogic/AI/AIGarrisonStates.h"
 #include "GameLogic/AI/AIStateMachine.h"
 #include "GameLogic/Damage.h"
 #include "GameLogic/GameLogic.h"
@@ -110,8 +111,8 @@ void damageTo(Object &obj, float targetHealth)
 	if (cur > targetHealth)
 	{
 		DamageInfo d;
-		d.in.m_amount = cur - targetHealth;
-		d.in.m_damageType = DAMAGE_UNRESISTABLE;
+		d.m_in.m_amount = cur - targetHealth;
+		d.m_in.m_damageType = DAMAGE_UNRESISTABLE;
 		body->attemptDamage(d);
 	}
 }
@@ -124,8 +125,8 @@ void healToFull(Object &obj)
 	if (missing > 0.0f)
 	{
 		DamageInfo h;
-		h.in.m_amount = missing;
-		h.in.m_damageType = DAMAGE_HEALING;
+		h.m_in.m_amount = missing;
+		h.m_in.m_damageType = DAMAGE_HEALING;
 		body->attemptHealing(h);
 	}
 }
