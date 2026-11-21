@@ -1775,3 +1775,11 @@
 - Причина: в файле нет защиты `if (!hudtest::haveWorld("...")) return;`, которую имеет каждый аналогичный тест (`engine/tests/test_anim1.cpp:390` и ещё 147 мест в `engine/tests/`); `test_local_66.cpp` — единственный файл с `hudtest::shared()` без неё. Правка не вносилась: она чужая (Local 66, issue #511, P-135) и не относится к PORT-301; файлы `engine/tests/test_local_66.cpp` и `engine/tests/HudTestUtil.h` побайтно совпадают с `origin/main` (`b8d60d3c`), так что падение существовало до этой ветки.
 - Проверка: падает само по себе (`engine/build/openbfme_tests "-tc=LOCAL-66*"`: `1 passed | 1 failed`, `FATAL ERROR: test case CRASHED: SIGSEGV`) и в полном прогоне (обрывает его на 2670-м тесте); с `ROTWK_INSTALL`/`BFME2_INSTALL`, указывающими на папку только с `game.dat`, — так же. Зелёный workflow форка `Own test check` на `b8d60d3c` этому не противоречит: он запускает только тесты, отобранные по изменённым файлам, а не весь набор, поэтому `LOCAL-66` в нём не участвует и его прохождение не подтверждено. Правка: добавить в начало теста `if (!hudtest::haveWorld("LOCAL-66 ParticleSysBone")) { return; }` (как в `test_anim1.cpp`), либо исключить файл из прогона без файлов игры.
 
+### P-171. Тест `modgap2: WallUpgradeUpdate*` вылетает с SIGSEGV на `main`
+- Статус: [x] **ВЫПОЛНЕНО — Claude, 2026-11-21** (тест; в игре не видно)
+- Добавлено: 2026-11-21, Claude (отчёт партии бота 2026-11-21d: `modgap2*` красный и на `main`; на ПК `main` `512974ba` тоже `CRASHED`)
+- Описание: `test_modgap2_env_heavens_radar.cpp:229` падает с `SIGSEGV` и обрывает набор `modgap2*`. Появилось между партиями 21a и 21c.
+- Подсистема: тесты
+- Взял: Claude
+- Причина и исправление: Local 100 (`651a3e648`) перенёс пробуждение модуля при руинах как в RotWK (`setWakeFrame(getObject(), ...)`, RW 0x8AEB08 -> RW 0x850C32), а тест строил `WallUpgradeUpdate` без объекта (`nullptr`). Код верен (в игре у модуля всегда есть объект; защита от `nullptr` была бы запасным путём), исправлен тест: модуль из блока INI на объекте `logictest::LogicWorld`, ожидания те же.
+- Проверка: `modgap2*` на станции 0 (строка `[doctest]` — в коммите переноса).
