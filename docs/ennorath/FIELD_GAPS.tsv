@@ -542,8 +542,8 @@ parsed-unused	object		SoundFallingFromPlane	1	manual	S-1242 S-707	no				template
 parsed-unused	object		SoundPromotedElite	1	manual		no				template getter route unavailable or field absent from the recovered table	
 parsed-unused	object		SoundPromotedHero	1	manual		no				template getter route unavailable or field absent from the recovered table	
 parsed-unused	object		SoundPromotedVeteran	1	manual		no				template getter route unavailable or field absent from the recovered table	
-parsed-unused	object	ActiveBody	EnteringDamagedTransitionTime	1	struct		yes	256	33	10	0x008C1C75@0 0x008C1C87@0 0x008C234E@0 0x008C3A91@0 0x008C3AAD@0 0x008C3ACC@0 0x005D8808@1 0x008595BA@1	module
-parsed-unused	object	ActiveBody	ReallyDamagedAttributeModifier	1	struct		yes	256	33	10	0x008C1C75@0 0x008C1C87@0 0x008C234E@0 0x008C3A91@0 0x008C3AAD@0 0x008C3ACC@0 0x005D8808@1 0x008595BA@1	module
+parsed-unused	object	ActiveBody	EnteringDamagedTransitionTime	1	struct		yes	255	33	10	0x008C1C75@0 0x008C1C87@0 0x008C234E@0 0x008C3A91@0 0x008C3AAD@0 0x008C3ACC@0 0x005D8808@1 0x008595BA@1	module
+parsed-unused	object	ActiveBody	ReallyDamagedAttributeModifier	1	struct		yes	255	33	10	0x008C1C75@0 0x008C1C87@0 0x008C234E@0 0x008C3A91@0 0x008C3AAD@0 0x008C3ACC@0 0x005D8808@1 0x008595BA@1	module
 parsed-unused	object	AutoAbilityBehavior	WorkingRadius	1	struct		yes	306	5	14	0x0085D3ED@1 0x006289E7@5 0x0062AB74@5 0x00629BCA@6 0x006A95E6@6	module
 parsed-unused	object	CastleBehavior	CrewPrepareFX	1	struct		yes	437	69	19	0x00797BCF@0 0x00797D86@0 0x00799CA5@0 0x00686BF5@1 0x0068D8D7@1 0x00799C6A@1 0x00646148@2 0x006461CA@2	module
 parsed-unused	object	CastleBehavior	CrewPrepareInterval	1	struct		yes	437	69	19	0x00797BCF@0 0x00797D86@0 0x00799CA5@0 0x00686BF5@1 0x0068D8D7@1 0x00799C6A@1 0x00646148@2 0x006461CA@2	module
