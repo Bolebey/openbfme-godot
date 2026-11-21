@@ -481,7 +481,7 @@ void Player::addUpgradeDiscount(const std::string &sourceName, const std::vector
 {
 	for (UpgradeDiscount &d : m_upgradeDiscounts) // RW 0x6B2C67
 	{
-		if (d.sourceName == sourceName && d.percents == percents && d.applyTo == applyTo)
+		if (d.sourceName == sourceName && d.percents == percents && d.applyTo == applyTo) // RW 0x006AB681 (vector<float>::operator==)
 		{
 			++d.count;
 			recomputeDiscount(d);
@@ -494,7 +494,7 @@ void Player::addUpgradeDiscount(const std::string &sourceName, const std::vector
 	d.percents = percents;
 	d.applyTo = applyTo;
 	recomputeDiscount(d);
-	m_upgradeDiscounts.push_back(std::move(d));
+	m_upgradeDiscounts.push_back(std::move(d)); // RW 0x006B2028 (vector<UpgradeDiscount>::push_back), ctor RW 0x006B0060
 }
 
 void Player::removeUpgradeDiscount(const std::string &sourceName, const std::vector<float> &percents, const std::vector<std::string> &applyTo)
