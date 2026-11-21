@@ -1,5 +1,5 @@
 faction	pass	idle	red	red_top	unverified
-FactionAngmar	325	83	13	NO-EFFECT 7, NO-FIRE 4, LEFT-WORLD 1	4
+FactionAngmar	325	85	13	NO-EFFECT 7, NO-FIRE 4, LEFT-WORLD 1	2
 FactionArnor	435	99	3	LEFT-WORLD 1, NO-EFFECT 1, FAIL 1	6
 FactionDwarves	409	73	17	FAIL 12, NO-EFFECT 4, NO-FIRE 1	4
 FactionElves	311	95	15	NO-EFFECT 5, NOT-ON-BAR 4, NO-FIRE 2	4

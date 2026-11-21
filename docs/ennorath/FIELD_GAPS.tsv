@@ -84,7 +84,7 @@ parsed-unused	armydefinition		MaxBuildingsToBeDefensiveTarget_Med	11	manual		no	
 parsed-unused	armydefinition		MaxBuildingsToBeDefensiveTarget_Small	11	block-parser		no				no reader route implemented for this top-level block	
 parsed-unused	armydefinition		MaxThreatForOpportunityTargets	11	block-parser	S-7336	no				no reader route implemented for this top-level block	
 parsed-unused	armydefinition		ValueToSetForMaxOnDefenseTeam	11	block-parser	S-7336	no				no reader route implemented for this top-level block	
-parsed-unused	object	W3DScriptedModelDraw	MinLODRequired	11	struct		yes	420	194	6	0x004B2A03@0 0x004B2A68@0 0x004B2A89@0 0x004B2B41@0 0x004B2B92@0 0x004B2BA7@0 0x004B2BBF@0 0x004B2BDC@0	module
+parsed-unused	object	W3DScriptedModelDraw	MinLODRequired	11	struct		yes	404	181	6	0x004B2A03@0 0x004B2A68@0 0x004B2A89@0 0x004B2B41@0 0x004B2B92@0 0x004B2BA7@0 0x004B2BBF@0 0x004B2BDC@0	module
 parsed-unused	fxparticlesystem	/System	UseMaximumHeight	10	block-file	S-7290	no				no reader route implemented for this nested top-level subtable	
 parsed-unused	object		LiveCameraOffset	10	by-name		no				no named getter candidate in entry blocks; not a no-reader verdict	getter
 parsed-unused	object		LiveCameraPitch	10	by-name		no				no named getter candidate in entry blocks; not a no-reader verdict	getter
@@ -119,7 +119,7 @@ not-read	fxparticlesystem		VelocityType	4	manual	S-684	no				no reader route imp
 not-read	fxparticlesystem		VolumeType	4	manual	S-684	no				no reader route implemented for this top-level block	
 parsed-unused	object	SiegeDeploySpecialPower	InitiateSound	4	struct	S-4942	yes	64	1	3	0x008C9C50@1	module
 parsed-unused	object	SymbioticStructuresBody	Symbiote	4	struct	S-7408	yes	25	11	1	0x008C4EA4@0 0x008C4F84@0 0x008C501C@0 0x008C5123@0 0x008C519A@0 0x008C52B5@0 0x008C5304@0 0x008C53AF@0	module
-parsed-unused	object	W3DScriptedModelDraw	UseProducerTexture	4	struct		yes	420	194	6	0x004B2A03@0 0x004B2A68@0 0x004B2A89@0 0x004B2B41@0 0x004B2B92@0 0x004B2BA7@0 0x004B2BBF@0 0x004B2BDC@0	module
+parsed-unused	object	W3DScriptedModelDraw	UseProducerTexture	4	struct		yes	404	181	6	0x004B2A03@0 0x004B2A68@0 0x004B2A89@0 0x004B2B41@0 0x004B2B92@0 0x004B2BA7@0 0x004B2BBF@0 0x004B2BDC@0	module
 parsed-unused	waterset		DiffuseColor	4	own-reader-unasked	S-023 S-7220	no				no candidate in recovered basic blocks; not a no-reader verdict	global WaterSettings[0..5] +0x54
 parsed-unused	waterset		SkyTexelsPerUnit	4	own-reader-unasked		no				no candidate in recovered basic blocks; not a no-reader verdict	global WaterSettings[0..5] +0x10
 parsed-unused	waterset		SkyTexture	4	own-reader-unasked		no				no candidate in recovered basic blocks; not a no-reader verdict	global WaterSettings[0..5] +0x4
@@ -146,7 +146,7 @@ parsed-unused	object	HorseHordeContain	LivingWorldOverloadTemplate	3	manual		yes
 parsed-unused	object	ModelConditionSoundSelectorClientBehavior/SoundState	VoiceRetreatToCastle	3	manual		no				the owner is not a module class of the map (an INI block, or a class the mod's objects do not use)	
 parsed-unused	object	RespawnBody	ReallyDamagedAttributeModifier	3	struct		yes	44	0	2	no specific none function: the reader is ported without a citation, shared, or in another class	module
 parsed-unused	object	W3DSailModelDraw	BlowingThresholdDegrees	3	struct	S-112	yes	67	0	0	no specific none function: the reader is ported without a citation, shared, or in another class	module
-parsed-unused	object	W3DScriptedModelDraw	UseDefaultAnimation	3	struct		yes	420	194	6	0x004B2A03@0 0x004B2A68@0 0x004B2A89@0 0x004B2B41@0 0x004B2B92@0 0x004B2BA7@0 0x004B2BBF@0 0x004B2BDC@0	module
+parsed-unused	object	W3DScriptedModelDraw	UseDefaultAnimation	3	struct		yes	404	181	6	0x004B2A03@0 0x004B2A68@0 0x004B2A89@0 0x004B2B41@0 0x004B2B92@0 0x004B2BA7@0 0x004B2BBF@0 0x004B2BDC@0	module
 parsed-unused	playertemplate		ScoreScreenImage	3	struct	S-7326	no				no instance explains the used fields; not a no-reader verdict	table 0xBF81A8
 parsed-unused	scoredkillevaannouncer		CountOnlyKillsAgainstLocalPlayer	3	block-parser		no				no instance explains the used fields; not a no-reader verdict	table 0xC51540
 parsed-unused	scoredkillevaannouncer		CountOnlyKillsByLocalPlayer	3	block-parser		no				no instance explains the used fields; not a no-reader verdict	table 0xC51540
@@ -555,8 +555,8 @@ parsed-unused	object	UpgradeSoundSelectorClientBehavior/SoundUpgrade	SoundImpact
 parsed-unused	object	UpgradeSoundSelectorClientBehavior/SoundUpgrade	VoiceMoveToCamp	1	manual		no				the owner is not a module class of the map (an INI block, or a class the mod's objects do not use)	
 parsed-unused	object	UpgradeSoundSelectorClientBehavior/SoundUpgrade	VoiceRetreatToCastle	1	manual		no				the owner is not a module class of the map (an INI block, or a class the mod's objects do not use)	
 parsed-unused	object	UpgradeSoundSelectorClientBehavior/SoundUpgrade/UnitSpecificSounds	VoiceEnterUnitTransportShip	1	by-name-prefix		no				the owner is not a module class of the map (an INI block, or a class the mod's objects do not use)	
-parsed-unused	object	W3DScriptedModelDraw	BirthFadeAdditive	1	struct		yes	420	194	6	0x004B2A03@0 0x004B2A68@0 0x004B2A89@0 0x004B2B41@0 0x004B2B92@0 0x004B2BA7@0 0x004B2BBF@0 0x004B2BDC@0	module
-parsed-unused	object	W3DScriptedModelDraw	HighDetailOnly	1	struct		yes	420	194	6	0x004B2A03@0 0x004B2A68@0 0x004B2A89@0 0x004B2B41@0 0x004B2B92@0 0x004B2BA7@0 0x004B2BBF@0 0x004B2BDC@0	module
+parsed-unused	object	W3DScriptedModelDraw	BirthFadeAdditive	1	struct		yes	404	181	6	0x004B2A03@0 0x004B2A68@0 0x004B2A89@0 0x004B2B41@0 0x004B2B92@0 0x004B2BA7@0 0x004B2BBF@0 0x004B2BDC@0	module
+parsed-unused	object	W3DScriptedModelDraw	HighDetailOnly	1	struct		yes	404	181	6	0x004B2A03@0 0x004B2A68@0 0x004B2A89@0 0x004B2B41@0 0x004B2B92@0 0x004B2BA7@0 0x004B2BBF@0 0x004B2BDC@0	module
 parsed-unused	object	W3DScriptedModelDraw/DefaultModelConditionState	OverrideTooltip	1	nested-parser		no				the owner is not a module class of the map (an INI block, or a class the mod's objects do not use)	
 parsed-unused	object	W3DScriptedModelDraw/ModelConditionState	OverrideTooltip	1	nested-parser		no				the owner is not a module class of the map (an INI block, or a class the mod's objects do not use)	
 parsed-unused	pathfinder		SlopeLimits	1	own-reader-unasked	S-160	no				no reader route implemented for this top-level block	
