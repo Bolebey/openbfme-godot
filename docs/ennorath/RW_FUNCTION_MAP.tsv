@@ -105,7 +105,7 @@ ActiveBody	0	0x0049449C	ported
 ActiveBody	0	0x005015C6	ported				
 ActiveBody	0	0x005DC48C	ported				RenderInfoClass::Additional_Pass_Count (tier A)
 ActiveBody	0	0x005F2D41	ported				
-ActiveBody	0	0x006519CA	none				
+ActiveBody	0	0x006519CA	ported				
 ActiveBody	0	0x006AA274	ported				
 ActiveBody	0	0x00715914	ported				GameWindow::winGetInstanceData (tier A)
 ActiveBody	0	0x008C1BF9	ported		vcall +0x54, vcall +0x84		
@@ -16089,7 +16089,7 @@ FloodUpdate	2	0x0066365E	ported	0x00698EC3
 FloodUpdate	2	0x00862535	ported	0x005FFE47, 0x00891AE4			
 FloodUpdate	3	0x0066341C	ported	0x0066365E			Rva00263653::Rva00263653 (tier B)
 FloodUpdate	3	0x007AEAFD	none	0x0064A492		caller 0x004B1607 (ported), caller 0x004C9229 (ported), caller 0x004CF246 (ported), caller 0x004D0C77 (ported), caller 0x004D10BC (ported), caller 0x0064A492 (ported), caller 0x00764BB9 (ported), caller 0x0086525F (ported), caller 0x008D055C (ported), caller 0x008D0A08 (ported)	SecondBase005D2111::~SecondBase005D2111 (tier A)
-FoundationAIUpdate	0	0x0079AA4A	none				
+FoundationAIUpdate	0	0x0079AA4A	ported				
 FoundationAIUpdate	0	0x0079AA54	none			callee 0x008582DE (ported)	
 FoundationAIUpdate	0	0x008580EE	none			callee 0x005487EC (ported), callee 0x00A3CEF0 (ported)	
 FoundationAIUpdate	0	0x00858133	none				
@@ -17201,17 +17201,17 @@ GarrisonContain	17	0x007ED86B	ported	0x00608F49
 GarrisonContain	17	0x009A2783	none	0x00692F84			
 GarrisonContain	17	0x00A3CD70	none	0x00436680		caller 0x006896F2 (ported), caller 0x00689D9F (ported), caller 0x0094FCBA (ported)	
 GarrisonContain	18	0x007ED77A	none	0x007ED86B		caller 0x007ED86B (ported)	
-GateOpenAndCloseBehavior	0	0x0064DFDE	none				
+GateOpenAndCloseBehavior	0	0x0064DFDE	ported				
 GateOpenAndCloseBehavior	0	0x0064DFEB	none		vcall +0x4		
-GateOpenAndCloseBehavior	0	0x006519CA	none				
-GateOpenAndCloseBehavior	0	0x00654FD1	none			callee 0x00A3CF28 (ported)	
+GateOpenAndCloseBehavior	0	0x006519CA	ported				
+GateOpenAndCloseBehavior	0	0x00654FD1	ported				
 GateOpenAndCloseBehavior	0	0x0086277F	ported				
-GateOpenAndCloseBehavior	0	0x0089BFAF	none				
+GateOpenAndCloseBehavior	0	0x0089BFAF	ported				
 GateOpenAndCloseBehavior	0	0x0089BFB5	ported		vcall +0x18		
-GateOpenAndCloseBehavior	0	0x0089BFFE	none				
-GateOpenAndCloseBehavior	0	0x0089C006	none			callee 0x005487EC (ported), callee 0x00A3CEF0 (ported)	
+GateOpenAndCloseBehavior	0	0x0089BFFE	ported				
+GateOpenAndCloseBehavior	0	0x0089C006	ported				
 GateOpenAndCloseBehavior	0	0x0089C35E	ported				
-GateOpenAndCloseBehavior	0	0x0089C37A	none		vcall +0x28	callee 0x008CD4AA (ported)	
+GateOpenAndCloseBehavior	0	0x0089C37A	ported		vcall +0x28		
 GateOpenAndCloseBehavior	0	0x0089C6F5	ported				GateOpenAndCloseBehavior::rva00498F46 (tier B)
 GateOpenAndCloseBehavior	0	0x0089C97A	ported		vcall +0x28		
 GateOpenAndCloseBehavior	0	0x0089C9BA	ported		vcall +0x28		
@@ -17219,7 +17219,7 @@ GateOpenAndCloseBehavior	0	0x0089CB19	ported				GateOpenAndCloseBehavior::onObje
 GateOpenAndCloseBehavior	0	0x0089CC29	ported		vcall +0x8, vcall +0x28, vcall +0x6c		
 GateOpenAndCloseBehavior	0	0x008DC9AB	ported				
 GateOpenAndCloseBehavior	0	0x009188EB	ported				RenderObjClass::Is_Complete (tier A)
-GateOpenAndCloseBehavior	0	0x009A5E04	none				
+GateOpenAndCloseBehavior	0	0x009A5E04	ported				
 GateOpenAndCloseBehavior	0	0x009E35EF	none				
 GateOpenAndCloseBehavior	1	0x00401E64	ported	0x0089CB19			D::StringBase<>::isEmpty (tier A)
 GateOpenAndCloseBehavior	1	0x004065AA	ported	0x0089CB19			D::StringBase<>::compare (tier A)
@@ -17238,7 +17238,7 @@ GateOpenAndCloseBehavior	1	0x006E85E9	ported	0x0068B244, 0x0089C9FA, 0x0089CA84,
 GateOpenAndCloseBehavior	1	0x006E861E	ported	0x0089C9FA, 0x0089CA84, 0x0089CC29			Pathfinder::RemoveObjectFromPathfindMapKeepingGateFlags (tier A)
 GateOpenAndCloseBehavior	1	0x0089BEC2	ported	0x0089CC29			Rva00498707::rva00498707 (tier A)
 GateOpenAndCloseBehavior	1	0x0089BED1	ported	0x0089CC29			Rva00498716::rva00498716 (tier A)
-GateOpenAndCloseBehavior	1	0x0089C113	none	0x0089BFFE		callee 0x0042F6A0 (ported)	GateOpenAndCloseBehavior::`scalar deleting destructor' (tier A)
+GateOpenAndCloseBehavior	1	0x0089C113	none	0x0089BFFE		callee 0x0042F6A0 (ported), caller 0x0089BFFE (ported)	GateOpenAndCloseBehavior::`scalar deleting destructor' (tier A)
 GateOpenAndCloseBehavior	1	0x0089C1A4	ported	0x0089C261, 0x0089CC29	vcall +0x6c		
 GateOpenAndCloseBehavior	1	0x0089C261	ported	0x0089CC29	vcall +0x64		
 GateOpenAndCloseBehavior	1	0x0089C33A	ported	0x0089C35E, 0x0089C6F5			
@@ -17452,13 +17452,13 @@ GateProxyBehavior	0	0x00656779	ported		vcall +0x2c
 GateProxyBehavior	0	0x006567A1	none		vcall +0x30	callee 0x00656693 (ported)	
 GateProxyBehavior	0	0x007FEAC1	ported				RenderObjClass::Intersect_OBBox (tier A)
 GateProxyBehavior	0	0x0088B211	ported				
-GateProxyBehavior	0	0x0089C45B	none				WeaponSetUpgrade::loadPostProcess (tier A)
+GateProxyBehavior	0	0x0089C45B	none			callee 0x0089C37A (ported)	WeaponSetUpgrade::loadPostProcess (tier A)
 GateProxyBehavior	0	0x0089CC24	none			callee 0x0089CB19 (ported)	WeaponSetUpgrade::loadPostProcess (tier A)
 GateProxyBehavior	0	0x00918BA0	ported				
 GateProxyBehavior	1	0x005487EC	ported	0x0064DFF6, 0x00656693, 0x0089CB19			
 GateProxyBehavior	1	0x00653DC4	none	0x006530AC		callee 0x0042F6A0 (ported)	GateProxyBehavior::`scalar deleting destructor' (tier A)
 GateProxyBehavior	1	0x00656693	ported	0x0065667C, 0x00656719, 0x00656730, 0x00656747, 0x00656760, 0x00656779, 0x006567A1			Rva00128780GateBehaviorOwner::resolveGateBehavior (tier A)
-GateProxyBehavior	1	0x0089C37A	none	0x0089C45B	vcall +0x28	callee 0x008CD4AA (ported)	
+GateProxyBehavior	1	0x0089C37A	ported	0x0089C45B	vcall +0x28		
 GateProxyBehavior	1	0x0089CB19	ported	0x0089CC24			GateOpenAndCloseBehavior::onObjectCreated (tier B)
 GateProxyBehavior	1	0x00A3CEF0	ported	0x00450429, 0x0064DFF6, 0x00656693, 0x0067A343, 0x00686160, 0x007684F8, 0x0089BF53, 0x0089C759, 0x0089CB19, 0x00935FAA			__EH_prolog (tier A)
 GateProxyBehavior	2	0x00401E64	ported	0x0089CB19			D::StringBase<>::isEmpty (tier A)
@@ -38978,7 +38978,7 @@ SpecialEnemySenseUpdate	10	0x00645716	none	0x00645A89		caller 0x00645A89 (ported
 SpecialPowerModule	0	0x006519A6	none				
 SpecialPowerModule	0	0x006519AF	ported		vcall +0x3c		
 SpecialPowerModule	0	0x006519C2	ported				
-SpecialPowerModule	0	0x006519CA	none				
+SpecialPowerModule	0	0x006519CA	ported				
 SpecialPowerModule	0	0x00654F8E	none			callee 0x00435F30 (ported), callee 0x00A3CEF0 (ported)	
 SpecialPowerModule	0	0x007B0F25	ported	0x00625456			
 SpecialPowerModule	0	0x00863BF3	ported				
@@ -41190,7 +41190,7 @@ StructureBody	9	0x009346AC	none	0x009347C6		caller 0x009347C6 (ported)	MixFileIn
 StructureBody	10	0x006E8074	none	0x0093450F, 0x009346AC		caller 0x006E9FF8 (ported), caller 0x00934400 (ported)	
 StructureBody	10	0x0093450F	none	0x009346AC		caller 0x00934594 (ported)	MixFileInfoBuffer::bfmeLinkInto (tier A)
 StructureBody	10	0x00A3CF96	ported	0x0070CB46			_atoi (tier A)
-StructureCollapseUpdate	0	0x00654FD1	none			callee 0x00A3CF28 (ported)	
+StructureCollapseUpdate	0	0x00654FD1	ported				
 StructureCollapseUpdate	0	0x008A18E0	ported				
 StructureCollapseUpdate	0	0x008A78AD	none				
 StructureCollapseUpdate	0	0x008A7918	none			callee 0x005487EC (ported), callee 0x00A3CEF0 (ported)	StructureCollapseUpdate::rva0004A429F (tier A)
@@ -50430,20 +50430,20 @@ W3DTruckDraw	15	0x00B62310	none	0x00B64B40
 W3DTruckDraw	15	0x00B64A80	none	0x00B64B40			_rehash (tier B)
 W3DTruckDraw	16	0x00B64930	none	0x00B64A80			_setnodevector (tier C)
 WallHubBehavior	0	0x005F2D3D	none				
-WallHubBehavior	0	0x0079AA4A	none				
+WallHubBehavior	0	0x0079AA4A	ported				
 WallHubBehavior	0	0x00851E97	ported				Vector3SolidBoxRandomizer::Class_ID (tier A)
-WallHubBehavior	0	0x00855E20	none				
-WallHubBehavior	0	0x00855E26	none				Rva0043C969Get (tier A)
-WallHubBehavior	0	0x00855E2C	none				
-WallHubBehavior	0	0x00855E38	none				
-WallHubBehavior	0	0x00855E43	none			callee 0x005487EC (ported), callee 0x00A3CEF0 (ported)	
+WallHubBehavior	0	0x00855E20	ported				
+WallHubBehavior	0	0x00855E26	ported				Rva0043C969Get (tier A)
+WallHubBehavior	0	0x00855E2C	ported				
+WallHubBehavior	0	0x00855E38	ported				
+WallHubBehavior	0	0x00855E43	ported				
 WallHubBehavior	0	0x00855E88	none				
 WallHubBehavior	0	0x00855EA0	ported				
-WallHubBehavior	0	0x00855F61	none			callee 0x0042F6A0 (ported)	WallHubBehaviorModuleData::`scalar deleting destructor' (tier A)
+WallHubBehavior	0	0x00855F61	ported				WallHubBehaviorModuleData::`scalar deleting destructor' (tier A)
 WallHubBehavior	0	0x00855F7D	none			callee 0x006D1305 (ported)	
 WallHubBehavior	0	0x00855F95	none			callee 0x006D1305 (ported)	
 WallHubBehavior	0	0x00855FAD	none			callee 0x006D1305 (ported)	
-WallHubBehavior	0	0x00855FC5	none		vcall +0x28		
+WallHubBehavior	0	0x00855FC5	ported		vcall +0x28		
 WallHubBehavior	0	0x0085601C	none			callee 0x006D1305 (ported), callee 0x00855FF1 (ported)	
 WallHubBehavior	0	0x0088B211	ported				
 WallHubBehavior	0	0x008B88B0	ported				UBfmePod20::set<>::~set<> (tier A)
@@ -50452,7 +50452,7 @@ WallHubBehavior	1	0x0042F6A0	ported	0x00855F61
 WallHubBehavior	1	0x004D0EAF	ported	0x008B88B0			UVBufferClass::~UVBufferClass (tier A)
 WallHubBehavior	1	0x005487EC	ported	0x00855E43			
 WallHubBehavior	1	0x006D1305	ported	0x00855F7D, 0x00855F95, 0x00855FAD, 0x0085601C			ThingFactory::rva002D06AA (tier D)
-WallHubBehavior	1	0x00855E00	none	0x00855F61		callee 0x0064A492 (ported)	Rva00458402::~Rva00458402 (tier A)
+WallHubBehavior	1	0x00855E00	ported	0x00855F61			Rva00458402::~Rva00458402 (tier A)
 WallHubBehavior	1	0x00855FF1	ported	0x0085601C			
 WallHubBehavior	1	0x0085603C	none	0x0085601C			
 WallHubBehavior	1	0x00A3CEF0	ported	0x00855E43			__EH_prolog (tier A)
