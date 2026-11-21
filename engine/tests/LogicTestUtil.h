@@ -9,6 +9,7 @@
 #include "HordeCompleteTestUtil.h"
 #include "Common/Upgrade.h"
 #include "ObjectTestUtil.h"
+#include "doctest.h"
 
 #include "Common/PlayerList.h"
 #include "Common/PlayerTemplate.h"

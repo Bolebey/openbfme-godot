@@ -1074,7 +1074,8 @@ struct EffectProbe
 			}
 			if (const ObjectWeapons *w = o->getWeapons())
 			{
-				s.attackRange = w->currentAttackRangeNoTarget();
+				// RW 0x006CA69A -> RW 0x006CA61F (single RANGE scale; NoTarget RW 0x006CA701 squares the scale)
+				s.attackRange = w->currentAttackRange();
 			}
 			if (logic.shroud())
 			{
