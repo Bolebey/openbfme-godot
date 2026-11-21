@@ -266,6 +266,7 @@ include(cmake/Port287.cmake) # PORT-287: horde producer selection and charge (OP
 include(cmake/Port248.cmake) # OPENBFME_PORT248_TESTS
 include(cmake/Port264.cmake) # OPENBFME_PORT264_TESTS (lane PORT-264)
 include(cmake/Port286.cmake) # OPENBFME_PORT286_TESTS (lane PORT-286)
+include(cmake/Port276.cmake) # OPENBFME_PORT276_TESTS: targetless trap and mine detonation
 include(cmake/Port211.cmake) # PORT-211: the economy group S-250 .. S-260 swept against main (fork issue 493; OPENBFME_PORT211_TESTS)
 include(cmake/Port242.cmake) # PORT-242: SpecialPowerModule RequirementsFilterStrategic (fork issue 566; OPENBFME_PORT242_TESTS)
 include(cmake/Port305.cmake) # PORT-305: ClearanceTestingSlowDeathBehavior room for a fall (OPENBFME_PORT305_TESTS)
@@ -1021,6 +1022,7 @@ add_executable(openbfme_tests
     ${OPENBFME_PORT248_TESTS}
     ${OPENBFME_PORT264_TESTS}
     ${OPENBFME_PORT286_TESTS}
+    ${OPENBFME_PORT276_TESTS}
     ${OPENBFME_PORT211_TESTS}
     ${OPENBFME_PORT242_TESTS}
     ${OPENBFME_PORT305_TESTS}
