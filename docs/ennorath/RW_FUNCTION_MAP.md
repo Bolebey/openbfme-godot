@@ -2,7 +2,7 @@
 
 Command: `python tools/mod/rw_function_map.py --game /content/game_assets/bfme_assets/RotWK/game.dat --ini /content/drive/MyDrive/for-arena/ennorath-ini-1.9.8.3.zip --inventory workspace/rebuild_inventory.json --decomp workspace/rebuild/xmap/rw_map.csv --out docs/ennorath/RW_FUNCTION_MAP`
 
-Rows: 52638; ported 28594, partial 779, none 23265.
+Rows: 52638; ported 28616, partial 779, none 23243.
 Counts are per module/function pair, not unique functions.
 
 ## Stop list
@@ -1056,7 +1056,6 @@ calls; their targets are not followed.
 | ActiveBody | 4811 | 0 | 0x008C1DAD | 3 | none |  |
 | ActiveBody | 4811 | 0 | 0x008C3A5A | 3 | none |  |
 | ActiveBody | 4811 | 0 | 0x008C3A67 | 3 | none |  |
-| ActiveBody | 4811 | 0 | 0x006519CA | 2 | none |  |
 | ActiveBody | 4811 | 0 | 0x008C3A2D | 2 | none |  |
 | ActiveBody | 4811 | 0 | 0x008C3A48 | 2 | none |  |
 | ActiveBody | 4811 | 0 | 0x008C3A53 | 2 | none |  |
@@ -2252,7 +2251,6 @@ calls; their targets are not followed.
 | SpecialPowerModule | 1965 | 0 | 0x0089796B | 11 | none | SpecialPowerModule::`scalar deleting destructor' (tier A) |
 | SpecialPowerModule | 1965 | 0 | 0x006519A6 | 4 | none |  |
 | SpecialPowerModule | 1965 | 0 | 0x00896A69 | 3 | none |  |
-| SpecialPowerModule | 1965 | 0 | 0x006519CA | 2 | none |  |
 | SpecialPowerModule | 1965 | 0 | 0x00897538 | 2 | none |  |
 | SpecialPowerModule | 1965 | 1 | 0x00897583 | 51 | none |  |
 | SpecialPowerModule | 1965 | 1 | 0x00435D50 | 42 | none |  |
@@ -3605,7 +3603,6 @@ calls; their targets are not followed.
 | ImmortalBody | 1203 | 10 | 0x006E8074 | 13 | none |  |
 | StructureCollapseUpdate | 1130 | 0 | 0x008A7918 | 15 | none | StructureCollapseUpdate::rva0004A429F (tier A) |
 | StructureCollapseUpdate | 1130 | 0 | 0x008A79E8 | 11 | none | Rva004A4214::`scalar deleting destructor' (tier A) |
-| StructureCollapseUpdate | 1130 | 0 | 0x00654FD1 | 6 | none |  |
 | StructureCollapseUpdate | 1130 | 0 | 0x008A8110 | 6 | none |  |
 | StructureCollapseUpdate | 1130 | 0 | 0x008A78AD | 2 | none |  |
 | StructureCollapseUpdate | 1130 | 1 | 0x008A788D | 5 | none | SupplyCenterDockUpdate::~SupplyCenterDockUpdate (tier A) |
@@ -11279,7 +11276,6 @@ calls; their targets are not followed.
 | FoundationAIUpdate | 71 | 0 | 0x008581A1 | 14 | none |  |
 | FoundationAIUpdate | 71 | 0 | 0x00858BA6 | 12 | none |  |
 | FoundationAIUpdate | 71 | 0 | 0x00858282 | 11 | none | BuildingBehaviorModuleData::`scalar deleting destructor' (tier A) |
-| FoundationAIUpdate | 71 | 0 | 0x0079AA4A | 5 | none |  |
 | FoundationAIUpdate | 71 | 0 | 0x008583D8 | 4 | none |  |
 | FoundationAIUpdate | 71 | 0 | 0x0097031D | 4 | none |  |
 | FoundationAIUpdate | 71 | 0 | 0x0085829E | 3 | none |  |
@@ -12719,15 +12715,7 @@ calls; their targets are not followed.
 | EvaAnnounceClientCreate | 48 | 5 | 0x00423FA0 | 52 | none | _STL::_N::_Rb_global<>::_Rotate_left (tier A) |
 | EvaAnnounceClientCreate | 48 | 5 | 0x00424030 | 52 | none | _STL::_N::_Rb_global<>::_Rotate_right (tier A) |
 | EvaAnnounceClientCreate | 48 | 5 | 0x00430130 | 6 | none |  |
-| GateOpenAndCloseBehavior | 46 | 0 | 0x0089C37A | 18 | none |  |
-| GateOpenAndCloseBehavior | 46 | 0 | 0x0089C006 | 15 | none |  |
-| GateOpenAndCloseBehavior | 46 | 0 | 0x0064DFDE | 6 | none |  |
-| GateOpenAndCloseBehavior | 46 | 0 | 0x00654FD1 | 6 | none |  |
 | GateOpenAndCloseBehavior | 46 | 0 | 0x0064DFEB | 3 | none |  |
-| GateOpenAndCloseBehavior | 46 | 0 | 0x006519CA | 2 | none |  |
-| GateOpenAndCloseBehavior | 46 | 0 | 0x0089BFAF | 2 | none |  |
-| GateOpenAndCloseBehavior | 46 | 0 | 0x0089BFFE | 2 | none |  |
-| GateOpenAndCloseBehavior | 46 | 0 | 0x009A5E04 | 2 | none |  |
 | GateOpenAndCloseBehavior | 46 | 0 | 0x009E35EF | 2 | none |  |
 | GateOpenAndCloseBehavior | 46 | 1 | 0x00436030 | 44 | none | D::StringBase<>::set (tier A) |
 | GateOpenAndCloseBehavior | 46 | 1 | 0x00435D50 | 42 | none |  |
@@ -14544,25 +14532,16 @@ calls; their targets are not followed.
 | DozerAIUpdate | 35 | 12 | 0x007B327D | 5 | none | Condition::rva003B275A (tier A) |
 | DozerAIUpdate | 35 | 14 | 0x007ED77A | 21 | none |  |
 | DynamicPortalBehaviour | 34 | 0 | 0x00863C90 | 15 | none |  |
-| WallHubBehavior | 34 | 0 | 0x00855E43 | 15 | none |  |
-| WallHubBehavior | 34 | 0 | 0x00855FC5 | 14 | none |  |
 | DynamicPortalBehaviour | 34 | 0 | 0x00863A5F | 12 | none |  |
 | DynamicPortalBehaviour | 34 | 0 | 0x00863E97 | 11 | none | DynamicPortalBehaviour::`scalar deleting destructor' (tier A) |
-| WallHubBehavior | 34 | 0 | 0x00855F61 | 11 | none | WallHubBehaviorModuleData::`scalar deleting destructor' (tier A) |
 | WallHubBehavior | 34 | 0 | 0x0085601C | 11 | none |  |
 | WallHubBehavior | 34 | 0 | 0x00855F7D | 9 | none |  |
 | WallHubBehavior | 34 | 0 | 0x00855F95 | 9 | none |  |
 | WallHubBehavior | 34 | 0 | 0x00855FAD | 9 | none |  |
-| WallHubBehavior | 34 | 0 | 0x0079AA4A | 5 | none |  |
-| WallHubBehavior | 34 | 0 | 0x00855E2C | 3 | none |  |
 | WallHubBehavior | 34 | 0 | 0x00855E88 | 3 | none |  |
 | DynamicPortalBehaviour | 34 | 0 | 0x00863C8A | 2 | none |  |
 | WallHubBehavior | 34 | 0 | 0x005F2D3D | 2 | none |  |
-| WallHubBehavior | 34 | 0 | 0x00855E20 | 2 | none |  |
-| WallHubBehavior | 34 | 0 | 0x00855E26 | 2 | none | Rva0043C969Get (tier A) |
-| WallHubBehavior | 34 | 0 | 0x00855E38 | 2 | none |  |
 | DynamicPortalBehaviour | 34 | 1 | 0x00672F68 | 8 | partial | Drawable::rva0027292F (tier B) |
-| WallHubBehavior | 34 | 1 | 0x00855E00 | 5 | none | Rva00458402::~Rva00458402 (tier A) |
 | RebuildHoleExposeDie | 34 | 1 | 0x00889AAA | 1 | none | RebuildHoleExposeDie::~RebuildHoleExposeDie (tier A) |
 | WallHubBehavior | 34 | 1 | 0x0085603C | 1 | none |  |
 | DynamicPortalBehaviour | 34 | 2 | 0x006ACA3D | 31 | none | _STL::I::IV?$allocator::vector<>::vector<> (tier A) |
@@ -22064,7 +22043,6 @@ calls; their targets are not followed.
 | ToppleUpdate | 3 | 1 | 0x0068D58C | 35 | none | Object::topple (tier A) |
 | HordeWorkerAIUpdate | 3 | 1 | 0x0089E623 | 23 | none | Rva0049AE5E::rva0049AE5E (tier B) |
 | HordeWorkerAIUpdate | 3 | 1 | 0x0089E41F | 19 | none | HordeAIUpdate::bfmePrivateCommand42 (tier D) |
-| GateProxyBehavior | 3 | 1 | 0x0089C37A | 18 | none |  |
 | ToppleUpdate | 3 | 1 | 0x008ABA7D | 15 | none | ToppleUpdateModuleData::~ToppleUpdateModuleData (tier A) |
 | W3DLaserDraw | 3 | 1 | 0x0055DBE0 | 13 | none |  |
 | GateProxyBehavior | 3 | 1 | 0x00653DC4 | 11 | none | GateProxyBehavior::`scalar deleting destructor' (tier A) |
