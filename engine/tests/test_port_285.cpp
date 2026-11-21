@@ -151,7 +151,7 @@ TEST_CASE("PORT-285 OCLUpdate: a loaded m_created below zero is refused by name,
 // ---- ProjectileStreamUpdate (GameLogic/Module/ProjectileStreamUpdate.cpp): both indices stay inside the fixed array ---------------------
 TEST_CASE("PORT-285 ProjectileStreamUpdate: a free or first valid index outside the stream's array is refused by name")
 {
-	constexpr int kMax = 20; // ProjectileStreamUpdate::MAX_PROJECTILE_STREAM
+	static constexpr int kMax = 20; // ProjectileStreamUpdate::MAX_PROJECTILE_STREAM
 	std::vector<std::uint8_t> bytes;
 	{
 		XferSave save;
