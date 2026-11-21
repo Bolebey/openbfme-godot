@@ -563,6 +563,7 @@ include(cmake/Local95.cmake)    # LOCAL-95: W3DScriptedModelDraw / W3DHordeModel
 include(cmake/Local106.cmake)   # LOCAL-106: model drawing second pass & shouldAnimate wiring (issue #784; OPENBFME_LOCAL106_TESTS)
 include(cmake/Local97.cmake)    # LOCAL-97: PoisonedBehavior, DamageFieldUpdate forceFireWeapon, ThreatFinderUpdate & AttributeModifierPoolUpdate (fork issue 762; OPENBFME_LOCAL97_TESTS)
 include(cmake/Local100.cmake)   # LOCAL-100: upgrade modules uncited functions (issue #766; OPENBFME_LOCAL100_TESTS)
+include(cmake/Local122.cmake)   # LOCAL-122: upgrade and death modules tail citations (issue #806; OPENBFME_LOCAL122_TESTS)
 include(cmake/Local107.cmake)   # LOCAL-107: AIUpdateInterface, ThreatFinderUpdate, AIGateUpdate (fork issue 785; OPENBFME_LOCAL107_TESTS)
 include(cmake/Local111.cmake)   # LOCAL-111: Lua alert quirk Q5 classification and source naming (fork issue 795; OPENBFME_LOCAL111_TESTS)
 include(cmake/Local98.cmake)    # LOCAL-98: death modules (issue #763; OPENBFME_LOCAL98_TESTS)
@@ -1390,6 +1391,7 @@ add_executable(openbfme_tests
     ${OPENBFME_LOCAL106_TESTS}
     ${OPENBFME_LOCAL97_TESTS}
     ${OPENBFME_LOCAL100_TESTS}
+    ${OPENBFME_LOCAL122_TESTS}
     ${OPENBFME_LOCAL107_TESTS}
     ${OPENBFME_LOCAL111_TESTS}
     ${OPENBFME_LOCAL98_TESTS}
