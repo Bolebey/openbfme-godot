@@ -36,7 +36,7 @@ The main class of a button is the class it links to that the fewest failing butt
 
 | class | buttons | map none | specific none | map partial | first specific none functions |
 |---|---:|---:|---:|---:|---|
-| SpecialPowerModule | 79 | 291 | 3 | 3 | 0x00654F8E@0 0x00896A32@0 0x008981BE@0 |
+| SpecialPowerModule | 79 | 290 | 3 | 3 | 0x00654F8E@0 0x00896A32@0 0x008981BE@0 |
 | UnpauseSpecialPowerUpgrade | 71 | 17 | 2 | 0 | 0x00697B6E@1 0x008D280A@3 |
 | WeaponFireSpecialAbilityUpdate | 60 | 164 | 2 | 11 | 0x00896156@0 0x00896370@0 |
 | OCLSpecialPower | 30 | 252 | 0 | 0 | - |

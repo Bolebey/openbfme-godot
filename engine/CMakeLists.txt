@@ -554,6 +554,10 @@ include(cmake/Port257.cmake)    # PORT-257: GiantBirdAIUpdate onCollide/collisio
 include(cmake/Port261.cmake)    # PORT-261: the player-side powers PlayerHealSpecialPower and StoreObjectsSpecialPower (issue #609; OPENBFME_PORT261_TESTS)
 include(cmake/Local80.cmake)    # LOCAL-80: script library rank actions and PLAYER_COMPARE_RANK (issue #704; OPENBFME_LOCAL80_TESTS)
 include(cmake/Local94.cmake)    # LOCAL-94: the last 8 condition / action types of the script map (issue #720; OPENBFME_LOCAL94_TESTS)
+include(cmake/Local95.cmake)    # LOCAL-95: W3DScriptedModelDraw / W3DHordeModelDraw uncited functions (issue #760; OPENBFME_LOCAL95_TESTS)
+include(cmake/Local98.cmake)    # LOCAL-98: death modules (issue #763; OPENBFME_LOCAL98_TESTS)
+include(cmake/Local97.cmake)    # LOCAL-97: PoisonedBehavior, DamageFieldUpdate forceFireWeapon, ThreatFinderUpdate & AttributeModifierPoolUpdate (fork issue 762; OPENBFME_LOCAL97_TESTS)
+include(cmake/Local96.cmake)    # LOCAL-96: DozerAIUpdate and WorkerAIUpdate builder functions (fork issue 761; OPENBFME_LOCAL96_TESTS)
 include(cmake/Local99.cmake)    # LOCAL-99: unit behaviour modules uncited own functions (issue #764; OPENBFME_LOCAL99_TESTS)
 include(cmake/Port224.cmake)    # PORT-224: destroying a creep lair or worker-rebuilt structure mid-rebuild fades the hole without money or treasure (issue #534; OPENBFME_PORT224_TESTS)
 include(cmake/Port222.cmake)    # PORT-222: a LevelGrantSpecialPower fills a horde's experience pool (fork issue 532; OPENBFME_PORT222_TESTS)
@@ -1355,6 +1359,10 @@ add_executable(openbfme_tests
     ${OPENBFME_PORT261_TESTS}
     ${OPENBFME_LOCAL80_TESTS}
     ${OPENBFME_LOCAL94_TESTS}
+    ${OPENBFME_LOCAL95_TESTS}
+    ${OPENBFME_LOCAL98_TESTS}
+    ${OPENBFME_LOCAL97_TESTS}
+    ${OPENBFME_LOCAL96_TESTS}
     ${OPENBFME_LOCAL99_TESTS}
     ${OPENBFME_PORT224_TESTS}
     ${OPENBFME_PORT222_TESTS}
