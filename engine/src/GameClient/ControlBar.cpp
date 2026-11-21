@@ -804,6 +804,8 @@ void ControlBar::setScheme(const ControlBarScheme *scheme)
 		return;
 	}
 	m_schemeName = scheme->m_name;
+	// RW 0x720704 .. 0x72070D: passes BuildUpClockColor (+0x18) to setBuildUpClockColor (RW 0x8DBE7E -> TheControlBar +0x210)
+	setBuildUpClockColor(scheme->m_buildUpClockColor);
 	// RW 0x720712 .. 0x720727: passes border colors to setCommandBarBorderColors (RW 0x71C62F)
 	setCommandBarBorderColors(
 		scheme->m_buttonBorderBuildColor,
@@ -813,6 +815,18 @@ void ControlBar::setScheme(const ControlBarScheme *scheme)
 		scheme->m_buttonBorderAlteredColor
 	);
 	m_commandBarBorderColor = scheme->m_commandBarBorderColor; // RW 0x720732 (+0x234)
+	// RW 0x720796 .. 0x7207C6 / RW 0x72176B .. 0x7217A7: resMultiplier = TheDisplay->{width,height} / ScreenCreationRes.{x,y}
+	m_schemeCreationRes = scheme->m_screenCreationRes;
+	m_schemeMultiplierX = (m_schemeCreationRes.x > 0) ? (float)m_displayWidth / (float)m_schemeCreationRes.x : 1.0f;
+	m_schemeMultiplierY = (m_schemeCreationRes.y > 0) ? (float)m_displayHeight / (float)m_schemeCreationRes.y : 1.0f;
+}
+
+void ControlBar::setDisplaySize(int width, int height)
+{
+	m_displayWidth = width;
+	m_displayHeight = height;
+	m_schemeMultiplierX = (m_schemeCreationRes.x > 0) ? (float)m_displayWidth / (float)m_schemeCreationRes.x : 1.0f;
+	m_schemeMultiplierY = (m_schemeCreationRes.y > 0) ? (float)m_displayHeight / (float)m_schemeCreationRes.y : 1.0f;
 }
 
 // RW 0x71D350 / 0x721613
