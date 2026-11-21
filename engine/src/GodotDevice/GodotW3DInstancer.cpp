@@ -495,6 +495,15 @@ void W3DInstancer::set_particle_color(bool enabled)
 	}
 }
 
+void W3DInstancer::set_buff_blend(bool enabled)
+{
+	BuffBlend = enabled;
+	if (Materials)
+	{
+		Materials->Set_Buff_Blend(enabled);
+	}
+}
+
 void W3DInstancer::set_instance_particle_color(int64_t instance, int shader, float r, float g, float b)
 {
 	if (instance < 0 || instance >= (int64_t)Instances.size()) return;
@@ -795,6 +804,7 @@ Dictionary W3DInstancer::setup(const Ref<RetailFileSystem> &fs)
 		Materials->Set_Asset_Packs(fs->assetPacks().empty() ? nullptr : &fs->assetPacks());
 		Materials->Set_Alpha_Override(AlphaOverride); // lane BUILD-5 r3
 		Materials->Set_Particle_Color(ParticleColor);
+		Materials->Set_Buff_Blend(BuffBlend);
 		// housecolor.ini: the table only names which textures have a house texture; applying it is stop S-022 (reported per surface).
 		// A missing or malformed file is an error, not an empty table.
 		std::vector<std::uint8_t> hcBytes;

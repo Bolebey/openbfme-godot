@@ -1036,3 +1036,13 @@ int W3D_Surface_Render_Priority(int sortLevel, int pass, bool floorBlend)
 	const int priority = staticBase + (kMaxStaticSort - clampedSort) * kMaxPasses + clampedPass;
 	return std::clamp(priority, FXParticleSystem::kW3DRenderPriorityMin, FXParticleSystem::kW3DRenderPriorityMax);
 }
+
+void W3D_Apply_Buff_Render_State(W3DShaderKey &key)
+{
+	// W3DBuffBuffer::Draw (RW 0x004D20C6): D3DRS_ZWRITEENABLE = 0 (RW 0x004D246C), D3DRS_ALPHATESTENABLE = 0 (RW 0x004D252C),
+	// D3DRS_SRCBLEND = D3DBLEND_ONE (RW 0x004D26D4), D3DRS_DESTBLEND = D3DBLEND_ONE (RW 0x004D2734), D3DRS_FOGENABLE = 0 (RW 0x004D2794).
+	key.Blend = W3D_GODOT_BLEND_ADD;
+	key.DepthWrite = false;
+	key.AlphaTest = false;
+	key.Fog = 0;
+}

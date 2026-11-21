@@ -154,3 +154,8 @@ std::string W3D_FixedFunction_House_Color_Stop(bool converted, bool lit, int sec
 // Transparent-pass render priority for a W3D surface (RW 0x4E2F3A RenderFloors, RW 0x470F5E SortLevel 0,
 // RW 0x47166A -> 0x576240 StaticSortLists descending 32..1). Both W3DMaterialFactory and W3DInstancer call this.
 int W3D_Surface_Render_Priority(int sortLevel, int pass, bool floorBlend);
+
+// W3DBuffBuffer::Draw (RW 0x004D20C6): forces D3DRS_ZWRITEENABLE = 0 (RW 0x004D246C), D3DRS_ALPHATESTENABLE = 0
+// (RW 0x004D252C), D3DRS_SRCBLEND = ONE (RW 0x004D26D4), D3DRS_DESTBLEND = ONE (RW 0x004D2734), D3DRS_FOGENABLE = 0
+// (RW 0x004D2794) for every W3DBuffDraw mesh, overriding any DepthMask = 1 or blend in the .w3d file.
+void W3D_Apply_Buff_Render_State(W3DShaderKey &key);
