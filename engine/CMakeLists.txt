@@ -565,6 +565,7 @@ include(cmake/Local100.cmake)   # LOCAL-100: upgrade modules uncited functions (
 include(cmake/Local98.cmake)    # LOCAL-98: death modules (issue #763; OPENBFME_LOCAL98_TESTS)
 include(cmake/Local97.cmake)    # LOCAL-97: PoisonedBehavior, DamageFieldUpdate forceFireWeapon, ThreatFinderUpdate & AttributeModifierPoolUpdate (fork issue 762; OPENBFME_LOCAL97_TESTS)
 include(cmake/Local96.cmake)    # LOCAL-96: DozerAIUpdate and WorkerAIUpdate builder functions (fork issue 761; OPENBFME_LOCAL96_TESTS)
+include(cmake/Local99.cmake)    # LOCAL-99: unit behaviour modules uncited own functions (issue #764; OPENBFME_LOCAL99_TESTS)
 include(cmake/Port224.cmake)    # PORT-224: destroying a creep lair or worker-rebuilt structure mid-rebuild fades the hole without money or treasure (issue #534; OPENBFME_PORT224_TESTS)
 include(cmake/Port222.cmake)    # PORT-222: a LevelGrantSpecialPower fills a horde's experience pool (fork issue 532; OPENBFME_PORT222_TESTS)
 include(cmake/Port268.cmake)    # PORT-268: stop grouping tool integration tests
@@ -1377,6 +1378,7 @@ add_executable(openbfme_tests
     ${OPENBFME_LOCAL98_TESTS}
     ${OPENBFME_LOCAL97_TESTS}
     ${OPENBFME_LOCAL96_TESTS}
+    ${OPENBFME_LOCAL99_TESTS}
     ${OPENBFME_PORT224_TESTS}
     ${OPENBFME_PORT222_TESTS}
     ${OPENBFME_PORT206_TESTS}
