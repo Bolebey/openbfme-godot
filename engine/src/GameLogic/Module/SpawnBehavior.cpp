@@ -276,7 +276,7 @@ void SpawnBehavior::forEachSpawnID(const std::function<void(ObjectID)> &fn) cons
 	}
 }
 
-// RW 0x86292C (PORT-198): closest live slave to *pos by 2D squared distance (RW 0x66137C, strict <)
+// RW 0x86292C (PORT-198): closest resolvable slave ID to *pos by 2D squared distance (RW 0x66137C, strict <); no separate alive test
 Object *SpawnBehavior::getClosestSlave(const Coord3D *pos)
 {
 	if (!pos)
