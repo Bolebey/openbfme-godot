@@ -57,8 +57,8 @@ parsed-unused	locomotor		Apply2DFrictionWhenAirborne	21	struct	S-7221	no				no n
 parsed-unused	object	HordeContain	LivingWorldOverloadTemplate	21	struct	S-7505	yes	485	94	18	0x0086BD7D@0 0x0086BD98@0 0x0086BDC0@0 0x0086BE2E@0 0x0086BE49@0 0x0086BE64@0 0x0086C0BC@0 0x0086C192@0	module
 parsed-unused	weapon	/FireLogicNugget	DelayTime	20	manual	S-1600	no				no reader route implemented for this nested top-level subtable	
 parsed-unused	locomotor		LateralVelocityRollFactor	19	struct	S-7221	no				no named getter candidate in entry blocks; not a no-reader verdict	getter
-not-read	object	GiantBirdSlowDeathBehavior	CrashAvoidStrength	19	manual	S-5606	yes	174	3	9	0x0068BF44@2 0x0079295E@2 0x008614FF@2	module
-not-read	object	GiantBirdSlowDeathBehavior	NeedToMaintainFlailingHeight	19	manual	S-5606	yes	174	3	9	0x0068BF44@2 0x0079295E@2 0x008614FF@2	module
+not-read	object	GiantBirdSlowDeathBehavior	CrashAvoidStrength	19	manual	S-5606	yes	173	2	9	0x0068BF44@2 0x008614FF@2	module
+not-read	object	GiantBirdSlowDeathBehavior	NeedToMaintainFlailingHeight	19	manual	S-5606	yes	173	2	9	0x0068BF44@2 0x008614FF@2	module
 parsed-unused	object	LargeGroupBonusUpdate	AlliesOnly	18	struct	S-7291	yes	56	1	5	0x00893810@1	module
 parsed-unused	object	W3DTornadoDraw/DecalTemplate	Style	16	manual		no				the owner is not a module class of the map (an INI block, or a class the mod's objects do not use)	
 parsed-unused	locomotor		MaximumWheelCompression	15	struct	S-7221	no				no named getter candidate in entry blocks; not a no-reader verdict	getter
@@ -545,9 +545,9 @@ parsed-unused	object		SoundPromotedVeteran	1	manual		no				template getter route
 parsed-unused	object	ActiveBody	EnteringDamagedTransitionTime	1	struct		yes	255	33	10	0x008C1C75@0 0x008C1C87@0 0x008C234E@0 0x008C3A91@0 0x008C3AAD@0 0x008C3ACC@0 0x005D8808@1 0x008595BA@1	module
 parsed-unused	object	ActiveBody	ReallyDamagedAttributeModifier	1	struct		yes	255	33	10	0x008C1C75@0 0x008C1C87@0 0x008C234E@0 0x008C3A91@0 0x008C3AAD@0 0x008C3ACC@0 0x005D8808@1 0x008595BA@1	module
 parsed-unused	object	AutoAbilityBehavior	WorkingRadius	1	struct		yes	306	5	14	0x0085D3ED@1 0x006289E7@5 0x0062AB74@5 0x00629BCA@6 0x006A95E6@6	module
-parsed-unused	object	CastleBehavior	CrewPrepareFX	1	struct		yes	437	69	19	0x00797BCF@0 0x00797D86@0 0x00799CA5@0 0x00686BF5@1 0x0068D8D7@1 0x00799C6A@1 0x00646148@2 0x006461CA@2	module
-parsed-unused	object	CastleBehavior	CrewPrepareInterval	1	struct		yes	437	69	19	0x00797BCF@0 0x00797D86@0 0x00799CA5@0 0x00686BF5@1 0x0068D8D7@1 0x00799C6A@1 0x00646148@2 0x006461CA@2	module
-parsed-unused	object	CastleBehavior	CrewReleaseFX	1	struct		yes	437	69	19	0x00797BCF@0 0x00797D86@0 0x00799CA5@0 0x00686BF5@1 0x0068D8D7@1 0x00799C6A@1 0x00646148@2 0x006461CA@2	module
+parsed-unused	object	CastleBehavior	CrewPrepareFX	1	struct		yes	436	68	19	0x00797BCF@0 0x00797D86@0 0x00799CA5@0 0x00686BF5@1 0x0068D8D7@1 0x00799C6A@1 0x00646148@2 0x006461CA@2	module
+parsed-unused	object	CastleBehavior	CrewPrepareInterval	1	struct		yes	436	68	19	0x00797BCF@0 0x00797D86@0 0x00799CA5@0 0x00686BF5@1 0x0068D8D7@1 0x00799C6A@1 0x00646148@2 0x006461CA@2	module
+parsed-unused	object	CastleBehavior	CrewReleaseFX	1	struct		yes	436	68	19	0x00797BCF@0 0x00797D86@0 0x00799CA5@0 0x00686BF5@1 0x0068D8D7@1 0x00799C6A@1 0x00646148@2 0x006461CA@2	module
 parsed-unused	object	ModelConditionSoundSelectorClientBehavior/SoundState	SoundMoveLoop	1	manual		no				the owner is not a module class of the map (an INI block, or a class the mod's objects do not use)	
 parsed-unused	object	RespawnBody	DamagedAttributeModifier	1	struct		yes	44	0	2	no specific none function: the reader is ported without a citation, shared, or in another class	module
 parsed-unused	object	SalvageCrateCollide	PorterChance	1	struct	S-7234	yes	39	1	1	0x008C1432@2	module
