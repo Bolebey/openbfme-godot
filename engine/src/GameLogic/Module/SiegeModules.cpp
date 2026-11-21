@@ -209,7 +209,8 @@ void bindRuntime(ModuleFactory &modules, const char *name)
 	});
 }
 
-// SiegeAIUpdate (RW 0x893BBA): the base AI with RotWK's isAllowedToRespondToAiCommands (RW 0x893C80)
+// SiegeAIUpdate (RW 0x893BBA; getModuleName RW 0x00893BF2, getModuleNameKey RW 0x00893C1F,
+// dtor RW 0x00893BF8, scalar deleting dtor RW 0x00893C64): the base AI with RotWK's isAllowedToRespondToAiCommands (RW 0x893C80)
 class SiegeAIUpdate : public AIUpdateInterface
 {
 public:
