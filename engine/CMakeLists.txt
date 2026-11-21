@@ -575,6 +575,7 @@ include(cmake/Local110.cmake)   # LOCAL-110: projectiles and fields uncited func
 include(cmake/Local119.cmake)   # LOCAL-119: effects drawn on objects P-158/P-160/P-167 (issue #803; OPENBFME_LOCAL119_TESTS)
 include(cmake/Local116.cmake)   # LOCAL-116: hero voices and ability sounds (issue #800; OPENBFME_LOCAL116_TESTS)
 include(cmake/Local115.cmake)   # LOCAL-115: shape-change abilities (fork issue 799; OPENBFME_LOCAL115_TESTS)
+include(cmake/Local113.cmake)   # LOCAL-113: AutoAbilityBehavior (issue #797; OPENBFME_LOCAL113_TESTS)
 include(cmake/Port224.cmake)    # PORT-224: destroying a creep lair or worker-rebuilt structure mid-rebuild fades the hole without money or treasure (issue #534; OPENBFME_PORT224_TESTS)
 include(cmake/Port222.cmake)    # PORT-222: a LevelGrantSpecialPower fills a horde's experience pool (fork issue 532; OPENBFME_PORT222_TESTS)
 include(cmake/Port301.cmake)    # PORT-301: ShareExperienceBehavior — the shared experience of a hero (fork issue 693; OPENBFME_PORT301_TESTS)
@@ -1401,6 +1402,7 @@ add_executable(openbfme_tests
     ${OPENBFME_LOCAL119_TESTS}
     ${OPENBFME_LOCAL116_TESTS}
     ${OPENBFME_LOCAL115_TESTS}
+    ${OPENBFME_LOCAL113_TESTS}
     ${OPENBFME_PORT224_TESTS}
     ${OPENBFME_PORT222_TESTS}
     ${OPENBFME_PORT206_TESTS}
@@ -1643,6 +1645,7 @@ add_executable(openbfme_tests
     tests/test_local_104.cpp
     tests/test_local_118.cpp
     tests/test_local_120.cpp
+    tests/test_local_108.cpp
     # shared numeric facade (WEAPON-1 e75dd8c, imported unchanged: wide PC24 results, SSE binary32 ops, retail integer conversions)
     tests/test_numeric_facade.cpp
     # lane ECON-1: the economy
