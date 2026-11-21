@@ -203,7 +203,7 @@ def write_reports(rows: list[MapRow], tsv: Path, markdown: Path, command: str,
     keys = [(r.module, r.function) for r in rows]
     if len(keys) != len(set(keys)):
         raise ValueError('duplicate module/function row')
-    if any(r.status not in {'none', 'partial', 'ported'} or r.depth < 0 or r.objects < 0 or r.instructions < 0 for r in rows):
+    if any(r.status not in {'none', 'partial', 'ported', 'library'} or r.depth < 0 or r.objects < 0 or r.instructions < 0 for r in rows):
         raise ValueError('invalid map row')
     previous = {}
     if tsv.exists():
