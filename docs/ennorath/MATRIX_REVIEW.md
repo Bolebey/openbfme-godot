@@ -7,8 +7,6 @@ Layer 2 (lint) flags verdicts the mod's own data contradicts; layer 3 lists ever
 By rule: L1 66, L4 3
 
 
-## Changes since a0544532: 3 buttons moved, 0 turned red
+## Changes since 655f0aa3: 1 buttons moved, 0 turned red
 
-- Angmar `AngmarDarkDunedain` `Command_AngmarChargeAttack`: MOD-DATA -> MEMBER
-- Angmar `AngmarSnowTroll` `Command_AngmarTrollChargeAttack`: MOD-DATA -> MEMBER
 - Rohan `RohanRadagastaufdemAdler_RingHero` `Command_SpecialAbilityNatursanktum`: ORDER -> PASS

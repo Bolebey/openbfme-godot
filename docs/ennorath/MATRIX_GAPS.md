@@ -51,7 +51,7 @@ The main class of a button is the class it links to that the fewest failing butt
 | GrantUpgradeCreate | 1 | 21 | 0 | 0 | - |
 | LevelGrantSpecialPower | 1 | 32 | 0 | 1 | - |
 | LevelUpUpgrade | 1 | 20 | 0 | 1 | - |
-| ProductionSpeedBonus | 1 | 27 | 0 | 0 | - |
+| ProductionSpeedBonus | 1 | 26 | 0 | 0 | - |
 
 ## Failing rows without a module link, by result
 
