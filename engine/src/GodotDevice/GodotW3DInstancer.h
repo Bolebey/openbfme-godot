@@ -127,6 +127,7 @@ public:
 	// opaque surfaces blend at the instance opacity (W3DShaderKey::AlphaOverride, ZH's translucent pass) instead of the dither
 	void set_alpha_override(bool enabled);
 	void set_particle_color(bool enabled);
+	void set_buff_blend(bool enabled);
 	void set_instance_particle_color(int64_t instance, int shader, float r, float g, float b);
 	bool has_model_file(const std::string &name) const;
 	// lane CAH-2 (stop S-1408): a model whose house colour textures are recoloured for a colour set (RotWK's house colour options, HouseColor.h: kind
@@ -489,6 +490,7 @@ private:
 	bool PresentationUpdates = true;
 	bool HouseColorEnabled = false;
 	bool ParticleColor = false;
+	bool BuffBlend = false;
 
 	// stats
 	double PoseMs = 0.0, UploadMs = 0.0, MapperMs = 0.0;

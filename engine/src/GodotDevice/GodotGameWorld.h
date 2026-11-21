@@ -1024,7 +1024,7 @@ private:
 	std::unique_ptr<W3DVegetationSway> m_vegSway; ///< lane VISUAL-2: the W3DTreeDraw trees' sway (null: the map has none)
 	std::array<int64_t, 11> m_swayTypeCounts{}; ///< lane VISUAL-2: the trees given each sway type (0: TaintedTree)
 	void updateTreeSway(double dt);
-	uint64_t m_staticId = 0, m_dynamicId = 0;
+	uint64_t m_staticId = 0, m_dynamicId = 0, m_buffId = 0;
 	std::vector<DrawableView> m_views;       ///< index = drawable id
 	std::map<std::string, int64_t> m_dynamicModels, m_staticModels;
 	Dictionary m_report;
@@ -1100,6 +1100,7 @@ private:
 	std::unique_ptr<LiveFX> m_liveFX;          ///< destroyed before m_game (it is the logic's FX sink and the drawables' FX host)
 	std::unique_ptr<GodotWeather> m_weather;   ///< lane WEATHER-1: the map's weather (snow / rain, darkness, lightning, its sound); destroyed before m_game
 	// lane SPELL-4: the BuffNugget buffs (GameClient/BuffDraw.h) as instances of the live objects' instancer, by TBuff serial
+	std::map<std::string, int64_t> m_buffModels;
 	std::map<uint64_t, int64_t> m_buffInstances;
 	unsigned long long m_buffsDrawn = 0;
 	void syncBuffs(double dt);
