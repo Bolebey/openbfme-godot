@@ -1396,6 +1396,12 @@ void Object::friend_onDie(const DieModuleInterface::Event &event)
 		{
 			d->onDie(event);
 		}
+		// RW 0x00698FA3 .. 0x00698FB5: after DieModuleInterface::onDie, Object::onDie calls AIUpdateInterface vslot +0x24C
+		// (DozerAIUpdate RW 0x0088BF7A removes an unplaced phantom structure on builder death).
+		if (AIUpdateInterface *ai = m_modules[i]->getAIUpdateInterface())
+		{
+			ai->onOwnerDie();
+		}
 	}
 	removeFromPlayerCommandPoints(); // RW 0x698FD9
 	m_logic.emotions().objectDied(*this); // RW 0x6990AC .. 0x6990C8 (lane MODULES-2): a SCARY or HERO object leaves TheEmotionSystem's list
