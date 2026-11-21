@@ -20,7 +20,7 @@
 #include "GameLogic/AI/AIStateMachine.h"
 #include "GameLogic/Damage.h"
 #include "GameLogic/GameLogic.h"
-#include "GameLogic/Module/BodyModule.h"
+#include "GameLogic/Module/ActiveBody.h"
 #include "GameLogic/Module/DozerAIUpdate.h"
 #include "GameLogic/Module/HordeWorkerAIUpdate.h"
 #include "GameLogic/Module/SiegeModules.h"
