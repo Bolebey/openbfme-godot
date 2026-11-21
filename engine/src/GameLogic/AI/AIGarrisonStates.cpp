@@ -132,10 +132,7 @@ bool GarrisonRules::canAttackAsNewTarget(Object &obj, Object &victim, CommandSou
 	}
 	if (obj.isKindOf((unsigned)spawnsAreTheWeapons))
 	{
-		if (source != CMD_FROM_SCRIPT && ShroudManager::isShroudedForAction(obj, victim))
-		{
-			return false;
-		}
+		// RW 0x82D054..0x82D091 asks the closest slave directly. The action shroud check (RW 0x82C167) is not part of this branch.
 		if (SpawnBehaviorInterface *spawn = SpawnBehaviorInterface::of(obj))
 		{
 			if (Object *slave = spawn->getClosestSlave(victim.getPosition()))

@@ -4,7 +4,7 @@
 //      getCanAnySlavesAttackSpecificTarget (0x862990), getCanAnySlavesUseWeaponAgainstTarget (0x8629ED), reEnslaveSlaves (0x862E4F).
 //   2. RW 0x68C3A3 callers: GettingBuiltBehavior::finishConstruction (0x8569C7 -> slot 10), AIGroup::groupIdle (0x77205F -> slot 8),
 //      AIGroup::groupAttackPosition (0x772369 -> slot 4), AIUpdate::privateAttackObject (0x66BEC3 -> slot 3),
-//      GarrisonRules::canAttackAsNewTarget (0x82CFD4 -> slot 2 + shroud gate, no false STRUCTURE passenger error without Contain),
+//      GarrisonRules::canAttackAsNewTarget (0x82CFD4 -> slot 2, no false STRUCTURE passenger error without Contain or extra shroud gate),
 //      CommandTranslator::objectCanAttack / objectCanDamage / evaluateForceAttack (0x81D9DE).
 //   3. ObjectWeapons::getAbleToUseWeaponAgainstTarget (RW 0x6C8652), Object::getAbleToAttackSpecificObject (0x68D6A6),
 //      Object::getAbleToUseWeaponAgainstTarget (0x68B5FA): immobile aim delta, Speed = 0 locomotor, HORDE vs non-horde contain,
@@ -454,6 +454,7 @@ struct SpawnerBuildFx : prodtest::ProdWorld
 			 "Object P198UnitTrained\n"
 			 "  BuildCost = 100\n"
 			 "  BuildTime = 2.0\n"
+			 "  BuildFadeInOnCreateTime = 5.0\n"
 			 "  CommandPoints = 2\n"
 			 "  KindOf = SELECTABLE INFANTRY\n"
 			 "  Behavior = AIUpdateInterface ModuleTag_AI\n"
@@ -599,7 +600,7 @@ TEST_CASE("PORT-198 SpawnBehaviorInterface slots 2..6 union, getClosestSlave, re
 	CHECK(spawnIface->getCanAnySlavesAttackSpecificTarget(ATTACK_NEW_TARGET, unattackable, CMD_FROM_PLAYER) == ATTACKRESULT_NOT_POSSIBLE);
 
 	// Single spawner with GettingBuiltBehavior: test finishConstruction -> slot 10 reEnslaveSlaves (RW 0x8569C7 -> 0x862E4F)
-	// and GarrisonRules::canAttackAsNewTarget (RW 0x82CFD4) including shroud veto and no spurious STRUCTURE error.
+	// and GarrisonRules::canAttackAsNewTarget (RW 0x82CFD4) without a spurious STRUCTURE error.
 	Object *spawner = r.world.unit("P198Spawner", 'A', 1000.0f, 1000.0f);
 	Object *inRangeEnemy = r.world.unit("Dummy", 'B', 1120.0f, 1000.0f);
 	Object *outOfRangeEnemy = r.world.unit("Dummy", 'B', 1350.0f, 1000.0f);
@@ -632,14 +633,23 @@ TEST_CASE("PORT-198 SpawnBehaviorInterface slots 2..6 union, getClosestSlave, re
 	CHECK_FALSE(GarrisonRules::canAttackAsNewTarget(*spawner, *unattackable, CMD_FROM_PLAYER));
 	CHECK(r.world.logic->report().errors.size() == errorsBefore);
 
-	// Shrouded enemy at 1800,1800 is blocked for player orders on a SPAWNS_ARE_THE_WEAPONS spawner (S-565), allowed for scripts.
+	// RW 0x82D054..0x82D091 asks the closest slave without an extra shroud check, for every command source. The action/UI shroud gate
+	// (RW 0x82C167, S-565) is a separate caller-level check; it must not be applied here to the spawner's player before asking the slave.
 	Object *shroudedEnemy = r.world.unit("Dummy", 'B', 1800.0f, 1800.0f);
+	Object *shroudedWall = r.world.unit("P198WalkableWall", 'B', 1810.0f, 1800.0f);
 	r.shroud.update();
 	REQUIRE(ShroudManager::isShroudedForAction(*spawner, *shroudedEnemy));
+	REQUIRE(ShroudManager::isShroudedForAction(*spawner, *shroudedWall));
 	const Coord3D nearShrouded{ 1700.0f, 1800.0f, 0.0f };
 	spawnerSlave->setPosition(&nearShrouded);
-	CHECK_FALSE(GarrisonRules::canAttackAsNewTarget(*spawner, *shroudedEnemy, CMD_FROM_PLAYER));
+	CHECK(GarrisonRules::canAttackAsNewTarget(*spawner, *shroudedEnemy, CMD_FROM_PLAYER));
+	CHECK(GarrisonRules::canAttackAsNewTarget(*spawner, *shroudedEnemy, CMD_FROM_AI));
 	CHECK(GarrisonRules::canAttackAsNewTarget(*spawner, *shroudedEnemy, CMD_FROM_SCRIPT));
+
+	// The separate context-action check still refuses a shrouded walkable wall, even if the nearby slave could attack it directly.
+	CHECK(spawnerSlave->getAbleToAttackSpecificObject(ATTACK_NEW_TARGET, shroudedWall, CMD_FROM_PLAYER) == ATTACKRESULT_POSSIBLE);
+	r.select(spawner);
+	CHECK(r.translator.evaluateContextCommand(shroudedWall, shroudedWall->getPosition(), EvaluateType::DoHint) != MSG_DO_ATTACK_OBJECT);
 }
 
 TEST_CASE("PORT-198 SPAWNS_ARE_THE_WEAPONS orders (slots 3, 4, 8), CommandTranslator context & force attack")
@@ -846,14 +856,29 @@ TEST_CASE("PORT-198 Player::onUnitCreated -> SkirmishAIManager::unitCreated -> A
 	reqUnit->producer = f.barracks->getID();
 	reqUnit->state = 1;
 	ai->build.inProgress.push_back(reqUnit);
+	ai->build.units.requests.push_back(reqUnit); // the unit builder and AIPlayer hold the same request
 
 	const std::uint64_t queuedBefore = ai->build.units.queued;
 	REQUIRE(pu->queueCreateUnit(unitTt, -1, unitProdId, -1, false, std::string(), false));
 	f.frames(5);
 	CHECK(reqUnit->state == 1);
 	CHECK(ai->build.units.queued == queuedBefore);
-	f.frames(20);
-	CHECK(reqUnit->state == 2);
+	// RW 0x8A29E5 notifies the AI at creation; RW 0x8A2A8C and 0x8A2D75 then hold the same production entry through the fade.
+	// Polling for the entry to disappear must not be mistaken for the event or count it a second time when it finally exits.
+	for (int i = 0; i < 40 && reqUnit->state == 1; ++i)
+	{
+		f.frames(1);
+	}
+	REQUIRE(reqUnit->state == 2);
+	const ProductionEntry *stillQueued = pu->firstProduction();
+	REQUIRE(stillQueued != nullptr);
+	CHECK(stillQueued->productionID == unitProdId);
+	CHECK(ai->build.units.queued == queuedBefore + 1);
+	f.frames(2);
+	CHECK(ai->build.units.requests.empty()); // RW 0x9A0D93: a finished request no longer constrains the builder
+	CHECK(pu->firstProduction() != nullptr);
+	f.frames(28);
+	CHECK(pu->firstProduction() == nullptr);
 	CHECK(ai->build.units.queued == queuedBefore + 1);
 
 	auto reqHorde = std::make_shared<AIBuildRequest>();
