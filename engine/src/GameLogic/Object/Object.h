@@ -193,9 +193,19 @@ public:
 	// RW 0x691059 / 0x691106 Object::setWeaponSetFlag / clearWeaponSetFlag (GameLogic/WeaponSetToggle.cpp): the flag, the weapon set update, the mapped model
 	// condition and the SWAPPING_TO_WEAPONSET_n special model condition
 	void setWeaponSetFlag(int bit, bool on);
+	// RW 0x68DECA / 0x6911B7 Object::setWeaponSetFlags / clearWeaponSetFlags: every bit of the mask, then ONE weapon set update (RW 0x6C99E2); the clear also
+	// mirrors into the model conditions named by the mask (RW 0x6911B7's second loop: the object's condition word has the bit -> cleared, one notify each).
+	// Mutates the object's flags whether or not it has a weapon set (RW writes Object + 0x38C)
+	void setWeaponSetFlags(const WeaponConditionFlags &mask, bool on);
 	bool hasAnyWeapon() const;
-	// ZH Object::getRelationship: this object's team toward the other's (NEUTRAL when either has no team)
+	// ZH Object::getRelationship: this object's team toward the other's (NEUTRAL when either has no team or is undetectable RW 0x68D850)
 	Relationship getRelationship(const Object &other) const;
+	// PORT-237: Object + 0x458 bit 1 (RW 0x68B303 / 0x68ACDF) and InvulnerableTime (RW 0x68C6C8 -> DefectionHelper RW 0x8E3ABB)
+	void setTemporarilyUndetectable(bool on);
+	bool isUndetectable() const { return m_undetectable; }
+	void setInvulnerableTime(UnsignedInt frames);
+	// PORT-237: Thing::isSignificantlyAboveTerrain (RW 0x70C55D -> 0x70C50C(0.0f))
+	bool isSignificantlyAboveTerrain() const;
 	// RW 0x698E7D Object::attemptDamage: a hit with a delay waits in the pending list (RW obj + 0x460), a hit made while this object runs its AI waits one frame (delay = 1.0);
 	// else RW 0x697E50 doAttemptDamage: the body's attemptDamage when this object is not dead, then (lane COMBAT-4) the shockwave handler RW 0x6968BC when the object
 	// is still alive or the hit carries a shockwave amount
@@ -221,6 +231,7 @@ public:
 	// shroud record is marked dirty, forced (RW 0x68C213 -> 0xB4E2A0); RW 0x68C7E9 updateShroudNow: the record leaves the dirty list and is processed at once
 	// (RW 0xB4F410 -> 0xB4EF50). BFME2 decomp ObjectSetShroudClearingRange.cpp / Object_updateShroudNow.cpp, tier A for both
 	void setShroudClearingRange(float range);
+	float getBaseShroudClearingRange() const;
 	void updateShroudNow();
 	bool hasShroudClearingRange() const { return m_hasShroudClearingRange; }
 	float shroudClearingRangeOverride() const { return m_shroudClearingRange; }
@@ -318,6 +329,13 @@ public:
 	// 10 (DISABLED_SCRIPT_UNDERPOWERED) forever
 	void setScriptStatus(std::uint8_t bits, bool set);
 	std::uint8_t scriptStatus() const { return m_scriptStatus; }
+	// PORT-220 (issue #529): RW Object + 0x45B, the single-use command flag. The setter is RW 0x940397 (`mov byte ptr [ecx + 0x45B], 1` / `ret`), the
+	// accessor RW 0x9422C2 (`mov al, byte ptr [ecx + 0x45B]` / `ret`), and Object::Object clears it together with + 0x45A / + 0x45C (RW 0x699C88). Its
+	// writers are processCommandUI's inline RW 0x94066B (bit 17 of the pressed button's Options, + 0x1C) and the setter; its reader is getCommandAvailability's
+	// gate RW 0x942826 (a set flag returns 0, disabled, for every command). Donor BFME2 names the pair markSingleUseCommandUsed / hasSingleUseCommandBeenUsed
+	// (gamelogic/object.h:402 .. 403, ObjectDoXfer.cpp:392 at + 0x43B, ControlBarRappellerCount.cpp:445) — corroboration, not retail proof.
+	void markSingleUseCommandUsed() { m_singleUseCommandUsed = true; } ///< RW 0x940397
+	bool hasSingleUseCommandBeenUsed() const { return m_singleUseCommandUsed; } ///< RW 0x9422C2
 	// lane SCRIPT-2 / LOCAL-58: RW Object + 0x454 (set by RW 0x68BE3C / DONOR BFME2 0x0028B76D); setting false calls Drawable::setSelectable(false)
 	// (RW 0x6719FA / DONOR BFME2 0x00271700) to deselect the drawable and toggle the draw/pick selectable override (-1/0/1, RW 0x4B2D5E / 0x4B583C).
 	void setScriptSelectable(bool on);
@@ -327,6 +345,16 @@ public:
 	// object for every player except its controlling owner (RW 0x625759). Both editions match.
 	void maskObject(bool on);
 	bool isMasked() const { return m_masked; }
+	// lane THREATLEVEL-1: the map scripts' cached enemy threat around the object (RW + 0x464, a float) and its deadline frame (RW + 0x468); the
+	// constructor (RW 0x69990F) clears both. Retail RotWK's Object::xfer (RW 0x697F28) does not write them; the OpenBFME snapshot does (version 3, as
+	// BFME2 1.06's xfer does: the state hash covers them). GameLogic/ScriptEngine/ScriptThreat.cpp reads and refreshes them (RW 0x697B41 / 0x69609F)
+	float scriptThreatCache() const { return m_scriptThreat; }
+	UnsignedInt scriptThreatDeadline() const { return m_scriptThreatDeadline; }
+	void setScriptThreatCache(float value, UnsignedInt deadline)
+	{
+		m_scriptThreat = value;
+		m_scriptThreatDeadline = deadline;
+	}
 
 	// lane SCRIPT-2: the trigger areas the object is in (RW 0x69264D, from reactToTransformChange when the position changed). Entries at + 0x3DC
 	// (trigger, + 4 entered, + 5 exited, + 6 inside; the count + 0x45A, at most 7: "***WARNING: Too many nested triggers"), the last change frame
@@ -647,8 +675,11 @@ private:
 	bool m_scriptSelectable = false; ///< RW +0x454: ctor initializes from SELECTABLE; hash only deviations from the template-derived default
 	bool m_scriptSelectableExplicit = false; ///< RW 0x4B2D5E / 0x4B583C: draw-module override (-1 unset vs explicit 0/1) for WALK_ON_TOP_OF_WALL
 	bool m_masked = false;           ///< RW + 0x459 bit 1 (maskObject; hashed when set)
+	float m_scriptThreat = 0.0f;              ///< lane THREATLEVEL-1: RW + 0x464 (hashed and saved once a refresh armed the deadline)
+	UnsignedInt m_scriptThreatDeadline = 0;   ///< lane THREATLEVEL-1: RW + 0x468
 	TriggerEntry m_triggers[MAX_TRIGGERS_IN];  ///< lane SCRIPT-2: RW + 0x3DC
 	int m_triggerCount = 0;                      ///< RW + 0x45A
+	bool m_singleUseCommandUsed = false;         ///< PORT-220: RW + 0x45B (hashed when set, xfer v6)
 	std::vector<std::uint8_t> m_geometryActive; ///< lane HUD-5: the shapes' active flags of the object's own GeometryInfo (+ 0xA8), empty: the template's
 	std::uint32_t m_geometryVersion = 0;
 	const ThingTemplate *m_geometrySource = nullptr; ///< lane MODCOMPAT-MOD1: the template whose GeometryInfo the object carries (null: its own; setGeometryInfoFrom)
@@ -698,6 +729,7 @@ private:
 	ObjectID m_speechLeader = INVALID_ID; ///< lane HERO-2: + 0x46C
 	bool m_receivingDifficultyBonus = false; ///< lane CAMP-1H: + 0x45C (hashed)
 	std::int8_t m_legendaryFactor = 1;       ///< lane RULES-1 (OpenBFME; hashed when not 1). One byte in the padding after + 0x45C: sizeof(Object) stays as it was (a larger Object changed the move3 crossing games: some code depends on the allocation layout, reported)
+	bool m_undetectable = false;             ///< PORT-237: RW + 0x458 bit 1 (RW 0x68B303 / 0x68C6C8; in padding after m_legendaryFactor: sizeof(Object) unchanged)
 	ObjectID m_capturerID = INVALID_ID;   ///< lane HERO-2: + 0x80
 	unsigned m_undeadKillFrame = 0;       ///< lane HERO-2: + 0x450
 	bool m_constructed = false;           ///< the constructor has finished: setTeam may run the owner change

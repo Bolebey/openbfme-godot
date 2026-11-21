@@ -125,12 +125,13 @@ public:
 	static void buildFieldParse(MultiIniFieldParse &p);
 };
 
+// RW 0x008B1BB8 (getModuleName), RW 0x008B1BDE (getModuleNameKey), RW 0x008B1C43 (scalar deleting dtor -> 0x008B1BBE).
 class ToggleDeploySpecialAbilityUpdate : public SpecialAbilityUpdate
 {
 public:
 	OBFME_MODULE_XFER(ToggleDeploySpecialAbilityUpdate) // the save (SAVE-4b): SpecialAbilityUpdate's and the counts
 	ToggleDeploySpecialAbilityUpdate(Thing *thing, const ToggleDeploySpecialAbilityUpdateModuleData *data); // RW 0x8B1B87
-	bool allowsSpecialPowerUse() const override; // RW 0x8B1C5F
+	bool allowsSpecialPowerUse(const Coord3D *loc = nullptr) const override; // RW 0x8B1C5F
 	unsigned deploys() const { return m_deploys; }
 	unsigned undeploys() const { return m_undeploys; }
 

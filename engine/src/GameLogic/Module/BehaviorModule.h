@@ -19,6 +19,7 @@
 #include "GameLogic/ObjectTypes.h"
 
 #include <cstdint>
+#include <functional>
 #include <list>
 #include <string>
 #include <vector>
@@ -36,6 +37,8 @@ class SpecialPowerModuleInterface;
 class UpdateModuleInterface;
 class UpdateModule;
 class HordeContainInterface;
+class UpgradeTemplate;
+class Weapon;
 class ExitInterface;                 // GameLogic/Module/ExitInterface.h (lane PROD-1)
 class ProductionUpdateInterface;     // GameLogic/Module/ProductionUpdate.h (lane PROD-1)
 class FoundationAIUpdate;            // GameLogic/Module/ConstructionModules.h (lane BUILD-1)
@@ -95,13 +98,22 @@ public:
 	}
 	// RW body vslot 0x44; a body without a damage frame answers -1 (RW 0x8C511E).
 	virtual UnsignedInt lastDamageFrame() const { return 0xFFFFFFFFu; }
+	// PORT-293: RW body vslot 0x48, the frame of the last healing hit. ActiveBody answers it through RW 0x5DC48C (module + 0xC0, -1 until the first
+	// healing hit: RW 0x8C3897). Every other body class of 2.01 answers the shared `or eax, -1` stub (e.g. InactiveBody's table RW 0xC718C8 + 0x48 =
+	// RW 0x48DACD), so the default is the never-healed value. AutoHealBehavior's NonStackable rule reads it (RW 0x855797)
+	virtual UnsignedInt getLastHealingFrame() const { return 0xFFFFFFFFu; }
 	// lane BACKLOG-1: RW vt[0x74], the body's GrabObject template name (ActiveBody RW 0x8C281E: the data's + 0x2C; InactiveBody RW 0x8C1B14: the empty string
 	// RW 0xBD0C3F). OpenContain's CHUNK_VENDOR / ROCK_VENDOR entry test reads it (RW 0x8660FC)
 	virtual std::string getGrabObjectName() const { return std::string(); }
-	// PORT-78: InactiveBody slots 0x78/0x7C/0x80: RW 0x851E97 (null), 0x70D41A (zero), 0x8C19EB (zero vector).
+	// PORT-78: InactiveBody slots 0x78/0x7C/0x80: RW 0x851E97 (null), 0x70D41A (zero), RW 0x8C19EB (zero vector).
 	virtual const std::string *getGrabFXName() const { return nullptr; }
 	virtual float getGrabDamage() const { return 0.0f; }
 	virtual Coord2D getGrabOffset() const { return Coord2D{}; }
+	// PORT-302: RW 0x8C1AC3 (InactiveBody's body slot 0x3C) writes zero ArmorSetFlags; slots 0x34/0x38 are the
+	// `ret 4` stub RW 0x9F3A3C. A body that answers like that must not let ArmorUpgrade (RW 0x8B761E, `call [eax+0x34]`
+	// at RW 0x8B76A5) change the object's armor-set bits. ActiveBody stores the bits in the body (RW +0xF0), and the port
+	// keeps them on Object; the body tells Object whether the write belongs to it.
+	virtual bool ignoresArmorSetFlagChanges() const { return false; }
 	// lane XP-1: RW vt[0x5C] (ActiveBody RW 0x8C1CD5) setMaxHealth(newMax, changeType): 1 keeps the health ratio, 2 adds the difference to the health
 	// (the AttributeModifier HEALTH / HEALTH_MULT bonuses use 1). A body class without the override counts the call (bodyMaxHealthCallsIgnored)
 	// RW 0x8C1BF9 / BFME2 slot 9: slot 0x28 of body interface
@@ -112,6 +124,8 @@ public:
 		(void)changeType;
 		++bodyMaxHealthCallsIgnored();
 	}
+	// PORT-237: RW vt[0x6C] (ActiveBody RW 0x8C329F): multiplies body damage scalar (+ 4) by scalar.
+	virtual void applyDamageScalar(float scalar) { (void)scalar; }
 	static unsigned long long &bodyMaxHealthCallsIgnored()
 	{
 		static unsigned long long n = 0;
@@ -161,10 +175,13 @@ public:
 	virtual void containReactToTransformChange() {}
 	// RW 0x867AA1, contain slot 0x14C: suppress entry sounds during initial payload creation.
 	virtual void enableLoadSounds(bool enabled) { (void)enabled; }
+	// contain slot 0xEC (called by SpecialAbilityUpdate::startPreparation RW 0x00853C3C): OpenContain RW 0x009F3A3C (no-op `ret 4`);
+	// TransportContain and subclasses RW 0x0086A43E (sets WEAPONSTATE_ONE / TWO / THREE from the target/rider's KindOf)
+	virtual void setWeaponStateOfRider(const Object &rider) { (void)rider; }
 	// contain slot 0x64 onSelling: the contain hears of its container's sale (BuildAssistant::sellObject RW 0x796806: `mov ecx, [object + 0x258]`, `mov eax,
 	// [ecx]`, `call [eax + 0x64]`, no argument — the only `call [reg + 0x64]` of 2.01 whose receiver is the contain interface). Every contain table answers the
-	// same body, RW 0x86561F: the kill-on-death byte (module + 0xE1) is cleared, then vslot 0x80 orderAllPassengersToExit(CMD_FROM_AI). No class overrides it
-	// (all 16 contain tables of 2.01 hold RW 0x86561F at + 0x64: OpenContain 0xC59B54, TransportContain 0xC5A6F4, HordeTransportContain 0xC5C3D4,
+	// same body, RW 0x86561F: the kill-on-death byte (module + 0xE1) is cleared, then vslot 0x80 orderAllPassengersToExit(CMD_FROM_AI). Only TunnelContain overrides it
+	// (its table RW 0xC5DCE0 holds RW 0x8812A8, the network leave; the other contain tables of 2.01 hold RW 0x86561F at + 0x64: OpenContain 0xC59B54, TransportContain 0xC5A6F4, HordeTransportContain 0xC5C3D4,
 	// GarrisonContain 0xC5C6FC, HordeGarrisonContain 0xC5CA54, SiegeEngineContain 0xC5D6CC, HordeSiegeEngineContain 0xC5DA74 and the rest), so
 	// OpenContain answers for every contain the port sells. HordeContain, the one ported contain that is not an OpenContain, keeps this default: the sale
 	// reaches only KindOf STRUCTURE and no structure of 2.01 or Ennorath carries a HordeContain (598 HordeContain blocks in the mod, none on a structure).
@@ -180,6 +197,14 @@ public:
 	// RW 0xC5C9F0). The defaults are OpenContain's answers; a contain class that is not ported answers through UnportedBehaviorModule (no contain at all) ----
 	// slot 0x10 isGarrisonable: GarrisonContain RW 0x8BD372 true, OpenContain RW 0x9188EB false (TunnelContain RW 0xC5DCE0 + 0x10: RW 0x9188EB false, lane UI-1)
 	virtual bool isGarrisonable() const { return false; }
+	// slot 0x1C (RW 0x87B308 in the GarrisonContain, HordeGarrisonContain, SlaughterHordeContain and CitadelSlaughterHordeContain tables RW 0xC5C698 / 0xC5C9F0 /
+	// 0xC5F0D0 / 0xC5F2E8: `mov eax, [ecx - 0x1C]; mov al, [eax + 0xA1]; ret`, the module data's ImmuneToClearBuildingAttacks) -- GarrisonsClearBuildingAttacks'
+	// gate: RotWK clears the building attacked by a garrisoned unit only when the garrison is immune (RW 0x910E4 / 0x911F3 ask it and skip when it answers
+	// true). Every other contain table of 2.01 holds the true body RW 0x8BD372 at + 0x1C (OpenContain RW 0xC59AF0, HordeContain RW 0xC5B480, its RotWK
+	// subclass RW 0xC5C110, AODHordeContain RW 0xC5D268, TransportContain RW 0xC5A690, HordeTransportContain RW 0xC5C370, SiegeEngineContain RW 0xC5D668,
+	// HordeSiegeEngineContain RW 0xC5DA10, and TunnelContain RW 0xC5DCE0, whose own tunnel slot is another body, RW 0x881072), so OpenContain's answer
+	// stands for every contain the port keeps that overrides nothing.
+	virtual bool isImmuneToClearBuildingAttacks() const { return true; }
 	// PR 284: slot 0x30, asked by ActionManager::getEnterMessage (RW 0x82CFB5): SlaughterHordeContain RW 0xC5F0D0 and CitadelSlaughterHordeContain RW
 	// 0xC5F2E8 + 0x30 = RW 0x8BD372 true; every other contain table of RW 0xC59AF0 .. 0xC5F688 + 0x30 = RW 0x9188EB false
 	virtual bool isSlaughterContain() const { return false; }
@@ -206,6 +231,17 @@ public:
 	// slot 0xB4 isPassengerAllowedToFire (OpenContain RW 0x865A7E; GarrisonContain, HordeGarrisonContain and TunnelContain RW 0x8BD372: true; HordeContain
 	// RW 0x86C713: its container's answer)
 	virtual bool isPassengerAllowedToFire() const { return false; }
+	// slot 0x130 calcBestGarrisonPosition(sourcePos, targetPos) (OpenContain RW 0x8655C2: zeroes *sourcePos and answers false; GarrisonContain /
+	// HordeGarrisonContain RW 0x87B7E3: loads the points if needed and answers the free point of the current damage state nearest *targetPos)
+	virtual bool calcBestGarrisonPosition(Coord3D *sourcePos, const Coord3D *targetPos)
+	{
+		if (sourcePos)
+		{
+			*sourcePos = Coord3D{ 0.0f, 0.0f, 0.0f };
+		}
+		(void)targetPos;
+		return false;
+	}
 	// slot 0xC0 (OpenContain RW 0x865B33, the same in every contain table read): a rider's shot at `victim` is blocked by its container (PassengersTestCollisionHeight)
 	virtual bool isPassengerShotBlocked(const Object *rider, const Object *victim) const { (void)rider; (void)victim; return false; }
 	// slots 0x158 / 0x15C / 0x160: the entry position, the entry offset and the exit offset in the world (HordeGarrisonContain RW 0x87D1A7 / 0x87D1E0 / 0x87D219:
@@ -215,6 +251,21 @@ public:
 	virtual bool getExitOffset(Coord3D &out) const { (void)out; return false; }
 	// slot 0x80 orderAllPassengersToExit (HordeGarrisonContain RW 0x87CE8F -> 0x991027); `source` is a CommandSourceType
 	virtual void orderAllPassengersToExit(int source) { (void)source; }
+	// slot 0x8C orderAllPassengersToIdle; `source` is a CommandSourceType
+	virtual void orderAllPassengersToIdle(int source) { (void)source; }
+	// slot 0x174 onContainerUpgrade (Object::giveUpgrade RW 0x006938B3; HordeTransportContain / HordeSiegeEngineContain RW 0x0087A988)
+	virtual void onContainerUpgrade(const std::vector<const UpgradeTemplate *> &granted) { (void)granted; }
+	// slot 0x4C getApparentControllingPlayer (GarrisonContain RW 0x0087B392)
+	virtual Player *getApparentControllingPlayer(const Player *observingPlayer) const { (void)observingPlayer; return nullptr; }
+	// slots 0x138 / 0x134 attemptBestFirePointPosition (GarrisonContain RW 0x0087BAEC / RW 0x0087BB6A)
+	virtual bool attemptBestFirePointPosition(Object *source, Weapon *weapon, Object *victim) { (void)source; (void)weapon; (void)victim; return false; }
+	virtual bool attemptBestFirePointPosition(Object *source, Weapon *weapon, const Coord3D *targetPos) { (void)source; (void)weapon; (void)targetPos; return false; }
+	// ExitInterface slot 0x1C getNaturalRallyPoint (HordeGarrisonContain RW 0x0087CF57)
+	virtual bool getNaturalRallyPoint(Coord3D &out) const { (void)out; return false; }
+	// slot 0x110 iterateContained (flags: bit 0 = riders, bit 2 = crew, bit 3 = reverse; SiegeEngineContain RW 0x0087F10E, HordeSiegeEngineContain RW 0x0088014B, TunnelContain RW 0x00880F78)
+	virtual void iterateContained(const std::function<void(Object *)> &fn, unsigned flags = 1) { (void)fn; (void)flags; }
+	// slot 0x140 hasMinePassenger (SiegeEngineContain RW 0x0087F2F5, HordeSiegeEngineContain RW 0x008F4D47)
+	virtual bool hasMinePassenger() const { return false; }
 	// slot 0x44 onObjectWantsToEnterOrExit (ZH OpenContain::onObjectWantsToEnterOrExit; AIEnterState RW 0x751699 / 0x752B67, AIExitState RW 0x74352D): 0 enter,
 	// 1 exit, 2 neither
 	virtual void onObjectWantsToEnterOrExit(Object *obj, int wants) { (void)obj; (void)wants; }

@@ -48,9 +48,10 @@
 //     DO_NOT_PICK_ME and WONT_RIDE_WITH_YOU set, out of the world RW 0x68C18F) and comes out (RW 0x88D6AE) when the build ends (walking BuilderMoveFromNewStructure
 //     Distance away from it, a PLAYER-sourced move) or the task is cancelled: back in the world RW 0x68E31F, the statuses cleared.
 // Both editions: HudInput mirrors the deselection when the porter hides (RW 0x88C51B / BFME2 0x489256), removing it through the command stream;
-// the drawable's fade out at the work and in at the exit is ported, lane PORTERFOG-1.
-// INFERENCE / NOT PORTED (stops S-304, S-1282): the placement's TerrainLogic calls (RW 0x684BCA / 0x684CBA, lane FBSIM-1 ported the phantom and its placement); the
-// face command 0x26 (the AI face state 36) runs as nothing; the bridge tower branch of the dock position; the bored wander (RW 0x88E17F, an AI player's dozer); the TheInGameUI idle worker
+// the drawable's fade out at the work and in at the exit is ported, lane PORTERFOG-1. The turn to the structure before the work (dock sub task 2) is the AI's
+// face command 0x26 (RW 0x88DD3E in the build branch, RW 0x88DA7A in the repair one; lane PORT-217, the work waits for the turn: RW 0x88DD5F / 0x88DAA1).
+// INFERENCE / NOT PORTED (stops S-304, S-1282): the placement's TerrainLogic calls (RW 0x684BCA / 0x684CBA, lane FBSIM-1 ported the phantom and its placement);
+// the bridge tower branch of the dock position; the bored wander (RW 0x88E17F, an AI player's dozer); the TheInGameUI idle worker
 // list is the marked flag (isIdleWorker); the primary machine reset after a PLAYER command runs before the command (RW: after it); the dozer's "a task ended"
 // notification to the AI player is also sent when a task is cancelled or fails (S-890).
 //
@@ -118,8 +119,8 @@ public:
 	static void registerWorkerClass(ModuleFactory &modules); // lane LUMBER1: binds WorkerAIUpdate (GameLogic/Module/WorkerAIUpdate.h)
 	bool isWorker() const { return m_isWorker; }
 
-	// RW 0x88C217 -> 0x88C2A5: the legality gate of the construct body, flags 0x49F (ZH CLEAR_PATH | TERRAIN_RESTRICTIONS | NO_OBJECT_OVERLAP | USE_QUICK_PATHFIND | SHROUD_REVEALED = 0x1F
-	// plus the RotWK bits 0x80 and 0x400 whose meaning is not read, S-301): a nonzero result rejects the order. The dispatcher asks it before it changes the builder's state
+	// RW 0x88C217 -> 0x88C2A5: the legality gate of the construct body, flags 0x49F (RotWK numbering, lane BUILDCLEAR-1: terrain, clear path, object overlap,
+	// quick path, the unread 0x10, fogged objects ignored, the pending dozer structures): a nonzero result rejects the order. The dispatcher asks it before it changes the builder's state
 	static constexpr unsigned kConstructLegalFlags = 0x49F;
 	bool siteIsLegal(const ThingTemplate &what, const Coord3D &pos, float angle, Player &owner);
 	// RW vslot 0x1F8 (RW 0x88C217): makes the foundation of `what` at `pos` and starts the build task; null when refused (illegal site, no money). The 5th
@@ -128,8 +129,13 @@ public:
 	Object *construct(const ThingTemplate &what, const Coord3D &pos, float angle, Player &owner, bool isRebuild = false);
 	// MSG_RESUME_CONSTRUCTION: RW 0x8ACEA9 (vslot 0xB4): the ActionManager's test, then newTask(BUILD, structure); the command path first idles a dozer without a task
 	bool resumeConstruction(Object &structure);
-	// lane BUILD-2: RW 0x88BD8D (vslot 0xB0, MSG_DO_REPAIR, a worker spawned to repair): the ActionManager's test and a free sole benefactor, then newTask(REPAIR)
-	bool repair(Object &structure);
+	// lane BUILD-2: RW 0x88BD8D (vslot 0xB0, MSG_DO_REPAIR, a worker spawned to repair): the ActionManager's test and a free sole benefactor, then newTask(REPAIR).
+	// lane PORT-282: virtual - the worker's class overrides the slot with its own body (RW 0x8AD2D3, WorkerAIUpdate::repair)
+	virtual bool repair(Object &structure);
+	// RW 0x88CB8A (dozer interface slot 0x50): may a repair order for `structure` replace the REPAIR task this builder already has?
+	// FALSE while the ordered target is the structure this builder repairs (the running task keeps it), TRUE otherwise, except for two bridge
+	// towers (RW 0x85B874's bridge module on both sides, their ids equal): an order for the other tower of a bridge is refused
+	bool canAcceptNewRepair(const Object *structure) const;
 	bool repairing() const { return m_currentTask == DOZER_TASK_REPAIR; }
 	// the frames of work (sub task 3) this dozer put into its current / last task
 	UnsignedInt taskWorkFrames() const { return m_taskWorkFrames; }

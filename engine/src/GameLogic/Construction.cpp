@@ -479,9 +479,17 @@ Object *Construction::buildObjectNow(GameLogic &logic, Object *builder, const Th
 	}
 	if (structure)
 	{
+		// PORT-224 (issue #534, P-143): RW 0x797951 .. 0x797977 (DONOR BFME2 BuildAssistant.cpp:1776-1782, Rva002A9BF2Get.cpp:92-108):
+		// neither buildObjectNow nor Player::onStructureConstructionComplete (RW 0x6AA72B) clears OBJECT_STATUS_UNDER_CONSTRUCTION (set at
+		// RW 0x797894). Full-health structures with GettingBuiltBehavior clear it on their first update via checkCompletion (RW 0x857BDA ->
+		// RW 0x857D4C); workerless RebuildHoleBehavior::update (RW 0x886994 .. 0x8869F7, e.g. NeutralStructureHole creep lairs) drops health to 1%
+		// and calls startConstruction(true) with m_forceComplete = true (RW 0x8567A2), keeping UNDER_CONSTRUCTION throughout the self-rise so
+		// killing the rising lair awards no bounty (RW 0x6AC09B), spawns no new hole (RW 0x889B0C), and fades the masked hole without treasure.
 		onStructureCreated(owner, builder, *obj);
-		obj->setStatus(OBJECT_STATUS_UNDER_CONSTRUCTION, false);
-		onStructureConstructionComplete(owner, builder, *obj, false);
+		if (!builder || !templateKindOf(logic, *builder->getTemplate(), "WALL_HUB")) // RW 0x797964 .. 0x79796E: KindOf bit 156 (+0x11B & 0x10)
+		{
+			onStructureConstructionComplete(owner, builder, *obj, false);
+		}
 	}
 	// lane PORT-117 (issue #301, P-57): RW 0x7979D4 .. 0x797A02. A KindOf HORDE object is completed WITHOUT its producer. RotWK reads the new object's
 	// template (Object + 4) KindOf word + 0x114 for bit 0x2000 (RW 0x7979DC: KindOf bit 109 = HORDE in the name table RW 0xDA0E68) and, when it is set, calls
@@ -526,9 +534,5 @@ std::vector<std::string> Construction::stopLines()
 		"filter row blocks nothing (RW's default filter at data + 0x40 was not read: inference); what keeps a dead structure in the world is its own die modules (KeepObjectDie)",
 		"[S-656] repair: MSG_DO_REPAIR sends the selected dozers to repair (DozerAIUpdate::repair, the heal of RW 0x88DC46, free); the dispatcher case of MSG_DO_REPAIR was not read, and the "
 		"caller that makes the owner pay a structure's own repair (GettingBuiltBehavior slot 4 without force: ceil(calcCostToBuild * PercentOfBuildCostToRebuild<state>), RW 0x856227) was not found",
-		// lane PORT-117 (issue #301): what buildObjectNow's HORDE step leaves open
-		"[S-7317] buildObjectNow (lane PORT-117): a KindOf HORDE object is completed without its producer (RW 0x7979D4 .. 0x797A02: ported, the horde's InitialPayload is made in the call, "
-		"RW 0x871BAB / 0x86A1FA); not ported: the banner carrier RotWK's HordeContain makes in that same call when the horde has no producer and its BannerCarrierMinLevel is 0 "
-		"(RW 0x8718F5 .. 0x87190E -> RW 0x870204): the port's carrier comes from HordeContain::bannerCheck on the horde's update (RW 0x8719E4, S-587), after the call",
 	};
 }
