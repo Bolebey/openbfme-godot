@@ -10,6 +10,8 @@
 #include "doctest.h"
 
 #include "CombatTestUtil.h"
+#include "EnnorathScenario.h"
+#include "HudTestUtil.h"
 
 #include "Common/INI.h"
 #include "Common/Player.h"
@@ -157,4 +159,46 @@ TEST_CASE("LOCAL-124 FakePathfindPortalBehaviour::xfer leaves open gate unregist
 	CHECK_FALSE(fp->registered());
 	CHECK_FALSE(Pathfinder::isPortalWaypoint(*pf.findWaypoint(wp0)));
 	CHECK_FALSE(Pathfinder::isPortalWaypoint(*pf.findWaypoint(wp1)));
+}
+
+TEST_CASE("LOCAL-124 ENNORATH scenario: tail update and behavior modules on Ennorath objects")
+{
+	// Source: Ennorath 1.9.8.3 INI (GondorFarm, GondorFighterHorde, GondorCastleGate / GondorFortressCitadel)
+	// and RotWK 2.01 RW 0x0085921F (BuildingBehavior), RW 0x008603F3 (SlowDeathBehavior),
+	// RW 0x008A78AD (StructureCollapseUpdate), RW 0x0089A1A6 (BannerCarrierUpdate),
+	// RW 0x00864BFE (FakePathfindPortalBehaviour::xfer).
+	ennorathscenario::World world;
+	if (!world.load("LOCAL-124 Ennorath scenario"))
+	{
+		return;
+	}
+	hudtest::Rig game(world.shared, "map mp fall back 8p", "FactionMen");
+	const int pMen = game.index();
+	Player *mordor = game.game->players().findPlayerWithName("Player_2");
+	REQUIRE(mordor != nullptr);
+	const int pMordor = mordor->getPlayerIndex();
+	std::string err;
+
+	// 1. Structure with BuildingBehavior + StructureCollapseUpdate + SlowDeathBehavior.
+	Object *farm = game.game->createObject("GondorFarm", pMen, Coord3D{ 1700.0f, 2200.0f, 0.0f }, 0.0f, &err);
+	REQUIRE_MESSAGE(farm != nullptr, err);
+	CHECK(farm->findModule("BuildingBehavior") != nullptr);
+	CHECK(farm->findModule("StructureCollapseUpdate") != nullptr);
+
+	// 2. Horde unit with SlowDeathBehavior / BannerCarrierUpdate.
+	Object *horde = game.game->createObject("GondorFighterHorde", pMen, Coord3D{ 1780.0f, 2200.0f, 0.0f }, 0.0f, &err);
+	REQUIRE_MESSAGE(horde != nullptr, err);
+
+	// 3. Enemy structure with BuildingBehavior + SlowDeathBehavior.
+	Object *pit = game.game->createObject("MordorOrcPit", pMordor, Coord3D{ 1950.0f, 2200.0f, 0.0f }, 0.0f, &err);
+	REQUIRE_MESSAGE(pit != nullptr, err);
+	CHECK(pit->findModule("BuildingBehavior") != nullptr);
+
+	for (int i = 0; i < 15; ++i)
+	{
+		game.game->stepFrame();
+	}
+	CHECK_FALSE(farm->isDestroyed());
+	CHECK_FALSE(horde->isDestroyed());
+	CHECK_FALSE(pit->isDestroyed());
 }

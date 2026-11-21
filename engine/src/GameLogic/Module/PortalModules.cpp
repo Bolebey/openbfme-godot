@@ -542,6 +542,7 @@ std::function<bool(const PathfindObject &)> DynamicPortalBehaviour::waypointFilt
 	};
 }
 
+// RW 0x00863A5F (UpgradeModule::xfer, v1..2, 6 portal waypoints, m_created +0x3C, m_disabled +0x3D)
 void DynamicPortalBehaviour::xfer(Xfer &x)
 {
 	SnapshotXfer::version(x, 1, 1);
