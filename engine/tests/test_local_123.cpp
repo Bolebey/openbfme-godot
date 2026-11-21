@@ -536,7 +536,7 @@ TEST_CASE("LOCAL-123 ENNORATH scenario: live Ennorath objects of the 13 module c
 	REQUIRE_MESSAGE(ram != nullptr, error);
 	auto *ramContain = dynamic_cast<SiegeEngineContain *>(ram->getContain());
 	REQUIRE(ramContain != nullptr);
-	CHECK(ramContain->getCrewCount() == 2);
+	CHECK(ramContain->getCrewCount() == 6); // Ennorath isengardsiegeunits.ini: InitialCrew = IsengardFighterCrew 6
 	ramContain->evacuateCrew(2 /*CMD_FROM_AI*/); // RW 0x0087F0CF
 	CHECK(ramContain->getCrewCount() == 0);
 
