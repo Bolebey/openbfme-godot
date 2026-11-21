@@ -10,13 +10,16 @@
 #include "Common/Upgrade.h"
 #include "GameClient/ControlBarCommands.h"
 #include "GameLogic/AI/AIStateMachine.h"
+#include "GameLogic/GameLogic.h"
 #include "GameLogic/Module/AIUpdate.h"
+#include "GameLogic/Module/BehaviorModule.h"
 #include "GameLogic/Module/LogicModules.h"
 #include "GameLogic/Module/ProductionUpdate.h"
 #include "GameLogic/Module/SpawnBehavior.h"
 #include "GameLogic/Module/StancesBehavior.h"
 #include "GameLogic/Module/UpgradeModuleClasses.h"
 #include "GameLogic/Object/Object.h"
+#include "GameLogic/Object/PartitionManager.h"
 #include "Common/Thing/KindOfTokens.h"
 
 #include <memory>
@@ -67,12 +70,12 @@ TEST_CASE("MODS-3: Ennorath 1.9.8.5's game.dat turns on ennorath.stance-keeps-mo
 	REQUIRE_MESSAGE(ModEngineFeatures::activate({ "fc32e4c4142b5c607b90972eaf448400" }, &error), error);
 	CHECK(ModEngineFeatures::activeProfiles() == std::vector<std::string>{ "Ennorath 1.9.8.5 game.dat" });
 	CHECK(ModEngineFeatures::identityFeatures() ==
-		std::vector<std::string>{ "mod-engine:ennorath.stance-keeps-moving", "mod-engine:ennorath.middle-click-camera" }); // a retail peer is refused
+		std::vector<std::string>{ "mod-engine:ennorath.stance-keeps-moving", "mod-engine:ennorath.middle-click-camera", "mod-engine:ennorath.evacuate-containers" }); // a retail peer is refused
 	CHECK_FALSE(ModEngineFeatures::has(ModEngineFeature::EdainUnchainedHerobarKindOf));
 	const std::vector<std::string> lines = ModEngineFeatures::stopLines();
 	REQUIRE(lines.size() == 1);
 	CHECK(lines[0].rfind("S-5304: Ennorath 1.9.8.5 game.dat: rebuilt: ", 0) == 0);
-	CHECK(lines[0].find("not yet (docs/ennorath/ENNORATH_EXE.md): war wagons and the Witch-king unloading through the common evacuate") != std::string::npos);
+	CHECK(lines[0].find("not yet (docs/ennorath/ENNORATH_EXE.md): the map search in the lobby") != std::string::npos);
 }
 
 namespace
@@ -148,6 +151,76 @@ TEST_CASE("MODS-3: ennorath.stance-keeps-moving: HoldGround stops a walking unit
 		REQUIRE(ai->currentStateId() == (unsigned)AI_MOVE_TO);
 		stance.setStance(STANCE_AGGRESSIVE, "test:player");
 		CHECK(ai->currentStateId() == (unsigned)AI_MOVE_TO);
+	}
+}
+
+namespace
+{
+// a tunnel (TunnelContain: a horde garrison, vtable RW 0xC5DCE0 slot 0x80 = RW 0x87CE8F -> RW 0x991027), a wagon with a TransportContain (no horde) and a walker
+const char kEvacuate[] =
+	"Object EvacTunnel\n"
+	" KindOf = STRUCTURE SELECTABLE\n"
+	" Geometry = BOX\n GeometryMajorRadius = 20\n GeometryMinorRadius = 20\n GeometryHeight = 30\n"
+	" Body = ActiveBody BodyTag\n  MaxHealth = 500\n End\n"
+	" Behavior = TunnelContain ContainTag\n  TimeForFullHeal = 5000\n  AllowAlliesInside = Yes\n  AllowEnemiesInside = No\n  AllowNeutralInside = No\n End\n"
+	"End\n"
+	"Object EvacWagon\n"
+	" KindOf = VEHICLE SELECTABLE TRANSPORT\n"
+	" TransportSlotCount = 1\n"
+	" Geometry = CYLINDER\n GeometryMajorRadius = 10\n GeometryMinorRadius = 10\n GeometryHeight = 20\n"
+	" Body = ActiveBody BodyTag\n  MaxHealth = 500\n End\n"
+	" Behavior = AIUpdateInterface AiTag\n End\n"
+	" Behavior = TransportContain ContainTag\n  Slots = 2\n  AllowAlliesInside = Yes\n  AllowEnemiesInside = No\n  AllowNeutralInside = No\n End\n"
+	" LocomotorSet\n  Locomotor = WalkerLoco\n  Condition = SET_NORMAL\n  Speed = 55\n End\n"
+	"End\n"
+	"Object EvacWalker\n"
+	" KindOf = INFANTRY SELECTABLE CAN_ATTACK\n"
+	" TransportSlotCount = 1\n"
+	" Geometry = CYLINDER\n GeometryMajorRadius = 8\n GeometryMinorRadius = 8\n GeometryHeight = 20\n"
+	" Body = ActiveBody BodyTag\n  MaxHealth = 100\n End\n"
+	" Behavior = AIUpdateInterface AiTag\n End\n"
+	" LocomotorSet\n  Locomotor = WalkerLoco\n  Condition = SET_NORMAL\n  Speed = 55\n End\n"
+	"End\n";
+} // namespace
+
+TEST_CASE("MODS-3: ennorath.evacuate-containers: evacuate all leaves a wagon (a rider whose contain is no horde) in the tunnel in retail 2.01 (RW 0x991072), lets it out with the feature (PYSAGE 1.9.8.5 .keydef 0xF39580)")
+{
+	// RW 0x991027: per rider, its contain (Object + 0x258): a horde (contain vslot 0x7C) gets vslot 0x84, no horde -> skipped (RW 0x991072 je 0x99109E); no
+	// contain -> aiExit (RW 0x991099 -> RW 0x7716C1). The pySAGE hook at RW 0x99106B sends the no-horde case to RW 0x991086 (aiExit) as well
+	Retail guard;
+	for (const bool feature : { false, true })
+	{
+		CAPTURE(feature);
+		std::string error;
+		if (feature)
+		{
+			REQUIRE(ModEngineFeatures::activate({ "fc32e4c4142b5c607b90972eaf448400" }, &error));
+		}
+		else
+		{
+			ModEngineFeatures::reset();
+		}
+		combattest::CombatWorld f(kEvacuate);
+		f.logic->partition().setRegion(0.0f, 0.0f, 1000.0f, 1000.0f);
+		Object *tunnel = f.unit("EvacTunnel", 'B', 300, 300);
+		tunnel->friend_onBuildComplete();
+		Object *wagon = f.unit("EvacWagon", 'B', 300, 340);
+		Object *walker = f.unit("EvacWalker", 'B', 300, 340);
+		ContainModuleInterface *c = tunnel->getContain();
+		REQUIRE(c->addToContain(wagon));
+		REQUIRE(c->addToContain(walker));
+		REQUIRE(wagon->getContainedBy() == tunnel);
+		c->orderAllPassengersToExit((int)CMD_FROM_PLAYER);
+		f.frames(60);
+		CHECK(walker->getContainedBy() == nullptr); // the rider without a contain leaves either way (the neighbour)
+		if (feature)
+		{
+			CHECK(wagon->getContainedBy() == nullptr);
+		}
+		else
+		{
+			CHECK(wagon->getContainedBy() == tunnel);
+		}
 	}
 }
 
