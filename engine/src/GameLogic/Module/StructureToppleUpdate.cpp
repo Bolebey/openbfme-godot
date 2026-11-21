@@ -120,7 +120,7 @@ const FieldParse kStructureToppleParse[] = {
 	{ "StructuralIntegrity", INI::parseReal, nullptr, ST_OFF(m_structuralIntegrity) },
 	{ "StructuralDecay", INI::parseReal, nullptr, ST_OFF(m_structuralDecay) },
 	{ "DamageFXTypes", parseDamageFXTypes, nullptr, ST_OFF(m_damageFXTypes) },                        // RW 0x73A5C9
-	{ "TopplingFX", parseFXName, nullptr, ST_OFF(m_toppleFX) },                                       // RW 0x73A302
+	{ "TopplingFX", parseFXName, nullptr, ST_OFF(m_treeToppleFX) },                                       // RW 0x73A302
 	{ "ToppleDelayFX", parseFXName, nullptr, ST_OFF(m_toppleDelayFX) },
 	{ "ToppleStartFX", parseFXName, nullptr, ST_OFF(m_toppleStartFX) },
 	{ "ToppleDoneFX", parseFXName, nullptr, ST_OFF(m_toppleDoneFX) },
@@ -625,7 +625,7 @@ const float kToppleKillDamage = 999999.0f;     // RW 0xC6A294
 #define TU_OFF(member) (int)offsetof(ToppleUpdateModuleData, member)
 // RW 0xC6A490 (buildFieldParse RW 0x008AB8C6, DONOR BFME2 0x008A81F0)
 const FieldParse kToppleParse[] = {
-	{ "ToppleFX", parseFXName, nullptr, TU_OFF(m_toppleFX) },                                       // RW 0x73A302
+	{ "ToppleFX", parseFXName, nullptr, TU_OFF(m_treeToppleFX) },                                       // RW 0x73A302
 	{ "BounceFX", parseFXName, nullptr, TU_OFF(m_bounceFX) },                                       // RW 0x73A302
 	{ "StumpName", INI::parseAsciiString, nullptr, TU_OFF(m_stumpName) },                           // RW 0x42EE5E
 	{ "KillWhenStartToppling", INI::parseBool, nullptr, TU_OFF(m_killWhenStartToppled) },           // RW 0x42E558
@@ -802,7 +802,7 @@ void ToppleUpdate::applyTopplingForce(const Coord3D *toppleDirection, float topp
 	m_numAngleDeltaX = count;
 	m_angleDeltaX = SimMath::divf32(SimMath::subf32(desiredAngle, currentAngle), SimMath::sseFromInt32(m_numAngleDeltaX));
 	self->setModelConditionState(CombatNames::modelCondition("TOPPLED"), true); // RW 0x8ABCEF: bit 0
-	doToppleObjFX(*self, "ToppleUpdate ToppleFX", m_data->m_toppleFX);
+	doToppleObjFX(*self, "ToppleUpdate ToppleFX", m_data->m_treeToppleFX);
 	if (!m_data->m_stumpName.empty())
 	{
 		GameLogic &logic = self->logic();

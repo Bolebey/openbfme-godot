@@ -61,7 +61,7 @@ public:
 	std::uint32_t m_damageFXTypes = 0xFFFFFFFFu; ///< +0x4C (all types)
 	std::string m_toppleStartFX;                 ///< +0x50
 	std::string m_toppleDelayFX;                 ///< +0x54
-	std::string m_toppleFX;                      ///< +0x58 TopplingFX (no body of the module reads it)
+	std::string m_treeToppleFX;                      ///< +0x58 TopplingFX (no body of the module reads it)
 	std::string m_toppleDoneFX;                  ///< +0x5C
 	std::string m_crushingFX;                    ///< +0x60
 	std::string m_crushingWeaponName;            ///< +0x64
@@ -149,7 +149,7 @@ enum ToppleOptionFlags : unsigned
 class ToppleUpdateModuleData : public ModuleData
 {
 public:
-	std::string m_toppleFX;                 ///< +0x08 (RW 0x73A302)
+	std::string m_treeToppleFX;                 ///< +0x08 (RW 0x73A302)
 	std::string m_bounceFX;                 ///< +0x0C (RW 0x73A302)
 	std::string m_stumpName;                ///< +0x10 (RW 0x42EE5E)
 	float m_initialVelocityPercent = 0.2f;  ///< +0x14 (RW 0xBDAD78)

@@ -137,7 +137,7 @@ TEST_CASE("LOCAL-102 ToppleUpdate: module data reads RotWK table RW 0xC6A490 and
 	Object *defObj = w.unit("TestToppleDefaults", 'A', 100, 100);
 	const ToppleUpdateModuleData *d0 = toppleOf(defObj)->data();
 	REQUIRE(d0 != nullptr);
-	CHECK(d0->m_toppleFX.empty());
+	CHECK(d0->m_treeToppleFX.empty());
 	CHECK(d0->m_bounceFX.empty());
 	CHECK(d0->m_stumpName.empty());
 	CHECK(d0->m_initialVelocityPercent == 0.2f); // RW 0xBDAD78
@@ -153,7 +153,7 @@ TEST_CASE("LOCAL-102 ToppleUpdate: module data reads RotWK table RW 0xC6A490 and
 	Object *tree = w.unit("TestToppleTree", 'A', 200, 200);
 	const ToppleUpdateModuleData *d1 = toppleOf(tree)->data();
 	REQUIRE(d1 != nullptr);
-	CHECK(d1->m_toppleFX == "FX_ToppleTree");
+	CHECK(d1->m_treeToppleFX == "FX_ToppleTree");
 	CHECK(d1->m_bounceFX == "FX_TreeBounce");
 	CHECK(d1->m_stumpName == "TestStump");
 	CHECK(d1->m_initialVelocityPercent == doctest::Approx(0.2f)); // tolerance: parsePercentToReal 20 * 0.01f rounding
