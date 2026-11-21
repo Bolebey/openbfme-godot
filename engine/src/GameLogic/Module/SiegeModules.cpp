@@ -492,6 +492,19 @@ Coord3D SiegeDockingBehavior::dockDirection(int index) const
 	return *getObject()->getPosition();
 }
 
+// RW 0x0085D1CD (SiegeDockingBehavior::loadPostProcess): initialize dock bones if xfer did not restore them.
+// In retail RW 0x0085D1CD calls initializeBones (RW 0x85CE65) then UpdateModule::loadPostProcess (RW 0x4D0EAF);
+// gating on !m_initialized preserves entries and reservedBy already restored by xfer (RW 0x0085D08F).
+void SiegeDockingBehavior::loadPostProcess()
+{
+	if (!m_initialized)
+	{
+		initializeBones(); // RW 0x85CE65
+		m_initialized = true;
+	}
+}
+
+// RW 0x0085D08F (SiegeDockingBehavior::xfer)
 void SiegeDockingBehavior::xfer(Xfer &x)
 {
 	SnapshotXfer::version(x, 1, 1);
