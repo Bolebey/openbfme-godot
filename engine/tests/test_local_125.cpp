@@ -112,3 +112,37 @@ TEST_CASE("LOCAL-125 Mouse tooltip: TooltipBackgroundColor and alt-color flags (
 	CHECK(tip.activeTextColor() == 0xFF007FFFu);
 	CHECK(tip.activeBackgroundColor() == 0x7F007FFFu);
 }
+
+#include "Common/Upgrade.h"
+
+// RW 0x66F58E / 0x66F5B6 (UpgradeTemplate::cacheButtonImage -> +0x90) and WoTR readers RW 0x9FFC42 / 0xA08500
+TEST_CASE("LOCAL-125 Upgrade StrategicIcon: resolves War of the Ring icons (RW 0x66F58E / 0x9FFC42)")
+{
+	const std::string iniText =
+		"Upgrade Upgrade_TestArmor\n"
+		"  Type = OBJECT\n"
+		"  StrategicIcon = UIHeavyArmor\n"
+		"End\n"
+		"Upgrade Upgrade_TestNoIcon\n"
+		"  Type = OBJECT\n"
+		"End\n"
+		"Upgrade Upgrade_TestBlades\n"
+		"  Type = OBJECT\n"
+		"  StrategicIcon = UIForgedBlades\n"
+		"End\n";
+
+	UpgradeCenter center;
+	UpgradeCenter *prev = TheUpgradeCenter;
+	TheUpgradeCenter = &center;
+	INIEnvironment env;
+	center.registerBlock(env.blocks);
+	INI ini(env);
+	ini.loadMemory("upgrade.ini", std::vector<std::uint8_t>(iniText.begin(), iniText.end()), INI_LOAD_OVERWRITE);
+	TheUpgradeCenter = prev;
+
+	const std::vector<std::string> icons = center.strategicIconsForUpgrades(
+		{ "Upgrade_TestArmor", "Upgrade_TestNoIcon", "Upgrade_Unknown", "Upgrade_TestBlades" });
+	REQUIRE(icons.size() == 2);
+	CHECK(icons[0] == "UIHeavyArmor");
+	CHECK(icons[1] == "UIForgedBlades");
+}
