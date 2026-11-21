@@ -217,3 +217,139 @@ TEST_CASE("LOCAL-109 ManTheWallsSpecialPower (RW 0x008CB5A6): issues CMD_FROM_PL
 	const bool oneMovedNorth = (horde1->getPosition()->y > y1Before + 5.0f) || (horde2->getPosition()->y > y2Before + 5.0f);
 	CHECK(oneMovedNorth);
 }
+
+#include "EnnorathScenario.h"
+#include "GameLogic/Damage.h"
+#include "GameLogic/Module/ActiveBody.h"
+#include "GameLogic/WallSpan.h"
+
+TEST_CASE("LOCAL-109 ENNORATH scenario: MenPorter builds/repairs GondorFarm, MenWallHubSmall builds wall span, GondorGreatKeep mans the walls (RW 0x0088D186, RW 0x008CB5A6)")
+{
+	// Source of expectations: Ennorath 1.9.8.3 INI (MenPorter, GondorFarm, MenWallHubSmall, GondorGreatKeep, CastleFlag, GondorFighterHorde)
+	// and RotWK 2.01 RW 0x0088D186 (DozerAIUpdate::loadPostProcess), RW 0x0085601C/0x00855F7D/0x00855F95/0x005F2D3D/0x00855E88 (WallHubBehavior),
+	// RW 0x008CB5A6 (ManTheWallsSpecialPower CMD_FROM_PLAYER).
+	ennorathscenario::World world;
+	if (!world.load("LOCAL-109 ENNORATH scenario"))
+	{
+		return;
+	}
+	hudtest::Rig game(world.shared);
+	const int player1 = game.index();
+	Player *p1 = game.game->players().getNthPlayer(player1);
+	REQUIRE(p1 != nullptr);
+	p1->depositMoney(10000, false);
+
+	std::string error;
+
+	// 1. MenPorter builds a GondorFarm and repairs it after damage.
+	Object *porter = game.game->createObject("MenPorter", player1, Coord3D{ 1200.0f, 1200.0f, 0.0f }, 0.0f, &error);
+	REQUIRE_MESSAGE(porter != nullptr, error);
+	DozerAIUpdate *dozer = dynamic_cast<DozerAIUpdate *>(porter->getAIUpdateInterface());
+	REQUIRE(dozer != nullptr);
+	const ThingTemplate *farmTmpl = world.shared.world->things().findTemplate("GondorFarm");
+	REQUIRE(farmTmpl != nullptr);
+
+	game.logic().runLogicFrame();
+	game.logic().runLogicFrame();
+
+	Coord3D site{ 0.0f, 0.0f, 0.0f };
+	bool foundSite = false;
+	for (float dx : { 120.0f, -120.0f, 160.0f, -160.0f })
+	{
+		for (float dy : { 0.0f, 120.0f, -120.0f })
+		{
+			Coord3D cand{ 1200.0f + dx, 1200.0f + dy, 0.0f };
+			if (dozer->siteIsLegal(*farmTmpl, cand, 0.0f, *p1))
+			{
+				site = cand;
+				foundSite = true;
+				break;
+			}
+		}
+		if (foundSite) break;
+	}
+	REQUIRE(foundSite);
+
+	Object *farm = dozer->construct(*farmTmpl, site, 0.0f, *p1, false);
+	REQUIRE(farm != nullptr);
+	REQUIRE(dozer->unplacedStructure() == farm->getID());
+	dozer->loadPostProcess(); // RW 0x0088D186: phantom remains inert & out of world
+	CHECK(farm->isEffectivelyDead());
+	CHECK_FALSE(farm->isInWorld());
+
+	for (int f = 0; f < 400 && farm->isUnderConstruction(); ++f)
+	{
+		game.logic().runLogicFrame();
+	}
+	// If still unplaced or under construction, give enough frames to complete construction.
+	for (int f = 0; f < 600 && (farm->isUnderConstruction() || farm->isEffectivelyDead()); ++f)
+	{
+		game.logic().runLogicFrame();
+	}
+	REQUIRE_FALSE(farm->isUnderConstruction());
+	REQUIRE_FALSE(farm->isEffectivelyDead());
+
+	// Damage the completed farm and verify MenPorter repairs it.
+	ActiveBody *farmBody = dynamic_cast<ActiveBody *>(farm->getBodyModule());
+	REQUIRE(farmBody != nullptr);
+	const float maxHp = farmBody->getMaxHealth();
+	farmBody->internalChangeHealth(-100.0f);
+	const float damagedHp = farmBody->getHealth();
+	REQUIRE(damagedHp < maxHp); // tolerance: precondition that damage reduced health before repair
+	dozer->repair(*farm);
+	for (int f = 0; f < 300 && farmBody->getHealth() < maxHp; ++f)
+	{
+		game.logic().runLogicFrame();
+	}
+	CHECK(farmBody->getHealth() > damagedHp); // tolerance: repair rate depends on MenPorter RepairHealthPercentPerSecond and frame count
+
+	// 2. MenWallHubSmall builds a wall span segment-by-segment near MenFortressCitadel (COMMANDCENTER for MaxBuildoutDistance & shroud).
+	Object *citadel = game.game->createObject("MenFortressCitadel", player1, Coord3D{ 1200.0f, 1500.0f, 0.0f }, 0.0f, &error);
+	REQUIRE_MESSAGE(citadel != nullptr, error);
+	game.logic().runLogicFrame();
+	Object *hub = game.game->createObject("MenWallHubSmall", player1, Coord3D{ 1450.0f, 1500.0f, 0.0f }, 0.0f, &error);
+	REQUIRE_MESSAGE(hub != nullptr, error);
+	game.logic().runLogicFrame();
+	WallHubBehavior *hubBehavior = WallHubBehavior::find(*hub, 0);
+	REQUIRE(hubBehavior != nullptr);
+	CHECK(hubBehavior->hubCapTemplate() != nullptr);
+	CHECK(hubBehavior->defaultSegmentTemplate() != nullptr);
+	CHECK(hubBehavior->patternTemplate(0) != nullptr);
+	CHECK(hubBehavior->builderRadius() == 20.0f);
+	CHECK(hubBehavior->staggeredBuildFactor() > 0); // tolerance: MenWallHubSmall StaggeredBuildFactor from Ennorath INI is positive
+
+	std::vector<ObjectID> builtSpan;
+	bool built = false;
+	int lastWorstCode = -1;
+	const Coord3D hp = *hub->getPosition();
+	for (Coord3D delta : { Coord3D{ 220.0f, 0.0f, 0.0f }, Coord3D{ 0.0f, 220.0f, 0.0f }, Coord3D{ 0.0f, -220.0f, 0.0f }, Coord3D{ -220.0f, 0.0f, 0.0f } })
+	{
+		Coord3D endPos{ hp.x + delta.x, hp.y + delta.y, 0.0f };
+		WallSpan::Plan plan;
+		if (WallSpan::plan(game.logic(), *hub, hp, endPos, hubBehavior->data()->m_options, plan))
+		{
+			lastWorstCode = plan.worstCode;
+			if (WallSpan::build(game.logic(), *hub, hp, endPos, *p1, hubBehavior->data()->m_options, &builtSpan))
+			{
+				built = true;
+				break;
+			}
+		}
+	}
+	CHECK_MESSAGE(built, "lastWorstCode=" << lastWorstCode);
+	CHECK(builtSpan.size() >= 2u); // tolerance: span over 220 world units produces at least 2 wall tiles
+
+	// 3. GondorGreatKeep casts ManTheWallsSpecialPower (RW 0x008CB5A6): GondorFighterHorde receives CMD_FROM_PLAYER move toward WallHubTemplate (TACTICAL_MARKER).
+	Object *keep = game.game->createObject("GondorGreatKeep", player1, Coord3D{ 1800.0f, 1200.0f, 0.0f }, 0.0f, &error);
+	REQUIRE_MESSAGE(keep != nullptr, error);
+	Object *marker = game.game->createObject("WallHubTemplate", player1, Coord3D{ 1950.0f, 1200.0f, 0.0f }, 0.0f, &error);
+	REQUIRE_MESSAGE(marker != nullptr, error);
+	Object *horde = game.game->createObject("GondorFighterHorde", player1, Coord3D{ 1850.0f, 1250.0f, 0.0f }, 0.0f, &error);
+	REQUIRE_MESSAGE(horde != nullptr, error);
+	game.logic().runLogicFrame();
+
+	auto *mtw = dynamic_cast<ManTheWallsSpecialPower *>(keep->findModule("ManTheWallsSpecialPower"));
+	REQUIRE(mtw != nullptr);
+	mtw->doSpecialPower(0);
+	CHECK(horde->getAIUpdateInterface()->lastCommandSource() == CMD_FROM_PLAYER);
+}
