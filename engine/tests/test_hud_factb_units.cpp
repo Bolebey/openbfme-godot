@@ -2752,7 +2752,7 @@ TEST_CASE("factb units: every Isengard unit, horde and hero ability and upgrade 
 	unitsOf("FactionIsengard", r);
 	r.print("units FactionIsengard");
 	// the stance radial is pressed now (MATRIX_TODO 3): only the ram, which has no StancesBehavior, keeps a greyed stance button
-	r.check({ { "IsengardBatteringRam Command_ToggleStance", "S-289" }, { "IsengardPorter Command_PorterExtinguishFire", "S-1997" },
+	r.check({ { "IsengardBatteringRam Command_ToggleStance", "S-289" },
 		{ "IsengardBallista Command_BombardEvil", "S-1990" }, { "IsengardSaruman Command_SarumanThunderBolt", "S-180 (the bolt's damage lands; its WeaponOCLNugget makes nothing)" },
 		// ORDER (MATRIX_TODO 11 / 19, 2026-11-19): the blast hits nobody only after the whole Isengard sweep; alone, after either half of the
 		// objects before it, or after the first half plus any one of the second, it passes: a state the run accumulates, no single object's leak
