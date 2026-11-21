@@ -111,6 +111,22 @@ const char kPort198Objects[] =
 	"    MaxHealth = 1000\n"
 	"  End\n"
 	"End\n"
+	// The locked secondary cannot damage a non-HERO, but the primary can. RW 0x6C891B .. 0x6C8930 limits the damage walk to the locked slot.
+	"Object P198LockedPair\n"
+	"  KindOf = STRUCTURE IMMOBILE SELECTABLE CAN_ATTACK\n"
+	"  Geometry = CYLINDER\n"
+	"  GeometryMajorRadius = 10\n"
+	"  GeometryHeight = 20\n"
+	"  WeaponSet\n"
+	"    Conditions = None\n"
+	"    Weapon = PRIMARY P198GroundShort\n"
+	"    Weapon = SECONDARY P198GroundShort\n"
+	"    OnlyAgainst = SECONDARY HERO\n"
+	"  End\n"
+	"  Body = ActiveBody ModuleTag_Body\n"
+	"    MaxHealth = 1000\n"
+	"  End\n"
+	"End\n"
 	"Object P198ImmobileSlave\n"
 	"  KindOf = INFANTRY ARCHER CAN_ATTACK\n"
 	"  VisionRange = 250\n"
@@ -830,6 +846,28 @@ TEST_CASE("PORT-198 WeaponSet range uses the combined anti-mask (RW 0x6C8724)")
 	const Coord3D ground = *enemy->getPosition();
 	CHECK(tower->getAbleToUseWeaponAgainstTarget(ATTACK_NEW_TARGET, enemy, &ground, CMD_FROM_PLAYER) == ATTACKRESULT_POSSIBLE);
 	CHECK(tower->getAbleToUseWeaponAgainstTarget(ATTACK_NEW_TARGET, nullptr, &ground, CMD_FROM_PLAYER) == ATTACKRESULT_POSSIBLE);
+}
+
+TEST_CASE("PORT-198 WeaponSet damage walk considers only the locked slot (RW 0x6C891B)")
+{
+	Port198Rig r;
+	Object *tower = r.world.unit("P198LockedPair", 'A', 400.0f, 400.0f);
+	Object *enemy = r.world.unit("Dummy", 'B', 430.0f, 400.0f);
+	r.world.frames(2);
+	ObjectWeapons *weapons = tower->getWeapons();
+	REQUIRE(weapons != nullptr);
+	REQUIRE(weapons->weaponInSlot(PRIMARY_WEAPON) != nullptr);
+	REQUIRE(weapons->weaponInSlot(SECONDARY_WEAPON) != nullptr);
+	CHECK_FALSE(enemy->isKindOf((unsigned)CombatNames::kindOf("HERO")));
+
+	// RW 0x6C8929 .. 0x6C8930: without a lock, walk from slot 5 down to PRIMARY; the primary weapon can damage the target.
+	CHECK(tower->getAbleToUseWeaponAgainstTarget(ATTACK_NEW_TARGET, enemy, enemy->getPosition(), CMD_FROM_PLAYER) == ATTACKRESULT_POSSIBLE);
+	REQUIRE(weapons->setWeaponLock(SECONDARY_WEAPON, LOCKED_PERMANENTLY));
+	// RW 0x6C8921 loads the current slot into EAX and RW 0x6C8924 copies it to the loop's lower bound. Thus RW 0x6C8984 .. 0x6C8993 stops
+	// after SECONDARY; it must NOT fall back to PRIMARY even though that weapon could damage this target.
+	CHECK(tower->getAbleToUseWeaponAgainstTarget(ATTACK_NEW_TARGET, enemy, enemy->getPosition(), CMD_FROM_PLAYER) == ATTACKRESULT_INVALID_SHOT);
+	REQUIRE(weapons->setWeaponLock(PRIMARY_WEAPON, LOCKED_PERMANENTLY));
+	CHECK(tower->getAbleToUseWeaponAgainstTarget(ATTACK_NEW_TARGET, enemy, enemy->getPosition(), CMD_FROM_PLAYER) == ATTACKRESULT_POSSIBLE);
 }
 
 TEST_CASE("PORT-198 Player::onUnitCreated -> SkirmishAIManager::unitCreated -> AIBaseBuilder::onStructureBuilt(..., false)")
