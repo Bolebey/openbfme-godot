@@ -94,6 +94,7 @@ class TerrainLogic;
 class UpgradeTypeTable;
 class UpgradeTemplate;
 class AIWorld;
+class FormationAssistant;
 class Economy;
 class CombatState;
 class ExperienceWorld;
@@ -1033,6 +1034,10 @@ public:
 	// MOVE-1: the pathfinder / AI world of this game (GameLogic/AI/AIWorld.h; TheAI): null until the game that has one installs it
 	void setAIWorld(AIWorld *ai) { m_aiWorld = ai; }
 	AIWorld *aiWorld() const { return m_aiWorld; }
+	// The formation table for commands and their snapshots. An explicit data source (synthetic worlds)
+	// overrides FormationAssistant.ini from the active world. Configuration, not simulation state.
+	void setFormationAssistant(const FormationAssistant *data) { m_formationAssistant = data; }
+	const FormationAssistant *formationAssistant() const;
 	// objects created without the OnCreated dispatch (no ObjectCreatedProc installed): counted and reported (S-147)
 	unsigned long long creationsWithoutDispatch() const { return m_creationsWithoutDispatch; }
 
@@ -1301,6 +1306,7 @@ public:
 private:
 	int m_nextListenerToken = 0;
 	AIWorld *m_aiWorld = nullptr;
+	const FormationAssistant *m_formationAssistant = nullptr;
 	ShroudManager *m_shroud = nullptr;
 	std::unique_ptr<PartitionManager> m_partition; // lane MODULES-2
 	std::unique_ptr<EmotionWorld> m_emotions;      // lane MODULES-2
