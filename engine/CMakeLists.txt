@@ -581,6 +581,7 @@ include(cmake/Local116.cmake)   # LOCAL-116: hero voices and ability sounds (iss
 include(cmake/Local115.cmake)   # LOCAL-115: shape-change abilities (fork issue 799; OPENBFME_LOCAL115_TESTS)
 include(cmake/Local113.cmake)   # LOCAL-113: AutoAbilityBehavior (issue #797; OPENBFME_LOCAL113_TESTS)
 include(cmake/Local114.cmake)   # LOCAL-114: AIUpdateInterface third pass (fork issue 798; OPENBFME_LOCAL114_TESTS)
+include(cmake/Local112.cmake)   # LOCAL-112: WeaponFireSpecialAbilityUpdate & special-weapon matrix probe/scene fixes (issue #796; OPENBFME_LOCAL112_TESTS)
 include(cmake/Port224.cmake)    # PORT-224: destroying a creep lair or worker-rebuilt structure mid-rebuild fades the hole without money or treasure (issue #534; OPENBFME_PORT224_TESTS)
 include(cmake/Port222.cmake)    # PORT-222: a LevelGrantSpecialPower fills a horde's experience pool (fork issue 532; OPENBFME_PORT222_TESTS)
 include(cmake/Port301.cmake)    # PORT-301: ShareExperienceBehavior — the shared experience of a hero (fork issue 693; OPENBFME_PORT301_TESTS)
@@ -1413,6 +1414,7 @@ add_executable(openbfme_tests
     ${OPENBFME_LOCAL115_TESTS}
     ${OPENBFME_LOCAL113_TESTS}
     ${OPENBFME_LOCAL114_TESTS}
+    ${OPENBFME_LOCAL112_TESTS}
     ${OPENBFME_PORT224_TESTS}
     ${OPENBFME_PORT222_TESTS}
     ${OPENBFME_PORT206_TESTS}
