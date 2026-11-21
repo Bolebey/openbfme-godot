@@ -1618,6 +1618,7 @@ add_executable(openbfme_tests
     # lane LOCAL-45 (P-35 hud5 icons health bars, P-36 cheat1 snapshot after foreign RetailObjectWorld context, P-85 LOCAL-20 retaliation range 287.5, issue #401)
     tests/test_local_45.cpp
     tests/test_local_83.cpp
+    tests/test_local_104.cpp
     # shared numeric facade (WEAPON-1 e75dd8c, imported unchanged: wide PC24 results, SSE binary32 ops, retail integer conversions)
     tests/test_numeric_facade.cpp
     # lane ECON-1: the economy
