@@ -1692,7 +1692,26 @@ bool Locomotor::locomotorMaintainCurrentPosition(LocomotorHost &host)
 		}
 		break;
 	}
-	noteStopOf(2); // the tail (RW 0x5E76AC on the held position, RW 0x70BA76) is not run
+	// RW 0x5E7E64 .. 0x5E7E84 (inside RW 0x5E7CC7): tail handleBehaviorZ (RW 0x5E76AC) + setTransform (RW 0x70BA76).
+	// S-1750 narrowed: for a non-HORDE NO_Z_MOTIVE_FORCE locomotor whose z differs from its layer surface (e.g. a ground unit
+	// spawned at a projectile detonation height by an OCL without ON_GROUND_ALIGNED), snap z to the surface as
+	// RW 0x5E774A .. 0x5E7816 does. Skipping when already at surface avoids writing pendingPosition / transform on every
+	// grounded idle unit (S-1750 stays noted for the full tail and sleep return RW 0x5E7E70).
+	if (m_template->m_zAxisBehavior == Z_NO_Z_MOTIVE_FORCE && m_template->m_appearance != LOCO_HORDE && !host.zMotionSuppressed())
+	{
+		const Coord3D pos{ m_matrix.m[0][3], m_matrix.m[1][3], m_matrix.m[2][3] }; // RW 0x5E3A5A
+		float surface = host.groundHeightAt(pos.x, pos.y);                         // TheTerrainLogic vslot 0x1C (layer height)
+		if (host.logicFrame() > (unsigned)LOGICFRAMES_PER_SECOND && host.isOnRampOrRaisedLayer() && SimMath::subf32(pos.z, surface) > 20.0f)
+		{
+			surface = pos.z; // RW 0x5E77AF .. 0x5E77EE
+		}
+		if (!(pos.z == surface))
+		{
+			m_matrix.m[2][3] = surface;
+			host.setTransform(m_matrix); // RW 0x70BA76
+		}
+	}
+	noteStopOf(2); // full tail (other ZAxisBehavior modes, wading, pending z, sleep return RW 0x5E7E70) is not run
 	return result;
 }
 
