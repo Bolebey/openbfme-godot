@@ -31,12 +31,6 @@
 namespace
 {
 const char *const kLocal101Ini =
-	"Locomotor SET_NORMAL TestFootLoco\n"
-	"  Surfaces = GROUND\n"
-	"  Speed = 50\n"
-	"  Acceleration = 100\n"
-	"  Braking = 100\n"
-	"End\n"
 	"Object TestDockWall\n"
 	"  KindOf = STRUCTURE IMMOBILE\n"
 	"  Geometry = BOX\n"
@@ -55,7 +49,7 @@ const char *const kLocal101Ini =
 	"  GeometryMajorRadius = 5.0\n"
 	"  GeometryHeight = 15.0\n"
 	"  LocomotorSet\n"
-	"    Locomotor = TestFootLoco\n"
+	"    Locomotor = WalkerLoco\n"
 	"    Condition = SET_NORMAL\n"
 	"    Speed = 50\n"
 	"  End\n"
@@ -75,7 +69,7 @@ const char *const kLocal101Ini =
 	"  GeometryMinorRadius = 15.0\n"
 	"  GeometryHeight = 15.0\n"
 	"  LocomotorSet\n"
-	"    Locomotor = TestFootLoco\n"
+	"    Locomotor = HordeLoco\n"
 	"    Condition = SET_NORMAL\n"
 	"    Speed = 50\n"
 	"  End\n"
@@ -230,7 +224,8 @@ TEST_CASE("LOCAL-101 HordeWorkerAIUpdate repair lifecycle, duplicate 0x13 ignore
 	CHECK(ai->repairMoveFlag());
 	w.logic->destroyObject(house);
 	w.logic->runLogicFrame();
-	ai->update();
+	ai->update(); // RW 0x89E6A1..0x89E725: clears pendingRepairTarget and idles
+	ai->update(); // RW 0x89E738..0x89E784: clears activeRepairTarget and RW 0x0089E623 clears repairMoveFlag
 	CHECK(ai->pendingRepairTarget() == 0);
 	CHECK(ai->activeRepairTarget() == 0);
 	CHECK_FALSE(ai->repairMoveFlag());
