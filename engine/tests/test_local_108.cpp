@@ -76,8 +76,8 @@ const char kLocal108Objects[] =
 	"  End\n"
 	"  Body = ActiveBody ModuleTag_Body\n"
 	"    MaxHealth = 100\n"
-	"    MaxHealthDamaged = 65\n"
-	"    MaxHealthReallyDamaged = 40\n"
+	"    MaxHealthDamaged = 75\n"
+	"    MaxHealthReallyDamaged = 25\n"
 	"    DodgePercent = 25%\n"
 	"  End\n"
 	"  Behavior = AttributeModifierPoolUpdate ModuleTag_Pool\n"
@@ -160,14 +160,14 @@ TEST_CASE("LOCAL-108 ActiveBody: setDamageState (RW 0x008C1BF9), resetHealthToDa
 	body->clearLastAttacker(); // RW 0x008C3A89
 	CHECK(body->takeLastAttacker() == INVALID_ID);
 
-	// RW 0x008C1C75: snaps 55.0f (in BODY_DAMAGED) to m_damagedFraction * m_maxHealth = 65.0f.
+	// RW 0x008C1C75: snaps 55.0f (in BODY_DAMAGED) to m_damagedFraction * m_maxHealth = 75.0f.
 	body->resetHealthToDamageState();
-	CHECK(body->getHealth() == 65.0f);
+	CHECK(body->getHealth() == 75.0f);
 	CHECK(body->getDamageState() == BODY_DAMAGED);
 
 	// RW 0x008C1BF9: all four states
 	body->resetDamageState(BODY_REALLYDAMAGED);
-	CHECK(body->getHealth() == 40.0f);
+	CHECK(body->getHealth() == 25.0f);
 	CHECK(body->getDamageState() == BODY_REALLYDAMAGED);
 
 	body->resetDamageState(BODY_RUBBLE);
