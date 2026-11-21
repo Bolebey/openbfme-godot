@@ -446,10 +446,11 @@ LiveScripting::Stats LiveScripting::stats() const
 			s.stops.push_back("[" + e.stop + "] " + e.text);
 		}
 		const std::vector<std::string> &alerts = m_engine->logic()->alerts();
+		const std::vector<std::string> &ctx = m_engine->logic()->alertSources();
+		const std::vector<bool> &dropped = m_engine->logic()->alertRetailDropped();
 		for (size_t i = 0; i < alerts.size(); ++i)
 		{
 			const std::string &from = i < m_alertSources.size() ? m_alertSources[i] : std::string();
-			const std::vector<std::string> &ctx = m_engine->logic()->alertSources();
 			std::string where = i < ctx.size() ? ctx[i] : std::string();
 			if (!where.empty())
 			{
@@ -464,8 +465,19 @@ LiveScripting::Stats LiveScripting::stats() const
 					}
 				}
 			}
-			s.errors.push_back(!from.empty() ? "OnCreated handler failed (" + from + "): " + alerts[i]
-				: !where.empty() ? "Lua alert (" + where + "): " + alerts[i] : "Lua alert: " + alerts[i]);
+			const std::string msg = !from.empty() ? "OnCreated handler failed (" + from + "): " + alerts[i]
+				: !where.empty() ? "Lua alert (" + where + "): " + alerts[i] : "Lua alert: " + alerts[i];
+			if (i < dropped.size() && dropped[i])
+			{
+				// RW 0x735AE9 (pushObject quirk Q5) -> lua_call RW 0x73611D -> _ALERT RW 0x734E41 (retail builds and drops the alert):
+				// e.g. DozerAIUpdate::hideInStructure RW 0x88C51B -> Object::leaveWorld RW 0x68C18F -> unregisterObject RW 0x735A1D
+				// before OnProducing (+ACTIVELY_CONSTRUCTING) fires via AIUpdateInterface::update RW 0x6695EF -> RW 0x663E32 -> RW 0x7378DA.
+				++s.dataDefects[msg];
+			}
+			else
+			{
+				s.errors.push_back(msg);
+			}
 		}
 	}
 	return s;

@@ -55,7 +55,8 @@ public:
 		size_t worldEntries = 0, worldExits = 0;
 		size_t engineEvents = 0;               ///< lane HERO-2: engine dispatches (RW 0x7379CB) that reached an object with a handler list
 		size_t modelConditionChanges = 0;      ///< lane HERO-2: model condition changes the AI update handed to the ModelCondition events (RW 0x663E32)
-		std::vector<std::string> errors;       ///< handler alerts
+		std::vector<std::string> errors;       ///< handler alerts (runtime errors on registered objects)
+		std::map<std::string, size_t> dataDefects; ///< retail-swallowed alerts (quirk Q5 on unregistered objects, RW 0x735AE9 -> _ALERT RW 0x734E41)
 		std::vector<std::string> stops;        ///< the reports of the script engine ("[S-124] ...")
 	};
 	Stats stats() const;
