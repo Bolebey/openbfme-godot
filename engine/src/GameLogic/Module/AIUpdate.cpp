@@ -249,7 +249,12 @@ public:
 	// lane EXIT-1: obj+0x264, the PhysicsBehavior RW caches at creation (RW 0x69A420); the port's Object keeps it with its collide list (PhysicsBehavior::find)
 	bool hasPhysicsModule() const override { return physics() != nullptr; }
 	PhysicsBehavior *physics() const { return PhysicsBehavior::find(obj()); }
-	bool zMotionSuppressed() const override { return false; }
+	// RW 0x5E774A .. 0x5E7765: DISABLED_HELD (obj + 0x1C8 bit 3) or active PhysicsBehavior flight suppresses ground snap
+	bool zMotionSuppressed() const override
+	{
+		const PhysicsBehavior *p = physics();
+		return (p != nullptr && p->isFlying()) || obj().isDisabledByType(3);
+	}
 	unsigned logicFrame() const override { return obj().logic().getFrame(); }
 	bool containerAllowsBackingUp() const override { return false; }
 	// RW 0x5E774A: TheTerrainLogic vslot 0x1C at the object's layer (lane WALL-1: a wall top's or a ramp's height, Pathfinder::getLayerHeight)
