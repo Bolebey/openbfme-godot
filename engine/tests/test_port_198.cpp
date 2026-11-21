@@ -13,6 +13,8 @@
 // SpawnBehavior_getCanAnySlavesAttackSpecificTarget.cpp at 0x45F8E0, SpawnBehavior_getCanAnySlavesUseWeaponAgainstTarget.cpp at 0x45F93D,
 // and Common/RTS/PlayerAIDelegates.cpp): names and priority, each step confirmed in RW above.
 
+// Include this fixture first: it must supply its own doctest macros regardless of the caller's include order.
+#include "LogicTestUtil.h"
 #include "doctest.h"
 #include "CombatTestUtil.h"
 #include "ProdTestUtil.h"
