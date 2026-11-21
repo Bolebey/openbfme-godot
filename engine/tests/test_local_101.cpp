@@ -94,6 +94,11 @@ const char *const kLocal101Ini =
 	"  Body = ActiveBody BodyTag\n"
 	"    MaxHealth = 200\n"
 	"  End\n"
+	"  Behavior = HordeGarrisonContain ModuleTag_Garrison\n"
+	"    ContainMax = 2\n"
+	"    AllowAlliesInside = Yes\n"
+	"    AllowNeutralInside = Yes\n"
+	"  End\n"
 	"End\n";
 
 void damageTo(Object &obj, float targetHealth)
