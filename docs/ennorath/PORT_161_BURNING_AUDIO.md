@@ -145,3 +145,27 @@ continues to wait for Port 290's runtime to land. The existing owner restriction
 remains: do not implement the shared runtime on this branch. After that landing,
 connect the burning-cell register/unregister/delayed-update calls and run the
 PORT-161 tests. No engine behaviour or test expectation changed in this update.
+
+## Resumed after Port 290 landing
+
+Port 290 is merged by 40fd43f0b (fork PR 743). Its value-based consumer
+accepts BurningCell notifications without a fabricated object identity.
+The former scope stop above is historical, not a remaining blocker.
+
+Implementation now connects every existing set insertion, erase, clear and
+snapshot replacement to the shared link. Temporary-key constructor/destructor
+notifications are preserved, as are the resident node's copied constructor and
+stored registration frame. RW 0x685E43 stamps even a globally gated add;
+RW 0x685E65 skips only frame -1. The cycle-end delayed update is gated by
+RW 0x685E0A/16, not an unconditional periodic re-add. No shared audio runtime
+or FX-player code is changed.
+
+The native fire snapshot advances to version 3 to save the audio registration
+frames (RW 0x686441); versions 1/2 explicitly migrate their previously absent
+audio registration to -1 for delayed update. Frames are presentation-only
+bookkeeping and have no simulation reader: fire CRC remains unchanged.
+On load, constructor contributions whose saved frames fail the map gate are
+removed before the deferred update can register them. This adapts the existing
+OpenBFME snapshot layout rather than claiming byte compatibility with retail.
+
+Tests and the completed full-target build are still pending at this checkpoint.
