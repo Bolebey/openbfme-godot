@@ -374,7 +374,6 @@ include(cmake/Port24.cmake) # PORT-24: Object/ForceLuaRegistration (OPENBFME_POR
 include(cmake/Port6.cmake) # PORT-6: StealthDetectorUpdate/CanDetectWhileGarrisoned (OPENBFME_PORT6_TESTS)
 include(cmake/Port55.cmake) # PORT-55: SlaughterHordeContain, the citadel's cashback and CanAlwaysEnter (issue #165; OPENBFME_PORT55_TESTS)
 include(cmake/Port62.cmake) # PORT-62: TransportContain/FireGrabWeaponOnVictim, the GrabWeapon fire (OPENBFME_PORT62_TESTS)
-include(cmake/Port40.cmake) # PORT-40: AIData/MaxRecruitRadius (issue #125; OPENBFME_PORT40_TESTS)
 include(cmake/Port46.cmake) # PORT-46: ToggleMountedSpecialAbilityUpdate/OpacityTarget, the drawable fade (OPENBFME_PORT46_TESTS)
 include(cmake/Port13.cmake) # PORT-13: AIData/AttackMoveUsesFormations and the formation attack march (OPENBFME_PORT13_TESTS)
 include(cmake/Port9.cmake) # PORT-9: OpenContain/onCollide + tryToEvacuate, the collide pickup (OPENBFME_PORT9_TESTS)
@@ -472,7 +471,6 @@ include(cmake/Input1.cmake)     # INPUT-1: RotWK's input layer (OPENBFME_INPUT1_
 include(cmake/Opts2.cmake)      # OPTS-2: the Options menu (OPENBFME_OPTS2_TESTS)
 include(cmake/Opts3.cmake)      # OPTS-3: the OpenBFME page of the Options screen (appends to OPENBFME_APT_SOURCES)
 include(cmake/Opts6.cmake)      # OPTS-6: menu keyboard / controller navigation, the modal in-game menu (appends to OPENBFME_APT_SOURCES)
-include(cmake/Play1.cmake)      # PLAY-1: the tribute, the placement ghost (appends to OPENBFME_SIM_SOURCES; OPENBFME_PLAY1_SOURCES / _TESTS)
 include(cmake/Play4.cmake)      # PLAY-4: the guard machine, the tester's gameplay report (appends to OPENBFME_SIM_SOURCES; OPENBFME_PLAY4_TESTS)
 include(cmake/MapReset1.cmake)  # MAPRESET-1: map.ini overrides reset before every game (OPENBFME_MAPRESET1_TESTS)
 include(cmake/FactA.cmake)      # FACT-A: Men / Elves / Dwarves content through the HUD, selling (appends to OPENBFME_SIM_SOURCES; OPENBFME_FACTA_TESTS)
@@ -561,9 +559,9 @@ include(cmake/Port261.cmake)    # PORT-261: the player-side powers PlayerHealSpe
 include(cmake/Local80.cmake)    # LOCAL-80: script library rank actions and PLAYER_COMPARE_RANK (issue #704; OPENBFME_LOCAL80_TESTS)
 include(cmake/Local94.cmake)    # LOCAL-94: the last 8 condition / action types of the script map (issue #720; OPENBFME_LOCAL94_TESTS)
 include(cmake/Local95.cmake)    # LOCAL-95: W3DScriptedModelDraw / W3DHordeModelDraw uncited functions (issue #760; OPENBFME_LOCAL95_TESTS)
+include(cmake/Local97.cmake)    # LOCAL-97: PoisonedBehavior, DamageFieldUpdate forceFireWeapon, ThreatFinderUpdate & AttributeModifierPoolUpdate (fork issue 762; OPENBFME_LOCAL97_TESTS)
 include(cmake/Local100.cmake)   # LOCAL-100: upgrade modules uncited functions (issue #766; OPENBFME_LOCAL100_TESTS)
 include(cmake/Local98.cmake)    # LOCAL-98: death modules (issue #763; OPENBFME_LOCAL98_TESTS)
-include(cmake/Local97.cmake)    # LOCAL-97: PoisonedBehavior, DamageFieldUpdate forceFireWeapon, ThreatFinderUpdate & AttributeModifierPoolUpdate (fork issue 762; OPENBFME_LOCAL97_TESTS)
 include(cmake/Local96.cmake)    # LOCAL-96: DozerAIUpdate and WorkerAIUpdate builder functions (fork issue 761; OPENBFME_LOCAL96_TESTS)
 include(cmake/Local99.cmake)    # LOCAL-99: unit behaviour modules uncited own functions (issue #764; OPENBFME_LOCAL99_TESTS)
 include(cmake/Local101.cmake)   # LOCAL-101: special AI modules SiegeDockingBehavior & HordeWorkerAIUpdate (fork issue 771; OPENBFME_LOCAL101_TESTS)
@@ -1375,6 +1373,7 @@ add_executable(openbfme_tests
     ${OPENBFME_LOCAL80_TESTS}
     ${OPENBFME_LOCAL94_TESTS}
     ${OPENBFME_LOCAL95_TESTS}
+    ${OPENBFME_LOCAL97_TESTS}
     ${OPENBFME_LOCAL100_TESTS}
     ${OPENBFME_LOCAL98_TESTS}
     ${OPENBFME_LOCAL97_TESTS}
