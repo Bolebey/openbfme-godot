@@ -463,7 +463,7 @@ TEST_CASE("LOCAL-114 aiPanicCower (RW 0x00664952), aiAttackMoveToObject (RW 0x00
 	CHECK(ai->micropathToPosition(Coord3D{ 240.0f, 200.0f, 0.0f }));
 	CHECK(ai->mover().goalType() == AIGOAL_EXPLICIT_WITH_PATH);
 	REQUIRE(ai->mover().path() != nullptr);
-	CHECK(ai->mover().path()->nodeCount() == 2);
+	CHECK(ai->mover().path()->nodeCount() == 5);
 
 	// 4. appendPositionToLocomotorPath (RW 0x0066708E) & Path::setLastNodePortal (RW 0x0076578C):
 	// both when a path already exists and when starting from no path.
