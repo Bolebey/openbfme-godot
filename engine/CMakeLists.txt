@@ -569,6 +569,7 @@ include(cmake/Local101.cmake)   # LOCAL-101: special AI modules SiegeDockingBeha
 include(cmake/Local103.cmake)   # LOCAL-103: client draw modules (issue #773; OPENBFME_LOCAL103_TESTS)
 include(cmake/Port224.cmake)    # PORT-224: destroying a creep lair or worker-rebuilt structure mid-rebuild fades the hole without money or treasure (issue #534; OPENBFME_PORT224_TESTS)
 include(cmake/Port222.cmake)    # PORT-222: a LevelGrantSpecialPower fills a horde's experience pool (fork issue 532; OPENBFME_PORT222_TESTS)
+include(cmake/Port301.cmake)    # PORT-301: ShareExperienceBehavior — the shared experience of a hero (fork issue 693; OPENBFME_PORT301_TESTS)
 include(cmake/Port268.cmake)    # PORT-268: stop grouping tool integration tests
 include(cmake/Port206.cmake)    # PORT-206: the weapon bonus conditions of Object + 0x39C, WeaponBonusUpgrade sets PLAYER_UPGRADE (issue #488; OPENBFME_PORT206_TESTS)
 include(cmake/Port258.cmake)    # PORT-258: powers on enemy units — DominateEnemy, Curse, Deflect, TimerRefresh (issue #606; OPENBFME_PORT258_TESTS)
@@ -1396,6 +1397,7 @@ add_executable(openbfme_tests
     ${OPENBFME_PORT226_TESTS}
     ${OPENBFME_PORT271_TESTS}
     ${OPENBFME_PORT290_TESTS}
+    ${OPENBFME_PORT301_TESTS}
     ${OPENBFME_PORT294_TESTS}
     ${OPENBFME_PORT275_TESTS}
     ${OPENBFME_PORT280_TESTS}
