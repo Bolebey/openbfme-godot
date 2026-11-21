@@ -230,6 +230,7 @@ TEST_CASE("PORT-289 canRepairObject follows the native KindOf words and exact ex
 	Object *selfRepair = r.place("Port289SelfRepair", 'A', 140.0f, 180.0f);
 	r.damage(*selfRepair, 500.0f);
 	CHECK_FALSE(ActionManager::canRepairObject(dozer, selfRepair, CMD_FROM_PLAYER)); // slot-32 -> slot-9
+	CHECK(ActionManager::canRepairObject(dozer, selfRepair, CMD_FROM_AI)); // the direct AI repair path keeps the existing worker-task behavior
 }
 
 TEST_CASE("PORT-289 dead targets, active sole healers and shroud command sources use the native gates")

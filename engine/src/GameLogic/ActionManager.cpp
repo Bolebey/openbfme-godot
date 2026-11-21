@@ -1015,11 +1015,17 @@ bool canRepairObject(const Object *source, const Object *target, CommandSourceTy
 		return false;
 	}
 
-	// RW 0x82D8DC: a self-repairing GettingBuiltBehavior makes worker repair
-	// unavailable.  Object owns the canonical slot-32 module scan.
-	if (RepairQueryInterface *repair = target->getRepairQueryInterface(); repair && repair->canSelfRepair())
+	// RW 0x82D8DC: a self-repairing GettingBuiltBehavior makes player repair
+	// unavailable.  Direct AI repair orders reach the same predicate after the
+	// AI has selected the target; like the native AI bridge/full-health path,
+	// they keep the existing worker task behavior. Object owns the canonical
+	// slot-32 module scan.
+	if (sourceType != CMD_FROM_AI)
 	{
-		return false;
+		if (RepairQueryInterface *repair = target->getRepairQueryInterface(); repair && repair->canSelfRepair())
+		{
+			return false;
+		}
 	}
 	// RW 0x82D8F0 -> isObjectShroudedForAction: script orders and the four
 	// reserved fake-tree ids bypass the human owner's fog gate.
