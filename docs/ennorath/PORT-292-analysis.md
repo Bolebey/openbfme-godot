@@ -33,8 +33,8 @@ The table is deliberately partial: the other rows in the function map still need
 | RW start | First-instruction body / outcome | Port location or scope |
 |---|---|---|
 | 0x872A69 | Returns the HordeContain class-name string pointer; not simulation behaviour. | Module registry plumbing. |
-| 0x872A8D | Stores the argument at interface +0x160 = module +0x27C, the banner countdown. | `HordeContain::m_bannerCountdown`, set in `HordeBanner.cpp`; direct setter's callers still need comparison. |
-| 0x872A9A | Returns interface +0x160 = module +0x27C, the banner countdown; getter. | `HordeContain::m_bannerCountdown`; no standalone gameplay algorithm. |
+| 0x872A8D | Horde-interface slot +0x174 stores the argument at interface +0x160 = module +0x27C, the banner countdown. BannerCarrierUpdate's nearby-horde path RW 0x89AB8F calls it at RW 0x89ACB1 with 1 when the target horde has no free slot and its countdown exceeds 1; BFME2 `BannerCarrierUpdateReplenish.cpp` confirms the getter/setter pair. | **Ported for this caller:** `HordeContain::expediteBannerRespawn`, called in `HordeBanner.cpp`'s full-horde branch; the port's source comment RW 0x89ACC1 names the subsequent iteration, not the setter call. Other callers remain unverified. |
+| 0x872A9A | Horde-interface slot +0x178 returns interface +0x160 = module +0x27C, the banner countdown. Nearby-horde path reads it at RW 0x89ACA0. | **Ported for this caller:** `expediteBannerRespawn` tests `m_bannerCountdown > 1` before writing 1; `bannerCountdown()` exposes the value. Other callers remain unverified. |
 | 0x872AAE | Returns interface +0x1EC, the last-member-entered frame. | Already ported: `HordeContain::lastMemberEnteredFrame`, `HordeGarrisonLink.cpp`. |
 | 0x872ACB | Returns interface +0x150 = module +0x26C, banner carrier id; getter. | `HordeContain::bannerCarrier`; `SpecialAbilityModules.cpp` reads it. No standalone gameplay algorithm. |
 | 0x872AD2 | Stores argument at interface +0x150 = module +0x26C, banner carrier id. | `HordeBanner.cpp::handOverBannerCarrier` assigns `m_bannerCarrier`; full setter caller comparison remains open. |
