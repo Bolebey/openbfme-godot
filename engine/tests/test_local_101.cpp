@@ -111,8 +111,8 @@ void damageTo(Object &obj, float targetHealth)
 	if (cur > targetHealth)
 	{
 		DamageInfo d;
-		d.m_in.m_amount = cur - targetHealth;
-		d.m_in.m_damageType = DAMAGE_UNRESISTABLE;
+		d.m_input.m_amount = cur - targetHealth;
+		d.m_input.m_damageType = DAMAGE_UNRESISTABLE;
 		body->attemptDamage(d);
 	}
 }
@@ -125,8 +125,8 @@ void healToFull(Object &obj)
 	if (missing > 0.0f)
 	{
 		DamageInfo h;
-		h.m_in.m_amount = missing;
-		h.m_in.m_damageType = DAMAGE_HEALING;
+		h.m_input.m_amount = missing;
+		h.m_input.m_damageType = DAMAGE_HEALING;
 		body->attemptHealing(h);
 	}
 }
