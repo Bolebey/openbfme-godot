@@ -658,7 +658,7 @@ bool SpecialAbilityUpdate::allowsSpecialPowerUse(const Coord3D *loc) const
 		getObject()->logic().noteStop("[S-1043] SpecialAbilityUpdate: the grab enums' room test (RW 0x851BA2) of a contain that is not an OpenContain is not ported; the power is refused");
 		return false;
 	}
-	return (int)c->getContainCount() < open->getContainMax();
+	return c->getContainCount() < static_cast<unsigned>(open->getContainMax()); // RW 0x851BC4..0x851BC6: cmp edi, eax; jb
 }
 
 // RW 0x851551
