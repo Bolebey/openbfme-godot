@@ -44,6 +44,7 @@ enum class ModEngineFeature
 	EnnorathStanceKeepsMoving,         // HoldGround idles the AI only when it is idle and not waiting for a path (.stancem)
 	EnnorathMiddleClickCamera,         // a middle click resets the camera: at most 350 ms by the clock, never moved beyond 5 pixels (.camfix)
 	EnnorathEvacuateContainers,        // evacuate all lets a rider with a contain that is no horde out of a horde garrison / tunnel (.keydef 0xF39580)
+	EnnorathLobbyMapSearch,            // MpGameSetup MapSearch text entry filters MapList live by display name (.mapfind / .mapsvar)
 	Count
 };
 
