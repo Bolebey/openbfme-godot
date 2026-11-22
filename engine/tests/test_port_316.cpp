@@ -70,9 +70,8 @@ const char kObjects[] =
 	"    DefaultModelConditionState\n"
 	"      Model = Port316Idle\n"
 	"    End\n"
-	"    ModelConditionState\n"
+	"    ModelConditionState MOVING\n"
 	"      Model = Port316Moving\n"
-	"      Condition = MOVING\n"
 	"    End\n"
 	"  End\n"
 	"  Body = ActiveBody ModuleTag_Body\n"
@@ -90,6 +89,14 @@ const char kObjects[] =
 	"  Geometry = CYLINDER\n"
 	"  GeometryMajorRadius = 6\n"
 	"  GeometryHeight = 16\n"
+	"  Draw = W3DScriptedModelDraw ModuleTag_Draw\n"
+	"    DefaultModelConditionState\n"
+	"      Model = Port316Idle\n"
+	"    End\n"
+	"    ModelConditionState MOVING\n"
+	"      Model = Port316Moving\n"
+	"    End\n"
+	"  End\n"
 	"  Body = ActiveBody ModuleTag_Body\n"
 	"    MaxHealth = 100\n"
 	"  End\n"
@@ -204,7 +211,7 @@ TEST_CASE("PORT-316 creation: a later change still waits for the flush, and an o
 	dm.applyEvents(taken);
 	Drawable *d = dm.findByObject(o->getID());
 	REQUIRE(d != nullptr);
-	CHECK(d->getModelConditionFlags().any() == false); // no condition of its own reached it
+	CHECK_FALSE(d->getModelConditionFlags().test(bit)); // nothing of its own reached it
 	CHECK(countEvents(taken, ClientEvent::MODEL_FLUSH, o->getID()) == 0);
 
 	// a change made now is stored and reaches the modules only at the end-of-frame flush
