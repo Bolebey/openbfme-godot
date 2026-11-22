@@ -60,11 +60,12 @@ void ClientEventRecorder::objectCreated(Object &obj)
 	// to RW 0x68D607 -> RW 0x679512 (RW 0x690FD5 .. 0x690FE2). Without it a condition the object already carried before its drawable
 	// existed (set in the constructor / onCreate, RW 0x6D168B's steps 2 and 3, before sendObjectCreated RW 0x628882 in step 4) never
 	// reaches the draw modules at all: the drawable shows the default state until the next change of that bit.
-	for (int bit = 0; bit < 19 * 32 && bit < (int)e.flags.size(); ++bit)
 	{
-		if (obj.testModelCondition(bit))
+		const Object::ModelConditionBits &carried = obj.getModelConditionBits();
+		std::uint32_t *flags = e.flags.words();
+		for (int w = 0; w < ModelConditionFlags::NUM_WORDS && w < (int)carried.size(); ++w)
 		{
-			e.flags.set(bit);
+			flags[w] |= carried[w];
 		}
 	}
 	// the same call's time-of-day and weather part (RW 0x690F8B .. 0x690FD0): NIGHT when GlobalData + 0x13E (forceModelsToFollowTimeOfDay)
