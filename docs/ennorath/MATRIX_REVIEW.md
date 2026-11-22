@@ -7,7 +7,7 @@ Layer 2 (lint) flags verdicts the mod's own data contradicts; layer 3 lists ever
 By rule: L1 66, L4 3
 
 
-## Changes since c0388357: 86 buttons moved, 3 turned red
+## Changes since d220f2dc: 86 buttons moved, 3 turned red
 
 - Angmar `AngmarNecroAcolyteBook` `Command_NecromancerDeathBargain`: PASS -> NO-FIRE — SpecialAbilityDeathBargainAcolyte (target none) did not fire in 300 frames (sent: MSG_DESTROY_SELECTED_GROUP b1 | MSG_DESTROY_SELECTED_GROUP
 - Arnor `spell` `SpellBookStarOfTheNorth`: PASS -> NO-RULE — cast, but no effect seen beyond the control run: no effect of CloudBreakSpecialPower is asserted;  (enemies lost 2161 with the cast, 1742 wi
