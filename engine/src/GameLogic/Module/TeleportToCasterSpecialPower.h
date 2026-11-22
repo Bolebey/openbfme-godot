@@ -30,6 +30,7 @@ public:
 };
 
 // Local 87: RW 0x008D1833 (getModuleName), RW 0x008D1878 (getModuleNameKey), RW 0x008D189E (dtor).
+// RW 0x008D187E (dtor -> RW 0x00854D9A)
 class TeleportToCasterSpecialPower : public SpecialAbilityUpdate {
 public:
     OBFME_MODULE_XFER(TeleportToCasterSpecialPower)
