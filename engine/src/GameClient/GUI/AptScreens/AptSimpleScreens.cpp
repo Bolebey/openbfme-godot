@@ -606,7 +606,15 @@ void AptPlayerTribute::tributeRowShown(const std::string &argument)
 		GadgetSliderSetPosition(window, (int)r.amount);
 	});
 	registerScreenRef(root + "_InitTextEntry", [this, index](const std::string &, GameWindow *window) {
-		m_rows[(size_t)index].entry = window; // RW 0x91565C (its 5-digit limit and filter: S-1922)
+		m_rows[(size_t)index].entry = window; // RW 0x91565C
+		if (window)
+		{
+			if (EntryData *entry = static_cast<EntryData *>(window->winGetUserData()))
+			{
+				entry->numericalOnly = true; // RW 0x721FA9(window, 0x21): digits only (0x20) | no spaces (0x01)
+				entry->maxTextLen = 5;       // RW 0x81606D(window, 5): up to 99999 (RW 0x915F5D)
+			}
+		}
 		refreshRow(m_rows[(size_t)index]);
 	});
 	setFieldUtf8(row.path, 0, row.name);

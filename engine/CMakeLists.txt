@@ -613,6 +613,7 @@ include(cmake/Port297.cmake)    # PORT-297: resources — SupplyWarehouseDockUpd
 include(cmake/Port293.cmake)    # PORT-293: ActiveBody's last-healing timestamp (body slot 0x48) and AutoHealBehavior NonStackable (issue #685; OPENBFME_PORT293_TESTS)
 include(cmake/Port309.cmake)    # PORT-309: ExperienceLevel level-up tint verdict re-check (issue #701, S-7196 / PORT-44; OPENBFME_PORT309_TESTS)
 include(cmake/Port318.cmake)    # PORT-318: the AerialPathfindNoFlyZone block and the no-fly zone test of flyers (issue #754; OPENBFME_PORT318_TESTS)
+include(cmake/Port331.cmake)    # PORT-331: Shell, online and Living World stop fixes (issue #848; OPENBFME_PORT331_TESTS)
 add_library(openbfme_core STATIC
     ${OPENBFME_PLAY2_SOURCES}
     ${OPENBFME_APT_SOURCES}
@@ -1395,6 +1396,7 @@ add_executable(openbfme_tests
     ${OPENBFME_PORT252_TESTS}
     ${OPENBFME_PORT236_TESTS}
     ${OPENBFME_PORT318_TESTS}
+    ${OPENBFME_PORT331_TESTS}
     ${OPENBFME_PORT227_TESTS}
     ${OPENBFME_PORT249_TESTS}
     ${OPENBFME_PORT273_TESTS}
