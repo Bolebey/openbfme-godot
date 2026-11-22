@@ -562,7 +562,7 @@ public:
 	// ---- the object list (GameLogic keeps it; spec 5.4: append at the tail) -----------------------------------------------
 	Object *getNextObject() const { return m_next; }
 	Object *getPrevObject() const { return m_prev; }
-	// ZH Object::isInList(Object **pListHead)
+	// RW 0x0068BB4B / DONOR BFME2 Object::isInList(Object **pListHead)
 	bool isInList(Object *const *listHead) const { return m_next != nullptr || m_prev != nullptr || *listHead == this; }
 
 	// ---- the recorded transform (client interpolation data) ----------------------------------------------------------------
