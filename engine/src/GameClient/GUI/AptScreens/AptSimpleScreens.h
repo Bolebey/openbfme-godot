@@ -153,6 +153,8 @@ private:
 	void pageUnloaded(const std::string &name);
 	void rowShown(const std::string &params);
 	void rowHidden(const std::string &params);
+	// ennorath.chat-mute (PYSAGE 1.9.8.5 .chatmut 0x00EDB01C / 0x00EDB037 -> 0x00EDB058): handles cmq= / cmt= on _OnRowShown
+	bool handleChatMute(bool isTributePage, const std::string &params);
 	void dropStatusPage();
 	std::string statusPrefix() const { return "_level" + std::to_string(level()) + "." + m_status->path; }
 
@@ -160,6 +162,7 @@ private:
 	struct TRow
 	{
 		int playerIndex = -1;
+		int slot = -1;
 		std::string name; ///< UTF-8
 		std::uint32_t cash = 0;
 		std::uint32_t color = 0;

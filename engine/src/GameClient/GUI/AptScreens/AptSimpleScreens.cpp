@@ -2,6 +2,8 @@
 // See GameClient/GUI/AptScreens/AptSimpleScreens.h.
 
 #include "GameClient/GUI/AptScreens/AptSimpleScreens.h"
+
+#include "Common/ModEngineFeatures.h"
 #include "GameClient/LocalizedText.h"
 #include "Common/BfmeGame.h"
 
@@ -315,9 +317,96 @@ void AptPlayerTribute::dropStatusPage()
 // border (its right edge two pixels before the border), not over it
 constexpr int kStatusPageBadgeDx = -7;
 
+// ennorath.chat-mute: PYSAGE 1.9.8.5 .chatmut 0x00EDB01C (hook RW 0x915E00, pageKind=0) and 0x00EDB037 (hook RW 0x9162F5, pageKind=1)
+// -> 0x00EDB058: parses "cmq=<0..7>&name=<path>" (query) or "cmt=<0..7>&name=<path>" (toggle), maps the row to its GameSlot 0..7,
+// toggles bit `slot` in the local mute mask (.chatmut 0x00EDB26C) on cmt=, and invokes "<relPath>.ChatMute"->SetMuteState("_audible"|"_muted"|"_disabled").
+bool AptPlayerTribute::handleChatMute(bool isTributePage, const std::string &params)
+{
+	if (!ModEngineFeatures::has(ModEngineFeature::EnnorathChatMute))
+	{
+		return false;
+	}
+	if (params.size() < 4)
+	{
+		return false;
+	}
+	bool isToggle = false;
+	if (params.compare(0, 4, "cmq=") == 0)
+	{
+		isToggle = false;
+	}
+	else if (params.compare(0, 4, "cmt=") == 0)
+	{
+		isToggle = true;
+	}
+	else
+	{
+		return false; // PYSAGE 1.9.8.5 .chatmut 0x00EDB08E -> 0x00EDB205: not a chat-mute command, run vanilla OnRowShown
+	}
+	// PYSAGE 1.9.8.5 .chatmut 0x00EDB09B .. 0x00EDB0E3: single digit 0..7, "&name=", non-empty target with level 0..13
+	if (params.size() <= 11)
+	{
+		return true;
+	}
+	const unsigned rowIndex = (unsigned)(unsigned char)params[4] - (unsigned)'0';
+	if (rowIndex > 7u || params.compare(5, 6, "&name=") != 0)
+	{
+		return true;
+	}
+	const std::string target = params.substr(11);
+	const int targetLevel = levelIndexFromTarget(target); // RW 0x8155D9
+	if (targetLevel < 0 || targetLevel > 13 || !m_env.tribute)
+	{
+		return true;
+	}
+	int slot = -1;
+	bool isLocal = false;
+	if (!isTributePage)
+	{
+		// PYSAGE 1.9.8.5 .chatmut 0x00EDB109 .. 0x00EDB11D: StatusPage row table
+		if (!m_status || !m_env.playerStatus || rowIndex >= m_env.playerStatus->rows.size())
+		{
+			return true;
+		}
+		const PlayerStatusRow &row = m_env.playerStatus->rows[rowIndex];
+		slot = row.slot;
+		isLocal = slot >= 0 && slot == m_env.playerStatus->localSlot;
+	}
+	else
+	{
+		// PYSAGE 1.9.8.5 .chatmut 0x00EDB11F .. 0x00EDB15C: TributePage row table
+		if (rowIndex >= m_rows.size())
+		{
+			return true;
+		}
+		const TRow &row = m_rows[rowIndex];
+		slot = row.slot;
+		isLocal = row.local;
+	}
+	// PYSAGE 1.9.8.5 .chatmut 0x00EDB15E .. 0x00EDB1A3: local player or invalid slot -> "_disabled"; else toggle on cmt= and pick "_muted" / "_audible"
+	const char *state = "_disabled";
+	if (slot >= 0 && slot <= 7 && !isLocal)
+	{
+		if (isToggle)
+		{
+			m_env.tribute->setChatMuted(slot, !m_env.tribute->chatMuted(slot));
+		}
+		state = m_env.tribute->chatMuted(slot) ? "_muted" : "_audible";
+	}
+	// PYSAGE 1.9.8.5 .chatmut 0x00EDB1A8 .. 0x00EDB1F6: "%s.ChatMute" -> SetMuteState(state) (RW 0x62282A)
+	const std::string clipPath = skipLevelN(target) + ".ChatMute";
+	std::string error;
+	windows().invokeASAt(targetLevel, clipPath, "SetMuteState", { state }, nullptr, &error);
+	return true;
+}
+
 // RW 0x915E00 (OnRowShown) -> the row object RW 0x915BF6
 void AptPlayerTribute::rowShown(const std::string &params)
 {
+	if (handleChatMute(false, params))
+	{
+		return;
+	}
 	std::string indexText, name;
 	if (!m_status || !commandParam(params, "index", indexText))
 	{
@@ -449,6 +538,7 @@ void AptPlayerTribute::contentLoaded(const std::string &argument)
 			}
 			TRow r;
 			r.playerIndex = p.playerIndex;
+			r.slot = p.slot;
 			r.name = p.name;
 			r.cash = p.cash;
 			r.local = p.local;
@@ -491,6 +581,10 @@ void AptPlayerTribute::tributeRowHidden(const std::string &argument)
 
 void AptPlayerTribute::tributeRowShown(const std::string &argument)
 {
+	if (handleChatMute(true, argument))
+	{
+		return;
+	}
 	std::string idx, name;
 	if (!commandParam(argument, "index", idx) || !commandParam(argument, "name", name))
 	{
