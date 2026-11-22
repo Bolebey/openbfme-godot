@@ -30,9 +30,10 @@
 //     answers the highest zone height that contains the truncated sample point). The map INI block AerialPathfindNoFlyZone fills it, one pair per block over
 //     the block table row RW 0xD9E60C (name RW 0xBF8D54) whose parser is RW 0x60095C: the token "TriggerArea" (RW 0xBF8D48, RW 0x60096B) looked up in the
 //     map's polygon trigger list (TheTerrainLogic RW 0xDE4690, vslot 0x9C = RW 0x6825F6 over the list RW 0xDA21FC), then "Height" (RW 0xBF3598,
-//     RW 0x60099E) read whether or not the trigger exists, then RW 0x777F76 when it does. The parser reads exactly those two tokens and never an End
-//     (RW 0x60095C returns at RW 0x6009DC), and RW's top-level dispatch (RW 0x42BDAD) has no End row, so the block is not End-terminated: a map.ini
-//     carries its two fields and nothing after them. The list is map state, not simulation state: no xfer reads it (the insert RW 0x777F76, the zone test
+//     RW 0x60099E) read whether or not the trigger exists, then RW 0x777F76 when it does. The parser reads exactly those two tokens off the line the
+//     top-level dispatcher (RW 0x42BDAD, which has no End row) hands it: nothing between RW 0x60095C and its ret at RW 0x6009DC reads a line, so a
+//     map.ini writes `AerialPathfindNoFlyZone TriggerArea = X Height = Y` on one line and no End follows (a field on the next line is refused by the
+//     token reader RW 0x42DD73 / RW 0x42DEED). The list is map state, not simulation state: no xfer reads it (the insert RW 0x777F76, the zone test
 //     RW 0x777E54 and the insert node RW 0x777F5C are the list's only users) and TheAerialPathfinder is a SubsystemInterface, so a load rebuilds it from
 //     the map's map.ini (DONOR BFME2: the constructor 0x0022C987 makes the list at + 0x10, the reset slot 9 at 0x0022C9D2 clears it).
 //

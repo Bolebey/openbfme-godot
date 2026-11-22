@@ -413,8 +413,9 @@ const std::vector<NoFlyZone> &noFlyZones()
 // RW 0x60095C (the parser of the block table row RW 0xD9E60C): "TriggerArea" (RW 0x60096B getNextSubToken, RW 0x42DD73) names the trigger, which the
 // parser looks up in the map's polygon trigger list (RW 0x60098E TheTerrainLogic vslot 0x9C = RW 0x6825F6, a walk of the list RW 0xDA21FC comparing the
 // names); "Height" (RW 0x60099E) is read next whether or not the trigger was found (RW 0x6009C2 fstp st(0) drops it); the found pair goes to the list
-// (RW 0x6009BB -> RW 0x777F76). The function reads exactly those two tokens: the block has no End of its own, and RW's top-level dispatch (RW 0x42BDAD)
-// knows no End block, so an End line after the two fields would be an unknown block.
+// (RW 0x6009BB -> RW 0x777F76). The function reads exactly those two tokens off the line the top-level dispatch (RW 0x42BDAD) hands it and reads no
+// line of its own (no call between RW 0x60095C and the ret at RW 0x6009DC), so the block is one line, `AerialPathfindNoFlyZone TriggerArea = X Height = Y`;
+// it has no End either (RW 0x42BDAD knows no End block), and a field on the next line is refused by the token reader (RW 0x42DD73 / RW 0x42DEED).
 void parseNoFlyZoneBlock(INI *ini, const std::vector<TriggerArea> *triggers)
 {
 	const std::string name = ini->getNextSubToken("TriggerArea");

@@ -7,8 +7,11 @@
 //    then "Height" (RW 0xBF3598) as a real (RW 0x42EAAD) read whether or not the trigger exists (RW 0x6009AC test, RW 0x6009C2 fstp st(0)), then
 //    RW 0x777F76(trigger, height) on TheAerialPathfinder (RW 0xDE7958), which appends the pair to the list at + 0x10 (RW 0x777F8E add ecx, 0x10;
 //    RW 0x777F5C push_back) and adds nothing for a null trigger (RW 0x777F7E).
-//  * The parser reads exactly those two tokens and returns (RW 0x6009DC): it never reads an End, and RW's top-level dispatch (RW 0x42BDAD, the
-//    block list at RW 0xDC51C0 compared at RW 0x42BDE6) knows no End block, so the block is written without one. The tests below write it that way.
+//  * The parser reads exactly those two tokens (nothing between RW 0x60095C and its ret at RW 0x6009DC calls the line reader) and never an End, and
+//    RW's top-level dispatch (RW 0x42BDAD, the block list at RW 0xDC51C0 compared at RW 0x42BDE6) knows no End block. The dispatcher hands the
+//    handler the buffer of the header line itself, so the fields are written on that line: `AerialPathfindNoFlyZone TriggerArea = Z Height = 120`.
+//    The tests below write it that way, and one of them pins that a field on a following line is refused (retail's token reader has no line of its
+//    own to read either: getNextSubToken RW 0x42DD73 is strtok over the current buffer, RW 0x42DEED).
 //  * RW 0x777E54 is the zone test: an empty list answers 0 (RW 0x777E64 loads RW 0xC1B594 = 0.0f); otherwise the maximum starts at -9999
 //    (RW 0x777E6F loads RW 0xBDFFE0 = -9999.0f) and every zone whose polygon contains the truncated sample point (x: cvttss2si RW 0x777E84, y:
 //    RW 0x777E89, back to floats RW 0x68628B, polygon walk RW 0x70CF29 at RW 0x6E4DC7) and whose height is not lower than the current maximum
@@ -69,22 +72,17 @@ TEST_CASE("PORT-318 AerialPathfindNoFlyZone: RW 0x60095C reads TriggerArea and H
 	fixture.env.blocks.registerBlock("AerialPathfindNoFlyZone",
 		[&triggers](INI *ini) { AerialPathfinder::parseNoFlyZoneBlock(ini, &triggers); });
 
-	// the block's own tokens, no End (see the file header: RW 0x60095C reads two tokens, RW 0x42BDAD has no End row)
-	const char *ini = "AerialPathfindNoFlyZone\n"
-					  "  TriggerArea = NoFlyZone1\n"
-					  "  Height = 150.0\n";
+	// the block's own tokens, on the header line and without an End (see the file header: RW 0x60095C reads two tokens off the line the dispatcher
+	// handed it, RW 0x42BDAD has no End row)
+	const char *ini = "AerialPathfindNoFlyZone TriggerArea = NoFlyZone1 Height = 150.0\n";
 	REQUIRE(initest::loadError(fixture.env, "map.ini", ini, INI_LOAD_CREATE_OVERRIDES).empty());
 	REQUIRE(AerialPathfinder::noFlyZones().size() == 1);
 	CHECK(AerialPathfinder::noFlyZones()[0].trigger == &triggers[0]); // RW 0x6009BB hands the trigger the lookup returned
 	CHECK(AerialPathfinder::noFlyZones()[0].height == 150.0f);        // RW 0x42EAAD scanReal, exact for a binary32-representable value
 
 	// RW 0x60095C appends what each block gives (RW 0x777F8E: the list at + 0x10, never a replace): the same zone at another height is a second pair
-	const char *twice = "AerialPathfindNoFlyZone\n"
-						"  TriggerArea = NoFlyZone1\n"
-						"  Height = 220.0\n"
-						"AerialPathfindNoFlyZone\n"
-						"  TriggerArea = NoFlyZone1\n"
-						"  Height = 90.0\n";
+	const char *twice = "AerialPathfindNoFlyZone TriggerArea = NoFlyZone1 Height = 220.0\n"
+						"AerialPathfindNoFlyZone TriggerArea = NoFlyZone1 Height = 90.0\n";
 	REQUIRE(initest::loadError(fixture.env, "map.ini", twice, INI_LOAD_CREATE_OVERRIDES).empty());
 	REQUIRE(AerialPathfinder::noFlyZones().size() == 3);
 	CHECK(AerialPathfinder::noFlyZones()[1].height == 220.0f);
@@ -101,12 +99,8 @@ TEST_CASE("PORT-318 AerialPathfindNoFlyZone: a name the map's trigger list does 
 
 	// the missing trigger's block is followed by a block that must still be parsed: it is only reached when the first block consumed its Height
 	// token (RW 0x60099E is called before RW 0x6009AC decides, and RW 0x6009C2 only drops the value)
-	const char *ini = "AerialPathfindNoFlyZone\n"
-					  "  TriggerArea = NoSuchZone\n"
-					  "  Height = 400.0\n"
-					  "AerialPathfindNoFlyZone\n"
-					  "  TriggerArea = NoFlyZone1\n"
-					  "  Height = 120.0\n";
+	const char *ini = "AerialPathfindNoFlyZone TriggerArea = NoSuchZone Height = 400.0\n"
+					  "AerialPathfindNoFlyZone TriggerArea = NoFlyZone1 Height = 120.0\n";
 	REQUIRE(initest::loadError(fixture.env, "map.ini", ini, INI_LOAD_CREATE_OVERRIDES).empty());
 	REQUIRE(AerialPathfinder::noFlyZones().size() == 1); // only the second block's pair: RW 0x777F76 is not called for a missing trigger
 	CHECK(AerialPathfinder::noFlyZones()[0].trigger == &triggers[0]);
@@ -116,6 +110,16 @@ TEST_CASE("PORT-318 AerialPathfindNoFlyZone: a name the map's trigger list does 
 	initest::Fixture bare;
 	bare.env.blocks.registerBlock("AerialPathfindNoFlyZone", [](INI *ini) { AerialPathfinder::parseNoFlyZoneBlock(ini, nullptr); });
 	REQUIRE(initest::loadError(bare.env, "map.ini", ini, INI_LOAD_CREATE_OVERRIDES).empty());
+	CHECK(AerialPathfinder::noFlyZones().size() == 1);
+
+	// the fields belong to the header line: a field on the next line is not read by the parser (RW 0x60095C never reads a line), so the token the
+	// line reader has left is not the one the parser wants and the load fails naming the block; nothing reaches the list
+	const char *wrapped = "AerialPathfindNoFlyZone\n"
+						  "  TriggerArea = NoFlyZone1\n"
+						  "  Height = 120.0\n";
+	const std::string wrappedError = initest::loadError(fixture.env, "map.ini", wrapped, INI_LOAD_CREATE_OVERRIDES);
+	CHECK(!wrappedError.empty());
+	CHECK(wrappedError.find("AerialPathfindNoFlyZone") != std::string::npos);
 	CHECK(AerialPathfinder::noFlyZones().size() == 1);
 }
 
@@ -141,12 +145,17 @@ TEST_CASE("PORT-318 the no-fly zone test (RW 0x777E54): 0 without zones, else th
 	CHECK(AerialPathfinder::noFlyZoneHeight(300.5f, 200.0f) == 150.0f);
 	CHECK(AerialPathfinder::noFlyZoneHeight(99.5f, 200.0f) == -9999.0f);
 
-	// a zone behind the sample point's truncation: -0.9 truncates to 0, and a zone that starts at 0 holds it
+	// the same truncation on a zone at the origin: 50.9 and 20.9 truncate into the square's right edge, which the walk counts as inside (RW 0x70CF29
+	// toggles there, RW 0x777E84 is the truncation); 51.4 truncates to 51, outside the bounding box RW 0x70CB46; -0.9 truncates to 0, which the walk
+	// leaves OUTSIDE (the left edge's crossing test at RW 0x70CD24 is x <= a.x both ways, so it does not toggle), so truncation alone does not put a
+	// point inside a zone that starts to its right
 	const TriggerArea origin = squareTrigger("Origin", 0.0f, 50.0f);
 	AerialPathfinder::resetNoFlyZones();
 	AerialPathfinder::addNoFlyZone(&origin, 40.0f);
-	CHECK(AerialPathfinder::noFlyZoneHeight(-0.9f, 20.0f) == 40.0f);
-	CHECK(AerialPathfinder::noFlyZoneHeight(-1.5f, 20.0f) == -9999.0f); // -1 truncates to -1, outside the 0..50 square
+	CHECK(AerialPathfinder::noFlyZoneHeight(50.9f, 20.9f) == 40.0f);
+	CHECK(AerialPathfinder::noFlyZoneHeight(51.4f, 20.9f) == -9999.0f);
+	CHECK(AerialPathfinder::noFlyZoneHeight(10.9f, 20.9f) == 40.0f);  // well inside, truncated or not
+	CHECK(AerialPathfinder::noFlyZoneHeight(-0.9f, 20.0f) == -9999.0f); // truncated to 0: the left edge itself is not inside
 }
 
 TEST_CASE("PORT-318 the flight ground height takes the higher of the terrain and the zone (RW 0x777ED7), and MinFlightHeight only over both")
