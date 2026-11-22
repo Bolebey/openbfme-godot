@@ -94,6 +94,23 @@ const char kStanceWalker[] =
 	"End\n";
 } // namespace
 
+TEST_CASE("MODS-3: Ennorath 1.9.8.7's game.dat turns on the same features as 1.9.8.5 until its own edits are rebuilt, and its S-5304 line names them")
+{
+	// Ennorath 1.9.8.7 (the patch note's 1.9.8.6 and 1.9.8.7 ship one game.dat, md5 f222b925...): the 1.9.8.5 sections stay, plus .wmfeat / .wmkeys
+	Retail guard;
+	std::string error;
+	REQUIRE_MESSAGE(ModEngineFeatures::activate({ "fc32e4c4142b5c607b90972eaf448400" }, &error), error);
+	const std::vector<std::string> features1985 = ModEngineFeatures::identityFeatures();
+	ModEngineFeatures::reset();
+	REQUIRE_MESSAGE(ModEngineFeatures::activate({ "f222b925edf2a9553e574ad8445f2841" }, &error), error);
+	CHECK(ModEngineFeatures::activeProfiles() == std::vector<std::string>{ "Ennorath 1.9.8.7 game.dat" });
+	CHECK(ModEngineFeatures::identityFeatures() == features1985);
+	const std::vector<std::string> lines = ModEngineFeatures::stopLines();
+	REQUIRE(lines.size() == 1);
+	CHECK(lines[0].rfind("S-5304: Ennorath 1.9.8.7 game.dat: rebuilt: as Ennorath 1.9.8.5", 0) == 0);
+	CHECK(lines[0].find("not yet (docs/ennorath/ENNORATH_EXE.md): the 1.9.8.6 / 1.9.8.7 edits (.wmfeat / .wmkeys") != std::string::npos);
+}
+
 TEST_CASE("MODS-3: ennorath.stance-keeps-moving: HoldGround stops a walking unit in retail 2.01 (RW 0x86216B), with the feature only an idle one (PYSAGE 1.9.8.5 .stancem)")
 {
 	// retail StancesBehavior::setStance (RW 0x8620DD): stance 3 calls aiIdle (RW 0x5E821A(0)) on any AI (RW 0x86215B .. 0x862170). The pySAGE hook at
