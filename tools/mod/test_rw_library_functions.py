@@ -40,6 +40,14 @@ def test_load_reads_the_written_list(tmp_path):
     assert lib.load(tmp_path / "missing.tsv") == {}
 
 
+def test_proven_library_entries_in_tsv():
+    loaded = lib.load()
+    assert len(lib.PROVEN_LIBRARY) == 30
+    for addr, (_name, why) in lib.PROVEN_LIBRARY.items():
+        assert addr in loaded, f"missing 0x{addr:08X} in rw_library_functions.tsv"
+        assert loaded[addr] == why
+
+
 def test_stlport_algorithms_and_refcount_ptr():
     assert lib.classify("PAURva00079EA1Element::__copy_ptrs<> (tier A)") == "C++ standard library container (STLport)"
     assert lib.classify("PAUBfmePod248::_Destroy<> (tier A)") == "C++ standard library container (STLport)"
