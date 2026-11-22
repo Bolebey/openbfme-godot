@@ -6,6 +6,7 @@
 #include "Common/XferSave.h"
 #include "GameClient/LargeGroupAudioGrid.h"
 #include "GameLogic/Map/FireLogicSystem.h"
+#include "GameLogic/Map/TerrainTrees.h"
 
 namespace
 {
@@ -179,4 +180,55 @@ TEST_CASE("PORT-161 gate frame drops constructor notifications without periodic 
 	CHECK(b.events.empty()); // RW 0x685E55 stamps even when global add was gated
 	b.fire.changeBurnRateAll(-100);
 	CHECK(b.grid.members == 0); // stored frame <= gate, only balanced temporary pair
+}
+
+TEST_CASE("PORT-161 tree fuel registers cell audio without creating a tree object")
+{
+	BurningAudio b;
+	// Synthetic tree input through the existing optimized-tree fire registration.
+	// RW 0x683F80 -> 0x686A82: template fuel enters the cell, not FlammableUpdate.
+	REQUIRE(b.world.w.load("Object Port161Tree\n Flammability\n Fuel = 777\n MaxBurnRate = 10\n Decay = 4\n Resistance = 255\n End\nEnd\n").empty());
+	const auto *tree = b.world.w.get("Port161Tree");
+	REQUIRE(tree);
+	b.fire.registerTree(123, {50, 50, 0}, tree);
+	CHECK(b.fire.getCellFuel(5, 5) == 777);
+	CHECK(b.events.empty()); // merely planting a tree must not crackle
+	b.ignite();
+	CHECK(b.fire.getCellFuel(5, 5) == 767);
+	CHECK(b.grid.members == 1);
+	REQUIRE_FALSE(b.events.empty());
+	CHECK(b.events.front().object == INVALID_ID);
+	b.fire.changeBurnRateAll(-100);
+	CHECK(b.grid.members == 0);
+	b.fire.unregisterTree(123, {50, 50, 0});
+}
+
+TEST_CASE("PORT-161 extinguishing a cell preserves another cell and an object contribution")
+{
+	BurningAudio b;
+	// Real object members and anonymous cell members share the position/weight
+	// consumer (RW 0x971326 / 0x971392), not an INVALID_ID-indexed registry.
+	LargeGroupAudioEvent object;
+	const std::vector<std::string> keys{"BurningCell"};
+	object.keys = &keys;
+	object.object = 17;
+	object.frame = b.world.logic->getFrame();
+	object.x = object.storedX = 85;
+	object.y = object.storedY = 85;
+	b.link.notify(object);
+	b.ignite();
+	b.fire.changeBurnRate(7, 7, 5, 10, false);
+	for (int i = 0; i < 10; ++i)
+		b.fire.update();
+	REQUIRE(b.fire.cellsBurningCount() == 2);
+	CHECK(b.grid.members == 3);
+	b.fire.changeBurnRate(5, 5, 5, -100, false);
+	CHECK(b.fire.cellsBurningCount() == 1);
+	CHECK(b.grid.members == 2);
+	b.fire.changeBurnRateAll(-100);
+	CHECK(b.grid.members == 1);
+	object.kind = LargeGroupAudioEvent::REMOVE;
+	object.storedFrame = object.frame;
+	b.link.notify(object);
+	CHECK(b.grid.members == 0);
 }
