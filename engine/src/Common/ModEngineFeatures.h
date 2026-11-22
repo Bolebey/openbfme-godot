@@ -47,6 +47,7 @@ enum class ModEngineFeature
 	EnnorathOptionsPages,              // paged options screen ETPage0..4/9, ETBegin/ETCancel/ETReset, ETFrameRate (display-only), ETMouseSensitivity (.optui / .optfix)
 	EnnorathOptionHotkeys,             // 11 CommandMap hotkey rows in options and mod defaults Builder=B / MatchType=E (.optui / .optfix / .hotkeys / .keydef / .keycmd)
 	EnnorathOnlineDelayFix,            // NetworkDelayFix checkbox and online frame-count pacing (.dlyfix)
+	EnnorathLobbyMapSearch,            // MpGameSetup MapSearch text entry filters MapList live by display name (.mapfind / .mapsvar)
 	Count
 };
 

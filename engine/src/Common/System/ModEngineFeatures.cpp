@@ -52,6 +52,7 @@ const char *ModEngineFeatures::name(ModEngineFeature f)
 	case F::EnnorathOptionsPages: return "ennorath.options-pages";
 	case F::EnnorathOptionHotkeys: return "ennorath.option-hotkeys";
 	case F::EnnorathOnlineDelayFix: return "ennorath.online-delay-fix";
+	case F::EnnorathLobbyMapSearch: return "ennorath.lobby-map-search";
 	case F::Count: break;
 	}
 	return "?";
@@ -85,11 +86,11 @@ const std::vector<ModEngineFeatures::Profile> &ModEngineFeatures::knownBinaries(
 		// in the retail code. The features below rebuild the edits the owner took; the line below names what is left out.
 		{ "fc32e4c4142b5c607b90972eaf448400", "Ennorath 1.9.8.5 game.dat",
 			{ F::EnnorathStanceKeepsMoving, F::EnnorathMiddleClickCamera, F::EnnorathEvacuateContainers,
-			  F::EnnorathOptionsPages, F::EnnorathOptionHotkeys, F::EnnorathOnlineDelayFix },
+			  F::EnnorathOptionsPages, F::EnnorathOptionHotkeys, F::EnnorathOnlineDelayFix, F::EnnorathLobbyMapSearch },
 			"rebuilt: the defensive stance that keeps a moving unit going (.stancem), the middle click camera reset by time (.camfix), war wagons and "
 			"the Witch-king leaving a tunnel by evacuate all (.keydef 0xF39580), the paged options menu (.optui / .optfix), the option hotkeys and mod "
-			"defaults (.hotkeys / .keydef / .keycmd), the online lag fix option (.dlyfix); not yet (docs/ennorath/ENNORATH_EXE.md): the map search in "
-			"the lobby (.mapfind), replays (.rpchat / .rppause), the chat mute (.chatmut), select all buildings (.bldgrp / .padsel / .bldext / "
+			"defaults (.hotkeys / .keydef / .keycmd), the online lag fix option (.dlyfix), the map search in the lobby (.mapfind / .mapsvar); not yet "
+			"(docs/ennorath/ENNORATH_EXE.md): replays (.rpchat / .rppause), the chat mute (.chatmut), select all buildings (.bldgrp / .padsel / .bldext / "
 			".bldcan / .bldlvl / .bldcap), the building limit fix, War of the Ring for 8 players (.wotrui / .wotrobs / .wtrview / .wtrdisp), 64 "
 			"CommandSet slots (.cmdext) and 5120 upgrades (.upg5k), the text entry clipboard (.txtclip, P-128), the observer's command range (.obscmd); "
 			"the 30 / 60 FPS choice (.fxrate / .fpsvar / .fpsdraw; ETFrameRate shown in Options) is left out by decision: OpenBFME keeps its own frame rate" },
