@@ -2,8 +2,8 @@
 // See BuffDraw.h (lane SPELL-4). Client-only.
 
 // TARGET W3DBuffDraw: RW 0x004B1B3F xfer, RW 0x004B612F getModelName, RW 0x004CE5CF GetSnapshotName,
-//   RW 0x004CE5D5 getModuleNameKey, RW 0x004CE672 ModuleData scalar deleting dtor.
-// TARGET TBuff: RW 0x004D13A7 GetSnapshotName, RW 0x004D187F scalar deleting dtor, RW 0x004D18E9 xfer.
+//   RW 0x004CE5D5 getModuleNameKey, RW 0x004CE62B ~W3DBuffDrawModuleData, RW 0x004CE672 ModuleData scalar deleting dtor.
+// TARGET TBuff: RW 0x004D13A7 GetSnapshotName, RW 0x004D13AD ~TBuff (via RW 0x00707F3E BuffLogic::removeBuff), RW 0x004D187F scalar deleting dtor, RW 0x004D18E9 xfer.
 #include "GameClient/BuffDraw.h"
 #include "Common/Xfer.h"
 #include "GameLogic/SnapshotXfer.h"
