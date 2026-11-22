@@ -12,13 +12,19 @@ LUA = (0x00B5B180, 0x00B64CA0)  # the span of the `_lua*` functions in the 2026-
 def test_library_kinds():
     assert lib.classify("UBfmePod12::list<>::push_front (tier A)") == "C++ standard library container (STLport)"
     assert lib.classify("IVRva004D971D::_Rb_tree<>::insert_unique (tier A)") == "C++ standard library container (STLport)"
+    assert lib.classify("PAURva003615E5Record::_Destroy<> (tier A)") == "C++ standard library container (STLport)"
+    assert lib.classify("PBUBfmePod148::__uninitialized_copy<> (tier A)") == "C++ standard library container (STLport)"
     assert lib.classify("D::StringBase<>::compare (tier A)") == "string class (AsciiString / UnicodeString)"
+    assert lib.classify("EAStringC::rva006D3750 (tier A)") == "string class (AsciiString / UnicodeString)"
     assert lib.classify("AODCrushCollide::`scalar deleting destructor' (tier A)") == "compiler-generated deleting destructor"
     assert lib.classify("_strncat (tier A)") == "C runtime / compiler helper"
     assert lib.classify("__SEH_prolog (tier A)") == "C runtime / compiler helper"
     assert lib.classify("_bfme_debugRecordCallsite (tier D)") == "debug hook of the game"
     assert lib.classify("_lua_pushstring (tier A)", 0x00B5B830, LUA) == "Lua virtual machine (the port runs its own Lua)"
     assert lib.classify("_rehash (tier A)", 0x00B64A80, LUA) == "Lua virtual machine (the port runs its own Lua)"
+    assert lib.classify("", 0x00435DE0) == "string class (AsciiString / UnicodeString)"
+    assert lib.classify("", 0x00B63030) == "Lua virtual machine (the port runs its own Lua)"
+    assert lib.classify("", 0x007633E0) == "C++ standard library container (STLport)"
 
 
 def test_game_code_is_not_library():
