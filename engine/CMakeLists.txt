@@ -580,6 +580,7 @@ include(cmake/Local127.cmake)   # LOCAL-127: Ennorath 1.9.8.5 paged options menu
 include(cmake/Local128.cmake)   # LOCAL-128: Ennorath 1.9.8.5 lobby map search (fork issue 812; OPENBFME_LOCAL128_TESTS)
 include(cmake/Local129.cmake)   # LOCAL-129: Ennorath 1.9.8.5 chat mute on PlayerTribute (.chatmut 0xEDB000; fork issue 813; OPENBFME_LOCAL129_TESTS)
 include(cmake/Local130.cmake)   # LOCAL-130: 50 most shared helpers + RW 0x6760CA / 0x677898 construction ambient (fork issue 829; OPENBFME_LOCAL130_TESTS)
+include(cmake/Local139.cmake)   # LOCAL-139: global game data fields (fork issue 856; OPENBFME_LOCAL139_TESTS)
 include(cmake/Local101.cmake)   # LOCAL-101: special AI modules SiegeDockingBehavior & HordeWorkerAIUpdate (fork issue 771; OPENBFME_LOCAL101_TESTS)
 include(cmake/Local103.cmake)   # LOCAL-103: client draw modules (issue #773; OPENBFME_LOCAL103_TESTS)
 include(cmake/Local109.cmake)   # LOCAL-109: builders and walls second pass (fork issue 787; OPENBFME_LOCAL109_TESTS)
@@ -1424,6 +1425,7 @@ add_executable(openbfme_tests
         ${OPENBFME_LOCAL128_TESTS}
         ${OPENBFME_LOCAL129_TESTS}
         ${OPENBFME_LOCAL130_TESTS}
+        ${OPENBFME_LOCAL139_TESTS}
     ${OPENBFME_LOCAL101_TESTS}
     ${OPENBFME_LOCAL103_TESTS}
     ${OPENBFME_LOCAL109_TESTS}
