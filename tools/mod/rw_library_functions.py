@@ -28,7 +28,9 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 STL = re.compile(r"(^|::|\b)(std::|_STL::|stlp_std::|_Tree|_Rb_tree|_Hashtable|_Ht_iterator<>|hashtable<>|basic_string|allocator|"
-                 r"(map|multimap|vector|list|set|multiset|hash_map|hash_set|hash_multimap|deque|pair|less|equal_to)<>)")
+                 r"(map|multimap|vector|list|set|multiset|hash_map|hash_set|hash_multimap|deque|pair|less|equal_to)<>)|"
+                 r"::(__copy|__copy_ptrs|__copy_backward|__copy_backward_ptrs|_Destroy|__destroy_aux|fill|uninitialized_fill_n|find|__find|_M_find)<>$|"
+                 r"RefCountPtr<>::operator=$")
 STRINGS = re.compile(r"(^|::)(AsciiString|UnicodeString|StringBase<>)(::|$)")
 CRT = re.compile(r"^_{1,2}(SEH_prolog|SEH_epilog|memset|memcpy|memmove|memcmp|strcmp|strncmp|strcpy|strncpy|strcat|strncat|strlen|stricmp|"
                  r"strnicmp|atexit|atoi|atof|ftol2?|tolower|toupper|isprint|isspace|isalpha|isdigit|isalnum|upper_bound|lower_bound|"
@@ -58,6 +60,96 @@ def classify(name: str, address: int = 0, lua_block: tuple[int, int] = (0, 0)) -
     return None
 
 
+
+# Proven by RotWK 2.01 disassembly (Local 133, client / draw classes): STLport container/string internals,
+# WW3D DynamicVectorClass/RefCountPtr/HashTableClass, allocator free, and compiler-generated record helpers
+# whose decomp names are unnamed or generic Rva*/Bfme* names.
+PROVEN_CLIENT_DRAW_LIBRARY: dict[int, tuple[str, str]] = {
+    # W3DHordeModelDraw callees (STLport basic_string, _Rb_tree, list, AsciiString, RefCountClass, record copy/dtor)
+    0x00407410: ("std::basic_string<char>::basic_string", "C++ standard library container (STLport)"),
+    0x004088C0: ("std::basic_string<char>::_M_range_initialize", "C++ standard library container (STLport)"),
+    0x00408D30: ("std::basic_string<char>::basic_string(copy)", "C++ standard library container (STLport)"),
+    0x00411D30: ("std::basic_string<char>::erase", "C++ standard library container (STLport)"),
+    0x0041B010: ("std::basic_string<char>::append", "C++ standard library container (STLport)"),
+    0x004363B0: ("AsciiString::toLower", "string class (AsciiString / UnicodeString)"),
+    0x00454778: ("_Rb_tree::_M_create_node", "C++ standard library container (STLport)"),
+    0x00478553: ("Rva00752630::Rva00752630(copy)", "compiler-generated struct copy constructor"),
+    0x00478A7C: ("Rva000791EDCopy", "C++ standard library container (STLport)"),
+    0x00478E00: ("BfmeNarrowRecord00079C23::~BfmeNarrowRecord00079C23", "compiler-generated struct destructor"),
+    0x0047900B: ("BfmeNarrowRecord00079C23::BfmeNarrowRecord00079C23", "compiler-generated struct constructor"),
+    0x0047946B: ("BfmeNarrowRecord00079C23::BfmeNarrowRecord00079C23(copy)", "compiler-generated struct copy constructor"),
+    0x00479A90: ("BfmeNarrowRecord00079C23::operator=", "compiler-generated struct assignment"),
+    0x00479CFE: ("BfmeHelperYS::BfmeHelperYS", "compiler-generated struct constructor"),
+    0x004B5C5C: ("_Rb_tree::_M_erase", "C++ standard library container (STLport)"),
+    0x004B8A90: ("_Rb_tree::clear", "C++ standard library container (STLport)"),
+    0x004BB948: ("std::list::erase", "C++ standard library container (STLport)"),
+    0x00778D70: ("std::__find(AsciiString)", "C++ standard library container (STLport)"),
+    0x00778E1C: ("std::find(AsciiString)", "C++ standard library container (STLport)"),
+    0x007985FC: ("_Rb_tree::_M_get_node(header)", "C++ standard library container (STLport)"),
+    0x00806CFF: ("std::_Destroy(0x18)", "C++ standard library container (STLport)"),
+    0x0082147E: ("std::list::_M_create_node(sentinel)", "C++ standard library container (STLport)"),
+    0x00A329C0: ("RefCountClass::Release_Ref", "WW3D ref-counted smart pointer"),
+    # W3DSupplyDraw callees (STLport vector/_Rb_tree destructors and compiler-generated record assign/dtor)
+    0x004B3C30: ("BfmeRecord000B43E5::operator=", "compiler-generated struct assignment"),
+    0x004B604C: ("Rva000B978ARecord::operator=", "compiler-generated struct assignment"),
+    0x004B927E: ("Rva000B9AAA::~Rva000B9AAA", "compiler-generated struct destructor"),
+    0x004B9296: ("Rva00B9AC2::~Rva00B9AC2", "compiler-generated struct destructor"),
+    0x004BAE30: ("_Rb_tree::~_Rb_tree", "C++ standard library container (STLport)"),
+    0x004BCA33: ("std::_Destroy(Rva00B9AC2)", "C++ standard library container (STLport)"),
+    0x004BD963: ("BfmeVectorRecord000BDF17::~BfmeVectorRecord000BDF17", "compiler-generated struct destructor"),
+    0x004BE552: ("Rva000BEDF0Record::~Rva000BEDF0Record", "compiler-generated struct destructor"),
+    0x004BFB46: ("std::vector::~vector(AnimSet)", "C++ standard library container (STLport)"),
+    0x004BFB85: ("std::vector::~vector(StringTail)", "C++ standard library container (STLport)"),
+    0x004BFBC4: ("std::vector::~vector(AsciiString)", "C++ standard library container (STLport)"),
+    0x004C046E: ("BfmeStringTailRecord180::~BfmeStringTailRecord180", "compiler-generated struct destructor"),
+    0x004C12AC: ("std::vector::~vector(Rva00B9AC2)", "C++ standard library container (STLport)"),
+    0x004C12EB: ("std::vector::~vector(Rva000BDD08)", "C++ standard library container (STLport)"),
+    0x004C1335: ("std::vector::~vector(Rva00079554Record)", "C++ standard library container (STLport)"),
+    0x004C204B: ("BfmePod252::~BfmePod252", "compiler-generated struct destructor"),
+    0x004C643E: ("BfmePod248::~BfmePod248", "compiler-generated struct destructor"),
+    0x004C827D: ("std::vector::~vector(BfmePod248)", "C++ standard library container (STLport)"),
+    0x006CFD22: ("Rva000B435F::operator=", "compiler-generated struct assignment"),
+    0x006D049C: ("std::__copy_ptrs(Rva000B435F)", "C++ standard library container (STLport)"),
+    # W3DDebrisDraw callees (AsciiString/SplitString/HashTableClass/CRC_Stringi/RefCountPtr)
+    0x004356B0: ("skipSeps", "string class (AsciiString / UnicodeString)"),
+    0x004356F0: ("skipNonSeps", "string class (AsciiString / UnicodeString)"),
+    0x00507E74: ("Ref_Ptr_Set", "WW3D ref-counted smart pointer"),
+    0x00508511: ("AsciiStringCharPlusText::make", "string class (AsciiString / UnicodeString)"),
+    0x00509687: ("AsciiStringCharPlusText::write", "string class (AsciiString / UnicodeString)"),
+    0x0050B479: ("AsciiStringCharPlusText::operator AsciiString", "string class (AsciiString / UnicodeString)"),
+    0x0053189B: ("RefCountPtr<TextureClass>::RefCountPtr", "WW3D ref-counted smart pointer"),
+    0x00536B39: ("SplitString", "string class (AsciiString / UnicodeString)"),
+    0x0091507F: ("AsciiStringCharPlusText::operator+", "string class (AsciiString / UnicodeString)"),
+    0x00A279E0: ("HashTableClass::Find", "WW3D container (HashTableClass)"),
+    0x00A29500: ("CRC_Stringi", "WW3D hash helper (CRC_Stringi)"),
+    # W3DLaserDraw callees (allocator free, DynamicVectorClass, RefCountPtr<TextureClass> vector dtor)
+    0x0042F6C0: ("operator delete (pool)", "C runtime / compiler helper"),
+    0x0048FA88: ("DynamicVectorClass::Resize", "WW3D container (DynamicVectorClass)"),
+    0x004C9105: ("std::_Destroy(RefCountPtr<TextureClass>)", "C++ standard library container (STLport)"),
+    0x004C911E: ("std::vector<RefCountPtr<TextureClass>>::~vector", "C++ standard library container (STLport)"),
+    0x004FFBF2: ("DynamicVectorClass<Vector3>::Add", "WW3D container (DynamicVectorClass)"),
+    0x00525D79: ("RefCountPtr<TextureClass>::~RefCountPtr", "WW3D ref-counted smart pointer"),
+    # W3DStreakDraw callees (vector dtor, DynamicVectorClass)
+    0x004CFCD4: ("std::vector<AsciiString>::~vector", "C++ standard library container (STLport)"),
+    0x004FFB3D: ("DynamicVectorClass::Shrink", "WW3D container (DynamicVectorClass)"),
+    0x004FFC33: ("DynamicVectorClass<Vector3>::Delete", "WW3D container (DynamicVectorClass)"),
+    0x00567C1D: ("DynamicVectorClass<float>::Add", "WW3D container (DynamicVectorClass)"),
+    0x00567C50: ("DynamicVectorClass<float>::Delete", "WW3D container (DynamicVectorClass)"),
+    # TerrainResourceClientBehavior callees (_Rb_tree / std::list)
+    0x008EC278: ("_Rb_tree::_M_erase", "C++ standard library container (STLport)"),
+    0x008EC2EF: ("_Rb_tree::clear", "C++ standard library container (STLport)"),
+    0x008EC35C: ("std::list::clear", "C++ standard library container (STLport)"),
+    # TransitionDamageFX callees (vector<RubbleNeighbor> dtor)
+    0x008BE311: ("RubbleNeighbor::~RubbleNeighbor", "compiler-generated struct destructor"),
+    0x008BE48A: ("std::_Destroy(RubbleNeighbor)", "C++ standard library container (STLport)"),
+    0x008BE4A3: ("std::vector<RubbleNeighbor>::~vector", "C++ standard library container (STLport)"),
+    # W3DQuadrupedDraw callee (std::vector::_M_fill_insert)
+    0x004C98D5: ("std::vector<Coord3D>::_M_fill_insert", "C++ standard library container (STLport)"),
+    # BeaconClientUpdate callee (RvaSmartPtr12::operator=)
+    0x0044C4E2: ("RvaSmartPtr12::operator=", "WW3D ref-counted smart pointer"),
+}
+
+
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("--map", type=Path, default=Path("docs/ennorath/RW_FUNCTION_MAP.tsv"))
@@ -67,6 +159,8 @@ def main(argv=None) -> int:
     rows = {}
     for address, name in HAND_STOPS.items():
         rows[address] = (name, "port infrastructure or library (rw_function_map.HAND_STOPS)")
+    for address, (name, why) in PROVEN_CLIENT_DRAW_LIBRARY.items():
+        rows.setdefault(address, (name, why))
     with a.map.open(encoding="utf-8") as f:
         table = list(csv.DictReader(f, delimiter="\t"))
     bare = lambda r: re.sub(r"\s*\(tier [A-Z]\)\s*$", "", r.get("decomp") or "").strip()

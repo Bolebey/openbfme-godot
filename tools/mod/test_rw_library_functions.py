@@ -38,3 +38,11 @@ def test_load_reads_the_written_list(tmp_path):
     p.write_text("# header\naddress\tname\treason\n0x00A3D01A\t_strncat\tC runtime / compiler helper\n", encoding="utf-8")
     assert lib.load(p) == {0x00A3D01A: "C runtime / compiler helper"}
     assert lib.load(tmp_path / "missing.tsv") == {}
+
+
+def test_stlport_algorithms_and_refcount_ptr():
+    assert lib.classify("PAURva00079EA1Element::__copy_ptrs<> (tier A)") == "C++ standard library container (STLport)"
+    assert lib.classify("PAUBfmePod248::_Destroy<> (tier A)") == "C++ standard library container (STLport)"
+    assert lib.classify("PAVAsciiString::__find<> (tier A)") == "C++ standard library container (STLport)"
+    assert lib.classify("VAsciiString::U?$pair::_M_find<> (tier A)") == "C++ standard library container (STLport)"
+    assert lib.classify("VTextureClass::RefCountPtr<>::operator= (tier B)") == "C++ standard library container (STLport)"
