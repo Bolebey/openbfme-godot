@@ -114,7 +114,7 @@ void ControlBar::playStanceVoice(int stance)
 	}
 }
 
-bool ControlBar::pressButton(int slot, bool inPalantir, bool shift)
+bool ControlBar::pressButton(int slot, bool inPalantir, bool shift, bool repeated)
 {
 	const ControlBarButton *cb = find(slot, inPalantir);
 	Object *obj = m_ctx.logic.findObjectByID(m_source);
@@ -135,6 +135,12 @@ bool ControlBar::pressButton(int slot, bool inPalantir, bool shift)
 	// that option bit (its option tests are 0x227, bits 5, 17 and 31); retail draws such a button with its _static clip (RW 0x9D2BFA), which
 	// takes no click, so a direct / shortcut press is refused here instead of casting its placeholder power.
 	if (!b.m_isClickable || b.hasOption(COMMAND_OPTION_NONPRESSABLE))
+	{
+		return false;
+	}
+	// Local 141 (S-7364): RW 0x9404A1..0x9404AB (DONOR BFME2 ControlBarCommandProcessing.cpp:362):
+	// a repeated press is ignored for every command except GUI_COMMAND_UNIT_BUILD (3).
+	if (repeated && b.m_command != GUI_COMMAND_UNIT_BUILD)
 	{
 		return false;
 	}
@@ -205,6 +211,12 @@ bool ControlBar::pressButton(int slot, bool inPalantir, bool shift)
 			// RW 0x940BD9 sets the flag only when all three hold. The logic's batch loop is RW 0x8A1260 (`lea eax,[eax*4+1]`: 5 or 1).
 			// REVIVE has its own case below (RW 0x940B1B) and always sends one, as RW 0x940BC2 requires.
 			const bool multiple = shift && BuildAssistant::maxSimultaneousOfType(*tt) == 0;
+			// Local 141 (S-7364): RW 0x940BE6..0x940BF0 (DONOR BFME2 ControlBarCommandProcessing.cpp:515):
+			// with `repeated` set, UNIT_BUILD sends no message unless `multiple` is also true.
+			if (repeated && !multiple)
+			{
+				return false;
+			}
 			ClientMessage &m = m_ctx.stream.append(MSG_QUEUE_UNIT_CREATE);
 			m.appendBoolean(false);
 			m.appendInteger((int)tt->getTemplateID());
