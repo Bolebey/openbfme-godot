@@ -555,6 +555,7 @@ include(cmake/Port227.cmake)    # PORT-227: Ennorath backlog (WaitForOthers, For
 include(cmake/Port249.cmake)    # PORT-249: OCLSpecialPower's location requirements, slot 0x48 (fork issue 577; OPENBFME_PORT249_TESTS)
 include(cmake/Port273.cmake)    # PORT-273: point-target special powers require the retail location ActionManager test (fork issue 640; OPENBFME_PORT273_TESTS)
 include(cmake/Port289.cmake)    # PORT-289: ActionManager::canRepairObject (fork issue 677; OPENBFME_PORT289_TESTS)
+include(cmake/Port198.cmake)    # PORT-198: SpawnBehavior's order slots and Player::onUnitCreated (fork issue 465; OPENBFME_PORT198_TESTS)
 include(cmake/Port237.cmake)    # PORT-237: OCL nuggets/fields, CreateObjectDie, AODCrushCollide, OCLUpdate CreateAtEdge, BattlePlan bonuses (issue #560; OPENBFME_PORT237_TESTS)
 include(cmake/Port284.cmake)    # PORT-284: save closed-set audit, logic snapshots
 include(cmake/Port220.cmake)    # PORT-220: the single-use command flag, Object + 0x45B (issue #529; OPENBFME_PORT220_TESTS)
@@ -1392,6 +1393,7 @@ add_executable(openbfme_tests
     ${OPENBFME_PORT249_TESTS}
     ${OPENBFME_PORT273_TESTS}
     ${OPENBFME_PORT289_TESTS}
+    ${OPENBFME_PORT198_TESTS}
     ${OPENBFME_PORT237_TESTS}
     ${OPENBFME_PORT284_TESTS}
     ${OPENBFME_PORT220_TESTS}
