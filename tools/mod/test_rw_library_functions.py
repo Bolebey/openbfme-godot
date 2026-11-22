@@ -40,8 +40,17 @@ def test_load_reads_the_written_list(tmp_path):
     assert lib.load(tmp_path / "missing.tsv") == {}
 
 
-def test_proven_library_entries_are_in_tsv():
+def test_proven_library_entries_in_tsv():
     loaded = lib.load()
-    assert len(lib.PROVEN_LIBRARY) == 127
+    assert len(lib.PROVEN_LIBRARY) == 157
     for addr, (_name, why) in lib.PROVEN_LIBRARY.items():
-        assert loaded.get(addr) == why
+        assert addr in loaded, f"missing 0x{addr:08X} in rw_library_functions.tsv"
+        assert loaded[addr] == why
+
+
+def test_local_136_proven_library_entries_are_in_tsv():
+    loaded = lib.load()
+    # Local 136 added 127 entries on top of Local 130's 30 entries
+    assert len(lib.PROVEN_LIBRARY) >= 157
+    for addr in (0x00AE8E20, 0x004050E6, 0x00A3D28E, 0x006CF86E, 0x0076293A, 0x00867305):
+        assert addr in loaded
