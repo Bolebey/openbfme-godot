@@ -124,6 +124,12 @@
 - Мордор: у сегмента купить калитку (`Command_MordorWallUpgradeToPosternGate`).
 Если что-то выглядит или работает не как в оригинале — новая задача по этому отличию.
 
+## Проверить в игре (перенос 2026-11-23: Port 292, HordeContain)
+
+Доделано Claude из ветки агента (песочница агента не успевала собрать проект). Песочница 5 (GCC): `PORT-292*` 3/3, `module coverage*`, `save4c*` 26/26, `perf1*` 11/11, `skirmish ai vs ai` 7/7, перенос между миссиями 7/7; `camp1 bonus` и `save4b` T4 красные и на чистом `main` на GCC (на MSVC проходят).
+
+1. **Port 292 (#684)**: в игре почти не видно. Кампания Ангмара: победить в миссии с отрядом, у которого в данных задан `LivingWorldOverloadTemplate`, — в следующую миссию он переходит под этим шаблоном, как в RotWK. Разбор функций `HordeContain` и стопы S-7518..S-7520 — в `docs/ennorath/PORT-292-analysis.md`.
+
 ## Проверить в игре (перенос 2026-11-22, вечер: партии бота 22b–22e — Port 225, 315, 198, 318 — и Local 127, 128, 129, 130)
 
 Собрано и проверено на песочнице 4 (Colab, GCC; ветка `agent/claude/sb4-accept`): `perf1*` 11/11, `uber1*` 7/7, `save4c*` 26/26, `skirmish ai vs ai` 7/7, `script2 angmar` 4/4, `factb units` 3/3, `factc units` 1/1, `module coverage*`, `modgap2*` 76/76, `MODS-3*` 27/27, `PORT-225*` 6/6, `PORT-315*` 4/4, `PORT-198*` 10/10, `PORT-318*` 4/4, `LOCAL-127*` 5/5, `LOCAL-128*` 3/3, `LOCAL-129*` 2/2, `LOCAL-130*` 2/2. Эталон `skirmish ai vs ai` перемерен (партия: #582 и #736), `script2 angmar` — Locals 118 / 120. `apt/Options.big` 1.9.8.5 возвращён в тестовую копию на ПК.
