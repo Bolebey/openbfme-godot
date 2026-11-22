@@ -76,7 +76,9 @@ TEST_CASE("MODS-3: Ennorath 1.9.8.5's game.dat turns on ennorath.stance-keeps-mo
 	REQUIRE(lines.size() == 1);
 	CHECK(lines[0].rfind("S-5304: Ennorath 1.9.8.5 game.dat: rebuilt: ", 0) == 0);
 	CHECK(lines[0].find("the map search in the lobby (.mapfind / .mapsvar)") != std::string::npos);
-	CHECK(lines[0].find("not yet (docs/ennorath/ENNORATH_EXE.md): the option hotkeys") != std::string::npos);
+	CHECK(lines[0].find("the option hotkeys and mod defaults (.hotkeys / .keydef / .keycmd)") != std::string::npos); // Local 127
+	CHECK(lines[0].find("per-player chat mute on the tribute screen (.chatmut 0xEDB000)") != std::string::npos); // Local 129
+	CHECK(lines[0].find("not yet (docs/ennorath/ENNORATH_EXE.md): replays") != std::string::npos); // Locals 127-129 merged (2026-11-22)
 }
 
 namespace
