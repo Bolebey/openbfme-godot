@@ -22,7 +22,7 @@
 //   * effective pitch = perFilePitch * pitch, effective volume shift = perFileVolumeShift * volumeShift (RW 0x6DA65D, 0x6DA664).
 //   * ONLY the audio random stream is used: the RW code has no logical-audio branch (the ZH GameLogicRandomValue draws are gone), so an audio
 //     event never consumes the logic RNG (AUDIO-1 acceptance: audio never touches logic state).
-//   * RW sound class (0x6DAE8B): Music 1, UI 2, World 4, Streaming 8, Ambient 0x10 (types 4 and 5 map to 2 / 0); ~AudioEventRTS RW 0x006DABCB.
+//   * RW sound class (0x6DAE8B): Music 1, UI 2, World 4, Streaming 8, Ambient 0x10 (types 4 and 5 map to 2 / 0).
 // INFERENCE (stop S-243): the owner dependent mute of RW 0x6DB221 (an object with bit 20 of its status word set, a drawable whose byte +0x44A is clear) is
 // not modelled; it needs the live objects.
 
@@ -99,6 +99,7 @@ struct AudioEventEnv
 	const AudioOwnerResolver *owners = nullptr;
 };
 
+// ~AudioEventRTS RW 0x006DABCB
 class AudioEventRTS
 {
 public:
