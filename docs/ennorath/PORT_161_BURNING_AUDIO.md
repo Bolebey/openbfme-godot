@@ -1,6 +1,8 @@
 # Port 161 / P-89: burning terrain audio — investigation
 
-Status: analysis checkpoint, not an implemented fix. No claim of passing PORT-161 tests.
+Status: implementation and eight synthetic tests committed; full-target execution pending.
+The early analysis/stop sections below are historical; the resumed section records the Port 290 landing.
+No claim of passing PORT-161 tests yet.
 
 ## Sources
 
@@ -178,3 +180,23 @@ or negative-control result is claimed yet. The initial build was interrupted
 after 135/1913 steps to regenerate with the new test lane, then resumed from
 its object cache. CMake warns about unavailable lame/mpg123 fixtures (five
 unrelated MP3 cases); neither requested test filter uses them.
+
+
+## Continuation: verification automation
+
+The test source now also covers the optimized-tree fuel registration input
+(RW 0x683F80 -> 0x686A82), without creating an object for that tree, and
+mixed membership: extinguishing one cell preserves another cell and an
+object contribution. Eight PORT-161 cases total; their syntax check passes.
+
+The full Release target is still compiling with -j1, not replaced by a small
+standalone test executable. A session-only verifier waits for that build,
+then incrementally builds the final source state and runs PORT-161 plus
+PORT-290/fire-logic neighbors. It prepares the negative control in ignored
+workspace copies: disable only BurningCell's notification body, compile a
+private replacement object, replace that member in a private core archive,
+and relink the full test binary to a separate path. It must fail the burning
+cell registration regression, then the unmodified binary must pass PORT-161
+again. Tracked source, normal archive, normal binary and hash pins are not
+modified by this control. Execution results remain pending; this describes
+the scheduled verification, not a claim it already succeeded.
