@@ -116,8 +116,10 @@ public:
 	virtual bool ignoresArmorSetFlagChanges() const { return false; }
 	// lane XP-1: RW vt[0x5C] (ActiveBody RW 0x8C1CD5) setMaxHealth(newMax, changeType): 1 keeps the health ratio, 2 adds the difference to the health
 	// (the AttributeModifier HEALTH / HEALTH_MULT bonuses use 1). A body class without the override counts the call (bodyMaxHealthCallsIgnored)
-	// RW 0x8C1BF9 / BFME2 slot 9: slot 0x28 of body interface
+	// RW 0x008C1BF9 / DONOR BFME2 0x004BDAA9 (slot 10 +0x28 of body interface)
 	virtual void resetDamageState(int state = 0) { (void)state; }
+	// RW 0x008C1C75 / DONOR BFME2 0x004BDB25 (slot 3 +0x0C of body interface): setDamageState(getDamageState())
+	virtual void resetHealthToDamageState() { resetDamageState((int)getDamageState()); }
 	virtual void setMaxHealth(float newMax, int changeType)
 	{
 		(void)newMax;
@@ -249,8 +251,19 @@ public:
 	virtual bool getEntryPosition(Coord3D &out) const { (void)out; return false; }
 	virtual bool getEntryOffset(Coord3D &out) const { (void)out; return false; }
 	virtual bool getExitOffset(Coord3D &out) const { (void)out; return false; }
+	// slot 0x68 onContainedAboutToTakeDamage (OpenContain RW 0x00865631; HordeTransportContain, HordeGarrisonContain, HordeSiegeEngineContain,
+	// TunnelContain, SlaughterHordeContain, CitadelSlaughterHordeContain RW 0x0087A3A4)
+	virtual void onContainedAboutToTakeDamage(Object *rider, const void *damageSource, struct DamageInfo *info)
+	{
+		(void)rider;
+		(void)damageSource;
+		(void)info;
+	}
 	// slot 0x80 orderAllPassengersToExit (HordeGarrisonContain RW 0x87CE8F -> 0x991027); `source` is a CommandSourceType
 	virtual void orderAllPassengersToExit(int source) { (void)source; }
+	// slot 0x88 evacuateCrew (OpenContain RW 0x009F3A3C no-op; SiegeEngineContain RW 0x0087F0CF, HordeSiegeEngineContain RW 0x0087FF18;
+	// called by FlammableUpdate::onDamage at ignition RW 0x00890666 with CMD_FROM_AI = 2)
+	virtual void evacuateCrew(int source = 2) { (void)source; }
 	// slot 0x8C orderAllPassengersToIdle; `source` is a CommandSourceType
 	virtual void orderAllPassengersToIdle(int source) { (void)source; }
 	// slot 0x174 onContainerUpgrade (Object::giveUpgrade RW 0x006938B3; HordeTransportContain / HordeSiegeEngineContain RW 0x0087A988)
@@ -354,6 +367,17 @@ public:
 	virtual void objectBecameAudible() = 0;   ///< slot 1: RW 0x8AF174 -> join, RW 0x8AF005
 };
 
+// RW Object::rva0028BD17 (0x68C3E6 / slot 32 at module + 0x80): the repair query
+// returned by a behavior module.  The retail interface has many unrelated slots;
+// this is the one typed slot used by ActionManager::canRepairObject (slot 9 at
+// interface + 0x24, RW 0x8564F6).
+class RepairQueryInterface
+{
+public:
+	virtual ~RepairQueryInterface() = default;
+	virtual bool canSelfRepair() const = 0;
+};
+
 class BehaviorModule : public ObjectModule
 {
 public:
@@ -398,6 +422,9 @@ public:
 	// RW 0x8AFC5F / BFME2 0x4AC5F5: slot 31 (offset 0x7C) of the +0xC interface
 	virtual EnvironmentActor *slot31() { return nullptr; }
 	EnvironmentActor *getEnvironmentActor() { return slot31(); }
+	// RW Object::rva0028BD17: slot 32 (offset 0x80), the shared repair query.
+	virtual RepairQueryInterface *slot32() { return nullptr; }
+	RepairQueryInterface *getRepairQueryInterface() { return slot32(); }
 
 protected:
 	// lane SAVE-4b: BehaviorModule::xfer, version (1, 1) (RW 0x8CD4AA, the base xfer every UpdateModule / UpgradeModule xfer calls; inference: it is

@@ -47,7 +47,7 @@ class AttributeModifierPool : public UpdateModule
 public:
 	OBFME_MODULE_XFER(AttributeModifierPool) // lane SAVE-4b
 	AttributeModifierPool(Thing *thing, const ModuleData *data);
-	~AttributeModifierPool() override = default; // RW 0x008055C9 (~AttributeModifierPoolUpdate), RW 0x00805843 (scalar deleting dtor)
+	~AttributeModifierPool() override = default; // RW 0x008055C9 (~AttributeModifierPoolUpdate -> m_entries vector dtor RW 0x00805517), RW 0x00805843 (scalar deleting dtor)
 	static void registerClass(ModuleFactory &modules); // getModuleName RW 0x00805612, getModuleNameKey RW 0x00805618
 
 	UpdateSleepTime update() override; ///< RW 0x80585F
@@ -61,6 +61,8 @@ public:
 	bool hasList(const std::string &listName) const;
 	// RW 0x8052FB (Object::removeAttributeModifier RW 0x68F259, lane INTEG-1): the list's entry goes, with its removal side effects
 	void remove(const std::string &listName) { removeByName(listName); }
+	// RW 0x006998D0 -> 0x699900..0x699908 (0x698DC9) / RW 0x00879106 -> 0x87917F..0x879187 (DONOR BFME2 0x00298E6A): erases the entry vector (+0x20) in place without per-entry remove (RW 0x8052FB)
+	void clearEntries() { m_entries.clear(); }
 	// RW 0x804FCC (lane SPELL-2): every category whose bit is set in `mask` (15 categories) is disabled until `frame` (the suppressed test of RW 0x804D27)
 	void disableCategories(unsigned mask, unsigned frame)
 	{

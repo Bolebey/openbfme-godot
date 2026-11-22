@@ -2,6 +2,7 @@
 // See GameLogic/Module/DozerAIUpdate.h for the sources of every rule.
 
 #include "GameLogic/Module/DozerAIUpdate.h"
+#include "GameLogic/ActionManager.h"
 #include "GameLogic/Module/WorkerAIUpdate.h"
 #include "Common/ModEngineFeatures.h"
 #include "GameLogic/Economy.h"
@@ -136,12 +137,6 @@ bool sameOwnerUnfinished(const Object &dozer, const Object &structure)
 	return !structure.isDestroyed() && structure.isUnderConstruction() && structure.getControllingPlayer() == dozer.getControllingPlayer();
 }
 
-// the stand-in of the ActionManager's canRepairObject (RW 0x82D7F2, not ported: S-1282): the dozer's owner's finished, living structure
-bool canRepair(const Object &dozer, const Object *structure)
-{
-	return structure && !structure->isDestroyed() && !structure->isEffectivelyDead() && !structure->isUnderConstruction() &&
-	       structure->getControllingPlayer() == dozer.getControllingPlayer();
-}
 } // namespace
 
 DozerAIUpdate::DozerAIUpdate(Thing *thing, const ModuleData *data)
@@ -165,6 +160,7 @@ DozerAIUpdate::DozerAIUpdate(Thing *thing, const ModuleData *data)
 	}
 }
 
+// RW 0x0088C8CA (getModuleNameKey) / RW 0x0088C90F (getModuleName): "DozerAIUpdate" (0xC0B1E8)
 void DozerAIUpdate::registerClass(ModuleFactory &modules)
 {
 	modules.bindModuleProc("DozerAIUpdate", MODULETYPE_BEHAVIOR, [](Thing *thing, const ModuleData *data, const ModuleFactory::ModuleTemplate &info) -> std::unique_ptr<Module> {
@@ -182,9 +178,40 @@ void DozerAIUpdate::registerWorkerClass(ModuleFactory &modules)
 	WorkerAIUpdate::registerClass(modules); // lane LUMBER1: the dozer half here, the supply half in WorkerAIUpdate
 }
 
+// RW 0x0088D1AC (dtor) / RW 0x0088D692 (scalar deleting dtor)
 DozerAIUpdate::~DozerAIUpdate()
 {
 	finishBuildingSound(); // RW 0x88D1F6
+}
+
+// RW 0x0088D186 (DozerAIUpdate::loadPostProcess; DONOR BFME2 DozerAIUpdateCtor.cpp:494):
+// calls AIUpdateInterface::loadPostProcess (RW 0x00667BEF), then if m_unplacedStructure (+0x568) != 0
+// tail-calls makePhantomStructureInert (RW 0x0088D0D8): clears dangling id if missing, else sets
+// effectively dead (RW 0x0068D950(1)) and removes from world if inWorld (RW 0x0068C18F).
+void DozerAIUpdate::loadPostProcess()
+{
+	AIUpdateInterface::loadPostProcess();
+	if (m_unplacedStructure == INVALID_ID)
+	{
+		return;
+	}
+	Object *self = getObject();
+	if (!self)
+	{
+		return;
+	}
+	GameLogic &logic = self->logic();
+	Object *phantom = logic.findObjectByID(m_unplacedStructure); // RW 0x0088D0ED
+	if (!phantom || phantom->isDestroyed())
+	{
+		m_unplacedStructure = INVALID_ID; // RW 0x0088D0F8
+		return;
+	}
+	phantom->friend_setEffectivelyDead(true); // RW 0x0088D104 -> 0x0068D950(1)
+	if (phantom->isInWorld()) // RW 0x0088D109
+	{
+		logic.friend_containLeaveWorld(*phantom); // RW 0x0088D114 -> 0x0068C18F
+	}
 }
 
 void DozerAIUpdate::onOwnerDie()
@@ -201,7 +228,8 @@ void DozerAIUpdate::onOwnerDie()
 
 void DozerAIUpdate::onDelete()
 {
-	// RW 0x0088CF96 (DozerAIUpdate::onDelete, main vslot +0x20; WorkerAIUpdate::onDelete RW 0x008AE203 has the same body):
+	// RW 0x0088CF96 (DozerAIUpdate::onDelete, main vslot +0x20; DozerAIInterface adjustor thunk RW 0x0088D1A1;
+	// WorkerAIUpdate::onDelete RW 0x008AE203, adjustor thunk RW 0x008AE456, has the same body):
 	// cancel every pending task (0..2), clear ACTIVELY_BEING_CONSTRUCTED (+0x114 bit 0x20) on any remaining task target,
 	// then stop the held building sound (finishBuildingSound, interface slot +0x60).
 	for (int t = 0; t < DOZER_NUM_TASKS; ++t)
@@ -601,7 +629,7 @@ bool DozerAIUpdate::siteIsLegal(const ThingTemplate &what, const Coord3D &pos, f
 
 Object *DozerAIUpdate::construct(const ThingTemplate &what, const Coord3D &pos, float angle, Player &owner, bool isRebuild)
 {
-	// RW 0x88C217: + 0x4D0 = the rebuild flag first (lane BFME2CAMP1); the machine made, nothing is created, paid or changed when the site is not legal
+	// RW 0x0088C217 (DozerAIInterface adjustor thunk RW 0x0088C931): + 0x4D0 = the rebuild flag first (lane BFME2CAMP1); the machine made, nothing is created, paid or changed when the site is not legal
 	m_isRebuild = isRebuild;
 	if (m_primaryState < 0)
 	{
@@ -648,19 +676,15 @@ bool DozerAIUpdate::resumeConstruction(Object &structure)
 
 bool DozerAIUpdate::repair(Object &structure)
 {
-	// RW 0x88BD8D: the dozer can repair (slot 0x50) and the ActionManager allows it (RW 0x82D7F2, S-1282), the structure has no other sole healer (RW 0x68B8D3);
-	// the command path RW 0x88E552 idles a dozer without a current task first
+	// RW 0x88BD8D: canAcceptNewRepair is the dozer interface's slot 0x50,
+	// before the shared ActionManager::canRepairObject gate. The existing
+	// repair task remains the healing path.
 	Object *self = getObject();
-	if (!canAcceptNewRepair(&structure)) // RW 0x88BDA2: the dozer interface's slot 0x50, FIRST
+	if (!canAcceptNewRepair(&structure)) // RW 0x88BDA2, FIRST
 	{
 		return false;
 	}
-	if (!canRepair(*self, &structure))
-	{
-		return false;
-	}
-	const ObjectID healer = self->logic().getFrame() > structure.soleHealingBenefactorExpiry() ? (ObjectID)INVALID_ID : structure.soleHealingBenefactor();
-	if (healer != INVALID_ID && healer != self->getID())
+	if (!ActionManager::canRepairObject(self, &structure, lastCommandSource()))
 	{
 		return false;
 	}
@@ -676,6 +700,12 @@ bool DozerAIUpdate::repair(Object &structure)
 	return true;
 }
 
+bool DozerAIUpdate::repair(Object &structure, CommandSourceType source)
+{
+	setLastCommandSource(source); // PORT-289: keep the source for the virtual repair gate and per-frame cancellation
+	return repair(structure);     // PORT-282: dispatch WorkerAIUpdate::repair when the dynamic type is a worker
+}
+
 // lane PORT-282: RW 0x8AD2D3 (the worker's dozer-interface slot 0xB0; WorkerAIUpdate, not the dozer's 0x88BD8D). The ActionManager's test (RW 0x82D7F2) is
 // asked first with the ordered structure, and the order is dropped when it says no; a builder that is not a SWARM_DOZER (the template's KindOf byte + 0x109
 // bit 7) then asks the dozer interface's slot 0x50 (RW 0x88CB8A, canAcceptNewRepair) and the structure's sole healer (RW 0x68B8D3, Object's own accessor):
@@ -684,7 +714,7 @@ bool DozerAIUpdate::repair(Object &structure)
 bool WorkerAIUpdate::repair(Object &structure)
 {
 	Object *self = getObject();
-	if (!canRepair(*self, &structure)) // RW 0x8AD2EB(0x82D7F2): the ActionManager's structure test
+	if (!ActionManager::canRepairObject(self, &structure, lastCommandSource())) // RW 0x8AD2EB(0x82D7F2): the shared ActionManager repair predicate
 	{
 		return false;
 	}
@@ -1303,9 +1333,10 @@ UpdateSleepTime DozerAIUpdate::update()
 void DozerAIUpdate::dozerMachineStep()
 {
 	Object *self = getObject();
-	if (m_currentTask == DOZER_TASK_REPAIR && !canRepair(*self, self->logic().findObjectByID(getTaskTarget(DOZER_TASK_REPAIR))))
+	if (m_currentTask == DOZER_TASK_REPAIR &&
+		!ActionManager::canRepairObject(self, self->logic().findObjectByID(getTaskTarget(DOZER_TASK_REPAIR)), lastCommandSource()))
 	{
-		cancelTaskInternal(DOZER_TASK_REPAIR); // RW 0x88CB6D (the ActionManager's test RW 0x82D7F2: S-1282)
+		cancelTaskInternal(DOZER_TASK_REPAIR); // RW 0x88CB6D -> ActionManager::canRepairObject
 	}
 	// the primary machine (ZH StateMachine::updateStateMachine)
 	const int before = m_primaryState;

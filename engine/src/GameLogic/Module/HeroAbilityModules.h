@@ -121,12 +121,32 @@ class CommandButton;
 //   * nothing when Percentage is not above 0 or the object is BLOODTHIRSTY (status 65, RW 0x44DDEC(0x41));
 //   * ThePartitionManager within Radius of the object's position, distance type 0, ITER_FASTEST, through RW 0xC1D660 (not the object), RW 0xC10E20 (alive),
 //     RW 0xC11DC0 (the object's ALLIES), RW 0xC0F374 (Object + 0x458 bit 3: never set) and the ObjectFilter for the object's controlling player (RW 0xBE4CC8);
-//   * for each hit in that order: a HERO object skips a HERO candidate when TheGameLogic + 0x9F is 0 (INFERENCE: RW 0x62D299 sets the byte to 1 when a game
-//     starts, so a game's heroes share with heroes); a candidate whose ExperienceTracker accepts experience (RW 0x79D322) makes value := fstp(value *
+//   * for each hit in that order: a HERO object skips a HERO candidate when TheGameLogic + 0x9F is 0 (PORT-301: RW 0x883428 reads the byte; the GameLogic
+//     constructor sets it to 1, RW 0x62D299, and script action 538 SET_HERO_EXPERIENCE_SHARING writes it, RW 0x7CDF99 -> RW 0x7BD3D1); a candidate whose
+//     ExperienceTracker accepts experience (RW 0x79D322) makes value := fstp(value *
 //     Percentage), then value := fstp(dropOff * value) and, above 0, ExperienceTracker::addExperiencePoints(value, true, true, true, false) (RW 0x79D833).
 //     The value is NOT restored per candidate: each one shares the previous one's share (retail's register reuse, [ebp + 8]);
 //   * the drop off (RW 0x88325B): DropOff == 1.0: max(0, 1 - |candidate - position| / Radius) with the length RW 0x4054F5 (x87 z*z + y*y + x*x, CRT sqrt,
 //     fstp) and SSE subtract / divide; any other DropOff: 1.0.
+// THE 7 OWN FUNCTIONS THE MAP REPORTS AS `none` (Port 301, fork issue 693; each read from its first instruction, the class bound by create RW 0x64BC96 ->
+// constructor RW 0x88314A -> vtable RW 0xC5EEA0, `docs/ennorath/RW_FUNCTION_MAP.tsv`): the port has every one of them -- the six that carry no gameplay are
+// the shared module plumbing, ported once for every module, so nothing below is a second path:
+//   * RW 0x4B612F (the ModuleData vtable RW 0xC5EEA0 slot + 0x38) the base ModuleData's empty tag name: an AsciiString built from the empty literal
+//     RW 0xDC62B8 through RW 0x435F30 (the port's ModuleData::getModuleTagName);
+//   * RW 0x8830A2 (the module vtable RW 0xC5EE6C slot 2) the class name: `mov eax, 0xC0B55C`, the literal "ShareExperienceBehavior" (the port's
+//     Module::getModuleClassName);
+//   * RW 0x8830A8 (slot 3) the module name key: the one-shot registration (the flag RW 0xDE91A0, the name key RW 0xDE919C built by RW 0x5487EC from the
+//     class name RW 0xC0B55C) (the port's Module::getModuleNameKey);
+//   * RW 0x8831AC (slot 0) the scalar deleting destructor: the destructor RW 0x883082, then operator delete RW 0x42F6A0 for argument bit 0 (the port's
+//     implicit destructor);
+//   * RW 0x88320F (the ModuleData vtable RW 0xC5EEA0 slot 0) the ModuleData's scalar deleting destructor: the destructor RW 0x88322B, then operator delete
+//     RW 0x42F6A0 for argument bit 0 (the port's implicit destructor);
+//   * RW 0x8E3BB1 (the module's xfer) the version (1, 1) RW 0x404F15 and the base xfer RW 0x850C60, nothing else (the port's xfer(): the share counter is
+//     the port's own diagnostics, not state, so it is not written);
+//   * RW 0x8831C8 (slot 4) the update: a debug trace and then UPDATE_SLEEP_FOREVER (mov eax, 0x3FFFFFFF) -- no state change; the port sleeps forever
+//     too (the constructor's friend_setNextCallFrame, RW 0x883196 -> RW 0x850C32, and update() answers UPDATE_SLEEP_FOREVER).
+// NOT PORTED (stop S-7545, reported per use): the retail's debug trace in RW 0x8831C8 -- it needs the general Debug singleton (RW 0xDC62C0) the port has
+// not got; the trace changes nothing the player sees.
 class ShareExperienceBehaviorModuleData : public ModuleData
 {
 public:
@@ -142,7 +162,7 @@ class ShareExperienceBehavior : public UpdateModule
 public:
 	OBFME_MODULE_XFER(ShareExperienceBehavior) // lane SAVE-4b
 	ShareExperienceBehavior(Thing *thing, const ShareExperienceBehaviorModuleData *data); // RW 0x88314A
-	UpdateSleepTime update() override { return UPDATE_SLEEP_FOREVER; }
+	UpdateSleepTime update() override { return UPDATE_SLEEP_FOREVER; } // RW 0x8831C8: a debug trace and UPDATE_SLEEP_FOREVER, no state change
 	void share(float value); // RW 0x8832F0
 	static ShareExperienceBehavior *of(Object &obj); // RW 0x88305B
 	unsigned long long shares() const { return m_shares; }
@@ -150,7 +170,7 @@ public:
 private:
 	float dropOffFactor(const Coord3D &from, const Object &candidate) const; // RW 0x88325B
 	const ShareExperienceBehaviorModuleData *m_data;
-	unsigned long long m_shares = 0; // diagnostics (not state)
+	unsigned long long m_shares = 0; // diagnostics (not state): retail's xfer (RW 0x8E3BB1) saves nothing but the version and the base xfer (PORT-301)
 };
 
 // DamageFilteredCreateObjectDie (create RW 0x64C684, constructor RW 0x889222; vtables RW 0xC6134C, die RW 0xC61288 (module + 0x10), damage RW 0xC6127C
@@ -176,6 +196,7 @@ public:
 	static void buildFieldParse(MultiIniFieldParse &p);
 };
 
+// RW 0x0088918B (getModuleName), RW 0x00889198 (getModuleNameKey), RW 0x00889262 / RW 0x0088916B (dtor)
 class DamageFilteredCreateObjectDie : public BehaviorModule, public DieModuleInterface, public DamageModuleInterface
 {
 public:
@@ -237,7 +258,7 @@ public:
 	};
 	float m_maxScanRange = 0.0f;       // + 0x08
 	float m_minScanRange = 0.0f;       // + 0x0C
-	float m_workingRadius = 0.0f;      // + 0x10 (not read by the update)
+	float m_workingRadius = 0.0f;      // + 0x10 (RW 0xC57EC0 parse, RW 0x85D37D zero-init in ctor RW 0x85D355; never read in RotWK or BFME2 donor)
 	float m_idleTimeSeconds = 0.0f;    // + 0x14
 	std::string m_specialAbility;      // + 0x18
 	ObjectStatusMaskType m_forbiddenStatus{}; // + 0x1C
@@ -254,6 +275,7 @@ class AutoAbilityBehavior : public UpdateModule
 public:
 	OBFME_MODULE_XFER(AutoAbilityBehavior) // lane SAVE-4b
 	AutoAbilityBehavior(Thing *thing, const AutoAbilityBehaviorModuleData *data); // RW 0x85D7FD
+	~AutoAbilityBehavior() override = default; // RW 0x0085D3ED (~AutoAbilityBehavior), RW 0x0085D5CE (scalar deleting dtor)
 	UpdateSleepTime update() override;                                           // RW 0x85D9D1
 	DisabledMaskType getDisabledTypesToProcess() const override { return (DisabledMaskType)(1u << 3); } // RW 0x855830 (vtable RW 0xC57F80 slot 1): DISABLED_HELD
 	void onObjectCreated() override;                                              // the StartsActive part of the constructor (needs the command set)
@@ -324,14 +346,14 @@ private:
 //     voice plays for MSG_DO_SPECIAL_POWER (RW 0x8DF846) — the initiate itself posts no sound of its own;
 //   * update (RW 0x8983B5): the PERMANENT weapon lock is released (RW 0x68DF11(2)), every WeaponSetFlags bit off (RW 0x691106), the modifier removed (RW
 //     0x68F259), not active, the countdown unpaused (slot 0x24(0)); sleeps forever.
-// Port 256 (fork issue 604): the class's own map rows that carried no citation, classified by reading them (RW_FUNCTION_MAP depth 0):
-//   0x898276 / 0x898290  the static type descriptor accessor (returns RW 0xC0B4D0) and its one-shot initializer (the pool object RW 0x5487EC); slots + 0x08 and
-//                       + 0x10 of the primary vtable RW 0xC65188, no game code calls them -- the port has no RTTI descriptor, nothing to port;
-//   0x89833B            the scalar deleting destructor (the destructor RW 0x89822B, then operator delete RW 0x42F6A0 for argument bit 0) -- the port's
-//                       implicit destructor;
-//   0x8E38D8            a thunk chain RW 0x8B88B0 -> RW 0x4D0EAF -> the empty stub RW 0x63F3BF (slot + 0x04 of RW 0xC65188: nothing);
-//   0x9E7051            the getter of + 0x38 ("active"): mov al, [ecx+0x18] on the + 0x20 subobject -- the port's isActive() / active();
-//   0x898357            the xfer override: version (1, 1) RW 0x404F15, the base RW 0x9912DB, then Xfer slot 0x90 on + 0x38 -- the port's xfer().
+// Port 256 (fork issue 604) / Local 123 (issue #807): the class's own map rows, classified by reading them (RW_FUNCTION_MAP depth 0):
+//   RW 0x00898276 / RW 0x00898290 (DONOR BFME2 0x00494AF3) getModuleName (returns RW 0xC0B4D0) and getModuleNameKey (the pool object RW 0x5487EC);
+//                       slots + 0x08 and + 0x10 of the primary vtable RW 0xC65188;
+//   RW 0x0089833B       (DONOR BFME2 0x00494B9E) the scalar deleting destructor (the destructor RW 0x0089822B, then operator delete RW 0x42F6A0 for
+//                       argument bit 0) -- the port's implicit destructor;
+//   RW 0x008E38D8       a thunk chain RW 0x8B88B0 -> RW 0x4D0EAF -> the empty stub RW 0x63F3BF (slot + 0x04 of RW 0xC65188: nothing);
+//   RW 0x009E7051       the getter of + 0x38 ("active"): mov al, [ecx+0x18] on the + 0x20 subobject -- the port's isActive() / active();
+//   RW 0x00898357       the xfer override: version (1, 1) RW 0x404F15, the base RW 0x9912DB, then Xfer slot 0x90 on + 0x38 -- the port's xfer().
 class WeaponModeSpecialPowerUpdateModuleData : public ModuleData
 {
 public:

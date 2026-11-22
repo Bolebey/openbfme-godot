@@ -108,6 +108,7 @@ public:
 	static void buildFieldParse(MultiIniFieldParse &p);
 };
 
+// RW 0x0064DFEB (this-0x0C adjuster thunk, vtable RW 0xC668A0 slot 1), RW 0x009E35EF (vtable RW 0xC668E0 slot 12, fld +0x38 percent rate)
 class GateOpenAndCloseBehavior : public UpdateModule, public CollideModuleInterface
 {
 public:
@@ -209,7 +210,7 @@ class GateProxyBehavior : public GateOpenAndCloseBehavior
 public:
 	OBFME_MODULE_XFER(GateProxyBehavior) // lane SAVE-4b
 	GateProxyBehavior(Thing *thing, const GateProxyBehaviorModuleData *data);
-	~GateProxyBehavior() override = default;
+	~GateProxyBehavior() override = default; // RW 0x00653DE0 / RW 0x00653DC4 / thunk RW 0x006530AC
 
 	UpdateSleepTime update() override; // RW 0x64DF74: returns UPDATE_SLEEP_FOREVER
 	void crc(StateHasher &hasher) const override;
@@ -243,6 +244,7 @@ class AIGateUpdate : public UpdateModule
 public:
 	OBFME_MODULE_XFER(AIGateUpdate) // lane SAVE-4b
 	AIGateUpdate(Thing *thing, const AIGateUpdateModuleData *data);
+	~AIGateUpdate() override;
 	UpdateSleepTime update() override;
 	void crc(StateHasher &hasher) const override;
 	// the trigger's callback (RW 0x8B4AF4)

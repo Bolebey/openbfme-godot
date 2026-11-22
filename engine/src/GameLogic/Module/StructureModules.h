@@ -114,8 +114,9 @@ public:
 class InactiveBody : public BehaviorModule, public BodyModuleInterface
 {
 public:
-	OBFME_MODULE_XFER(InactiveBody) // lane SAVE-4b
+	OBFME_MODULE_XFER(InactiveBody) // lane SAVE-4b (RW 0x008C1AEA)
 	InactiveBody(Thing *thing, const InactiveBodyModuleData *data);
+	~InactiveBody() override = default; // RW 0x008C18D8 (~InactiveBody), RW 0x008C1A59 (scalar deleting dtor)
 	BodyModuleInterface *getBody() override { return this; }
 	float getHealth() const override { return 0.0f; }
 	float getMaxHealth() const override { return 0.0f; }
@@ -174,6 +175,7 @@ public:
 	static void buildFieldParse(MultiIniFieldParse &p);
 };
 
+// RW 0x008A78AD (getModuleName), RW 0x008A7918 (getModuleNameKey), RW 0x008A79E8 (scalar deleting dtor -> RW 0x008A788D)
 class StructureCollapseUpdate : public UpdateModule, public DieModuleInterface
 {
 public:
@@ -353,7 +355,7 @@ class SymbioticStructuresBody : public ActiveBody
 public:
 	OBFME_MODULE_XFER(SymbioticStructuresBody) // lane SAVE-4b (RW 0x008C4C07)
 	SymbioticStructuresBody(Thing *thing, const SymbioticStructuresBodyModuleData *data) : ActiveBody(thing, data), m_symbioticData(data) {}
-	~SymbioticStructuresBody() override = default; // RW 0x008C4CD5
+	~SymbioticStructuresBody() override = default; // RW 0x008C4BE8 / RW 0x008C4CD5
 	// RW + 0x104: the object whose body this one answers with (INVALID_ID until something links them: stop S-343, S-7408)
 	void setSymbiote(ObjectID id) { m_symbioteId = id; }
 	ObjectID symbioteId() const { return m_symbioteId; }

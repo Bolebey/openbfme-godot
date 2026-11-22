@@ -6,6 +6,7 @@
 #include "GameLogic/Object/Contain/GarrisonContainRuntime.h"
 #include "GameLogic/SnapshotXfer.h"
 
+#include "Common/ModEngineFeatures.h"
 #include "Common/NumericState.h"
 #include "GameLogic/AI/AIPathfind.h"
 #include "Common/Player.h"
@@ -811,6 +812,17 @@ void GarrisonContain::onBodyDamageStateChange(const DamageInfo *, BodyDamageType
 	}
 }
 
+// RW 0x0087A3A4 (DONOR BFME2 0x00479C0C): contain vslot 0x68 on HordeGarrisonContain (and subclasses TunnelContain, SlaughterHordeContain,
+// CitadelSlaughterHordeContain): forwards to OpenContain::onContainedAboutToTakeDamage (RW 0x00865631) only when rider->getContain() == nullptr
+void GarrisonContain::onContainedAboutToTakeDamage(Object *rider, const void *damageSource, DamageInfo *info)
+{
+	if (isHordeGarrison() && rider && rider->getContain() != nullptr)
+	{
+		return;
+	}
+	OpenContain::onContainedAboutToTakeDamage(rider, damageSource, info);
+}
+
 void GarrisonContain::orderAllPassengersToIdle(int source)
 {
 	const std::vector<Object *> riders(m_contained.begin(), m_contained.end());
@@ -1391,8 +1403,10 @@ void GarrisonContain::orderAllPassengersToExit(int source)
 		{
 			h->exitContainer(getObject(), source);
 		}
-		else if (r->getContain())
+		else if (r->getContain() && !ModEngineFeatures::has(ModEngineFeature::EnnorathEvacuateContainers))
 		{
+			// RW 0x99106B .. 0x991072: a rider whose contain is no horde (vslot 0x7C null) stays. ennorath.evacuate-containers (PYSAGE 1.9.8.5 .keydef 0xF39580,
+			// hooked at RW 0x99106B): it goes on to RW 0x991086 and gets aiExit like a rider without a contain (war wagons, the Angmar Witch-king)
 			continue;
 		}
 		else if (AIUpdateInterface *ai = r->getAIUpdateInterface())
