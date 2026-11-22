@@ -576,6 +576,7 @@ include(cmake/Local105.cmake)   # LOCAL-105: FadeAndDieOrnamentUpdate and small 
 include(cmake/Local96.cmake)    # LOCAL-96: DozerAIUpdate and WorkerAIUpdate builder functions (fork issue 761; OPENBFME_LOCAL96_TESTS)
 include(cmake/Local99.cmake)    # LOCAL-99: unit behaviour modules uncited own functions (issue #764; OPENBFME_LOCAL99_TESTS)
 include(cmake/Local126.cmake)   # LOCAL-126: map sweep errors + DAMAGE_MULT / RESIST_FEAR readers (fork issue 810; OPENBFME_LOCAL126_TESTS)
+include(cmake/Local127.cmake)   # LOCAL-127: Ennorath 1.9.8.5 paged options menu, hotkeys, and online delay fix (fork issue 811; OPENBFME_LOCAL127_TESTS)
 include(cmake/Local101.cmake)   # LOCAL-101: special AI modules SiegeDockingBehavior & HordeWorkerAIUpdate (fork issue 771; OPENBFME_LOCAL101_TESTS)
 include(cmake/Local103.cmake)   # LOCAL-103: client draw modules (issue #773; OPENBFME_LOCAL103_TESTS)
 include(cmake/Local109.cmake)   # LOCAL-109: builders and walls second pass (fork issue 787; OPENBFME_LOCAL109_TESTS)
@@ -1416,6 +1417,7 @@ add_executable(openbfme_tests
     ${OPENBFME_LOCAL96_TESTS}
     ${OPENBFME_LOCAL99_TESTS}
         ${OPENBFME_LOCAL126_TESTS}
+    ${OPENBFME_LOCAL127_TESTS}
     ${OPENBFME_LOCAL101_TESTS}
     ${OPENBFME_LOCAL103_TESTS}
     ${OPENBFME_LOCAL109_TESTS}
