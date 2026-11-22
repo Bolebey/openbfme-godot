@@ -979,7 +979,7 @@ void CastleBehavior::initiateUnpack(bool instant, const ThingTemplate *explicitT
 	{
 		payForUnpack(); // RW 0x79C1EA
 	}
-	// RW 0x79C1F5: the alert map's reset (RW 0x7985AA on + 0xA0) is not ported (S-951)
+	m_damageMap.clear(); // RW 0x79C1F5 -> 0x7985AA: reset alert map (+0xA0)
 }
 
 // RW 0x799ACB
@@ -1198,10 +1198,37 @@ void CastleBehavior::pushUnitsOut()
 	}
 }
 
-// RW 0x799440 (BFME2 donor CastleBehavior abandonment, tier B: the RW instruction was not read in this session's sandbox; the
-// chain is batch-10's, rows 5-7): the camp-destroyed EVA. The castle's own CastleMemberBehavior data names three events
+// RW 0x79B374: record last damaged logic frame per attacking player bit in m_damageMap (+0xA0)
+void CastleBehavior::recordDamageByPlayers(const DamageInfo &info)
+{
+	std::uint32_t mask = info.m_input.m_sourcePlayerMask; // RW 0x79B37E: [info + 0x0C]
+	const UnsignedInt frame = getObject()->logic().getFrame(); // RW 0x79B3AD: [TheGameLogic + 0x40]
+	for (int idx = 0; mask != 0u && idx < 32; ++idx, mask >>= 1u)
+	{
+		if (mask & 1u)
+		{
+			m_damageMap[idx] = frame; // RW 0x79B3A3 .. 0x79B3B3
+		}
+	}
+}
+
+// RW 0x7987C4: true when m_damageMap (+0xA0) contains any player index other than ownerPlayerIndex
+bool CastleBehavior::wasDamagedByOtherPlayer(int ownerPlayerIndex, unsigned timeoutFrames) const
+{
+	(void)timeoutFrames; // RW 0x7987C4 takes FriendlyCampDestroyedDamageTimeoutMS (+0x88) at [esp+0xC] and scans m_damageMap for key != ownerPlayerIndex
+	for (const auto &kv : m_damageMap)
+	{
+		if (kv.first != ownerPlayerIndex)
+		{
+			return true; // RW 0x7987EA
+		}
+	}
+	return false; // RW 0x7987E4
+}
+
+// RW 0x799440: the camp-destroyed EVA. The castle's own CastleMemberBehavior data names three events
 // (+ 0x08 / + 0x0C / + 0x10, parser RW 0x797F69); the one the local player hears depends on its relationship to the castle's
-// player: RW 0x79951F reads + 0x08 for the owner, RW 0x799560 + 0x0C for an ally, RW 0x7995C2 + 0x10 otherwise, and RW 0x7995DB
+// player: RW 0x79951F reads + 0x08 for the owner, RW 0x799560 + 0x0C for an ally, RW 0x7995C2 + 0x10 for an enemy, and RW 0x7995DB
 // reports it at the castle through RW 0x5DD9EE. Presentation only: the choice reads the local player, never writes simulation state.
 void CastleBehavior::reportCampDestroyedEva()
 {
@@ -1217,14 +1244,45 @@ void CastleBehavior::reportCampDestroyedEva()
 	const Player *local = castle->logic().players().getLocalPlayer();
 	if (local && local == owner)
 	{
+		// RW 0x7994F9 .. 0x799512: pass TheEva +0x88 (FriendlyCampDestroyedDamageTimeoutMS) to RW 0x7987C4
+		const unsigned friendlyTimeout = AudioApi::friendlyCampDestroyedDamageTimeoutFrames();
+		if (friendlyTimeout > 0u && !wasDamagedByOtherPlayer(owner->getPlayerIndex(), friendlyTimeout))
+		{
+			return;
+		}
 		event = data && !data->m_campDestroyedOwnerEvaEvent.empty() ? &data->m_campDestroyedOwnerEvaEvent : nullptr; // RW 0x79951F
 	}
 	else if (local && local->getRelationship(owner) == ALLIES)
 	{
+		// RW 0x799537 .. 0x799553: pass TheEva +0x88 (FriendlyCampDestroyedDamageTimeoutMS) to RW 0x7987C4
+		const unsigned friendlyTimeout = AudioApi::friendlyCampDestroyedDamageTimeoutFrames();
+		if (friendlyTimeout > 0u && !wasDamagedByOtherPlayer(owner->getPlayerIndex(), friendlyTimeout))
+		{
+			return;
+		}
 		event = data && !data->m_campDestroyedAllyEvaEvent.empty() ? &data->m_campDestroyedAllyEvaEvent : nullptr; // RW 0x799560
 	}
 	else
 	{
+		// RW 0x799580 .. 0x7995B9: enemy branch checks m_damageMap[local->playerIndex] + TheEva +0x84 (EnemyCampDestroyedDamageTimeoutMS) >= frame
+		const unsigned enemyTimeout = AudioApi::enemyCampDestroyedDamageTimeoutFrames();
+		if (enemyTimeout > 0u)
+		{
+			if (!local || local->getRelationship(owner) != ENEMIES)
+			{
+				return; // RW 0x799580: non-enemy skips
+			}
+			const auto it = m_damageMap.find(local->getPlayerIndex());
+			if (it == m_damageMap.end())
+			{
+				return; // RW 0x79959B
+			}
+			const UnsignedInt now = castle->logic().getFrame(); // RW 0x7995A5
+			if (it->second + enemyTimeout < now)
+			{
+				return; // RW 0x7995B7..0x7995B9: jb 0x7995e0
+			}
+		}
 		event = data && !data->m_campDestroyedAttackerEvaEvent.empty() ? &data->m_campDestroyedAttackerEvaEvent : nullptr; // RW 0x7995C2
 	}
 	if (event)
@@ -1251,6 +1309,7 @@ void CastleBehavior::abandon()
 	castle->setStatus((unsigned)n.unselectable, false); // RW 0x79CC59
 	setMembersStatus(n.noAttack, true);                 // RW 0x79CC75: RW 0x79A017(NO_ATTACK, 1)
 	m_timer = m_data->m_fadeTime;                       // RW 0x79CC83
+	m_damageMap.clear();                                // RW 0x79CC86 -> 0x7985AA: reset alert map (+0xA0)
 }
 
 // RW 0x79CCF2
@@ -1680,11 +1739,18 @@ void CastleMemberBehavior::crc(StateHasher &h) const
 	h.addBool(m_breached);
 }
 
+// RW 0x79B757
 void CastleMemberBehavior::onDamage(const DamageInfo &info)
 {
 	if (info.m_output.m_actualDamageDealt > 0.0f)
 	{
-		++getObject()->logic().combat().counters().castleMemberHits; // RW 0x79B374 (the castle's alert) is not ported (S-343)
+		++getObject()->logic().combat().counters().castleMemberHits;
+		// RW 0x79B76B .. 0x79B793: forward damage to owning castle's CastleBehavior::recordDamageByPlayers (RW 0x79B374)
+		Object *castleObj = m_castleId != INVALID_ID ? getObject()->logic().findObjectByID(m_castleId) : getObject();
+		if (CastleBehavior *cb = castleObj ? CastleBehavior::of(*castleObj) : nullptr)
+		{
+			cb->recordDamageByPlayers(info); // RW 0x79B793 -> 0x79B374
+		}
 	}
 }
 
@@ -1821,7 +1887,7 @@ void CastleModules::registerAll(ModuleFactory &modules)
 // ---- lane SAVE-4b: the snapshots (OpenBFME native, S-4190: each class's fields in its crc's order; the last error text is the report's) ----------------
 void CastleBehavior::xfer(Xfer &x)
 {
-	XferVersion v{ 1, 2 }; // 2: lane CASTLEAREA-1's areas and set
+	XferVersion v{ 1, 3 }; // 2: lane CASTLEAREA-1's areas and set; 3: Local 139 m_damageMap (+0xA0, RW 0x79BBBC)
 	x.xferVersion(v);
 	FoundationAIUpdate::xfer(x);
 	SnapshotXfer::enumIn(x, m_state, STATE_IDLE, STATE_ABANDONED, "a castle's state");
@@ -1862,6 +1928,34 @@ void CastleBehavior::xfer(Xfer &x)
 			{
 				const int index = a.trigger;
 				registerArea(std::move(a), index);
+			}
+		}
+	}
+	// Local 139 (version 3): m_damageMap (+0xA0, RW 0x79BBBC)
+	if (v.current >= 3)
+	{
+		UnsignedInt count = (UnsignedInt)m_damageMap.size();
+		x.xferUnsignedInt(&count);
+		if (x.isLoading())
+		{
+			m_damageMap.clear();
+			for (UnsignedInt i = 0; i < count; ++i)
+			{
+				int playerIdx = 0;
+				UnsignedInt frame = 0;
+				x.xferInt(&playerIdx);
+				x.xferUnsignedInt(&frame);
+				m_damageMap[playerIdx] = frame;
+			}
+		}
+		else
+		{
+			for (const auto &kv : m_damageMap)
+			{
+				int playerIdx = kv.first;
+				UnsignedInt frame = kv.second;
+				x.xferInt(&playerIdx);
+				x.xferUnsignedInt(&frame);
 			}
 		}
 	}
