@@ -1150,9 +1150,24 @@ void FireLogicSystem::crc(StateHasher &h) const
 	}
 }
 
+// RW 0x00C11750 (FireLogicSystem FieldParse table): MaxCellsBurning (+0x90, RW 0x0042EC5E),
+// FuelRegenerationRate (+0x94, RW 0x0042EC5E). MaxCellsBurning is also read by RW 0x005F32FF (0x005F3314).
 void FireLogicSystem::parseINI(INI *ini)
 {
 	if (!ini) return;
-	// Optional INI parser for FireLogicSystem.ini overrides
+	struct ParsedFireLogic
+	{
+		int maxCellsBurning;
+		int fuelRegenRate;
+	};
+	ParsedFireLogic parsed{ m_maxCellsBurning, m_fuelRegenRate };
+	static const FieldParse kFields[] = {
+		{ "MaxCellsBurning", INI::parseInt, nullptr, (int)offsetof(ParsedFireLogic, maxCellsBurning) },
+		{ "FuelRegenerationRate", INI::parseInt, nullptr, (int)offsetof(ParsedFireLogic, fuelRegenRate) },
+		{ nullptr, nullptr, nullptr, 0 },
+	};
+	ini->initFromINI(&parsed, kFields);
+	m_maxCellsBurning = parsed.maxCellsBurning;
+	m_fuelRegenRate = parsed.fuelRegenRate;
 }
 
