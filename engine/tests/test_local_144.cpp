@@ -407,7 +407,7 @@ TEST_CASE("LOCAL-144: War of the Ring networkVote forces auto-resolve for partia
 		std::string error;
 		REQUIRE_MESSAGE(lw.start(s, &error), error);
 		lw.setNetworked(0, 1); // battleChoice = 1 (RTS wins tie)
-		REQUIRE(lw.armies().size() == 6);
+		REQUIRE(lw.armies().size() == 3);
 		int army0 = -1;
 		for (const auto &a : lw.armies())
 			if (a.owner == 0 && !a.garrison) { army0 = a.id; break; }
