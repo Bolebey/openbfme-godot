@@ -49,6 +49,8 @@ enum class ModEngineFeature
 	EnnorathOnlineDelayFix,            // NetworkDelayFix checkbox and online frame-count pacing (.dlyfix)
 	EnnorathLobbyMapSearch,            // MpGameSetup MapSearch text entry filters MapList live by display name (.mapfind / .mapsvar)
 	EnnorathChatMute,                  // per-player chat mute on the PlayerTribute screen and in the chat path (.chatmut 0xEDB000)
+	EnnorathReplayControls,            // replay tabs (Messenger), recorded replay chat and Ctrl+] pause (.rpchat / .rppause / .rppvar)
+	EnnorathWotr8Players,              // War of the Ring for 8 players: 8 lobby slots, dropdown clamp, 2-8 text, partial-human RTS battles (.wotrui / .wotrobs / .wtrview / .wtrdisp / .lobfac)
 	Count
 };
 
