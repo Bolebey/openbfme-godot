@@ -3,6 +3,12 @@
 
 #include "doctest.h"
 #include "MoveTestUtil.h"
+#include "HudTestUtil.h"
+#include "GameClient/ControlBar.h"
+#include "GameClient/ControlBarCommands.h"
+#include "GameLogic/AI/AIMove.h"
+#include "GameLogic/AI/AIPathfind.h"
+#include "GameLogic/Module/AIUpdate.h"
 
 #include "Common/Player.h"
 #include "Common/PlayerList.h"
@@ -212,4 +218,120 @@ TEST_CASE("LOCAL-142 S-7534: WAREHOUSE_SET_VALUE sets boxes with ceil(cash/Value
 	// Unknown object name: no crash, warehouse untouched (RW 0x7C1943 je)
 	ScriptActions::execute(w.logic->scriptEngine(), makeWarehouseAction("L142_NoSuchObject", 900));
 	CHECK(dock->boxesStored() == 2);
+}
+
+// RW 0x9427EB..0x942807 (getCommandAvailability RW 0x942733): ON_GROUND_ONLY (option bit 30, 0x40000000) calls
+// AIUpdateInterface vslot 0x228 (RW 0x66288A): true when m_curLocomotor != null, goal is AIGOAL_ON_PATH (1) or
+// AIGOAL_EXPLICIT_WITH_PATH (4), and m_path has a portal waypoint on m_closest (RW 0x661E50) or m_closest->m_nextOpti (RW 0x5E2DF4).
+TEST_CASE("LOCAL-142 S-7427: ON_GROUND_ONLY restricts command while AI follows a portal path (RW 0x9427EB / 0x66288A)")
+{
+	movetest::MoveWorld world(10, 10);
+	CommandStore store;
+	CommandStore *savedStore = TheCommandStore;
+	TheCommandStore = &store;
+	struct RestoreStore { CommandStore *saved; ~RestoreStore() { TheCommandStore = saved; } } guard{ savedStore };
+	store.setThingFactory(&world.w.things);
+
+	const std::string err = world.w.load(
+		"Object L142_GroundUnit\n"
+		"  KindOf = SELECTABLE INFANTRY\n"
+		"  CommandSet = L142GroundSet\n"
+		"  Body = ActiveBody B\n    MaxHealth = 100\n  End\n"
+		"  Behavior = AIUpdateInterface AI\n  End\n"
+		"  LocomotorSet\n"
+		"    Locomotor = WalkerLoco\n"
+		"    Condition = SET_NORMAL\n"
+		"    Speed = 50\n"
+		"  End\n"
+		"End\n",
+		INI_LOAD_OVERWRITE, "local142_s7427.ini");
+	REQUIRE_MESSAGE(err.empty(), err);
+	world.buildMap();
+
+	CommandButton plain, onGround;
+	plain.m_name = "L142Plain";
+	plain.m_command = GUI_COMMAND_STOP;
+	plain.m_inPalantir = true;
+	onGround.m_name = "L142OnGround";
+	onGround.m_command = GUI_COMMAND_STOP;
+	onGround.m_inPalantir = true;
+	onGround.m_options = COMMAND_OPTION_ON_GROUND_ONLY;
+	CommandSet *set = store.newDynamicCommandSet("L142GroundSet");
+	REQUIRE(set);
+	set->setDynamicButton(0, &plain);
+	set->setDynamicButton(1, &onGround);
+
+	PinholeView view{ { 0, -400, 500 }, { 0, 0, 0 }, 1024, 768, 0.7f };
+	InGameUI ui;
+	MessageStream stream;
+	HudContext ctx{ *world.logic, world.ai.get(), view, ui, stream, &store, {} };
+	ControlBar bar{ ctx };
+
+	Object *unit = world.make("L142_GroundUnit", world.teamOf("Alice"));
+	REQUIRE(unit);
+	world.players.setLocalPlayer(unit->getControllingPlayer());
+	AIUpdateInterface *ai = unit->getAIUpdateInterface();
+	REQUIRE(ai);
+	REQUIRE(ai->curLocomotor());
+
+	auto stateOf = [&](const CommandButton &b) {
+		ui.mirrorSelection({ unit->getID() });
+		bar.update();
+		for (const std::vector<ControlBarButton> *list : { &bar.palantirButtons(), &bar.sideButtons(), &bar.offBarButtons() })
+		{
+			for (const ControlBarButton &cb : *list)
+			{
+				if (cb.button == &b)
+				{
+					return cb.state;
+				}
+			}
+		}
+		return ButtonState::Hidden;
+	};
+
+	// Idle on ground: both buttons available
+	CHECK_FALSE(ai->isMovingAlongPortal());
+	CHECK(stateOf(plain) == ButtonState::Enabled);
+	CHECK(stateOf(onGround) == ButtonState::Enabled);
+
+	// Plain non-portal path (NO_WAYPOINT): still enabled
+	auto *plainPath = new Path();
+	Coord3D p0{ 10.0f, 10.0f, 0.0f };
+	Coord3D p1{ 50.0f, 10.0f, 0.0f };
+	plainPath->appendNode(&p0, LAYER_GROUND);
+	plainPath->appendNode(&p1, LAYER_GROUND);
+	plainPath->getFirstNode()->setNextOptimized(plainPath->getLastNode());
+	plainPath->markOptimized();
+	plainPath->updateClosestSegment(p0);
+	ai->mover().setPath(plainPath);
+	ai->mover().setGoalOnPath();
+	CHECK_FALSE(ai->isMovingAlongPortal());
+	CHECK(stateOf(onGround) == ButtonState::Enabled);
+
+	// Portal waypoint on m_closest (RW 0x661E50): ON_GROUND_ONLY becomes Restricted, plain stays Enabled
+	plainPath->getFirstNode()->setWaypointID(42);
+	CHECK(plainPath->isCurrentNodePortal());
+	CHECK(ai->isMovingAlongPortal());
+	CHECK(stateOf(onGround) == ButtonState::Restricted);
+	CHECK(stateOf(plain) == ButtonState::Enabled);
+
+	// Goal type 4 (AIGOAL_EXPLICIT_WITH_PATH, RW 0x6628A0) also restricts
+	ai->mover().setGoalTypeRaw(AIGOAL_EXPLICIT_WITH_PATH);
+	CHECK(ai->isMovingAlongPortal());
+	CHECK(stateOf(onGround) == ButtonState::Restricted);
+
+	// Portal waypoint on m_closest->m_nextOpti only (RW 0x5E2DF4 hasExplicitZ): restricts under AIGOAL_ON_PATH
+	plainPath->getFirstNode()->setWaypointID(PathNode::NO_WAYPOINT);
+	plainPath->setLastNodePortal(77);
+	ai->mover().setGoalTypeRaw(AIGOAL_ON_PATH);
+	CHECK_FALSE(plainPath->isCurrentNodePortal());
+	CHECK(plainPath->hasExplicitZ());
+	CHECK(ai->isMovingAlongPortal());
+	CHECK(stateOf(onGround) == ButtonState::Restricted);
+
+	// Goal type 2 (AIGOAL_EXPLICIT, neither 1 nor 4) does not restrict (RW 0x6628A3)
+	ai->mover().setGoalTypeRaw(AIGOAL_EXPLICIT);
+	CHECK_FALSE(ai->isMovingAlongPortal());
+	CHECK(stateOf(onGround) == ButtonState::Enabled);
 }

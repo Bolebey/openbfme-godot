@@ -683,6 +683,12 @@ bool Path::hasExplicitZ() const
 	return n->m_waypointID != PathNode::NO_WAYPOINT;
 }
 
+// RW 0x661E50: m_path && m_closest && m_closest->m_waypointID != NO_WAYPOINT
+bool Path::isCurrentNodePortal() const
+{
+	return m_path && m_closest && m_closest->m_waypointID != PathNode::NO_WAYPOINT;
+}
+
 float Path::remainingFrom(const PathNode *node, const Coord3D &pos) const
 {
 	// RW 0x765972: 0 without a node or without a next optimised node, else the approximate 2D distance to the next
