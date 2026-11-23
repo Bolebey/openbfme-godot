@@ -798,6 +798,11 @@ Dictionary GameWorld::setup(const Ref<RetailFileSystem> &fs)
 			// the FX files are read with the #define table retail's FX load sees (macros a mod defines in an earlier file, Ennorath 1.9.8's Water.ini
 			// #include); a world whose load never reached the FX subsystems is an error, never the GameData macros alone
 			Dictionary fx;
+			if (m_world)
+			{
+				// PORT-330 (S-190): the FXList blocks the FX player parses are checked against the same TheAudio / TheEva tables the world loaded
+				m_fxPlayer->setParseServices(m_world->fxListParseServices());
+			}
 			if (m_world && m_world->report().macrosBeforeFXTaken)
 			{
 				fx = m_fxPlayer->setupWithMacros(fs, m_world->report().macrosBeforeFX);
