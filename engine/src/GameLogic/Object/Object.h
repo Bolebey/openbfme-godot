@@ -44,6 +44,7 @@
 #pragma once
 
 #include "Common/Thing/Thing.h"
+#include "GameLogic/SimMath.h"
 #include "GameLogic/Module/BehaviorModule.h"
 #include "GameLogic/Module/DieModule.h"
 #include "GameLogic/ObjectTypes.h"
@@ -576,6 +577,16 @@ public:
 	float getRecordedOrientation() const { return m_recordedAngle; }
 	const float *getRecordedBasis() const { return m_recordedBasis; } ///< row major, as Thing::getBasis (read by the client's RenderInterpolation)
 	const Coord3D &getPreviousPosition() const { return m_previousPosition; }
+
+	// RW 0x00665342 (Object::getPlanarDirectionTo -> RW 0x006635F4 Thing::getPlanarDirectionTo; DONOR BFME2 Object::getPlanarDirectionTo; both BFME2 1.06 and RotWK 2.01):
+	// returns (other->pos.x - this->pos.x, other->pos.y - this->pos.y, 0.0f) in float32 (subss).
+	Coord3D getPlanarDirectionTo(const Object *other) const
+	{
+		if (!other) return Coord3D{ 0.0f, 0.0f, 0.0f };
+		const Coord3D *a = getPosition();
+		const Coord3D *b = other->getPosition();
+		return Coord3D{ SimMath::subf32(b->x, a->x), SimMath::subf32(b->y, a->y), 0.0f };
+	}
 
 	// lane BACKLOG4 (S-1222): RW 0x693919 (BFME2 decomp ObjectRva00293105.cpp Object::rva00293105 is the donor, tier B edited: RotWK adds the status
 	// test). Nothing with the status 0x66 (SUMMONING_REPLACEMENT, + 0xA0 bit 6); every module whose special power update interface (behaviour slot 0x64)

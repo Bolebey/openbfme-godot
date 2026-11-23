@@ -733,6 +733,7 @@ void FireLogicSystem::changeCellToObjectFlammability(int x, int y, const ThingTe
 	}
 }
 
+// RW 0x00685EB0 (FireLogicSystem::ResetCellToOriginalFlammability; DONOR BFME2 0x00285778)
 void FireLogicSystem::resetCellToOriginalFlammability(int x, int y)
 {
 	if (x < 0 || x >= m_numRows || y < 0 || y >= m_numCols)
@@ -748,6 +749,7 @@ void FireLogicSystem::resetCellToOriginalFlammability(int x, int y)
 	cell->m_burntOut = 0;
 }
 
+// RW 0x00687481 (FireLogicSystem::rva00286D4E; DONOR BFME2 0x00286D4E)
 void *FireLogicSystem::addWatcher(std::uint32_t id, int x, int y, bool add)
 {
 	if (!m_cells || !m_storage || x < 0 || y < 0 || x >= m_numRows || y >= m_numCols)

@@ -114,6 +114,7 @@ Path::Path(bool laterLegOnTie)
 {
 }
 
+// RW 0x007666FF (Path::~Path; DONOR BFME2 Path::~Path)
 Path::~Path()
 {
 	PathNode *node, *nextNode;
