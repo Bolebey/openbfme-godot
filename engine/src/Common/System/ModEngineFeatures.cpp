@@ -104,9 +104,10 @@ const std::vector<ModEngineFeatures::Profile> &ModEngineFeatures::knownBinaries(
 		// 1.9.8.5 has, so the mod's package keeps its stance, camera, evacuate, options, map search and chat mute with the new game.dat.
 		{ "f222b925edf2a9553e574ad8445f2841", "Ennorath 1.9.8.7 game.dat",
 			{ F::EnnorathStanceKeepsMoving, F::EnnorathMiddleClickCamera, F::EnnorathEvacuateContainers,
-			  F::EnnorathOptionsPages, F::EnnorathOptionHotkeys, F::EnnorathOnlineDelayFix, F::EnnorathLobbyMapSearch, F::EnnorathChatMute },
+			  F::EnnorathOptionsPages, F::EnnorathOptionHotkeys, F::EnnorathOnlineDelayFix, F::EnnorathLobbyMapSearch, F::EnnorathChatMute,
+			  F::EnnorathReplayControls, F::EnnorathWotr8Players },
 			"rebuilt: as Ennorath 1.9.8.5 (stance .stancem, middle click camera .camfix, evacuate all .keydef, paged options .optui / .optfix, option "
-			"hotkeys .hotkeys / .keydef / .keycmd, online lag fix .dlyfix, lobby map search .mapfind, chat mute .chatmut); not yet "
+			"hotkeys .hotkeys / .keydef / .keycmd, online lag fix .dlyfix, lobby map search .mapfind, chat mute .chatmut, replays .rpchat / .rppause, War of the Ring 8p .wotrui / .wotrobs / .wtrview / .wtrdisp); not yet "
 			"(docs/ennorath/ENNORATH_EXE.md): the 1.9.8.6 / 1.9.8.7 edits (.wmfeat / .wmkeys: the builder camera fix, select all units / all heroes / "
 			"planning mode hotkeys, workers out of the builder hotkey, more than two builders, the builder click sound, 127 factions, the resurrection "
 			"filter, portrait / icon change, CANT_EARN_POWERPOINTS, ToggleMounted at speed 0), and the 1.9.8.5 edits still open there" },
