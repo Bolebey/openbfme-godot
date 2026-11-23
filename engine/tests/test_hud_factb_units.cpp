@@ -690,7 +690,7 @@ void unitsSweep(const std::string &faction, Results &res, bool sweep)
 					break;
 				}
 				enemyName = attempt == 1 ? "GondorBoromir" : firstEnemy;
-				if (!spawn(upgrade ? 0 : 10))
+				if (!spawn((upgrade || cb->m_command == GUI_COMMAND_TOGGLE_STANCE) ? 0 : 10))
 				{
 					res.fail(item, "the unit left the world in its first 20 frames");
 					continue;
@@ -1708,13 +1708,39 @@ void unitsSweep(const std::string &faction, Results &res, bool sweep)
 				}
 				else if (cb->hasOption(COMMAND_OPTION_NEED_TARGET_ENEMY_OBJECT) && t && t->m_objectFilter)
 				{
+					auto swResistOf = [](const ThingTemplate *tt) -> float {
+						const ThingTemplate *fo = tt ? tt->getFinalOverride() : nullptr;
+						const FieldValue *sv = fo ? fo->findField("ShockwaveResistance") : nullptr;
+						return (sv && std::get_if<float>(sv)) ? *std::get_if<float>(sv) : 0.0f;
+					};
 					Object *eu = g.logic().findObjectByID(enemyUnitId);
 					Object *eb = g.logic().findObjectByID(enemyBuildingId);
-					const bool okU = eu && ObjectFilterMatch::allows(g.logic(), *t->m_objectFilter, *eu, g.rig.local);
+					const bool okU = eu && (!needsMetaImpact || swResistOf(static_cast<const ThingTemplate *>(eu->getTemplate())) == 0.0f)
+						&& ObjectFilterMatch::allows(g.logic(), *t->m_objectFilter, *eu, g.rig.local);
 					const bool okB = eb && !needsMetaImpact && ObjectFilterMatch::allows(g.logic(), *t->m_objectFilter, *eb, g.rig.local);
 					if (!okU && !okB)
 					{
-						if (const ThingTemplate *tt = pickFilteredTemplate(*t->m_objectFilter, enemy, needsMetaImpact))
+						const ThingTemplate *tt = nullptr;
+						if (needsMetaImpact)
+						{
+							// LOCAL-131: MetaImpactNugget rejects STRUCTURE and resists when ShockwaveResistance * 0.2 >= ShockWaveAmount (RW 0x9100AA);
+							// prefer a 0-resistance non-STRUCTURE enemy matching ObjectFilter (e.g. a hobbit/hero without ShockwaveResistance for BalrogWhip).
+							for (const ThingTemplate *ct : g.logic().things().templates())
+							{
+								if (ct && !factb::hasKindOf(*ct, "STRUCTURE") && !factb::hasKindOf(*ct, "UNATTACKABLE") && !factb::hasKindOf(*ct, "INERT")
+									&& !factb::hasKindOf(*ct, "PROJECTILE") && factb::hasKindOf(*ct, "SELECTABLE")
+									&& swResistOf(ct) == 0.0f && ObjectFilterMatch::allows(g.logic(), *t->m_objectFilter, ct, enemy, g.rig.local))
+								{
+									tt = ct;
+									break;
+								}
+							}
+						}
+						if (!tt)
+						{
+							tt = pickFilteredTemplate(*t->m_objectFilter, enemy, needsMetaImpact);
+						}
+						if (tt)
 						{
 							tempTarget.id = g.rig.make(tt->getName(), c.x + 150.0f, c.y - 50.0f, enemy)->getID();
 							tempEnemyTarget = true;
@@ -1794,6 +1820,7 @@ void unitsSweep(const std::string &faction, Results &res, bool sweep)
 					// lane LOCAL-87: ActivateModuleSpecialPower triggering a SpecialPowerModule whose AttributeModifierAffects restricts targets
 					// (e.g. Mouth of Sauron's Worte des Elends affecting enemy +HERO only) needs a matching target at the cast spot
 					const ObjectFilter *modFilter = nullptr;
+					bool modFilterAlliesOnly = false;
 					for (const std::unique_ptr<BehaviorModule> &m : u->modules())
 					{
 						const ActivateModuleSpecialPower *am = dynamic_cast<const ActivateModuleSpecialPower *>(m.get());
@@ -1812,6 +1839,7 @@ void unitsSweep(const std::string &faction, Results &res, bool sweep)
 									spd && !spd->m_attributeModifier.empty() && spd->m_attributeModifierAffects)
 								{
 									modFilter = spd->m_attributeModifierAffects.get();
+									modFilterAlliesOnly = !spd->m_targetEnemy && !spd->m_targetAllSides && !spd->m_reEnableAntiCategory && spd->m_antiCategory == 0;
 									break;
 								}
 							}
@@ -1854,22 +1882,28 @@ void unitsSweep(const std::string &faction, Results &res, bool sweep)
 						Object *eu = g.logic().findObjectByID(enemyUnitId);
 						Object *eb = g.logic().findObjectByID(enemyBuildingId);
 						Object *oh = ownHordeId != INVALID_ID ? g.logic().findObjectByID(ownHordeId) : nullptr;
-						const bool anyMatch = (eu && ObjectFilterMatch::allows(g.logic(), *modFilter, *eu, g.rig.local))
-											  || (eb && ObjectFilterMatch::allows(g.logic(), *modFilter, *eb, g.rig.local))
-											  || (oh && ObjectFilterMatch::allows(g.logic(), *modFilter, *oh, g.rig.local));
+						const bool anyMatch = (!modFilterAlliesOnly && eu && ObjectFilterMatch::allows(g.logic(), *modFilter, *eu, g.rig.local))
+						                      || (!modFilterAlliesOnly && eb && ObjectFilterMatch::allows(g.logic(), *modFilter, *eb, g.rig.local))
+						                      || (oh && ObjectFilterMatch::allows(g.logic(), *modFilter, *oh, g.rig.local));
 						if (!anyMatch)
 						{
-							if (const ThingTemplate *tt = pickFilteredTemplate(*modFilter, enemy))
+							if (!modFilterAlliesOnly)
 							{
-								tempTarget.id = g.rig.make(tt->getName(), c.x + 120.0f, c.y + 120.0f, enemy)->getID();
-								tempEnemyTarget = true;
-								g.step(5);
-								toughen(g.logic(), tempTarget.id);
+								if (const ThingTemplate *tt = pickFilteredTemplate(*modFilter, enemy))
+								{
+									tempTarget.id = g.rig.make(tt->getName(), c.x + 120.0f, c.y + 120.0f, enemy)->getID();
+									tempEnemyTarget = true;
+									g.step(5);
+									toughen(g.logic(), tempTarget.id);
+								}
 							}
-							else if (const ThingTemplate *tt = pickFilteredTemplate(*modFilter, g.rig.local))
+							if (tempTarget.id == INVALID_ID)
 							{
-								tempTarget.id = g.rig.make(tt->getName(), c.x - 100.0f, c.y + 60.0f)->getID();
-								g.step(5);
+								if (const ThingTemplate *tt = pickFilteredTemplate(*modFilter, g.rig.local))
+								{
+									tempTarget.id = g.rig.make(tt->getName(), c.x + 120.0f, c.y + 120.0f)->getID();
+									g.step(5);
+								}
 							}
 						}
 					}
@@ -1906,6 +1940,39 @@ void unitsSweep(const std::string &faction, Results &res, bool sweep)
 									toughen(g.logic(), tempTarget.id);
 									break;
 								}
+							}
+						}
+					}
+				}
+				if (targetless && t && tempTarget.id == INVALID_ID)
+				{
+					// LOCAL-131: targetless SpecialPowerModule / ProductionSpeedBonus with a specific AttributeModifierAffects filter and AffectsSelf=No
+					// (e.g. Thranduil THRANDUIL_OBJECTFILTER, Wulfgar IsengardTavern) needs a matching allied object within AttributeModifierRange
+					for (const std::unique_ptr<BehaviorModule> &m : u->modules())
+					{
+						const SpecialPowerModule *spm = dynamic_cast<const SpecialPowerModule *>(m.get());
+						const SpecialPowerModuleData *spd = spm ? spm->spData() : nullptr;
+						if (!spd || spd->m_specialPowerTemplate != t || spd->m_attributeModifier.empty() || spd->m_attributeModifierAffectsSelf || !spd->m_attributeModifierAffects)
+						{
+							continue;
+						}
+						const ObjectFilter &flt = *spd->m_attributeModifierAffects;
+						const bool isAllied = !spd->m_targetEnemy && spd->m_antiCategory == 0;
+						if (!isAllied || flt.includeNames.empty())
+						{
+							continue;
+						}
+						Object *al = allyId != INVALID_ID ? g.logic().findObjectByID(allyId) : nullptr;
+						Object *oh = ownHordeId != INVALID_ID ? g.logic().findObjectByID(ownHordeId) : nullptr;
+						const bool hasMatch = (al && ObjectFilterMatch::allows(g.logic(), flt, *al, g.rig.local))
+						                      || (oh && ObjectFilterMatch::allows(g.logic(), flt, *oh, g.rig.local));
+						if (!hasMatch)
+						{
+							if (const ThingTemplate *tt = pickFilteredTemplate(flt, g.rig.local))
+							{
+								tempTarget.id = g.rig.make(tt->getName(), c.x - 100.0f, c.y + 60.0f)->getID();
+								g.step(5);
+								break;
 							}
 						}
 					}
@@ -2144,7 +2211,17 @@ void unitsSweep(const std::string &faction, Results &res, bool sweep)
 						}
 						else
 						{
-							tgt = cb->m_affectsKindOf != KindOfMaskType{} ? g.logic().findObjectByID(enemyBuildingId) : g.logic().findObjectByID(enemyUnitId);
+							// LOCAL-131: MetaImpactNugget does not knock back STRUCTURE; when AffectsKindOf also accepts HERO/MONSTER/INFANTRY (e.g. BalrogWhip),
+							// prefer the enemy unit (and on retry, GondorBoromir) over GondorBarracks.
+							Object *euMeta = g.logic().findObjectByID(enemyUnitId);
+							bool euFitsAffects = false;
+							if (euMeta)
+							{
+								const KindOfMaskType &ek = g.logic().templateInfo(euMeta->getTemplate()).kindOf;
+								for (size_t wi = 0; wi < ek.size(); ++wi) { if (ek[wi] & cb->m_affectsKindOf[wi]) { euFitsAffects = true; break; } }
+							}
+							const bool preferUnitForMeta = needsMetaImpact && (attempt == 1 || euFitsAffects);
+							tgt = (cb->m_affectsKindOf != KindOfMaskType{} && !preferUnitForMeta) ? g.logic().findObjectByID(enemyBuildingId) : euMeta;
 							if (tgt && t && t->m_objectFilter && !ObjectFilterMatch::allows(g.logic(), *t->m_objectFilter, *tgt, g.rig.local))
 							{
 								Object *alt = cb->m_affectsKindOf != KindOfMaskType{} ? g.logic().findObjectByID(enemyUnitId) : g.logic().findObjectByID(enemyBuildingId);
@@ -2292,11 +2369,14 @@ void unitsSweep(const std::string &faction, Results &res, bool sweep)
 						const Coord3D onGround{ ground.x, ground.y, g.logic().getGroundHeight(ground.x, ground.y) };
 						if (pw && !ActionManager::canDoSpecialPowerAtLocation(*caster, onGround, pw, cb->m_options))
 						{
+							const Coord3D cp = *caster->getPosition();
 							for (const Coord3D d : { Coord3D{ 70.0f, 70.0f, 0.0f }, Coord3D{ -70.0f, 70.0f, 0.0f }, Coord3D{ 70.0f, -70.0f, 0.0f }, Coord3D{ -70.0f, -70.0f, 0.0f },
-													 Coord3D{ 220.0f, 220.0f, 0.0f }, Coord3D{ -220.0f, 220.0f, 0.0f }, Coord3D{ 220.0f, -220.0f, 0.0f }, Coord3D{ -220.0f, -220.0f, 0.0f },
-													 Coord3D{ 360.0f, 0.0f, 0.0f }, Coord3D{ -360.0f, 0.0f, 0.0f }, Coord3D{ 0.0f, 360.0f, 0.0f }, Coord3D{ 0.0f, -360.0f, 0.0f } })
+							                         Coord3D{ 120.0f, 0.0f, 0.0f }, Coord3D{ -120.0f, 0.0f, 0.0f }, Coord3D{ 0.0f, 120.0f, 0.0f }, Coord3D{ 0.0f, -120.0f, 0.0f },
+							                         Coord3D{ 100.0f, 100.0f, 0.0f }, Coord3D{ -100.0f, 100.0f, 0.0f }, Coord3D{ 100.0f, -100.0f, 0.0f }, Coord3D{ -100.0f, -100.0f, 0.0f },
+							                         Coord3D{ 220.0f, 220.0f, 0.0f }, Coord3D{ -220.0f, 220.0f, 0.0f }, Coord3D{ 220.0f, -220.0f, 0.0f }, Coord3D{ -220.0f, -220.0f, 0.0f },
+							                         Coord3D{ 360.0f, 0.0f, 0.0f }, Coord3D{ -360.0f, 0.0f, 0.0f }, Coord3D{ 0.0f, 360.0f, 0.0f }, Coord3D{ 0.0f, -360.0f, 0.0f } })
 							{
-								const Coord3D nearer{ c.x + d.x, c.y + d.y, g.logic().getGroundHeight(c.x + d.x, c.y + d.y) };
+								const Coord3D nearer{ cp.x + d.x, cp.y + d.y, g.logic().getGroundHeight(cp.x + d.x, cp.y + d.y) };
 								if (ActionManager::canDoSpecialPowerAtLocation(*caster, nearer, pw, cb->m_options))
 								{
 									ground = nearer; // clicked at its terrain height: a click at z 0 under a raised terrain lands elsewhere
