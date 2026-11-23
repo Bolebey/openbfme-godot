@@ -192,6 +192,11 @@ bool OpenContain::allowAlliesInside() const
 // RW 0x86603B
 bool OpenContain::openContainAllows(const Object &obj) const
 {
+	return openContainAllowsFor(*getObject(), openData(), m_enabled, obj);
+}
+
+bool OpenContain::openContainAllowsFor(const Object &containerObj, const OpenContainModuleData &d, bool enabled, const Object &obj)
+{
 	static const CombatNames::Status &st = CombatNames::statuses();
 	static const int temporarilyDefected = statusBit("TEMPORARILY_DEFECTED");
 	static const int holdingTheRing = statusBit("HOLDING_THE_RING");
@@ -203,10 +208,9 @@ bool OpenContain::openContainAllows(const Object &obj) const
 	static const int rockVendor = CombatNames::kindOf("ROCK_VENDOR");
 	static const int cavalry = CombatNames::kindOf("CAVALRY");
 	static const int mounted = CombatNames::modelCondition("MOUNTED");
-	const Object *container = getObject();
+	const Object *container = &containerObj;
 	GameLogic &logic = container->logic();
-	const OpenContainModuleData &d = openData();
-	if (obj.isDestroyed() || obj.testStatus((unsigned)temporarilyDefected) || obj.testStatus((unsigned)holdingTheRing) || !m_enabled)
+	if (obj.isDestroyed() || obj.testStatus((unsigned)temporarilyDefected) || obj.testStatus((unsigned)holdingTheRing) || !enabled)
 	{
 		return false;
 	}
@@ -302,6 +306,43 @@ bool OpenContain::isValidContainerFor(const Object &obj, bool checkCapacity, boo
 	(void)checkCapacity;
 	(void)checkPath;
 	return openContainAllows(obj);
+}
+
+// RW 0x008666A1 (contain slot 0x110): iterate m_contained when (flags & 1) != 0; reverse when (flags & 8) != 0.
+void OpenContain::iterateContained(const std::function<void(Object *)> &fn, unsigned flags)
+{
+	if (!fn || (flags & 1u) == 0)
+	{
+		return;
+	}
+	if ((flags & 8u) != 0)
+	{
+		if (!m_contained.empty())
+		{
+			auto cur = std::prev(m_contained.end());
+			for (;;)
+			{
+				Object *o = *cur;
+				const bool done = (cur == m_contained.begin());
+				auto prevIt = done ? m_contained.begin() : std::prev(cur);
+				fn(o);
+				if (done)
+				{
+					break;
+				}
+				cur = prevIt;
+			}
+		}
+	}
+	else
+	{
+		for (auto it = m_contained.begin(); it != m_contained.end();)
+		{
+			Object *o = *it;
+			++it;
+			fn(o);
+		}
+	}
 }
 
 // ---------------------------------------------------------------------------------------------------------------------------------
