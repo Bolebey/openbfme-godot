@@ -595,6 +595,7 @@ include(cmake/Local113.cmake)   # LOCAL-113: AutoAbilityBehavior (issue #797; OP
 include(cmake/Local114.cmake)   # LOCAL-114: AIUpdateInterface third pass (fork issue 798; OPENBFME_LOCAL114_TESTS)
 include(cmake/Local112.cmake)   # LOCAL-112: WeaponFireSpecialAbilityUpdate & special-weapon matrix probe/scene fixes (issue #796; OPENBFME_LOCAL112_TESTS)
 include(cmake/Local124.cmake)   # LOCAL-124: tail update/behavior modules (fork issue 808; OPENBFME_LOCAL124_TESTS)
+include(cmake/Local135.cmake)   # LOCAL-135: 205 shared RotWK helpers (fork issue 852; OPENBFME_LOCAL135_TESTS)
 include(cmake/Port224.cmake)    # PORT-224: destroying a creep lair or worker-rebuilt structure mid-rebuild fades the hole without money or treasure (issue #534; OPENBFME_PORT224_TESTS)
 include(cmake/Port222.cmake)    # PORT-222: a LevelGrantSpecialPower fills a horde's experience pool (fork issue 532; OPENBFME_PORT222_TESTS)
 include(cmake/Port301.cmake)    # PORT-301: ShareExperienceBehavior — the shared experience of a hero (fork issue 693; OPENBFME_PORT301_TESTS)
@@ -1444,6 +1445,7 @@ add_executable(openbfme_tests
     ${OPENBFME_LOCAL114_TESTS}
     ${OPENBFME_LOCAL112_TESTS}
     ${OPENBFME_LOCAL124_TESTS}
+    ${OPENBFME_LOCAL135_TESTS}
     ${OPENBFME_PORT224_TESTS}
     ${OPENBFME_PORT222_TESTS}
     ${OPENBFME_PORT206_TESTS}

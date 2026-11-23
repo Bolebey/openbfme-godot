@@ -149,6 +149,8 @@ class SpecialPowerModule : public BehaviorModule, public SpecialPowerModuleInter
 public:
 	OBFME_MODULE_XFER(SpecialPowerModule) // lane SAVE-4b
 	SpecialPowerModule(Thing *thing, const SpecialPowerModuleData *data);
+	// Both editions: RW 0x00897583 (DONOR BFME2 0x00493B50 SpecialPowerModule::~SpecialPowerModule; the shared-sync branch at 0x008975B8..0x008975BF is a retail no-op)
+	~SpecialPowerModule() override = default;
 	SpecialPowerModuleInterface *getSpecialPower() override { return this; }
 	const SpecialPowerModuleData *spData() const { return m_spData; }
 

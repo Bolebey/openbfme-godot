@@ -327,7 +327,7 @@ public:
 	// RW 0x692443: a set type: other than HELD resumes the countdowns (RW 0x68B961(0)), a rider held forever by it is cleared too, the expiry and the bit go,
 	// USER_PARALYZED / USER_FROZEN clear PARALYZED (and notify), then checkDisabledStatus runs
 	void clearDisabled(unsigned type);
-	bool isDisabledByType(unsigned type) const { return type < DISABLED_TYPE_COUNT && (m_disabled & (1u << type)) != 0; }
+	bool isDisabledByType(unsigned type) const { return type < DISABLED_TYPE_COUNT && (m_disabled & (1u << type)) != 0; } ///< RW 0x005E42B6
 	// RW 0x68B961: every module's special power interface pauses (true) or resumes (false) its countdown
 	void pauseAllSpecialPowers(bool pause);
 	// lane SCRIPT-2: the script status byte (RW Object + 0x457, ZH ObjectScriptStatusBit: 1 SCRIPT_DISABLED, 2 SCRIPT_UNPOWERED, 4 SCRIPT_UNSELLABLE,
