@@ -900,6 +900,8 @@ bool InGameHud::selectionRegionOp(const InGameUI &ui, IconUIOp &out)
 void InGameHud::noteJumpPosition(const Coord3D &position)
 {
 	m_radar->noteEvaPosition(position, m_config.game.logic().getFrame());
+}
+
 // lane HOVER-2: RW 0x69F637's tool tip (MouseoverTooltip.h) for the object under the pointer; over the HUD, while scrolling or selecting, while a script
 // has the input off (DISABLE_INPUT: no pointer, InGameUI::applyScriptInput) and with no object the request is empty (INFERENCE S-7187: ZH's window manager
 // clears it on every mouse event before createMouseoverHint runs).

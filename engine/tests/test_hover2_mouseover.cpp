@@ -74,8 +74,10 @@ struct HoverHud
 	void pointAt(const Object &o)
 	{
 		const ICoord2D px = rig.screenOf({ o.getPosition()->x, o.getPosition()->y, o.getPosition()->z + 10.0f });
-		hud->mouseMove(px.x + 3, px.y, 0); // a move, then the point: the hover pick runs on the move (RW 0x83CC13)
-		hud->mouseMove(px.x, px.y, 0);
+		// fork: the pick ray meets the drawn model (DrawablePick); in the fork's model state the exact centre pixel of the MordorLumberMill looks
+		// through a gap of the drawn mesh (Miss) while 3 pixels to the right hit it, so the pointer comes to rest there (still on the object)
+		hud->mouseMove(px.x + 6, px.y, 0); // a move, then the point: the hover pick runs on the move (RW 0x83CC13)
+		hud->mouseMove(px.x + 3, px.y, 0);
 		frames(1);
 	}
 };
