@@ -57,6 +57,7 @@ enum class ModEngineFeature
 	EnnorathSelectAllBuildings,        // select all buildings of a type / expansion pad, multi-building queue / foundation / level upgrade (.bldgrp/.padsel/.bldext/.bldcan/.bldlvl)
 	EnnorathReplayControls,            // replay tabs (Messenger), recorded replay chat and Ctrl+] pause (.rpchat / .rppause / .rppvar)
 	EnnorathWotr8Players,              // War of the Ring for 8 players: 8 lobby slots, dropdown clamp, 2-8 text, partial-human RTS battles (.wotrui / .wotrobs / .wtrview / .wtrdisp / .lobfac)
+	EnnorathChatClipboard,             // Ctrl+A / C / X / V in text entries (.txtclip, hooked at RW 0x722A8A; P-128, owner 2026-11-23: on with the Ennorath profiles)
 	Count
 };
 
