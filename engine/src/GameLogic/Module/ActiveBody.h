@@ -54,6 +54,8 @@ class ActiveBodyModuleData : public ModuleData
 public:
 	ActiveBodyModuleData() = default;
 
+	float bfmeBodyMaxHealth() const override { return m_maxHealth; }
+
 	// RW 0xC71D68, in the binary's order
 	float m_maxHealth = 0.0f;
 	float m_initialHealth = -1.0f;

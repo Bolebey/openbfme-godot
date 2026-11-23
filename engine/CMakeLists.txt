@@ -585,6 +585,7 @@ include(cmake/Local129.cmake)   # LOCAL-129: Ennorath 1.9.8.5 chat mute on Playe
 include(cmake/Local130.cmake)   # LOCAL-130: 50 most shared helpers + RW 0x6760CA / 0x677898 construction ambient (fork issue 829; OPENBFME_LOCAL130_TESTS)
 include(cmake/Local133.cmake)   # LOCAL-133: W3DLaserDraw width/fanWidth and tile factor clamps (fork issue 849; OPENBFME_LOCAL133_TESTS)
 include(cmake/Local139.cmake)   # LOCAL-139: global game data fields (fork issue 856; OPENBFME_LOCAL139_TESTS)
+include(cmake/Local140.cmake)   # LOCAL-140: object-level unread mod fields (fork issue 857; OPENBFME_LOCAL140_TESTS)
 include(cmake/Local101.cmake)   # LOCAL-101: special AI modules SiegeDockingBehavior & HordeWorkerAIUpdate (fork issue 771; OPENBFME_LOCAL101_TESTS)
 include(cmake/Local103.cmake)   # LOCAL-103: client draw modules (issue #773; OPENBFME_LOCAL103_TESTS)
 include(cmake/Local109.cmake)   # LOCAL-109: builders and walls second pass (fork issue 787; OPENBFME_LOCAL109_TESTS)
@@ -1436,6 +1437,7 @@ add_executable(openbfme_tests
         ${OPENBFME_LOCAL133_TESTS}
         ${OPENBFME_LOCAL136_TESTS}
         ${OPENBFME_LOCAL139_TESTS}
+        ${OPENBFME_LOCAL140_TESTS}
     ${OPENBFME_LOCAL101_TESTS}
     ${OPENBFME_LOCAL103_TESTS}
     ${OPENBFME_LOCAL109_TESTS}
