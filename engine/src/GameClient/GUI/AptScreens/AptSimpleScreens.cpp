@@ -3193,7 +3193,7 @@ void AptOptionsScreen::etReset()
 {
 	// PYSAGE 1.9.8.5 .optui 0xF23387 -> .dlyfix 0xF35102 -> .optui 0xF23203
 	const auto &entries = EnnorathOptions::entries();
-	for (int i = 0; i < EnnorathOptions::kEntryCount; ++i)
+	for (int i = 0; i < EnnorathOptions::activeEntryCount(); ++i)
 	{
 		const EnnorathOptionEntry &e = entries[(std::size_t)i];
 		if (e.kind == EnnorathOptionKind::Retail)
@@ -3217,7 +3217,7 @@ void AptOptionsScreen::etSyncVisibility()
 {
 	// PYSAGE 1.9.8.5 .optui 0xF23467 .. 0xF2348F + .dlyfix 0xF350D0
 	const auto &entries = EnnorathOptions::entries();
-	for (int i = 0; i < EnnorathOptions::kEntryCount; ++i)
+	for (int i = 0; i < EnnorathOptions::activeEntryCount(); ++i)
 	{
 		if (GameWindow *w = m_etWindows[(std::size_t)i])
 		{
@@ -3234,7 +3234,7 @@ void AptOptionsScreen::etSelectPage(int page)
 {
 	// PYSAGE 1.9.8.5 .optui 0xF233B7 .. 0xF234AF
 	const auto &entries = EnnorathOptions::entries();
-	for (int i = 0; i < EnnorathOptions::kEntryCount; ++i)
+	for (int i = 0; i < EnnorathOptions::activeEntryCount(); ++i)
 	{
 		GameWindow *w = m_etWindows[(std::size_t)i];
 		if (!w)
@@ -3250,7 +3250,7 @@ void AptOptionsScreen::etSelectPage(int page)
 	if (page == 9 && m_etPage != 9)
 	{
 		// Snapshot current combo values before entering Advanced Settings (.optui 0xF233F4 .. 0xF23455)
-		for (int i = 0; i < EnnorathOptions::kEntryCount; ++i)
+		for (int i = 0; i < EnnorathOptions::activeEntryCount(); ++i)
 		{
 			const EnnorathOptionEntry &e = entries[(std::size_t)i];
 			if (e.kind == EnnorathOptionKind::Retail || !m_etWindows[(std::size_t)i])
@@ -3366,7 +3366,7 @@ void AptOptionsScreen::etSave(OptionPreferences &prefs)
 	const auto &entries = EnnorathOptions::entries();
 	if (m_etHasDraft)
 	{
-		for (int i = 0; i < EnnorathOptions::kEntryCount; ++i)
+		for (int i = 0; i < EnnorathOptions::activeEntryCount(); ++i)
 		{
 			if (entries[(std::size_t)i].kind != EnnorathOptionKind::Retail)
 			{
@@ -3374,7 +3374,7 @@ void AptOptionsScreen::etSave(OptionPreferences &prefs)
 			}
 		}
 	}
-	for (int i = 0; i < EnnorathOptions::kEntryCount; ++i)
+	for (int i = 0; i < EnnorathOptions::activeEntryCount(); ++i)
 	{
 		const EnnorathOptionEntry &e = entries[(std::size_t)i];
 		if (e.kind == EnnorathOptionKind::Retail || !m_etWindows[(std::size_t)i])
@@ -3389,7 +3389,7 @@ void AptOptionsScreen::etSave(OptionPreferences &prefs)
 		}
 	}
 	m_etState.resolveDuplicateHotkeys();
-	for (int i = 0; i < EnnorathOptions::kEntryCount; ++i)
+	for (int i = 0; i < EnnorathOptions::activeEntryCount(); ++i)
 	{
 		if (entries[(std::size_t)i].kind == EnnorathOptionKind::Hotkey && m_etState.values[(std::size_t)i] == 0 && m_etWindows[(std::size_t)i])
 		{

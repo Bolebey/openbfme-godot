@@ -89,6 +89,7 @@ public:
 	// RW 0x86588C `cmp byte [ecx + 0xE1], 0` then `mov ecx, [ecx + 4]` (the module data) `cmp byte [ecx + 0x83], 0` (KillPassengersOnDeath): the byte above
 	// AND the data's row. Read by GarrisonContain::onRemoving (RW 0x87C0B6), HordeGarrisonContain::onDie (RW 0x87CF7D) and TransportContain's die (RW 0x87AE29)
 	bool getKillPassengersOnDeath() const;
+	virtual bool isGarrisonContain() const { return false; }
 	void onObjectWantsToEnterOrExit(Object *obj, int wants) override;
 	unsigned getStealthUnitsContained() const override { return m_stealthUnitsContained; }
 	bool allowAlliesInside() const override;
