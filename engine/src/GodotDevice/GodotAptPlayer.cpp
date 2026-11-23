@@ -619,6 +619,7 @@ const char *shellActionName(ShellAction a)
 		case ShellAction::QuitMenuOptions: return "QuitMenuOptions";
 		case ShellAction::ToggleQuitMenu: return "ToggleQuitMenu";
 		case ShellAction::PalantirObjectives: return "PalantirObjectives"; // lane PLAY-1
+		case ShellAction::PalantirMessenger: return "PalantirMessenger"; // Ennorath 1.9.8.5 .rpchat
 		case ShellAction::TributeReturnToGame: return "TributeReturnToGame";
 		case ShellAction::ObjectivesReturnToGame: return "ObjectivesReturnToGame"; // lane CAMPUI-1
 		case ShellAction::CreateAHeroExit: return "CreateAHeroExit";

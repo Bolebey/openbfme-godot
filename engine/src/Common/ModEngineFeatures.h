@@ -55,6 +55,8 @@ enum class ModEngineFeature
 	EnnorathBuildingLimitFix,          // phantom structures (PENDING_CONSTRUCTION + PHANTOM_STRUCTURE) count toward MaxSimultaneousOfType (.bldcap 0xF21000)
 	EnnorathSpellStoreDelay,           // defer AptSpellStore button state updates for 500 ms after OnInitialized (.spstore 0xED4000)
 	EnnorathSelectAllBuildings,        // select all buildings of a type / expansion pad, multi-building queue / foundation / level upgrade (.bldgrp/.padsel/.bldext/.bldcan/.bldlvl)
+	EnnorathReplayControls,            // replay tabs (Messenger), recorded replay chat and Ctrl+] pause (.rpchat / .rppause / .rppvar)
+	EnnorathWotr8Players,              // War of the Ring for 8 players: 8 lobby slots, dropdown clamp, 2-8 text, partial-human RTS battles (.wotrui / .wotrobs / .wtrview / .wtrdisp / .lobfac)
 	Count
 };
 
