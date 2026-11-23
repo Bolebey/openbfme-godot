@@ -388,6 +388,18 @@ bool InGameHud::boot(std::string *error)
 	}
 	// lane UI-4: the hero bar (InGameHeroSelect.h): AptPalantir::OnHeroSelectLoaded hands the movie's clip path (InGameHeroSelectInterface ctor RW 0x92DDE7)
 	m_heroSelect = std::make_unique<InGameHeroSelect>(m_input->context(), builderCycleTimeoutMs);
+	m_input->context().selectNearestBuilder = [this](bool noCamera) {
+		if (m_heroSelect)
+		{
+			m_heroSelect->selectNearestBuilder(noCamera);
+		}
+	};
+	m_input->context().selectAllHeroes = [this]() {
+		if (m_heroSelect)
+		{
+			m_heroSelect->selectAllHeroes();
+		}
+	};
 	m_config.game.drawables().setHeroAttackedHandler([this](ObjectID id) { m_heroSelect->onHeroAttacked(id); });
 	m_config.game.drawables().setDeselectHandler([this](ObjectID id) { m_input->ui().deselectObject(id); }); // TOP20 rampage (RW 0x6257E5)
 	m_input->ui().setSelectHandler([this](ObjectID id) { m_config.game.drawables().flashAsSelected(id); }); // LOCAL-3: RW 0x81DC79 / 0x81E0A7

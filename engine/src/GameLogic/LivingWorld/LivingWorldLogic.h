@@ -73,6 +73,7 @@ struct UnitInfo
 	int commandPoints = 0; // ThingTemplate CommandPoints
 	bool hero = false;     // KindOf HERO
 	bool createAHero = false; // lane WOTR-2: KindOf CREATE_A_HERO (0xBE: canBuildUnit WB 0xD98FE0 hides it without a Create-a-Hero profile)
+	bool cantEarnPowerPoints = false; // PYSAGE 1.9.8.7 .wmfeat 0xF3A40F (hook RW 0x8FE8C6): KindOf CANT_EARN_POWERPOINTS
 	int strength = 0;      // the HUD's army strength estimate (presentation: the BuildCost, a hero counts double; the AI does not read it)
 
 	// ---- autoresolve (lane WOTR-2; the ThingTemplate rows of the field table RW 0xDA3DF8) ----

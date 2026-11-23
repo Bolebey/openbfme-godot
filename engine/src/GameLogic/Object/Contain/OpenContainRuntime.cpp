@@ -5,6 +5,7 @@
 // inside GarrisonContain, moved here unchanged, and RW 0x8682D9 / 0x86702D / 0x867242 / 0x866B69 / 0x867D6A).
 
 #include "GameLogic/Object/Contain/OpenContainRuntime.h"
+#include "Common/ModEngineFeatures.h"
 #include "GameLogic/SnapshotXfer.h"
 
 #include "Common/Audio/AudioRequests.h"
@@ -682,6 +683,16 @@ void OpenContain::onDelete()
 	{
 		removeFromContain(r, true); // RW 0x8670C7: contain slot 0xA4(rider, true)
 		r->friend_setContainedBy(nullptr);
+		// PYSAGE 1.9.8.7 .wmfeat 0xF3A9B2 .. 0xF3A9EB (hook RW 0x8670D2, ennorath.garrison-hero-survive):
+		// For a STRUCTURE GarrisonContain with EjectPassengersOnDeath and !KillPassengersOnDeath, spare alive non-HORDE HERO riders.
+		if (ModEngineFeatures::has(ModEngineFeature::EnnorathGarrisonHeroSurvive) &&
+			isGarrisonContain() && openData().m_ejectPassengersOnDeath && !openData().m_killPassengersOnDeath &&
+			getObject() && getObject()->isKindOfName("STRUCTURE") &&
+			r && r->getBodyModule() && !r->isDestroyed() && !r->isEffectivelyDead() &&
+			!r->isKindOfName("HORDE") && r->isKindOf((unsigned)hero))
+		{
+			continue;
+		}
 		if (r->isKindOf((unsigned)hero))
 		{
 			r->kill(DAMAGE_UNRESISTABLE, 0); // RW 0x8670EB: kill(8, 0)
