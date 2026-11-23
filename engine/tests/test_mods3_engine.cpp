@@ -70,7 +70,7 @@ TEST_CASE("MODS-3: Ennorath 1.9.8.5's game.dat turns on ennorath.stance-keeps-mo
 	REQUIRE_MESSAGE(ModEngineFeatures::activate({ "fc32e4c4142b5c607b90972eaf448400" }, &error), error);
 	CHECK(ModEngineFeatures::activeProfiles() == std::vector<std::string>{ "Ennorath 1.9.8.5 game.dat" });
 	CHECK(ModEngineFeatures::identityFeatures() ==
-		std::vector<std::string>{ "mod-engine:ennorath.stance-keeps-moving", "mod-engine:ennorath.middle-click-camera", "mod-engine:ennorath.evacuate-containers", "mod-engine:ennorath.options-pages", "mod-engine:ennorath.option-hotkeys", "mod-engine:ennorath.online-delay-fix", "mod-engine:ennorath.lobby-map-search", "mod-engine:ennorath.chat-mute" }); // a retail peer is refused
+		std::vector<std::string>{ "mod-engine:ennorath.stance-keeps-moving", "mod-engine:ennorath.middle-click-camera", "mod-engine:ennorath.evacuate-containers", "mod-engine:ennorath.options-pages", "mod-engine:ennorath.option-hotkeys", "mod-engine:ennorath.online-delay-fix", "mod-engine:ennorath.lobby-map-search", "mod-engine:ennorath.chat-mute", "mod-engine:ennorath.observer-command-range", "mod-engine:ennorath.commandset-64", "mod-engine:ennorath.upgrades-5120", "mod-engine:ennorath.building-limit-fix", "mod-engine:ennorath.spell-store-delay", "mod-engine:ennorath.select-all-buildings" }); // a retail peer is refused
 	CHECK_FALSE(ModEngineFeatures::has(ModEngineFeature::EdainUnchainedHerobarKindOf));
 	const std::vector<std::string> lines = ModEngineFeatures::stopLines();
 	REQUIRE(lines.size() == 1);

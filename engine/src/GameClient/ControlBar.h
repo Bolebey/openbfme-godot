@@ -269,6 +269,13 @@ private:
 	// preClickIndex or the bar's context/dirty state changes.
 	static bool usesToggleIndex(const CommandButton &b);
 	void applyPredictedToggle(const CommandButton &b, const Object *obj);
+	// PYSAGE 1.9.8.5 .bldgrp / .padsel / .bldext / .bldcan / .bldlvl (EnnorathSelectAllBuildings)
+	static int levelUpgradeTarget(const CommandButton *b);
+	static bool isActiveBuildingForGroup(const Object &o);
+	std::vector<Object *> collectLiveSelected() const;
+	bool allSelectedStructures(const std::vector<Object *> &liveSelected) const;
+	Object *findSelectedSameBuildingGroup(const std::vector<Object *> &liveSelected);
+	const CommandButton *findLevelUpgradeButton(Object &obj, int targetLevel, ButtonState *outState);
 	struct PendingToggle
 	{
 		int preClickIndex = 0;
