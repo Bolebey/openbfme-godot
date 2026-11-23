@@ -10,6 +10,19 @@ retail site, `PYSAGE 1.9.8.5 .<section> 0x…` the patched code. How it was read
 `jmp` / `call` targets that land in each new section, and the disassembly of both sides (`tools/mod/rw.py dis` on each file). The 1.9.8.4
 binary is gone (the owner's `RotWK/` folder was replaced), so an edit's version is taken from the patch note, not from a diff.
 
+## 1.9.8.6 / 1.9.8.7 edits (patch note sections 1.9.8.6 and 1.9.8.7; one game.dat, md5 `f222b925edf2a9553e574ad8445f2841`, 2026-11-22)
+
+Profile «Ennorath 1.9.8.7 game.dat» (`ModEngineFeatures.cpp`): until these are rebuilt it turns on the 1.9.8.5 features. Against 1.9.8.5 the mod's
+files differ only in `game.dat`, `apt/Options.big` and `lang/englishpatch201.big`. New sections `.wmfeat` (0xF3A000) and `.wmkeys`; edited: `.camfix`
+(0x53 -> 0xE5 bytes), `.hotkeys` (0x48C -> 0x5CB), `.keycmd`, `.keydef`, `.optui`, `.rpchat`, `.chatmut`, `.dlyfix`, `.fpsdraw`; 202 bytes of `.text`.
+Disassembly: `/content/sandbox/work-dossier-ennorath-1987-pysage.txt` on the sandboxes (Drive `openbfme-runs/dossiers/ennorath-1987-pysage.txt`).
+
+| Section | Hooks (RW, 1.9.8.7 against 1.9.8.5) | Patch note (INFERENCE where the mapping is not yet read) |
+|---|---|---|
+| `.wmfeat` 0xF3A000 | jmp RW 0x5DA8F0, 0x5DA982, 0x694F06, 0x6AAFC3, 0x6AB0D0, 0x75B23B, 0x8670D2, 0x87CF94, 0x888012, 0x8B1FFE, 0x92D052; call RW 0x65A93F, 0x853FA0, 0x8FE8C6; the table 0xF3A5C0 read at RW 0x6AAD0C, 0x6AAD1E, 0x7079FC, 0x7B3CD9, 0x7B67E1 .. 0x7B68DA; bounds 0xDF at RW 0x6ACBD5, 0x762A35, 0x7B58FD | for mod makers: 127 factions instead of 14 (the relocated table 0xF3A5C0), the resurrection filter per unit, portrait / icon change without a hero form change, `CANT_EARN_POWERPOINTS`, `ToggleMountedSpecialAbilityUpdate` at LocomotorSet speed 0; the builder click sound; more than two builders selectable |
+| `.wmkeys`, `.hotkeys` (grown), `.keycmd`, `.keydef`, `.optui` | jmp RW 0x81F983, 0x92DB1F (`.hotkeys`); the 1.9.8.5 hooks | hotkeys: select all units on the map, select all heroes, planning mode; workers of lumber mills / quarries no longer taken by the builder hotkey |
+| `.camfix` (grown) | the 1.9.8.5 hooks RW 0x83AD3D, 0x83AEA3 | the camera no longer jumps to the builder when it is already on screen (and the 1.9.8.5 middle click reset) |
+
 ## 1.9.8.5 edits (patch note section 1.9.8.5)
 
 | patch note | section | hooked from (retail) | what the patched code does | port |
