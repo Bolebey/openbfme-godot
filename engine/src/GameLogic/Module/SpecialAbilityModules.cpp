@@ -658,7 +658,7 @@ bool SpecialAbilityUpdate::allowsSpecialPowerUse(const Coord3D *loc) const
 		getObject()->logic().noteStop("[S-1043] SpecialAbilityUpdate: the grab enums' room test (RW 0x851BA2) of a contain that is not an OpenContain is not ported; the power is refused");
 		return false;
 	}
-	return (int)c->getContainCount() < open->getContainMax();
+	return c->getContainCount() < static_cast<unsigned>(open->getContainMax()); // RW 0x851BC4..0x851BC6: cmp edi, eax; jb
 }
 
 // RW 0x851551
@@ -1936,13 +1936,20 @@ void SpecialAbilityUpdate::startPacking(bool success)
 	}
 	if (success && t)
 	{
-		const int type = t->getFinalOverride()->m_type; // RW 0x85365C / 0x85366A -> 0x688D3C, + 0x1C
+		const SpecialPowerTemplate *fo = t->getFinalOverride(); // RW 0x85365C / 0x85366A / 0x8536A8 -> 0x688D3C
+		const int type = fo->m_type; // + 0x1C
 		if (type == 0x1A || type == 0x1D)
 		{
 			// RW 0x853661 .. 0x85368D: SPECIAL_BLACKLOTUS_CAPTURE_BUILDING (0x1A) / SPECIAL_INFANTRY_CAPTURE_BUILDING (0x1D) -> 0x7DD (VoiceCaptureBuildingComplete)
 			AudioApi::postUnitVoice(0x7DD, obj->getID(), t);
 		}
-		// RW 0x853679 (0x7DE VoiceTaskComplete on other powers) and RW 0x8536BD (EvaEventToPlayOnSuccess) remain outside Port 86
+		// RW 0x853679 (0x7DE VoiceTaskComplete on other powers) remains outside Port 86
+		// RW 0x853468 (0x853692 .. 0x8536BD): Local 139 (fork issue 856) — if controlling player is local player, report SpecialPowerTemplate::m_evaEventToPlayOnSuccess (+0x44)
+		const Player *owner = obj->getControllingPlayer();
+		if (owner && owner == obj->logic().players().getLocalPlayer() && !fo->m_evaEventToPlayOnSuccess.empty())
+		{
+			AudioApi::reportEva(fo->m_evaEventToPlayOnSuccess, obj->getPosition()); // RW 0x8536BD -> 0x5DD9EE
+		}
 	}
 }
 
@@ -2258,7 +2265,7 @@ ObjectWeapons *WeaponFireSpecialAbilityUpdate::weaponHost()
 	return m_ownHost.get();
 }
 
-// RW 0x895BFB (DONOR BFME2 0x0049256B): deletes m_weapon (+0x88) via Weapon::~Weapon (RW 0x6CDB57 -> 0x6CD0BE, destroying any ProjectileStreamName object)
+// RW 0x895BFB (scalar deleting dtor RW 0x00895E44 -> 0x895BFB + operator delete RW 0x42F6A0; DONOR BFME2 0x0049256B): deletes m_weapon (+0x88) via Weapon::~Weapon (RW 0x6CDB57 -> 0x6CD0BE, destroying any ProjectileStreamName object)
 WeaponFireSpecialAbilityUpdate::~WeaponFireSpecialAbilityUpdate()
 {
 	if (m_weapon && getObject())
@@ -3289,6 +3296,7 @@ SpecialPowerUpdateInterface *SpecialAbilityModules::findUpdate(const Object &obj
 void SpecialAbilityModules::registerAll(ModuleFactory &modules)
 {
 	bindRuntime<SpecialAbilityUpdate, SpecialAbilityUpdateModuleData>(modules, "SpecialAbilityUpdate");
+	// getModuleClassName RW 0x00895C65 (returns 0xC0B420), getModuleNameKey RW 0x00895D15 (NameKeyGenerator RW 0x5487EC)
 	bindRuntime<WeaponFireSpecialAbilityUpdate, WeaponFireSpecialAbilityUpdateModuleData>(modules, "WeaponFireSpecialAbilityUpdate");
 	bindRuntime<ToggleMountedSpecialAbilityUpdate, ToggleMountedSpecialAbilityUpdateModuleData>(modules, "ToggleMountedSpecialAbilityUpdate");
 	bindRuntime<HeroModeSpecialAbilityUpdate, HeroModeSpecialAbilityUpdateModuleData>(modules, "HeroModeSpecialAbilityUpdate");
@@ -3437,11 +3445,23 @@ void WeaponFireSpecialAbilityUpdate::xfer(Xfer &x)
 	x.xferUnsignedInt(&m_shots);
 }
 
+// RW 0x008B1054 (slot 3): version window (1, 2), delegates to SpecialAbilityUpdate::xfer (RW 0x00852782), then
+// when version >= 2 transfers m_replaceAfterPacking (+0x8C, RW 0x008B107A .. 0x008B108B).
+// Also cited here: getModuleName RW 0x008B104E ("ToggleMountedSpecialAbilityUpdate"), getModuleNameKey RW 0x008B1097,
+// deleting dtor RW 0x008B1126 -> ~ToggleMountedSpecialAbilityUpdate RW 0x008B1024 -> ~SpecialAbilityUpdate RW 0x00854D9A.
 void ToggleMountedSpecialAbilityUpdate::xfer(Xfer &x)
 {
-	SnapshotXfer::version(x, 1, 1);
+	XferVersion v{ 1, 2 };
+	x.xferVersion(v);
 	SpecialAbilityUpdate::xfer(x);
-	x.xferBool(&m_replaceAfterPacking);
+	if (v.current >= 2)
+	{
+		x.xferBool(&m_replaceAfterPacking);
+	}
+	else if (x.isLoading())
+	{
+		m_replaceAfterPacking = false;
+	}
 	x.xferUnsignedInt(&m_toggles);
 	x.xferObjectID(&m_replacement);
 }

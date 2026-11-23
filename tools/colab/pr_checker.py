@@ -602,6 +602,19 @@ FOREIGN_NOTE = ("🔒 **PR из чужого форка**: на песочниц
                 "пропускаются). Тесты на данных игры пройдут в батче владельца после того, как владелец прочитает код.")
 
 
+FOREIGN_CONFLICT = ("⛔ **PR конфликтует с main** ({main}) в файлах {files}. На PR с конфликтом GitHub не запускает проверку "
+                    "«Fork PR: build and own tests», и батч владельца его не возьмёт. Влейте свежий `origin/main` в ветку PR, разрешите "
+                    "конфликты (обе стороны, ничего из main не теряя), соберите и прогоните свои тесты, запушьте.")
+
+
+def base_conflicts(n: str) -> list[str]:
+    """Files PR n's head (refs/prcheck/<n>, fetched by cycle) conflicts in with origin/main; [] when it merges cleanly or git cannot say."""
+    r = sh(["git", "merge-tree", "--write-tree", "--name-only", "--no-messages", "origin/main", f"refs/prcheck/{n}"], cwd=REPO)
+    if r.returncode != 1:
+        return []
+    return [line for line in r.stdout.splitlines()[1:] if line.strip()]
+
+
 def skip_reason(p: dict) -> str:
     """Why the checker leaves this PR alone now ('' = check it)."""
     head = p["headRefOid"]
@@ -738,6 +751,47 @@ def check_conclusion(head: str, check: str) -> str:
     return last.get("conclusion") or "running"
 
 
+FAILED_LINE = re.compile(r"FAILED:|error:|##\[error\]|\bERROR\b|❌|undefined reference|fatal error|is NOT correct|values: CHECK")
+
+
+def failed_lines(text: str, limit: int = 40) -> list[str]:
+    """The lines of a GitHub Actions job log that say what failed, timestamps cut, in order, at most `limit` (each 300 characters)."""
+    out: list[str] = []
+    for line in text.splitlines():
+        line = re.sub(r"^\d{4}-\d\d-\d\dT[\d:.]+Z ", "", line).rstrip()
+        if FAILED_LINE.search(line) and line[:300] not in out:
+            out.append(line[:300])
+    return out[:limit]
+
+
+def failed_log(head: str) -> list[str]:
+    """failed_lines of every failed run of the two checks on this commit; [] when GitHub gives no log. A PR's agent cannot read the logs
+    (PR 670, 2026-11-21: it asked the owner for the build's FAILED / error lines), so the red note carries them."""
+    lines: list[str] = []
+    env = dict(os.environ, GH_TOKEN=token())
+    for check in (ACTIONS_CHECK, RULES_CHECK):
+        name = check.replace(" ", "%20").replace(":", "%3A")
+        done = subprocess.run(["gh", "api", f"repos/{GH}/commits/{head}/check-runs?check_name={name}"], capture_output=True, text=True,
+                              encoding="utf-8", errors="replace", env=env)
+        runs = (json.loads(done.stdout).get("check_runs") or []) if done.returncode == 0 else []
+        for r in runs:
+            if r.get("conclusion") != "failure":
+                continue
+            log = subprocess.run(["gh", "api", f"repos/{GH}/actions/jobs/{r['id']}/logs"], capture_output=True, text=True,
+                                 encoding="utf-8", errors="replace", env=env)
+            if log.returncode == 0:
+                lines += [f"[{check}] {line}" for line in failed_lines(log.stdout)]
+    return lines[:60]
+
+
+def log_block(lines: list[str]) -> str:
+    """The failed lines as a fenced block for a PR comment, or '' when there are none."""
+    if not lines:
+        return ""
+    body = "\n".join(line.replace("`" * 3, "'" * 3) for line in lines)
+    return "\n\nСтроки ошибок из лога Actions:\n" + "`" * 3 + "text\n" + body + "\n" + "`" * 3
+
+
 def head_time(n: int | str) -> int:
     """The committer time of the PR's head (refs/prcheck/N, fetched each cycle): when its agent last pushed. Not updatedAt, which every
     comment moves, the checker's own report too."""
@@ -800,6 +854,16 @@ def cycle(args) -> int:
                     gh("pr", "comment", n, "--body", f"<!-- prcheck-foreign {head} -->\n{FOREIGN_NOTE}")
                 state["foreign"][n] = head
                 save_state(state)
+            # A fork's PR that conflicts with main never gets GitHub's check (pull_request runs on the merge commit, which a conflict
+            # does not have) and the batch bot waits for that check forever (PR 774, 2026-11-21): say so to its agent, once per head
+            files = base_conflicts(n)
+            if files and state.setdefault("foreign_conflict", {}).get(n) != head:
+                print(f"#{n}: from another account's fork, conflicts with main in {', '.join(files[:6])}", flush=True)
+                if not args.no_comment:
+                    gh("pr", "comment", n, "--body", f"<!-- returned --><!-- prcheck-foreign-conflict {head} -->\n" + FOREIGN_CONFLICT.format(
+                        main=main_sha[:8], files=", ".join(f"`{f}`" for f in files[:12])))
+                state["foreign_conflict"][n] = head
+                save_state(state)
             continue
         why = skip_reason(p) if args.pr is None else ""
         if why:
@@ -827,7 +891,8 @@ def cycle(args) -> int:
                     if not args.no_comment:
                         gh("pr", "comment", n, "--body", f"<!-- prcheck {head} -->\n❌ **PR #{n} не проверялся в песочнице** (голова {head[:8]}): "
                            f"в GitHub Actions красная проверка «{ACTIONS_CHECK}» или «{RULES_CHECK}» ({ci}) — сборка, свои тесты или правила PR (разделы описания, источник ожиданий тестов). Ошибки — в аннотациях проверки "
-                           "на вкладке Checks этого PR. Исправь и запушь: Actions проверит заново, песочница возьмёт PR после зелёного результата.")
+                           "на вкладке Checks этого PR. Исправь и запушь: Actions проверит заново, песочница возьмёт PR после зелёного результата."
+                           + log_block(failed_log(head)))
                     state["actions_red"][n] = head
                     save_state(state)
                 continue

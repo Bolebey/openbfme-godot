@@ -150,6 +150,7 @@ GarrisonContain::GarrisonContain(Thing *thing, const ModuleData *data, const Gar
 	getObject()->logic().noteStop(GarrisonRules::stopLine());
 }
 
+// RW 0x0087D3C5 (HordeGarrisonContain dtor -> RW 0x0087B312)
 // RW 0x0087B8A9 (GarrisonContain scalar deleting dtor), RW 0x0087D3A9 (HordeGarrisonContain scalar deleting dtor),
 // RW 0x006576FF (HordeGarrisonContainModuleData scalar deleting dtor), RW 0x0088395E (CitadelSlaughterHordeContain scalar deleting dtor)
 GarrisonContain::~GarrisonContain() = default;
@@ -810,6 +811,17 @@ void GarrisonContain::onBodyDamageStateChange(const DamageInfo *, BodyDamageType
 		orderAllPassengersToIdle(2 /*CMD_FROM_AI*/);
 		orderAllPassengersToExit(2 /*CMD_FROM_AI*/);
 	}
+}
+
+// RW 0x0087A3A4 (DONOR BFME2 0x00479C0C): contain vslot 0x68 on HordeGarrisonContain (and subclasses TunnelContain, SlaughterHordeContain,
+// CitadelSlaughterHordeContain): forwards to OpenContain::onContainedAboutToTakeDamage (RW 0x00865631) only when rider->getContain() == nullptr
+void GarrisonContain::onContainedAboutToTakeDamage(Object *rider, const void *damageSource, DamageInfo *info)
+{
+	if (isHordeGarrison() && rider && rider->getContain() != nullptr)
+	{
+		return;
+	}
+	OpenContain::onContainedAboutToTakeDamage(rider, damageSource, info);
 }
 
 void GarrisonContain::orderAllPassengersToIdle(int source)

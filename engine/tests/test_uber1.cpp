@@ -158,6 +158,7 @@ void storeUberHashes(const char *name, const std::vector<std::uint32_t> &hashes)
 // station-1); it differs from both parents
 // pin: merge queue q44 re-measured it once on the merged tree (OPENBFME_UBER1_REGEN=1), compared at each merge point: AIRBORNE-1 alone (AIRBORNE_TARGET
 // from the locomotor height, RW 0x66A472) moves it from frame 0.
+// pin: the landing of Locals 111-120 (2026-11-21) re-measured the pin vector once on the merged station-0 tree (OPENBFME_UBER1_REGEN=1); causes proven by one build with all three disabled (PROCESS 7 item 5): Local 118 (#802, PR #818: LargeGroupAudioUpdate wakes a disabled object's update, RW 0x008AF0D0 -> RW 0x008AF246), Local 120 (#804, PR #820) P-169 (Locomotor::locomotorMaintainCurrentPosition RW 0x5E7CC7: an idle NO_Z_MOTIVE_FORCE unit off its layer's height is put on it, RW 0x5E7E64 .. 0x5E7E84) and P-168 (ObjectCreationUpgrade::update RW 0x8B8464: the made object is enslaved to its maker, RW 0x8B86DB .. 0x8B8708); with them off the old pins matched (perf1 11/11, uber1 7/7)
 // pin: the fork's merge of upstream 69dcd7ff (2026-11-06) re-measured it once on the merged tree (OPENBFME_UBER1_REGEN=1, Windows MSVC, station-1)
 // pin: issue #88 (S-322, S-321): unconditional GameLogicSettings::crc of attributeModifierArmorMaxBonus and damageRadiusMinimumForSplash moves the pin vector from frame 0 (with the two fields unhashed it matches the previous vector).
 // pin: PORT-12 (8ca4fd8e) hashes MinDistFromEdgeOfMapForBuild in GameLogicSettings::crc (RotWK GlobalData +0xA68): the vector moves from frame 0, as
@@ -229,6 +230,7 @@ TEST_CASE("uber1: the Uber battle hashes as its pin vector in every frame with 1
 	const bool regen = regenEnv && *regenEnv == '1';
 	// Ambient movement: target idle wandering adds RNG draws and origin state,
 	// so these engine references are measured again for this simulation change.
+	// pin: the hand batch of 2026-11-23 (station-0, Windows MSVC: Locals 142-144, Ports 274 / 296 / 298) re-measured it once (OPENBFME_UBER1_REGEN=1); the one cause is Port 296's ActiveBody::crc of m_lastDamageAmount (the last damage record's + 0x20, new state hashed with its hit, PROCESS 15.5): one build with that line alone switched off matched the old vectors; the vector moves from frame 11
 	const std::vector<std::uint32_t> pin = readUberHashes("battle3000_40.hashes");
 	if (!regen)
 	{

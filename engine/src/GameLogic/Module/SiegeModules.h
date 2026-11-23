@@ -115,6 +115,7 @@ public:
 	static void buildFieldParse(MultiIniFieldParse &p); // no field (RW 0x85C939: the base table only)
 };
 
+// RW 0x0085CA3D (this-0x14 getUpdate thunk -> RW 0x008A18E0)
 class SiegeDockingBehavior : public UpdateModule
 {
 public:
@@ -345,6 +346,7 @@ public:
 };
 
 // Local 87: RW 0x008CAC24 (getModuleName), RW 0x008CAC65 (getModuleNameKey), RW 0x008CACAA (dtor), RW 0x008C6583 (base dtor thunk).
+// RW 0x008CAC2A (dtor -> RW 0x00897583)
 class StopSpecialPower : public SpecialPowerModule
 {
 public:

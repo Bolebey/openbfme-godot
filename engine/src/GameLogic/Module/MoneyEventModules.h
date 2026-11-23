@@ -57,6 +57,7 @@ public:
 	static void buildFieldParse(MultiIniFieldParse &p);
 };
 
+// RW 0x00888488 (getModuleName), RW 0x0088848E (getModuleNameKey), RW 0x008884FD / RW 0x0088846F (dtor)
 class RefundDie : public BehaviorModule, public DieModuleInterface
 {
 public:
@@ -82,6 +83,7 @@ public:
 };
 
 // scalar deleting dtor RW 0x008881CD
+// RW 0x008881E9 (dtor -> RW 0x00888180)
 class PillageModule : public BehaviorModule
 {
 public:

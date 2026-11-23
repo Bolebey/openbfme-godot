@@ -6,6 +6,7 @@
 #endif
 
 #include "Common/Upgrade.h"
+#include "Common/ModEngineFeatures.h"
 #include "Common/SnapshotProbe.h"
 #include "Common/Xfer.h"
 
@@ -260,10 +261,14 @@ UpgradeTemplate *UpgradeCenter::newUpgrade(const std::string &name, bool assignB
 	{
 		// lane MODS-3 (stop S-5303): retail keeps counting past the mask's 1152 bits (its masks then overflow); the port holds CAPACITY_BITS and
 		// refuses only beyond that
-		if (m_nextBit >= (int)UpgradeMaskType::CAPACITY_BITS)
+		// PYSAGE 1.9.8.5 .upg5k 0xEDF000: 5120 upgrades (0x1400 bits) with EnnorathUpgrades5120, 2048 without.
+		const unsigned limitBits = ModEngineFeatures::has(ModEngineFeature::EnnorathUpgrades5120)
+			? UpgradeMaskType::CAPACITY_BITS
+			: UpgradeMaskType::RETAIL_MOD_CAPACITY_BITS;
+		if (m_nextBit >= (int)limitBits)
 		{
 			throw INIException(3, "Upgrade %s: more than %u upgrades (OpenBFME holds %u; retail's mask has %u bits, RW 0x8D2835)", name.c_str(),
-				UpgradeMaskType::CAPACITY_BITS, UpgradeMaskType::CAPACITY_BITS, UpgradeMaskType::BITS);
+				limitBits, limitBits, UpgradeMaskType::BITS);
 		}
 		t->m_maskBit = m_nextBit++;
 	}
@@ -382,6 +387,21 @@ const UpgradeTemplate *UpgradeCenter::findUpgrade(const std::string &name) const
 const UpgradeTemplate *UpgradeCenter::findUpgradeByMaskBit(int bit) const
 {
 	return bit >= 0 && (size_t)bit < m_byBit.size() ? m_byBit[(size_t)bit] : nullptr;
+}
+
+// RW 0x66F58E / 0x66F5B6 (cacheButtonImage -> +0x90) and LivingWorld readers RW 0x9FFC42 / 0xA08500
+std::vector<std::string> UpgradeCenter::strategicIconsForUpgrades(const std::vector<std::string> &upgradeNames) const
+{
+	std::vector<std::string> icons;
+	for (const std::string &name : upgradeNames)
+	{
+		const UpgradeTemplate *u = findUpgrade(name);
+		if (u && !u->m_strategicIcon.empty())
+		{
+			icons.push_back(u->m_strategicIcon);
+		}
+	}
+	return icons;
 }
 
 const UpgradeTemplate *UpgradeCenter::findVeterancyUpgrade(int level) const

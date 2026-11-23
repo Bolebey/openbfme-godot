@@ -16,6 +16,7 @@
 #include "GameLogic/Damage.h"
 #include "GameLogic/GameLogic.h"
 #include "GameLogic/Map/TerrainLogic.h"
+#include "GameLogic/Module/DockUpdate.h"
 #include "GameLogic/Object/Object.h"
 #include "GameLogic/Object/PartitionManager.h"
 #include "GameLogic/ScriptEngine/ScriptConditions.h"
@@ -471,6 +472,13 @@ void ScriptActions::execute(ScriptEngine &engine, const ScriptActionRec &a)
 		logic.setShowBehindBuildingMarkers(param(a, 0).intValue != 0);
 		return;
 	}
+	if (name == "SET_HERO_EXPERIENCE_SHARING")
+	{
+		// PORT-301: case 538 (RW 0x7CDF99): TheGameLogic + 0x9F = (param 0's int (+ 8) != 0) through RW 0x7BD3D1; ShareExperienceBehavior::share reads it
+		// (RW 0x883428) and skips a HERO candidate while it is clear
+		logic.setHeroExperienceSharing(param(a, 0).intValue != 0);
+		return;
+	}
 	if (name == "OPTIONS_SET_DRAWICON_UI_MODE")
 	{
 		// LOCAL-94 (issue #720): case 300 (RW 0x7CE222) -> RW 0x7BD55C (DONOR BFME2 0x003BCA7B): TheGameLogic + 0x9A = (param 0's int != 0),
@@ -794,6 +802,17 @@ void ScriptActions::execute(ScriptEngine &engine, const ScriptActionRec &a)
 			else if (name == "MAP_REVEAL_ALL_PERM") shroud->revealMapForPlayerPermanently(i);
 			else if (name == "MAP_REVEAL_ALL_UNDO_PERM") shroud->undoRevealMapForPlayerPermanently(i);
 			else shroud->shroudMapForPlayer(i);
+		}
+		return;
+	}
+	if (name == "WAREHOUSE_SET_VALUE") // action 216, RW 0x7C191A (dispatched at RW 0x7CDC71)
+	{
+		if (Object *o = engine.getUnitNamed(param(a, 0).stringValue)) // RW 0x75A243
+		{
+			if (auto *wh = dynamic_cast<SupplyWarehouseDockUpdate *>(o->findModule("SupplyWarehouseDockUpdate"))) // RW 0x68BDA5
+			{
+				wh->setCashValue(param(a, 1).intValue); // RW 0x8AB64E
+			}
 		}
 		return;
 	}

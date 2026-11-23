@@ -57,7 +57,11 @@ struct UpgradeMaskType
 {
 	static constexpr unsigned WORDS = 0x24;
 	static constexpr unsigned BITS = WORDS * 32;
-	static constexpr unsigned CAPACITY_WORDS = 0x40;
+	// PYSAGE 1.9.8.5 .upg5k 0xEDF000 (mask limit 0x480 -> 0x1400): 0xA0 words = 5120 bits when EnnorathUpgrades5120 is on;
+	// without it, UpgradeCenter::newUpgrade keeps the 0x40-word (2048-bit) S-5303 cap.
+	static constexpr unsigned RETAIL_MOD_CAPACITY_WORDS = 0x40;
+	static constexpr unsigned RETAIL_MOD_CAPACITY_BITS = RETAIL_MOD_CAPACITY_WORDS * 32;
+	static constexpr unsigned CAPACITY_WORDS = 0xA0;
 	static constexpr unsigned CAPACITY_BITS = CAPACITY_WORDS * 32;
 	std::array<std::uint32_t, CAPACITY_WORDS> words{};
 	// the words the state hash and the saves carry: WORDS, or as many as the loaded upgrades need (TheUpgradeCenter's next mask bit)
@@ -212,6 +216,9 @@ public:
 	const UpgradeTemplate *findUpgrade(const std::string &name) const; ///< RW 0x66F5E5, case sensitive; null when unknown
 	const UpgradeTemplate *findUpgrade(const UpgradeMaskType &mask) const; // RW 0x66F468: first matching template in head-first list order
 	const UpgradeTemplate *findUpgradeByMaskBit(int bit) const;       ///< RW 0x66F218
+	// RW 0x66F58E / 0x66F5B6 (UpgradeTemplate::cacheButtonImage -> +0x90) & WoTR readers RW 0x9FFC42 / 0xA08500:
+	// resolves each upgrade name to its non-empty StrategicIcon (+0x8C) in order.
+	std::vector<std::string> strategicIconsForUpgrades(const std::vector<std::string> &upgradeNames) const;
 	const UpgradeTemplate *findVeterancyUpgrade(int level) const;     ///< "Upgrade_Veterancy_" + REGULAR / VETERAN / ELITE / HEROIC
 	size_t size() const { return m_byBit.size(); }
 	int nextMaskBit() const { return m_nextBit; }

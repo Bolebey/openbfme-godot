@@ -164,6 +164,14 @@ public:
 	// lane WALL-2: RW 0x765522 itself (cached by RW at + 0x24): a node of the optimised chain from the head carries a waypoint id
 	bool hasWaypointNodes() const;
 	void appendNode(const Coord3D *pos, PathfindLayerEnum layer);
+	// Local 114: RW 0x0076578C Path::setLastNodePortal (DONOR BFME2 0x00362F78): writes m_pathTail->m_waypointID ([ecx + 8] -> [eax + 0x20])
+	void setLastNodePortal(int portalWaypointID)
+	{
+		if (m_pathTail)
+		{
+			m_pathTail->setWaypointID(portalWaypointID);
+		}
+	}
 	void setBlockedByAlly(bool blocked) { m_blockedByAlly = blocked; }
 	bool getBlockedByAlly() const { return m_blockedByAlly; }
 	void markOptimized() { m_isOptimized = true; }
@@ -188,6 +196,8 @@ public:
 	void updateClosestSegment(const Coord3D &pos) override;
 	bool isNearPathEnd() const override;
 	bool hasExplicitZ() const override;
+	// RW 0x661E50: m_path && m_closest && m_closest->m_waypointID != PathNode::NO_WAYPOINT
+	bool isCurrentNodePortal() const;
 	float remainingDistanceFrom(const LocomotorPathPoint &point) const override;
 	int currentSpecialNodeType() const override;
 

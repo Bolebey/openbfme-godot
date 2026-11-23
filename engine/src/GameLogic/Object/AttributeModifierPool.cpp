@@ -117,8 +117,10 @@ bool AttributeModifierPool::hasList(const std::string &listName) const
 
 namespace
 {
-// lane SPELL-4: RW 0x804E32 (FX) / 0x804E8A (EndFX): with MultiLevelFX and the object's pool, the entry (category count - 1) of FX / FX2 / FX3, else FX.
-// INFERENCE (S-633): a count above 3 takes FX3 (the binary's index there is a reused stack slot)
+// INFERENCE (S-633): a category count above 3 takes FX3 (the binary's index there is a reused stack slot).
+// Both editions: ModifierListTemplate::getFX (RW 0x00804E32) / ModifierListTemplate::getEndFX (RW 0x00804E8A)
+// and AttributeModifierStore::getFX (RW 0x006144FE) / getEndFX (RW 0x0061452E) / getModelCondition (RW 0x0061455E) /
+// getClearModelCondition (RW 0x006145BF) / getUpgrade (RW 0x00614620).
 const std::string &pickModifierFX(const std::string (&fx)[3], bool multiLevel, int categoryCount)
 {
 	if (multiLevel)
@@ -205,6 +207,7 @@ UpdateSleepTime AttributeModifierPool::update()
 	const GameLogicSettings &settings = obj.logic().settings();
 	const Object::ModelConditionBits none{};
 	unsigned next = 0x3FFFFFFFu;
+	// Retail update (RW 0x0080585F) uses a local std::deque for delayed grants (RW 0x006EFE24 / 0x007B4A72 ctor, RW 0x006F4BAB / 0x007B7C37 push_back, RW 0x006EFD6A / 0x0078B354 pop_front, RW 0x006EC8CA / 0x0078B12F dtor).
 	std::vector<int> grants;
 	for (auto it = m_entries.begin(); it != m_entries.end();)
 	{

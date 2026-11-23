@@ -113,6 +113,7 @@ public:
 	// slot 0x1D8 / 4 (RW 0x870E50): a ModifierList reaches the members (not a LEVEL one) and always the horde's own pool
 	virtual void addAttributeModifier(const std::string &listName, int duration) = 0;
 	virtual void removeAttributeModifier(const std::string &listName) = 0; ///< slot 0x1DC (RW 0x870F75, lane INTEG-1)
+	virtual void clearAllAttributeModifiers() = 0; ///< slot 0x1E0 (RW 0x00879106, DONOR BFME2 0x00475E06)
 	// ---- lane GARRISON-1 (a horde entering a HordeGarrisonContain and leaving it; GameLogic/Object/Contain/HordeGarrisonLink.cpp) ----
 	// slot 0x18 (RW 0x86EE1B): `member` is contained by this horde or is one of its members on the way into a garrison (the map at interface + 0x54)
 	virtual bool isMemberOrEntering(const Object &member) const = 0;
@@ -207,6 +208,9 @@ public:
 	// otherwise only the members that are affectedByUpgrade; every member that takes it flashes (RW 0x871B0F -> RW 0x70E013, the grey
 	// 0.99 colour at RW 0xBE53BC, pushed as `push 0xf; push 4; push 4` at RW 0x871B18)
 	virtual void giveUpgrade(const UpgradeTemplate *upgrade, bool allMembers) = 0;
+	// RW 0x86D6FD, interface slot 0x274: copy the module data's LivingWorldOverloadTemplate.
+	// Appended so the port's existing interface slots do not move.
+	virtual std::string livingWorldOverloadTemplate() const = 0;
 };
 
 class HordeContain : public UpdateModule, public ContainModuleInterface, public CreateModuleInterface, public HordeContainInterface
@@ -274,6 +278,8 @@ public:
 	// RW 0x870F75 (slot 0x1DC, name, filter; the stances pass no filter): every member (contain slot 0x118) loses the list (Object::removeAttributeModifier), the
 	// second list's members are not ported (S-486), then the horde's own AttributeModifierPoolUpdate (RW 0x8052FB) (lane INTEG-1)
 	void removeAttributeModifier(const std::string &listName) override;
+	// RW 0x00879106 (slot 0x1E0, DONOR BFME2 0x00475E06): clears attribute modifiers on contained and garrison-entering members (RW 0x006998D0) and erases the horde's own pool entries
+	void clearAllAttributeModifiers() override;
 	// lane GARRISON-1 (HordeGarrisonLink.cpp)
 	bool isMemberOrEntering(const Object &member) const override;
 	bool allMembersEntered() const override { return m_garrisonEntering.empty(); }
@@ -424,6 +430,7 @@ public:
 	// lane COMBAT-1: the typed data (RanksToReleaseWhenAttacking, MeleeBehavior, ...) and the melee engagement. While engaged the formation is frozen where the men stand: the member
 	// pass does not run (RW 0x86D75E beginMelee / 0x86C0F9 endMelee; horde spec 2.1 step 3), the horde AI's melee behaviour moves the members instead
 	const HordeContainModuleData &hordeData() const;
+	std::string livingWorldOverloadTemplate() const override;
 	bool meleeEngaged() const { return m_meleeEngaged; }
 
 	// ---- lane BACKLOG-8: wall scaling (HordeWallScaling.cpp) ----

@@ -16,9 +16,11 @@
 #include "GameLogic/Combat/CombatState.h"
 #include "GameLogic/Combat/ObjectWeapons.h"
 #include "GameLogic/GameLogic.h"
+#include "GameLogic/Map/FireLogicSystem.h"
 #include "GameLogic/Module/AIUpdate.h"
 #include "GameLogic/Module/ActiveBody.h"
 #include "GameLogic/Module/BehaviorModule.h"
+#include "GameLogic/Module/CombatModules.h"
 #include "GameLogic/Module/DeployStyleAIUpdate.h"
 #include "GameLogic/Module/EmotionModules.h"
 #include "GameLogic/Module/ExtraDieModules.h"
@@ -28,6 +30,7 @@
 #include "GameLogic/Module/ReplaceObjectUpdate.h"
 #include "GameLogic/Module/SpecialAbilityModules.h"
 #include "GameLogic/Module/SpecialPowerModules.h"
+#include "GameLogic/Module/ProjectileModules.h"
 #include "GameLogic/Module/SpellBookPowers.h"
 #include "GameLogic/Module/StealthAbilityModules.h"
 #include "GameLogic/Module/WeaponChangeSpecialPower.h"
@@ -173,6 +176,8 @@ struct HitTracker
 	std::map<unsigned, std::map<ObjectID, UnsignedInt>> disabledFirstSeen;
 	/// the first tracked frame each object entered AI_HARVEST
 	std::map<ObjectID, UnsignedInt> harvestFirstSeen;
+	/// the first tracked frame each non-caster object was contained by a caster (GrabNugget)
+	std::map<ObjectID, UnsignedInt> grabbedFirstSeen;
 	struct Made
 	{
 		UnsignedInt frame;
@@ -224,6 +229,10 @@ struct HitTracker
 			if (const AIUpdateInterface *ai = o->getAIUpdateInterface(); ai && ai->aiStateType() == AI_HARVEST)
 			{
 				harvestFirstSeen.emplace(o->getID(), now);
+			}
+			if (!casters.count(o->getID()) && o->getContainedBy() && casters.count(o->getContainedBy()->getID()))
+			{
+				grabbedFirstSeen.emplace(o->getID(), now);
 			}
 			if (!first && o->getID() > highest && !made.count(o->getID()) && !o->isKindOfName("PROJECTILE"))
 			{
@@ -321,6 +330,7 @@ struct EffectProbe
 		TIMER_REFRESH,   ///< SpecialPowerTimerRefreshSpecialPower -> allied non-holder readySum decreased
 		FIRE_LOGIC,      ///< FireLogicNugget -> extinguishes / feeds fires (unported S-191 / S-1997 -> NO-EFFECT)
 		STORE,           ///< lane PORT-261: StoreObjectsSpecialPower (RW 0x8D1EA7) -> the captured list grew
+		PROD_SPEED,      ///< LOCAL-131: ProductionSpeedBonus (RW 0x8C71B7) -> Player::getProductionTimeChange changed
 	};
 
 	struct Expect
@@ -343,18 +353,39 @@ struct EffectProbe
 		std::set<int> emotions;                      ///< EMOTION: acceptable EmotionType ids (empty = any)
 		std::vector<int> modelConditions;            ///< MODEL_CONDITION: any of these bit indices satisfies
 		Scope scope = SCOPE_ANY;
+		int fireLogicType = -1; ///< FIRE_LOGIC: FireLogicNugget::m_logicType (0..4, RW 0x9120E6)
 	};
 
-	// the CreateObject templates of an ObjectCreationList (its ObjectNames)
-	static void oclTemplates(const std::string &name, std::set<std::string> &out)
+	// the CreateObject templates of an ObjectCreationList (its ObjectNames); when holder is known, respect RequiredUpgrades / ForbiddenUpgrades (RW 0x5F0DC5)
+	static void oclTemplates(const std::string &name, std::set<std::string> &out, const Object *holder = nullptr)
 	{
 		const ObjectCreationList *ocl = TheObjectCreationListStore && !name.empty() ? TheObjectCreationListStore->findObjectCreationList(name) : nullptr;
+		const Player *pl = holder ? holder->getControllingPlayer() : nullptr;
+		auto hasUpg = [&](const std::string &u) { return (holder && holder->hasUpgrade(u)) || (pl && pl->hasUpgradeComplete(u)); };
 		for (size_t i = 0; ocl && i < ocl->nuggets().size(); ++i)
 		{
-			if (ocl->nuggets()[i].kind == OCLNugget::CREATE_OBJECT)
+			const OCLNugget &ng = ocl->nuggets()[i];
+			if (ng.kind != OCLNugget::CREATE_OBJECT)
 			{
-				out.insert(ocl->nuggets()[i].objectNames.begin(), ocl->nuggets()[i].objectNames.end());
+				continue;
 			}
+			if (holder)
+			{
+				bool ok = ng.requiredUpgrades.empty();
+				for (const std::string &u : ng.requiredUpgrades)
+				{
+					ok = ok || hasUpg(u);
+				}
+				for (const std::string &u : ng.forbiddenUpgrades)
+				{
+					ok = ok && !hasUpg(u);
+				}
+				if (!ok)
+				{
+					continue;
+				}
+			}
+			out.insert(ng.objectNames.begin(), ng.objectNames.end());
 		}
 	}
 
@@ -453,10 +484,13 @@ struct EffectProbe
 	}
 	bool sawBaseSpecialAbilityUpdate = false;
 	unsigned weaponModeActive = 0;
-	float bounty = 0.0f; ///< lane FACT-C: the caster's player's bounty percent
+	float bounty = 0.0f;
+	std::map<std::string, float> prodSpeed; ///< lane FACT-C: the caster's player's bounty percent
 	float casterDamageMult = 1.0f;
 	float casterDamageAdd = 0.0f;
 	unsigned long long metaImpactHits = 0;
+	long long fireBurnRateSum = 0;
+	int fireBurningCells = 0;
 	std::uint32_t playerMoney = 0;
 	size_t luaEvents = 0;
 
@@ -469,8 +503,9 @@ struct EffectProbe
 			ws.push_back(w);
 			seenWs.insert(w);
 		}
-		bool damage = false, grab = false, ocl = false, hordeAttack = false, metaImpact = false, stealMoney = false, paralyze = false;
+		bool damage = false, heal = false, grab = false, ocl = false, hordeAttack = false, metaImpact = false, stealMoney = false, paralyze = false;
 		bool fireLogic = false;
+		int fireLogicType = -1;
 		std::string hordeProblem;
 		size_t hordeMembers = 1;
 		std::vector<const WeaponTemplate *> damageWeapons;
@@ -493,6 +528,30 @@ struct EffectProbe
 		for (size_t i = 0; i < ws.size(); ++i)
 		{
 			const WeaponTemplate *cur = ws[i];
+			// LOCAL-113 (PORT-276, RW 0x8961F7 / 0x90E28C / 0x8609A8): a self-detonation igniter (RadiusDamageAffects SELF/SUICIDE without ENEMIES,
+			// e.g. SalemeDetonateFallen) kills the caster so SlowDeathBehavior fires the real blast weapons; inspect those death weapons instead
+			if ((cur->m_affectsMask & (WEAPON_AFFECTS_SELF | WEAPON_KILLS_SELF)) && !(cur->m_affectsMask & WEAPON_AFFECTS_ENEMIES))
+			{
+				bool anyDeathWeapon = false;
+				for (const std::unique_ptr<BehaviorModule> &bm : holder.modules())
+				{
+					if (const SlowDeathBehaviorModuleData *sd = dynamic_cast<const SlowDeathBehaviorModuleData *>(bm->getModuleData()))
+					{
+						for (int ph = 0; ph < SDPHASE_COUNT; ++ph)
+						{
+							for (const std::string &dw : sd->m_weapon[ph])
+							{
+								enqueueWeapon(dw);
+								anyDeathWeapon = true;
+							}
+						}
+					}
+				}
+				if (anyDeathWeapon)
+				{
+					continue;
+				}
+			}
 			bool curHasDamage = false;
 			for (const std::shared_ptr<WeaponNugget> &n : cur->m_nuggets)
 			{
@@ -506,7 +565,11 @@ struct EffectProbe
 					continue;
 				}
 				const WeaponNuggetKind nk = n->kind();
-				if (nk == NUGGET_DAMAGE || nk == NUGGET_DOT)
+				if (nk == NUGGET_DAMAGE && static_cast<const DamageNugget *>(n.get())->m_damageType == DAMAGE_HEALING)
+				{
+					heal = true;
+				}
+				else if (nk == NUGGET_DAMAGE || nk == NUGGET_DOT)
 				{
 					damage = true;
 					curHasDamage = true;
@@ -514,6 +577,7 @@ struct EffectProbe
 				else if (nk == NUGGET_FIRE_LOGIC)
 				{
 					fireLogic = true;
+					fireLogicType = static_cast<const FireLogicNugget *>(n.get())->m_logicType;
 				}
 				else if (nk == NUGGET_GRAB)
 				{
@@ -521,8 +585,12 @@ struct EffectProbe
 				}
 				else if (const WeaponOCLNugget *on = dynamic_cast<const WeaponOCLNugget *>(n.get()))
 				{
-					ocl = true;
-					oclTemplates(on->m_weaponOCLName, made);
+					const size_t prev = made.size();
+					oclTemplates(on->m_weaponOCLName, made, &holder);
+					if (made.size() > prev)
+					{
+						ocl = true;
+					}
 				}
 				else if (const SpawnAndFadeNugget *sfn = dynamic_cast<const SpawnAndFadeNugget *>(n.get()))
 				{
@@ -624,14 +692,27 @@ struct EffectProbe
 					{
 						if (const ThingTemplate *proj = holder.logic().things().findTemplate(pn->m_projectileTemplateName))
 						{
+							// LOCAL-131 (RW 0x85F21B..0x85F235): BezierProjectileBehavior::detonate with a warhead calls destroyObject unless DetonateCallsKill = Yes;
+							// CreateObjectDie on the projectile never runs without kill() (e.g. GorkilBombProjectile).
+							bool killsOnDetonate = pn->m_warheadTemplateName.empty();
 							for (const ThingTemplate::Nugget &pnug : proj->behaviorModules().nuggets())
 							{
-								if (const CreateObjectDieModuleData *cod = dynamic_cast<const CreateObjectDieModuleData *>(pnug.data.get()))
+								if (const BezierProjectileBehaviorModuleData *bpd = dynamic_cast<const BezierProjectileBehaviorModuleData *>(pnug.data.get()))
 								{
-									if (!cod->m_creationList.empty())
+									killsOnDetonate = killsOnDetonate || bpd->m_detonateCallsKill;
+								}
+							}
+							if (killsOnDetonate)
+							{
+								for (const ThingTemplate::Nugget &pnug : proj->behaviorModules().nuggets())
+								{
+									if (const CreateObjectDieModuleData *cod = dynamic_cast<const CreateObjectDieModuleData *>(pnug.data.get()))
 									{
-										ocl = true;
-										oclTemplates(cod->m_creationList, made);
+										if (!cod->m_creationList.empty())
+										{
+											ocl = true;
+											oclTemplates(cod->m_creationList, made);
+										}
 									}
 								}
 							}
@@ -667,6 +748,10 @@ struct EffectProbe
 		if (grab)
 		{
 			p.expects.push_back({ GRAB, cls + " SpecialWeapon " + weaponName + " (GrabNugget)" });
+		}
+		if (heal)
+		{
+			p.expects.push_back({ HEAL, cls + " SpecialWeapon " + weaponName });
 		}
 		if (ocl)
 		{
@@ -726,7 +811,9 @@ struct EffectProbe
 		{
 			if (fireLogic)
 			{
-				p.expects.push_back({ FIRE_LOGIC, cls + " SpecialWeapon " + weaponName });
+				Expect fle{ FIRE_LOGIC, cls + " SpecialWeapon " + weaponName };
+				fle.fireLogicType = fireLogicType;
+				p.expects.push_back(std::move(fle));
 			}
 			else if (p.skippedNotes.empty())
 			{
@@ -767,7 +854,7 @@ struct EffectProbe
 		if (const SpecialAbilityUpdate *a = dynamic_cast<const SpecialAbilityUpdate *>(m))
 		{
 			const SpecialAbilityUpdateModuleData *d = a->abilityData();
-			if (!d->m_triggerAttributeModifier.empty())
+			if (!d->m_triggerAttributeModifier.empty() && (!TheAttributeModifierStore || TheAttributeModifierStore->find(d->m_triggerAttributeModifier)))
 			{
 				p.expects.push_back(modifierOf(cls + " TriggerAttributeModifier " + d->m_triggerAttributeModifier, d->m_triggerAttributeModifier));
 			}
@@ -971,6 +1058,39 @@ struct EffectProbe
 		{
 			areaAura(holder, cls, ep->data()->m_elvenGroveObject, p); // lane TAINTAREA-1
 		}
+		else if (const CloudBreakSpecialPower *cbsp = dynamic_cast<const CloudBreakSpecialPower *>(m))
+		{
+			// LOCAL-131: CloudBreakSpecialPower spawns SunbeamObject on the grid (RW 0x8C8B57) and applies EMOTION_UNCONTROLLABLE_FEAR (RW 0x8C8A3B)
+			const auto *cbd = dynamic_cast<const CloudBreakSpecialPowerModuleData *>(cbsp->getModuleData());
+			if (cbd && !cbd->m_sunbeamObject.empty() && cbd->m_objectSpacing > 0.0f)
+			{
+				p.expects.push_back(spawnOf(cls + " SunbeamObject " + cbd->m_sunbeamObject, { cbd->m_sunbeamObject }));
+			}
+			else
+			{
+				Expect ee{ EMOTION, cls + " (EMOTION_UNCONTROLLABLE_FEAR)" };
+				ee.emotions.insert(EMOTION_UNCONTROLLABLE_FEAR);
+				p.expects.push_back(std::move(ee));
+			}
+		}
+		else if (const ProductionSpeedBonus *psb = dynamic_cast<const ProductionSpeedBonus *>(m))
+		{
+			// LOCAL-131: ProductionSpeedBonus calls Player::setProductionSpeedBonus (RW 0x8C71B7 -> RW 0x6AF3C8) for each listed template
+			const auto *pd = dynamic_cast<const ProductionSpeedBonusModuleData *>(psb->getModuleData());
+			if (pd && !pd->m_types.empty())
+			{
+				Expect pe{ PROD_SPEED, cls };
+				for (const std::string &tp : pd->m_types)
+				{
+					pe.templates.insert(tp);
+					if (p.player)
+					{
+						p.prodSpeed[tp] = p.player->getProductionTimeChange(tp);
+					}
+				}
+				p.expects.push_back(std::move(pe));
+			}
+		}
 		else if (const OCLSpecialPower *op = dynamic_cast<const OCLSpecialPower *>(m))
 		{
 			std::set<std::string> made;
@@ -1041,6 +1161,18 @@ struct EffectProbe
 		p.player = u ? u->getControllingPlayer() : nullptr;
 		p.bounty = p.player ? p.player->getBountyPercent() : 0.0f;
 		p.metaImpactHits = logic.combat().counters().metaImpactHits;
+		p.fireBurningCells = logic.fireLogic().cellsBurningCount();
+		if (logic.fireLogic().hasGrid())
+		{
+			const int rows = logic.fireLogic().numRows(), cols = logic.fireLogic().numCols();
+			for (int x = 0; x < rows; ++x)
+			{
+				for (int y = 0; y < cols; ++y)
+				{
+					p.fireBurnRateSum += logic.fireLogic().getCellBurnRate(x, y);
+				}
+			}
+		}
 		p.playerMoney = p.player ? p.player->getMoney()->countMoney() : 0;
 		p.luaEvents = engineEvents;
 		for (Object *o = logic.getFirstObject(); o; o = o->getNextObject())
@@ -1074,7 +1206,8 @@ struct EffectProbe
 			}
 			if (const ObjectWeapons *w = o->getWeapons())
 			{
-				s.attackRange = w->currentAttackRangeNoTarget();
+				// RW 0x006CA69A -> RW 0x006CA61F (single RANGE scale; NoTarget RW 0x006CA701 squares the scale)
+				s.attackRange = w->currentAttackRange();
 			}
 			if (logic.shroud())
 			{
@@ -1268,14 +1401,17 @@ struct EffectProbe
 					const float dmgBonus = std::max(1.0f, std::max(casterDamageMult, after.casterDamageMult));
 					const float dmgAdd = std::max(casterDamageAdd, after.casterDamageAdd);
 					const float upperMult = (e.hordeMembers > 1 ? 2.5f * (float)e.hordeMembers : 2.5f) * dmgBonus;
+					const bool projSelf = e.weapon && e.weapon->m_projectileSelf; // LOCAL-113: ProjectileSelf (e.g. BalrogLeap) can also deal CrushWeapon damage on the same landing frame (500 + 3000 = 3500)
+					const UnsignedInt maxFrame = projSelf ? first + 2 : first;
 					for (const HitTracker::Hit &x : hits->hits)
 					{
 						auto it = hitNominal.find(x.victim);
 						const float nominal = it == hitNominal.end() ? 0.0f : it->second, sum = it == hitNominal.end() ? 0.0f : hitSum.at(x.victim);
-						if (x.frame == first && nominal > 0.0f && x.amount >= nominal * 0.9f && x.amount <= (sum + dmgAdd) * upperMult)
+						const bool oneShotKill = x.left <= 0.0f && x.amount > 0.0f && nominal >= x.amount;
+						if (x.frame >= first && x.frame <= maxFrame && nominal > 0.0f && ((x.amount >= nominal * 0.9f && (projSelf || x.amount <= (sum + dmgAdd) * upperMult)) || oneShotKill))
 						{
 							got = str("its first hit after the cast (frame %u) %.0f, the weapon's %.0f (all nuggets %.0f) against the victim's armour; no hit before the cast",
-									  first - frame, (double)x.amount, (double)nominal, (double)sum);
+									  x.frame - frame, (double)x.amount, (double)nominal, (double)sum);
 							break;
 						}
 					}
@@ -1304,6 +1440,17 @@ struct EffectProbe
 				}
 				break;
 			case FIRE_LOGIC:
+				if (e.fireLogicType == 1) // DECREASE_BURN_RATE (RW 0x9120E6 -> RW 0x6878D1)
+				{
+					if (after.fireBurnRateSum < fireBurnRateSum || after.fireBurningCells < fireBurningCells)
+					{
+						got = str("fire burn rate %lld -> %lld (cells %d -> %d)", fireBurnRateSum, after.fireBurnRateSum, fireBurningCells, after.fireBurningCells);
+					}
+				}
+				else if (after.fireBurnRateSum > fireBurnRateSum || after.fireBurningCells > fireBurningCells)
+				{
+					got = str("fire burn rate %lld -> %lld (cells %d -> %d)", fireBurnRateSum, after.fireBurnRateSum, fireBurningCells, after.fireBurningCells);
+				}
 				break;
 			case MODIFIER:
 			{
@@ -1543,6 +1690,17 @@ struct EffectProbe
 					{
 						got = str("object %u held by the caster", (unsigned)kv.first);
 						break;
+					}
+				}
+				if (got.empty() && hits)
+				{
+					for (const auto &kv : hits->grabbedFirstSeen)
+					{
+						if (!holders.count(kv.first) && kv.second >= frame)
+						{
+							got = str("object %u grabbed by the caster (frame %u)", (unsigned)kv.first, (unsigned)kv.second);
+							break;
+						}
 					}
 				}
 				break;
@@ -1795,6 +1953,20 @@ struct EffectProbe
 					got = str("the player's bounty went from %g to %g", (double)bounty, (double)after.bounty);
 				}
 				break;
+			case PROD_SPEED:
+				for (const std::string &tp : e.templates)
+				{
+					const auto bit = prodSpeed.find(tp);
+					const auto ait = after.prodSpeed.find(tp);
+					const float b0 = bit != prodSpeed.end() ? bit->second : 0.0f;
+					const float a0 = ait != after.prodSpeed.end() ? ait->second : (after.player ? after.player->getProductionTimeChange(tp) : 0.0f);
+					if (a0 != b0)
+					{
+						got = str("%s production time change %g -> %g", tp.c_str(), (double)b0, (double)a0);
+						break;
+					}
+				}
+				break;
 			case WEAPON_MODE:
 				if (after.weaponModeActive > weaponModeActive)
 				{
@@ -1804,12 +1976,29 @@ struct EffectProbe
 			case WEAPON_FLAGS:
 			case STATUS:
 			case MOUNT:
+				if (e.kind == MOUNT && !e.modifier.empty())
+				{
+					// LOCAL-131 (RW 0x8B16D1 -> 0x8B140D): ToggleMounted with PackTime > 0 creates MountedTemplate on triggerAbilityEffect
+					// while the old object stays alive until finishAfterPacking; check the new MountedTemplate object here too.
+					for (const auto &kv : after.seen)
+					{
+						if (kv.first > highest && kv.second.tmpl && kv.second.tmpl->getName() == e.modifier)
+						{
+							got = str("%s %u made", e.modifier.c_str(), (unsigned)kv.first);
+							break;
+						}
+					}
+					for (auto it = hits ? hits->made.begin() : std::map<ObjectID, HitTracker::Made>::const_iterator{}; hits && it != hits->made.end() && got.empty(); ++it)
+					{
+						if (it->first > highest && it->second.tmpl && it->second.tmpl->getName() == e.modifier)
+						{
+							got = str("%s %u made (frame %u)", e.modifier.c_str(), (unsigned)it->first, it->second.frame);
+						}
+					}
+					break;
+				}
 				for (ObjectID id : holders)
 				{
-					if (e.kind == MOUNT && !e.modifier.empty())
-					{
-						break; // the replacement by the MountedTemplate (the caller's check) is the only result
-					}
 					const Seen *b = was(id);
 					auto it = after.seen.find(id);
 					const bool status = it != after.seen.end() && b && it->second.status != b->status, flags = it != after.seen.end() && b && it->second.weaponFlags != b->weaponFlags;
@@ -1921,9 +2110,10 @@ struct EffectProbe
 				{
 					continue;
 				}
+				const bool alliesOnly = (wt->m_affectsMask & WEAPON_AFFECTS_ALLIES) != 0 && (wt->m_affectsMask & WEAPON_AFFECTS_ENEMIES) == 0;
 				for (Object *o = logic.getFirstObject(); o; o = o->getNextObject())
 				{
-					if (o->getControllingPlayer() == player || !o->getBodyModule())
+					if ((alliesOnly ? (o->getControllingPlayer() != player || holders.count(o->getID())) : o->getControllingPlayer() == player) || !o->getBodyModule())
 					{
 						continue;
 					}

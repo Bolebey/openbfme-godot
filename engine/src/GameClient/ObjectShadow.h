@@ -20,6 +20,7 @@
 //       ShadowForceDisable (RW 0x4C4EF8 / 0x4C5013): when true, no shadow is created.
 //   Visibility & corpse switch-off:
 //     Drawable::setShadowsEnabled (RW 0x672D28): false when dead with SlowDeathBehavior/ShadowWhenDead = No (TOP20 #24).
+//   ShadowTypeInfo (ctor RW 0x00478DC0, dtor RW 0x00478C89, operator= RW 0x00499E27).
 //   Shadow creation & parameters (W3DProjectedShadowManager::addShadow, RW 0x50BF6A):
 //     Texture defaults to "shadow" when length <= 1 (RW 0x50BF93).
 //     Size falls back to model bounding box if sizeX or sizeY is 0 (RW 0x50BFF3..0x50C066).
@@ -94,6 +95,16 @@ inline bool castsMap(const ThingTemplate *object, const W3DModelDrawModuleData *
 	const FieldValue *field = object->findField("Shadow");
 	const long long *bits = field ? std::get_if<long long>(field) : nullptr;
 	return bits && (*bits & mask) != 0;
+}
+
+// Local 117 (P-166): RotWK 2.01 RTS3DScene::Flush (RW 0x470F44 -> 0x47156D) unconditionally calls
+// BaseHeightMap::RenderTrees (RW 0x46B0A0) -> W3DTreeBuffer::drawTrees (RW 0x4EC387 -> 0x4E5F64) and
+// W3DShrubBuffer::drawShrubs (RW 0x46B233) during W3DShadowMapManager::UpdateShadowMap (RW 0x47D5C9,
+// WW3D::IsCurrentlyRenderingShadowMap = 1 at RW 0x47D6A8), regardless of ThingTemplate::Shadow.
+inline bool castsMap(const ThingTemplate *object, const W3DModelDrawModuleData *module, const ModelConditionInfo *state, bool useShadowMapping, bool isTreeDraw)
+{
+	if (isTreeDraw && useShadowMapping) return true;
+	return castsMap(object, module, state, useShadowMapping);
 }
 
 // Queries object-space bounding box extents (Extent.X, Extent.Y) of a model prototype (RW 0x50C01D)
