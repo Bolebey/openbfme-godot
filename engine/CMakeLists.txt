@@ -260,6 +260,7 @@ include(cmake/Port4.cmake) # OPENBFME_PORT4_TESTS
 include(cmake/Port109.cmake) # OPENBFME_PORT109_TESTS
 include(cmake/Port47.cmake) # OPENBFME_PORT47_TESTS
 include(cmake/Play2.cmake) # OPENBFME_PLAY2_TESTS (lane PLAY-2)
+include(cmake/Port161.cmake) # PORT-161: BurningCell producer into the shared audio runtime
 include(cmake/Port300.cmake) # OPENBFME_PORT300_TESTS (lane PORT-300, issue #692)
 include(cmake/Port302.cmake) # PORT-302: InactiveBody's armor-set flags and its damage answers (fork issue 694)
 include(cmake/Port287.cmake) # PORT-287: horde producer selection and charge (OPENBFME_PORT287_TESTS)
@@ -578,7 +579,6 @@ include(cmake/Port269.cmake)    # PORT-269: the dropped One Ring's radar marker 
 include(cmake/Port226.cmake)    # PORT-226: the idle state's stance countdown (fork issue #549; OPENBFME_PORT226_TESTS)
 include(cmake/Port271.cmake)    # PORT-271: several units and heroes selected — the panel, portrait and voice are the senior hero's (issue #638, P-151; OPENBFME_PORT271_TESTS)
 include(cmake/Port290.cmake)
-include(cmake/Port161.cmake)
 include(cmake/Port294.cmake)    # PORT-294: ObjectCreationUpgrade's own mux slots — wouldUpgrade, postUpgradeCheck, isPermanent (fork issue #686; OPENBFME_PORT294_TESTS)
 include(cmake/Port275.cmake)    # PORT-275: the command set swap re-evaluates the bar in the same update (fork issue 642; OPENBFME_PORT275_TESTS)
 include(cmake/Port280.cmake)    # PORT-280: ProductionSpeedBonus consumer on Player, calcTimeToBuild and ProductionUpdate (fork issue 647; OPENBFME_PORT280_TESTS)
@@ -1020,6 +1020,7 @@ add_executable(openbfme_tests
     ${OPENBFME_PORT47_TESTS}
     ${OPENBFME_PORT439_TESTS}
     ${OPENBFME_PLAY2_TESTS}
+    ${OPENBFME_PORT161_TESTS}
     ${OPENBFME_PORT287_TESTS}
     ${OPENBFME_PORT248_TESTS}
     ${OPENBFME_PORT264_TESTS}
@@ -1395,7 +1396,6 @@ add_executable(openbfme_tests
     ${OPENBFME_PORT226_TESTS}
     ${OPENBFME_PORT271_TESTS}
     ${OPENBFME_PORT290_TESTS}
-    ${OPENBFME_PORT161_TESTS}
     ${OPENBFME_PORT294_TESTS}
     ${OPENBFME_PORT275_TESTS}
     ${OPENBFME_PORT280_TESTS}

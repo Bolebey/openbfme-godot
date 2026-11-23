@@ -274,3 +274,12 @@ producer and consumer weights, not that installed samples are audible.
 
 No upstream PR: this is a pure audio/display change without before/after
 in-game snapshots, so the upstream acceptance gate is not met.
+
+
+Integration check: after opening PR #875, the advanced main had one textual
+CMake conflict: Port 301 and Port 161 both appended their test variable after
+Port 290. The Port 161 include/test entry was relocated beside Play2 (the
+requested lane model), without importing unrelated main changes or changing
+engine/test code. A merge-tree check against main 5a910338c must be clean;
+the full target and both regression filters are rebuilt/rerun after this
+CMake-only relocation before handing off the PR.
