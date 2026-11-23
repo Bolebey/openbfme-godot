@@ -130,7 +130,7 @@ TEST_CASE("LOCAL-143: ennorath.upgrades-5120 (.upg5k): 5120 upgrades with profil
 			REQUIRE_MESSAGE(res.empty(), res);
 			const UpgradeTemplate *last = TheUpgradeCenter->findUpgrade("Upg5k_2099");
 			REQUIRE(last != nullptr);
-			CHECK(last->getMaskBit() == 2102);
+			CHECK(last->getMaskBit() == 2108);
 			CHECK(UpgradeMaskType::activeWords() == 66);
 			UpgradeMaskType m;
 			m.set((unsigned)last->getMaskBit());
