@@ -249,6 +249,7 @@ private:
 };
 
 // Local 87: RW 0x008CC2C7 (getModuleName), RW 0x008CC31A (getModuleNameKey), RW 0x008CC35F (dtor), RW 0x008C6583 (base dtor thunk).
+// RW 0x008CC2CD (dtor -> RW 0x00897583)
 class PlayerHealSpecialPower : public SpecialPowerModule
 {
 public:
@@ -294,6 +295,7 @@ public:
 
 class ObjectCreationList;
 struct OCLNugget;
+// RW 0x008C7332 (getModuleNameKey)
 class OCLSpecialPower : public SpecialPowerModule
 {
 public:
@@ -336,6 +338,7 @@ public:
 };
 
 // Local 87: RW 0x008CCC15 (getModuleName), RW 0x008CCC34 (getModuleNameKey), RW 0x008CCC79 (dtor), RW 0x008C6583 (base dtor thunk).
+// RW 0x008CCC1B (dtor -> RW 0x00897583)
 class CombineHordeSpecialPower : public SpecialPowerModule
 {
 public:

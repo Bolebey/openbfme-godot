@@ -265,6 +265,7 @@ private:
 
 // RW vtable 0xC71FE0: getModuleName RW 0x008C4A34, getModuleNameKey RW 0x008C4A53, dtor RW 0x008C4A98;
 // health never drops below 1 (internalChangeHealth delta = max(delta, 1 - health), RW 0x8C4AB4)
+// RW 0x008C4A3A (dtor -> RW 0x008C3AED)
 class ImmortalBody : public ActiveBody
 {
 public:
@@ -276,6 +277,7 @@ public:
 
 // RW vtable 0xC71ED0: getModuleName RW 0x008C4947, getModuleNameKey RW 0x008C4966, dtor RW 0x008C49AB;
 // attemptDamage RW 0x8C49C7: a hit never takes more than health - 1 unless UNRESISTABLE
+// RW 0x008C494D (dtor -> RW 0x008C3AED)
 class HighlanderBody : public ActiveBody
 {
 public:

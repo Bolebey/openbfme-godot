@@ -577,6 +577,7 @@ include(cmake/Local105.cmake)   # LOCAL-105: FadeAndDieOrnamentUpdate and small 
 include(cmake/Local96.cmake)    # LOCAL-96: DozerAIUpdate and WorkerAIUpdate builder functions (fork issue 761; OPENBFME_LOCAL96_TESTS)
 include(cmake/Local99.cmake)    # LOCAL-99: unit behaviour modules uncited own functions (issue #764; OPENBFME_LOCAL99_TESTS)
 include(cmake/Local126.cmake)   # LOCAL-126: map sweep errors + DAMAGE_MULT / RESIST_FEAR readers (fork issue 810; OPENBFME_LOCAL126_TESTS)
+include(cmake/Local134.cmake)   # LOCAL-134: StoreObjects/TeleportToCaster same-map-status filter + free logic citations (fork issue 850; OPENBFME_LOCAL134_TESTS)
 include(cmake/Local127.cmake)   # LOCAL-127: Ennorath 1.9.8.5 paged options menu, hotkeys, and online delay fix (fork issue 811; OPENBFME_LOCAL127_TESTS)
 include(cmake/Local128.cmake)   # LOCAL-128: Ennorath 1.9.8.5 lobby map search (fork issue 812; OPENBFME_LOCAL128_TESTS)
 include(cmake/Local129.cmake)   # LOCAL-129: Ennorath 1.9.8.5 chat mute on PlayerTribute (.chatmut 0xEDB000; fork issue 813; OPENBFME_LOCAL129_TESTS)
@@ -1423,6 +1424,7 @@ add_executable(openbfme_tests
     ${OPENBFME_LOCAL96_TESTS}
     ${OPENBFME_LOCAL99_TESTS}
         ${OPENBFME_LOCAL126_TESTS}
+        ${OPENBFME_LOCAL134_TESTS}
     ${OPENBFME_LOCAL127_TESTS}
         ${OPENBFME_LOCAL128_TESTS}
         ${OPENBFME_LOCAL129_TESTS}
