@@ -99,6 +99,17 @@ const std::vector<ModEngineFeatures::Profile> &ModEngineFeatures::knownBinaries(
 			".bldcan / .bldlvl / .bldcap), the building limit fix, 64 "
 			"CommandSet slots (.cmdext) and 5120 upgrades (.upg5k), the text entry clipboard (.txtclip, P-128), the observer's command range (.obscmd); "
 			"the 30 / 60 FPS choice (.fxrate / .fpsvar / .fpsdraw; ETFrameRate shown in Options) is left out by decision: OpenBFME keeps its own frame rate" },
+		// Ennorath 1.9.8.7 (2026-11-22; the patch note's 1.9.8.6 and 1.9.8.7 are one game.dat, md5 f222b925...): the 1.9.8.5 sections stay (some edited:
+		// .camfix, .hotkeys, .keycmd, .keydef, .optui, .rpchat, .chatmut), plus .wmfeat / .wmkeys. Until their features are rebuilt it turns on what
+		// 1.9.8.5 has, so the mod's package keeps its stance, camera, evacuate, options, map search and chat mute with the new game.dat.
+		{ "f222b925edf2a9553e574ad8445f2841", "Ennorath 1.9.8.7 game.dat",
+			{ F::EnnorathStanceKeepsMoving, F::EnnorathMiddleClickCamera, F::EnnorathEvacuateContainers,
+			  F::EnnorathOptionsPages, F::EnnorathOptionHotkeys, F::EnnorathOnlineDelayFix, F::EnnorathLobbyMapSearch, F::EnnorathChatMute },
+			"rebuilt: as Ennorath 1.9.8.5 (stance .stancem, middle click camera .camfix, evacuate all .keydef, paged options .optui / .optfix, option "
+			"hotkeys .hotkeys / .keydef / .keycmd, online lag fix .dlyfix, lobby map search .mapfind, chat mute .chatmut); not yet "
+			"(docs/ennorath/ENNORATH_EXE.md): the 1.9.8.6 / 1.9.8.7 edits (.wmfeat / .wmkeys: the builder camera fix, select all units / all heroes / "
+			"planning mode hotkeys, workers out of the builder hotkey, more than two builders, the builder click sound, 127 factions, the resurrection "
+			"filter, portrait / icon change, CANT_EARN_POWERPOINTS, ToggleMounted at speed 0), and the 1.9.8.5 edits still open there" },
 		{ "f7ce90438eb50da4ce63804ba2688b6b", "RJ-RotWK launcher (a Qt program that starts the game, not a game binary)", {}, "" },
 		{ "243edd56bb09405626bb455a67b5aa46", "RJ-RotWK file.dat (the launcher's settings)", {}, "" },
 	};
