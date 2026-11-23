@@ -1209,6 +1209,7 @@ void FireLogicSystem::xfer(Xfer &x)
 	{
 		if (ver >= 3)
 		{
+			// RW 0x686441: restore the saved frame, not the load-time constructor stamp.
 			const auto constructedFrame = entry.second;
 			x.xferInt(&entry.second);
 			if (x.isLoading() && entry.second <= m_logic.largeGroupAudio().gateFrame())

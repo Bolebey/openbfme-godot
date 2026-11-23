@@ -151,6 +151,7 @@ public:
 	void setFuelRegenRate(int r) { m_fuelRegenRate = r; }
 
 private:
+	// PORT-161: RW 0x6862B6 / 0x686311, coordinate-key lifecycle helpers.
 	using BurningPosition = std::pair<int, int>;
 	void notifyBurningCell(bool add, const BurningPosition &position, std::int32_t storedFrame);
 	void insertBurningCell(const BurningPosition &position);

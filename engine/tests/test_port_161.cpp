@@ -95,6 +95,7 @@ TEST_CASE("PORT-161 burning grid cell registers anonymous audio and extinguishes
 
 TEST_CASE("PORT-161 quiet fuel and pre-residency extinguishing do not produce burning audio")
 {
+	// RW 0x68715E..0x6871AB: newlyLit skips the temporary-key erase path.
 	BurningAudio b;
 	CHECK(b.events.empty());
 	b.fire.changeBurnRate(5, 5, 5, 10, false);
