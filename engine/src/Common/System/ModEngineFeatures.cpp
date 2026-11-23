@@ -62,6 +62,7 @@ const char *ModEngineFeatures::name(ModEngineFeature f)
 	case F::EnnorathSelectAllBuildings: return "ennorath.select-all-buildings";
 	case F::EnnorathReplayControls: return "ennorath.replay-tabs-chat-pause";
 	case F::EnnorathWotr8Players: return "ennorath.wotr-8-players";
+	case F::EnnorathChatClipboard: return "ennorath.chat-clipboard";
 	case F::EnnorathOptionHotkeys1987: return "ennorath.option-hotkeys-1987";
 	case F::EnnorathBuilderFixes: return "ennorath.builder-fixes";
 	case F::EnnorathPortraitUpgrade: return "ennorath.portrait-upgrade";
@@ -105,14 +106,14 @@ const std::vector<ModEngineFeatures::Profile> &ModEngineFeatures::knownBinaries(
 			  F::EnnorathOptionsPages, F::EnnorathOptionHotkeys, F::EnnorathOnlineDelayFix, F::EnnorathLobbyMapSearch, F::EnnorathChatMute,
 			  F::EnnorathObserverCommandRange, F::EnnorathCommandSet64, F::EnnorathUpgrades5120, F::EnnorathBuildingLimitFix,
 			  F::EnnorathSpellStoreDelay, F::EnnorathSelectAllBuildings,
-			  F::EnnorathReplayControls, F::EnnorathWotr8Players },
+			  F::EnnorathReplayControls, F::EnnorathWotr8Players, F::EnnorathChatClipboard },
 			"rebuilt: the defensive stance that keeps a moving unit going (.stancem), the middle click camera reset by time (.camfix), war wagons and "
 			"the Witch-king leaving a tunnel by evacuate all (.keydef 0xF39580), the paged options menu (.optui / .optfix), the option hotkeys and mod "
 			"defaults (.hotkeys / .keydef / .keycmd), the online lag fix option (.dlyfix), the map search in the lobby (.mapfind / .mapsvar), per-player chat mute on the tribute screen (.chatmut 0xEDB000), "
 			"the observer's command range (.obscmd), 64 CommandSet slots (.cmdext), 5120 upgrades (.upg5k), the building limit fix (.bldcap), spell store open delay (.spstore), "
 			"select all buildings (.bldgrp / .padsel / .bldext / .bldcan / .bldlvl), "
-			"replays (tabs, chat, Ctrl+] pause: .rpchat / .rppause / .rppvar), War of the Ring for 8 players (.wotrui / .wotrobs / .wtrview / .wtrdisp / .lobfac); not yet "
-			"(docs/ennorath/ENNORATH_EXE.md): the text entry clipboard (.txtclip, P-128); the DirectX resolution sort (.ressort) has no display mode list in OpenBFME (S-1913 / S-3401); "
+			"replays (tabs, chat, Ctrl+] pause: .rpchat / .rppause / .rppvar), War of the Ring for 8 players (.wotrui / .wotrobs / .wtrview / .wtrdisp / .lobfac), the text entry clipboard Ctrl+A / C / X / V (.txtclip); not yet "
+			"(docs/ennorath/ENNORATH_EXE.md): the DirectX resolution sort (.ressort) has no display mode list in OpenBFME (S-1913 / S-3401); "
 			"the 30 / 60 FPS choice (.fxrate / .fpsvar / .fpsdraw; ETFrameRate shown in Options) is left out by decision: OpenBFME keeps its own frame rate" },
 		// Ennorath 1.9.8.7 (2026-11-22; the patch note's 1.9.8.6 and 1.9.8.7 are one game.dat, md5 f222b925...): the 1.9.8.5 sections stay (some edited:
 		// .camfix, .hotkeys, .keycmd, .keydef, .optui, .rpchat, .chatmut), plus .wmfeat / .wmkeys. Until their features are rebuilt it turns on what
@@ -122,14 +123,14 @@ const std::vector<ModEngineFeatures::Profile> &ModEngineFeatures::knownBinaries(
 			  F::EnnorathOptionsPages, F::EnnorathOptionHotkeys, F::EnnorathOnlineDelayFix, F::EnnorathLobbyMapSearch, F::EnnorathChatMute,
 			  F::EnnorathObserverCommandRange, F::EnnorathCommandSet64, F::EnnorathUpgrades5120, F::EnnorathBuildingLimitFix,
 			  F::EnnorathSpellStoreDelay, F::EnnorathSelectAllBuildings,
-			  F::EnnorathReplayControls, F::EnnorathWotr8Players,
+			  F::EnnorathReplayControls, F::EnnorathWotr8Players, F::EnnorathChatClipboard,
 			  F::EnnorathOptionHotkeys1987, F::EnnorathBuilderFixes, F::EnnorathPortraitUpgrade,
 			  F::EnnorathFilteredHordeRespawn, F::EnnorathCantEarnPowerPoints, F::EnnorathToggleMountedZeroSpeed,
 			  F::EnnorathGarrisonHeroSurvive },
 			"rebuilt: as Ennorath 1.9.8.5 plus 1.9.8.6 / 1.9.8.7 (.wmkeys / .hotkeys / .camfix: select all units / all heroes / planning mode hotkeys, "
 			"builder camera on-screen check, builder click sound, workers out of builder hotkey; .wmfeat: PortraitUpgrade, FilteredHordeRespawnBehavior, "
 			"CANT_EARN_POWERPOINTS, ToggleMounted at speed 0, garrison hero survival; 127 factions and >2 builders have no limit in OpenBFME); not yet "
-			"(docs/ennorath/ENNORATH_EXE.md): the 1.9.8.5 edits still open there (.txtclip P-128; .ressort S-1913 / S-3401; .fxrate 30/60 FPS left out by decision)" },
+			"(docs/ennorath/ENNORATH_EXE.md): the 1.9.8.5 edits still open there (.ressort S-1913 / S-3401; .fxrate 30/60 FPS left out by decision)" },
 		{ "f7ce90438eb50da4ce63804ba2688b6b", "RJ-RotWK launcher (a Qt program that starts the game, not a game binary)", {}, "" },
 		{ "243edd56bb09405626bb455a67b5aa46", "RJ-RotWK file.dat (the launcher's settings)", {}, "" },
 	};

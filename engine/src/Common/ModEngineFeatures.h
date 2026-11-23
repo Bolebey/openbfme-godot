@@ -57,6 +57,7 @@ enum class ModEngineFeature
 	EnnorathSelectAllBuildings,        // select all buildings of a type / expansion pad, multi-building queue / foundation / level upgrade (.bldgrp/.padsel/.bldext/.bldcan/.bldlvl)
 	EnnorathReplayControls,            // replay tabs (Messenger), recorded replay chat and Ctrl+] pause (.rpchat / .rppause / .rppvar)
 	EnnorathWotr8Players,              // War of the Ring for 8 players: 8 lobby slots, dropdown clamp, 2-8 text, partial-human RTS battles (.wotrui / .wotrobs / .wtrview / .wtrdisp / .lobfac)
+	EnnorathChatClipboard,             // Ctrl+A / C / X / V in text entries (.txtclip, hooked at RW 0x722A8A; P-128, owner 2026-11-23: on with the Ennorath profiles)
 	// Ennorath 1.9.8.6 / 1.9.8.7 (one game.dat, md5 f222b925...; PYSAGE 1.9.8.7 .wmfeat / .wmkeys / .camfix / .hotkeys)
 	EnnorathOptionHotkeys1987,         // 31-entry .wmkeys table (ETKeySelectAll, ETKeySelectAllHeroes, ETKeyTacticalMenu) + 0xAB / 0x5F dispatch
 	EnnorathBuilderFixes,              // builder click sound (.hotkeys 0xF384D6) and exclude non-DOZER_CONSTRUCT workers (.wmfeat 0xF3AA56)
