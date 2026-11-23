@@ -7,7 +7,7 @@ Layer 2 (lint) flags verdicts the mod's own data contradicts; layer 3 lists ever
 By rule: L1 66, L4 3
 
 
-## Changes since b36dc3ae: 75 buttons moved, 13 turned red
+## Changes since c14cef83: 75 buttons moved, 13 turned red
 
 - Isengard `spell` `SpellBookBndnissderzweiTime`: PASS -> FAIL — the spell bar's button is not castable (owned 1, usable 0, ready 1)
 - Isengard `spell` `SpellBookCrebain`: PASS -> FAIL — the spell bar's button is not castable (owned 1, usable 0, ready 1)
