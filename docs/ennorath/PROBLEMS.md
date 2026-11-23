@@ -1768,7 +1768,7 @@
 - Взял: —
 - Причина и исправление: —
 - Проверка: —
-### P-167. `LOCAL-66` (Local 66) падает с SIGSEGV без файлов игры — обрывает полный прогон
+### P-177. `LOCAL-66` (Local 66) падает с SIGSEGV без файлов игры — обрывает полный прогон
 - Статус: [ ] **НЕ НАЧАТО**
 - Добавлено: 2026-11-19, арена (в прогоне, ветка `arena/f5eafcb0-openbfme-godot`, PORT-301, issue #693)
 - Описание: тест `LOCAL-66 ParticleSysBone OnlyIfOnWater and OnlyIfOnLand filter bone-attached systems by LiveFX::isWater (RW 0x004C6514)` (`engine/tests/test_local_66.cpp:173`) падает с SIGSEGV, когда файлов розничной игры нет (`ROTWK_INSTALL` / `BFME2_INSTALL` не заданы или в папке только `game.dat`): `hudtest::shared()` возвращает `SharedWorld` с `mount == nullptr`, и строка 177 `FXPlayback playback(*s.mount->fs, ...)` разыменовывает пустой указатель. Тест обрывает прогон (`CRASHED`), и всё, что идёт после него, не проверяется.
