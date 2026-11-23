@@ -587,6 +587,7 @@ include(cmake/Local144.cmake)   # LOCAL-144: Ennorath 1.9.8.5 replays (tabs, cha
 include(cmake/Local145.cmake)   # LOCAL-145: Ennorath 1.9.8.6 / 1.9.8.7 exe edits (fork issue 871; OPENBFME_LOCAL145_TESTS)
 include(cmake/Local148.cmake)   # LOCAL-148: matrix sweep grey-button gates (fork issue 881; OPENBFME_LOCAL148_TESTS)
 include(cmake/Local149.cmake)   # LOCAL-149: HordeContain second pass (fork issue 882; OPENBFME_LOCAL149_TESTS)
+include(cmake/Local151.cmake)   # LOCAL-151: MouseCursor Texture and Weather CloudTextureSize/CloudOffsetPerSecond/SnowPointSize (fork issue 884; OPENBFME_LOCAL151_TESTS)
 include(cmake/Local130.cmake)   # LOCAL-130: 50 most shared helpers + RW 0x6760CA / 0x677898 construction ambient (fork issue 829; OPENBFME_LOCAL130_TESTS)
 include(cmake/Local133.cmake)   # LOCAL-133: W3DLaserDraw width/fanWidth and tile factor clamps (fork issue 849; OPENBFME_LOCAL133_TESTS)
 include(cmake/Local139.cmake)   # LOCAL-139: global game data fields (fork issue 856; OPENBFME_LOCAL139_TESTS)
@@ -1451,6 +1452,7 @@ add_executable(openbfme_tests
     ${OPENBFME_LOCAL145_TESTS}
     ${OPENBFME_LOCAL148_TESTS}
     ${OPENBFME_LOCAL149_TESTS}
+    ${OPENBFME_LOCAL151_TESTS}
         ${OPENBFME_LOCAL130_TESTS}
         ${OPENBFME_LOCAL133_TESTS}
         ${OPENBFME_LOCAL136_TESTS}
