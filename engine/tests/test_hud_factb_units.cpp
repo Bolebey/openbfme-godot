@@ -4043,25 +4043,36 @@ void spellBookOf(const std::string &faction, Results &res, bool viaStore)
 	// with a CommandPointBonus, made by the base
 	{
 		const std::string &side = g.rig.local->getPlayerTemplate()->m_side;
-		for (const ThingTemplate *t : s.world->things().templates())
+		// pass 0: the keep whose CommandSet holds GUI_COMMAND_REVIVE (the started skirmish's citadel); pass 1 only when the side has none.
+		// LOCAL-132: Ennorath's DwarvenFortressCitadel starts with a clan-choice CommandSet (no GUI_COMMAND_REVIVE slot yet), so pass 1 accepts
+		// COMMANDCENTER + CASTLE_KEEP (non-summoned) for RequirementsFilterMPSkirmish (+COMMANDCENTER). It must stay a fallback: taken on the same
+		// pass it picked IsengardAuRenpostenCitadel first, which the mod's SPELL_BOOK_REQUIREMENTS_FILTER (data/ini/object/system/system.ini:
+		// ANY +COMMANDCENTER -IsengardAuRenpostenCitadel ...) excludes, and all 12 Isengard spells went FAIL "usable 0" (maps run on main c14cef83)
+		bool made = false;
+		for (int pass = 0; pass < 2 && !made; ++pass)
 		{
-			const FieldValue *bonus = t->getFinalOverride()->findField("CommandPointBonus");
-			const long long *points = bonus ? std::get_if<long long>(bonus) : nullptr;
-			const CommandSet *cs = s.world->commands().findCommandSet(factb::stringFieldOf(*t, "CommandSet"));
-			bool keep = false;
-			for (int i = 0; cs && i < CommandSet::MAX_BUTTONS; ++i)
+			for (const ThingTemplate *t : s.world->things().templates())
 			{
-				keep = keep || (cs->getCommandButton(i) && cs->getCommandButton(i)->getFinalOverride()->m_command == GUI_COMMAND_REVIVE);
-			}
-			// LOCAL-132: Ennorath's DwarvenFortressCitadel starts with a clan-choice CommandSet (no GUI_COMMAND_REVIVE slot yet);
-			// accept COMMANDCENTER + CASTLE_KEEP (non-summoned) as well so RequirementsFilterMPSkirmish (+COMMANDCENTER) is met
-			keep = keep || (factb::hasKindOf(*t, "COMMANDCENTER") && factb::hasKindOf(*t, "CASTLE_KEEP") && !factb::hasKindOf(*t, "SUMMONED"));
-			if (keep && points && *points > 0 && factb::stringFieldOf(*t, "Side") == side && factb::hasKindOf(*t, "STRUCTURE"))
-			{
-				const Coord3D home = g.home();
-				const Coord3D at = g.rig.freeSpot(home.x, home.y - 900.0f, 400.0f);
-				g.rig.make(t->getName(), at.x, at.y);
-				break;
+				const FieldValue *bonus = t->getFinalOverride()->findField("CommandPointBonus");
+				const long long *points = bonus ? std::get_if<long long>(bonus) : nullptr;
+				const CommandSet *cs = s.world->commands().findCommandSet(factb::stringFieldOf(*t, "CommandSet"));
+				bool keep = false;
+				for (int i = 0; cs && i < CommandSet::MAX_BUTTONS; ++i)
+				{
+					keep = keep || (cs->getCommandButton(i) && cs->getCommandButton(i)->getFinalOverride()->m_command == GUI_COMMAND_REVIVE);
+				}
+				if (pass == 1)
+				{
+					keep = factb::hasKindOf(*t, "COMMANDCENTER") && factb::hasKindOf(*t, "CASTLE_KEEP") && !factb::hasKindOf(*t, "SUMMONED");
+				}
+				if (keep && points && *points > 0 && factb::stringFieldOf(*t, "Side") == side && factb::hasKindOf(*t, "STRUCTURE"))
+				{
+					const Coord3D home = g.home();
+					const Coord3D at = g.rig.freeSpot(home.x, home.y - 900.0f, 400.0f);
+					g.rig.make(t->getName(), at.x, at.y);
+					made = true;
+					break;
+				}
 			}
 		}
 		g.step(5);
