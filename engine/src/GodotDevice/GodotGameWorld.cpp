@@ -8138,7 +8138,7 @@ public:
 			r.playerIndex = p.getPlayerIndex();
 			r.slot = slotOf(p);
 			r.name = p.getPlayerDisplayName();
-			r.cash = p.getMoney()->countMoney();
+			r.cash = tributeDisplayCash(logic, p); // RW 0x9155C2 -> RW 0x6A950B / 0x6A9999 (Money + AI reserve)
 			r.local = isLocal;
 			r.active = !p.isObserver() && !p.isDefeated();
 			r.color = p.getPlayerColor();
