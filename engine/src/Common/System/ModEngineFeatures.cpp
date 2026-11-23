@@ -54,6 +54,12 @@ const char *ModEngineFeatures::name(ModEngineFeature f)
 	case F::EnnorathOnlineDelayFix: return "ennorath.online-delay-fix";
 	case F::EnnorathLobbyMapSearch: return "ennorath.lobby-map-search";
 	case F::EnnorathChatMute: return "ennorath.chat-mute";
+	case F::EnnorathObserverCommandRange: return "ennorath.observer-command-range";
+	case F::EnnorathCommandSet64: return "ennorath.commandset-64";
+	case F::EnnorathUpgrades5120: return "ennorath.upgrades-5120";
+	case F::EnnorathBuildingLimitFix: return "ennorath.building-limit-fix";
+	case F::EnnorathSpellStoreDelay: return "ennorath.spell-store-delay";
+	case F::EnnorathSelectAllBuildings: return "ennorath.select-all-buildings";
 	case F::Count: break;
 	}
 	return "?";
@@ -87,20 +93,25 @@ const std::vector<ModEngineFeatures::Profile> &ModEngineFeatures::knownBinaries(
 		// in the retail code. The features below rebuild the edits the owner took; the line below names what is left out.
 		{ "fc32e4c4142b5c607b90972eaf448400", "Ennorath 1.9.8.5 game.dat",
 			{ F::EnnorathStanceKeepsMoving, F::EnnorathMiddleClickCamera, F::EnnorathEvacuateContainers,
-			  F::EnnorathOptionsPages, F::EnnorathOptionHotkeys, F::EnnorathOnlineDelayFix, F::EnnorathLobbyMapSearch, F::EnnorathChatMute },
+			  F::EnnorathOptionsPages, F::EnnorathOptionHotkeys, F::EnnorathOnlineDelayFix, F::EnnorathLobbyMapSearch, F::EnnorathChatMute,
+			  F::EnnorathObserverCommandRange, F::EnnorathCommandSet64, F::EnnorathUpgrades5120, F::EnnorathBuildingLimitFix,
+			  F::EnnorathSpellStoreDelay, F::EnnorathSelectAllBuildings },
 			"rebuilt: the defensive stance that keeps a moving unit going (.stancem), the middle click camera reset by time (.camfix), war wagons and "
 			"the Witch-king leaving a tunnel by evacuate all (.keydef 0xF39580), the paged options menu (.optui / .optfix), the option hotkeys and mod "
-			"defaults (.hotkeys / .keydef / .keycmd), the online lag fix option (.dlyfix), the map search in the lobby (.mapfind / .mapsvar), per-player chat mute on the tribute screen (.chatmut 0xEDB000); not yet "
-			"(docs/ennorath/ENNORATH_EXE.md): replays (.rpchat / .rppause), select all buildings (.bldgrp / .padsel / .bldext / "
-			".bldcan / .bldlvl / .bldcap), the building limit fix, War of the Ring for 8 players (.wotrui / .wotrobs / .wtrview / .wtrdisp), 64 "
-			"CommandSet slots (.cmdext) and 5120 upgrades (.upg5k), the text entry clipboard (.txtclip, P-128), the observer's command range (.obscmd); "
+			"defaults (.hotkeys / .keydef / .keycmd), the online lag fix option (.dlyfix), the map search in the lobby (.mapfind / .mapsvar), per-player chat mute on the tribute screen (.chatmut 0xEDB000), "
+			"the observer's command range (.obscmd), 64 CommandSet slots (.cmdext), 5120 upgrades (.upg5k), the building limit fix (.bldcap), spell store open delay (.spstore), "
+			"select all buildings (.bldgrp / .padsel / .bldext / .bldcan / .bldlvl); not yet "
+			"(docs/ennorath/ENNORATH_EXE.md): replays (.rpchat / .rppause), War of the Ring for 8 players (.wotrui / .wotrobs / .wtrview / .wtrdisp), "
+			"the text entry clipboard (.txtclip, P-128); the DirectX resolution sort (.ressort) has no display mode list in OpenBFME (S-1913 / S-3401); "
 			"the 30 / 60 FPS choice (.fxrate / .fpsvar / .fpsdraw; ETFrameRate shown in Options) is left out by decision: OpenBFME keeps its own frame rate" },
 		// Ennorath 1.9.8.7 (2026-11-22; the patch note's 1.9.8.6 and 1.9.8.7 are one game.dat, md5 f222b925...): the 1.9.8.5 sections stay (some edited:
 		// .camfix, .hotkeys, .keycmd, .keydef, .optui, .rpchat, .chatmut), plus .wmfeat / .wmkeys. Until their features are rebuilt it turns on what
 		// 1.9.8.5 has, so the mod's package keeps its stance, camera, evacuate, options, map search and chat mute with the new game.dat.
 		{ "f222b925edf2a9553e574ad8445f2841", "Ennorath 1.9.8.7 game.dat",
 			{ F::EnnorathStanceKeepsMoving, F::EnnorathMiddleClickCamera, F::EnnorathEvacuateContainers,
-			  F::EnnorathOptionsPages, F::EnnorathOptionHotkeys, F::EnnorathOnlineDelayFix, F::EnnorathLobbyMapSearch, F::EnnorathChatMute },
+			  F::EnnorathOptionsPages, F::EnnorathOptionHotkeys, F::EnnorathOnlineDelayFix, F::EnnorathLobbyMapSearch, F::EnnorathChatMute,
+			  F::EnnorathObserverCommandRange, F::EnnorathCommandSet64, F::EnnorathUpgrades5120, F::EnnorathBuildingLimitFix,
+			  F::EnnorathSpellStoreDelay, F::EnnorathSelectAllBuildings },
 			"rebuilt: as Ennorath 1.9.8.5 (stance .stancem, middle click camera .camfix, evacuate all .keydef, paged options .optui / .optfix, option "
 			"hotkeys .hotkeys / .keydef / .keycmd, online lag fix .dlyfix, lobby map search .mapfind, chat mute .chatmut); not yet "
 			"(docs/ennorath/ENNORATH_EXE.md): the 1.9.8.6 / 1.9.8.7 edits (.wmfeat / .wmkeys: the builder camera fix, select all units / all heroes / "

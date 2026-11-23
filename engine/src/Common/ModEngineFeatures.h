@@ -49,6 +49,12 @@ enum class ModEngineFeature
 	EnnorathOnlineDelayFix,            // NetworkDelayFix checkbox and online frame-count pacing (.dlyfix)
 	EnnorathLobbyMapSearch,            // MpGameSetup MapSearch text entry filters MapList live by display name (.mapfind / .mapsvar)
 	EnnorathChatMute,                  // per-player chat mute on the PlayerTribute screen and in the chat path (.chatmut 0xEDB000)
+	EnnorathObserverCommandRange,      // an observer may page the command ranges (PUSH / POP_VISIBLE_COMMAND_RANGE) (.obscmd 0xED8000)
+	EnnorathCommandSet64,              // CommandSet slots 1..64 (.cmdext 0xED6000)
+	EnnorathUpgrades5120,              // upgrade mask capacity raised to 5120 bits (.upg5k 0xEDF000)
+	EnnorathBuildingLimitFix,          // phantom structures (PENDING_CONSTRUCTION + PHANTOM_STRUCTURE) count toward MaxSimultaneousOfType (.bldcap 0xF21000)
+	EnnorathSpellStoreDelay,           // defer AptSpellStore button state updates for 500 ms after OnInitialized (.spstore 0xED4000)
+	EnnorathSelectAllBuildings,        // select all buildings of a type / expansion pad, multi-building queue / foundation / level upgrade (.bldgrp/.padsel/.bldext/.bldcan/.bldlvl)
 	Count
 };
 
