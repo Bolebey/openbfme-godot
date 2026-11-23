@@ -2,7 +2,7 @@
 
 Command: `python tools/mod/rw_function_map.py --game /content/game_assets/bfme_assets/RotWK/game.dat --ini /content/drive/MyDrive/for-arena/ennorath-ini-1.9.8.7.zip --inventory workspace/rebuild_inventory.json --decomp workspace/rebuild/xmap/rw_map.csv --out docs/ennorath/RW_FUNCTION_MAP`
 
-Rows: 52638; ported 33766, partial 647, none 3774, library 14451.
+Rows: 52638; ported 33767, partial 646, none 3774, library 14451.
 library: code the port replaces wholesale (STL, strings, the C runtime, the Lua VM, compiler-generated destructors, the INI / Xfer
 infrastructure): tools/mod/rw_library_functions.tsv, made by tools/mod/rw_library_functions.py; a citation still wins (ported).
 Counts are per module/function pair, not unique functions.
@@ -857,7 +857,6 @@ calls; their targets are not followed.
 | ActiveBody | 4811 | 1 | 0x00450762 | 5 | library |  |
 | ActiveBody | 4811 | 1 | 0x006DAD81 | 2 | none | Rva002D9C2F::rva002D9C2F (tier A) |
 | ActiveBody | 4811 | 1 | 0x00A3CF22 | 1 | library | ji_00629182 (tier A) |
-| ActiveBody | 4811 | 2 | 0x00970ED8 | 54 | partial | PBVModuleData::vector<>::insert (tier A) |
 | ActiveBody | 4811 | 2 | 0x00406307 | 28 | library | D::StringBase<>::compare (tier A) |
 | ActiveBody | 4811 | 2 | 0x005D91D1 | 22 | library | OpaqueRefElement4::operator= (tier A) |
 | ActiveBody | 4811 | 2 | 0x004355D0 | 19 | library |  |

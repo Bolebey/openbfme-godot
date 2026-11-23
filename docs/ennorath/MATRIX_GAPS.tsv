@@ -114,6 +114,7 @@ FactionAngmar	AngmarDarkDunedain	Command_AngmarChargeAttack	MEMBER	SPECIAL_POWER
 FactionAngmar	AngmarSnowTroll	Command_AngmarTrollChargeAttack	MEMBER	SPECIAL_POWER	specialabilityangmarcharge			-				no module of the object or its members names it	
 FactionAngmar	AngmarWolfRider	Command_SpecialAbilityWargHowl	MEMBER	SPECIAL_POWER	specialabilitywarghowl			-				no module of the object or its members names it	
 FactionAngmar	RhudaurWolfRider	Command_SpecialAbilityWargHowl	MOD-DATA	SPECIAL_POWER	specialabilitywarghowl			-				no module of the object or its members names it	
+FactionAngmar	spell	SpellBookSummonStoneGiants	FAIL					-				no power or upgrade on the button	
 FactionArnor	ArnorArveduiNew		LEFT-WORLD					-				no power or upgrade on the button	
 FactionArnor	ArnorPalantirwatcherMod_summoned	Command_TowerGuardPorcupineFormation	MEMBER	HORDE_TOGGLE_FORMATION				-				no power or upgrade on the button	
 FactionArnor	ArnorTowerShieldGuardNew	Command_ToggleFormationArnorPikeWall	MEMBER	HORDE_TOGGLE_FORMATION				-				no power or upgrade on the button	
@@ -205,7 +206,6 @@ FactionMordor	DrogothAbilitiesShadow		TEMPORARY					-				no power or upgrade on 
 FactionMordor	HaradHaradrimRider	Command_ToggleFormationHalfCircle	MEMBER	HORDE_TOGGLE_FORMATION				-				no power or upgrade on the button	
 FactionMordor	HaradHaradrimRider_Summoned	Command_ToggleFormationHalfCircle	MEMBER	HORDE_TOGGLE_FORMATION				-				no power or upgrade on the button	
 FactionMordor	MordorGreatSauron	(aura) ModuleTag_LeadershipNazguls	MOD-DATA					-				no power or upgrade on the button	
-FactionMordor	MordorGrond	(aura) ModuleTag_DreadVisageAura	NO-AURA					-				no power or upgrade on the button	
 FactionMordor	MordorMorgulOrkPikemanNew	Command_TowerGuardPorcupineFormation	MEMBER	HORDE_TOGGLE_FORMATION				-				no power or upgrade on the button	
 FactionMordor	MordorMorgulOrkPikemanNewGrond_Summoned	Command_TowerGuardPorcupineFormation	MEMBER	HORDE_TOGGLE_FORMATION				-				no power or upgrade on the button	
 FactionMordor	MordorMorgulOrkPikemanNew_BarricadeGuard	Command_TowerGuardPorcupineFormation	MEMBER	HORDE_TOGGLE_FORMATION				-				no power or upgrade on the button	

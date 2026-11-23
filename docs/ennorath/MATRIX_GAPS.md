@@ -58,7 +58,7 @@ The main class of a button is the class it links to that the fewest failing butt
 | TEMPORARY | 18 |
 | NO-SEND | 6 |
 | NO-EFFECT | 2 |
+| FAIL | 1 |
 | GREY-BUG | 1 |
 | LEFT-WORLD | 1 |
-| NO-AURA | 1 |
 | NO-RULE | 1 |
