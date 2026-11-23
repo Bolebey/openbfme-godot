@@ -1737,7 +1737,6 @@ target_sources(openbfme_tests PRIVATE
     tests/test_coverage_mp3.cpp
     tests/test_weapon_attribute_modifiers.cpp
     tests/test_local_87.cpp
-    tests/test_coverage_online_hub.cpp)
     tests/test_coverage_online_hub.cpp
     ${OPENBFME_PORT207_TESTS}
     ${OPENBFME_PORT285_TESTS})
