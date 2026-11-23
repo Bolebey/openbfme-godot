@@ -283,3 +283,42 @@ requested lane model), without importing unrelated main changes or changing
 engine/test code. A merge-tree check against main 5a910338c must be clean;
 the full target and both regression filters are rebuilt/rerun after this
 CMake-only relocation before handing off the PR.
+
+## PR #875 rework: batch 2026-11-23a build return
+
+The return on f55e52b1 supplied only a truncated warning tail, not a compiler
+error. The complete batch log was recovered read-only from the owner's Drive:
+`openbfme-runs/batch/2026-11-23a/build-tip.log`, file
+`1XLeFQr5z0kp2GLw37Ggn9XieFLgWOuTo`, 460175 bytes, SHA-256
+`cec7a9ba234eef552a18e0ee61dde8ec2aa762ea1698946db8a23d4263d125dd`.
+It identifies batch source 3e8b4e81984fe5a1c4e65030182b03762f2be09a.
+Its last completed compile step is 1343/1447, followed by:
+
+```
+ninja: build stopped: interrupted by user.
+```
+
+There is no `error:`, `fatal error:` or `FAILED:` diagnostic in that log.
+This establishes an interrupted build, not a diagnosed C++ compilation
+failure. Who/what sent the interruption is not established. The batch script
+classifies any nonzero build exit as red and, without an `error` match,
+returns only the log tail (`batch_bot.py::build`); that explains why the PR
+return contains unrelated TestWallData warnings rather than the interruption
+line. The original batch did not reach linking or its tests. This does not
+claim to have recovered the individual bisect-point logs, which were not
+present in that Drive folder.
+
+Fresh main db85d5794472c977e0db56086e8f4ede2fc39e5d was merged into the
+same task branch (merge 966b5f7b8), without conflicts. The stale, shallow
+sandbox snapshot was preserved in a stash before restoring the branch's
+remote history; it was not applied over the merged tree. The new main's
+FireLogicSystem changes (Local 136 citations and Local 140 INI parser) are
+retained unchanged. No speculative gameplay/compiler workaround, other
+agent's function edit, CI change, or pin remeasurement is made to conceal
+an externally interrupted build. RW behavior and its evidence remain as
+above: this rework changes integration, not BurningCell semantics.
+
+At this checkpoint a clean Release/-j1 full-target rebuild after the merge
+is running. The previous f55e52b1 test results above are historical; they
+are not presented as results for the new merged head. A new PR head is
+pushed for the checker's requested rebuild as well.
