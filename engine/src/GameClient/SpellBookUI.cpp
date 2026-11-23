@@ -158,7 +158,7 @@ void SpellStoreModel::refresh()
 				if (st != SCIENCE_INVALID && !proxy.hasScience(st))
 				{
 					b.showDisabledWarning = m_player->isScienceDisabled(st) || m_player->isScienceHidden(st)
-						|| !TheScienceStore->playerHasPrereqsForScience(proxy, st);
+						|| !TheScienceStore->playerHasPrereqsForScience(proxy, st); // RW 0x823057 .. 0x823118 -> RW 0x5FED05
 					break;
 				}
 			}
@@ -254,6 +254,7 @@ std::vector<GameMessage> SpellStoreModel::close()
 // ---- InGameSpellBookModel --------------------------------------------------------------------------------------------------------------------
 bool InGameSpellBookModel::refresh(const CommandStore &commands, GameLogic &logic, Player &player)
 {
+	m_commands = &commands;
 	m_buttons.clear();
 	Object *book = SpecialPowerModules::findSpellBookObject(logic, player); // a display read: the id is not cached
 	m_book = book ? book->getID() : (ObjectID)INVALID_ID;
@@ -292,7 +293,7 @@ bool InGameSpellBookModel::refresh(const CommandStore &commands, GameLogic &logi
 			{
 				if (player.science().hasScience(st))
 				{
-					out.owned = true;
+					out.owned = true; // RW 0x943343 .. 0x943407: first owned required science drives COMMAND_RESTRICTED check
 					ownedScience = st;
 					break;
 				}
@@ -346,11 +347,28 @@ bool InGameSpellBookModel::press(int index, int playerIndex, std::vector<GameMes
 			m_targeting = index;
 			return true;
 		}
-		GameMessage m(MSG_DO_SPECIAL_POWER, playerIndex); // { power id, options, source (the book) } (SpellCommands kind 0)
-		m.appendIntegerArgument((int)b.power->getID());
-		m.appendIntegerArgument(0);
-		m.appendObjectIDArgument(m_book);
-		out.push_back(m);
+		auto emitTargetless = [&](const SpecialPowerTemplate &tt, std::uint32_t options) {
+			GameMessage m(MSG_DO_SPECIAL_POWER, playerIndex); // { power id, options, source (the book) } (SpellCommands kind 0)
+			m.appendIntegerArgument((int)tt.getID());
+			m.appendIntegerArgument((int)options);
+			m.appendObjectIDArgument(m_book);
+			out.push_back(m);
+		};
+		emitTargetless(*b.power, b.button ? b.button->m_options : 0u);
+		// RW 0x94157D..0x94160F: chained CommandTrigger buttons (+0x188) with m_command == GUI_COMMAND_SPECIAL_POWER (0x18)
+		if (b.button && m_commands && TheSpecialPowerStore)
+		{
+			for (const std::string &name : b.button->m_commandTrigger)
+			{
+				const CommandButton *cb = m_commands->findCommandButton(name);
+				const SpecialPowerTemplate *ct = cb && cb->m_command == GUI_COMMAND_SPECIAL_POWER && !cb->m_specialPowerName.empty()
+					? TheSpecialPowerStore->findSpecialPowerTemplate(cb->m_specialPowerName) : nullptr;
+				if (ct)
+				{
+					emitTargetless(*ct, cb->m_options);
+				}
+			}
+		}
 		return true;
 	}
 	return false;
@@ -419,13 +437,33 @@ bool InGameSpellBookModel::clickWorld(const Coord3D &where, int playerIndex, std
 		m_targeting = -1;
 		return false;
 	}
-	GameMessage m(MSG_DO_SPECIAL_POWER_AT_LOCATION, playerIndex);
-	m.appendIntegerArgument((int)b->power->getID());
-	m.appendLocationArgument(where);
-	m.appendObjectIDArgument(INVALID_ID);
-	m.appendIntegerArgument(0);
-	m.appendObjectIDArgument(m_book);
-	out.push_back(m);
+	// RW 0x81EBA8..0x81EBC5 -> CommandTranslator::issueSpecialPowerCommand (RW 0x81E147, 0x81E2DE..0x81E3FC):
+	// GUI_COMMAND_SPELL_BOOK (0x20) emits MSG_DO_SPECIAL_POWER_AT_LOCATION (0x411) for the primary power and
+	// for every chained CommandTrigger (+0x188) whose m_command == GUI_COMMAND_SPECIAL_POWER (0x18), with
+	// sourceObjectID = localPlayer->getSpellBookObject()->getID() (m_book).
+	auto emitAtLocation = [&](const SpecialPowerTemplate &tt, std::uint32_t options) {
+		GameMessage m(MSG_DO_SPECIAL_POWER_AT_LOCATION, playerIndex);
+		m.appendIntegerArgument((int)tt.getID());
+		m.appendLocationArgument(where);
+		m.appendObjectIDArgument(INVALID_ID);
+		m.appendIntegerArgument((int)options);
+		m.appendObjectIDArgument(m_book);
+		out.push_back(m);
+	};
+	emitAtLocation(*b->power, b->button ? b->button->m_options : 0u);
+	if (b->button && m_commands && TheSpecialPowerStore)
+	{
+		for (const std::string &name : b->button->m_commandTrigger)
+		{
+			const CommandButton *cb = m_commands->findCommandButton(name);
+			const SpecialPowerTemplate *ct = cb && cb->m_command == GUI_COMMAND_SPECIAL_POWER && !cb->m_specialPowerName.empty()
+				? TheSpecialPowerStore->findSpecialPowerTemplate(cb->m_specialPowerName) : nullptr;
+			if (ct)
+			{
+				emitAtLocation(*ct, cb->m_options);
+			}
+		}
+	}
 	m_targeting = -1;
 	return true;
 }

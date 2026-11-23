@@ -373,7 +373,7 @@ void ScriptCameraDirector::startMissionFadeUp(unsigned fadeUpFrames)
 	m_missionFadeUpActive = fadeUpFrames > 0;
 	if (m_missionFadeUpActive)
 	{
-		m_fadeState = Fade{};
+		m_fadeState = Fade{}; // RW 0x627062: hold black FadeWholeScreen until fadeUpFrames
 		m_fadeState.type = FADE_SUBTRACT;
 		m_fadeState.curValue = 1.0f;
 		m_fadePrev = 1.0f;
@@ -437,7 +437,7 @@ void ScriptCameraDirector::update(double ms, std::uint32_t presentedFrame, doubl
 			// RW 0x62707D: cmp currentFrame, targetFrame; jb keep_waiting -> once reached, reverse "FadeWholeScreen"
 			if (presentedFrame < m_missionFadeUpTarget)
 			{
-				m_fadeState.type = FADE_SUBTRACT;
+				m_fadeState.type = FADE_SUBTRACT; // RW 0x62707D: keep FadeWholeScreen held black while frame < target
 				m_fadeState.curValue = 1.0f;
 				m_fadePrev = 1.0f;
 				m_fadeCur = 1.0f;
@@ -445,7 +445,7 @@ void ScriptCameraDirector::update(double ms, std::uint32_t presentedFrame, doubl
 				m_fadePresent = presentedFrame;
 				return;
 			}
-			m_missionFadeUpActive = false;
+			m_missionFadeUpActive = false; // RW 0x627083: target frame reached -> release FadeWholeScreen
 			m_fadeState = Fade{};
 			m_fadePrev = -1.0f;
 			m_fadeCur = 0.0f;
