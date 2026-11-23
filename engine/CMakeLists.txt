@@ -590,6 +590,7 @@ include(cmake/Local145.cmake)   # LOCAL-145: Ennorath 1.9.8.6 / 1.9.8.7 exe edit
 include(cmake/Local148.cmake)   # LOCAL-148: matrix sweep grey-button gates (fork issue 881; OPENBFME_LOCAL148_TESTS)
 include(cmake/Local149.cmake)   # LOCAL-149: HordeContain second pass (fork issue 882; OPENBFME_LOCAL149_TESTS)
 include(cmake/Local151.cmake)   # LOCAL-151: MouseCursor Texture and Weather CloudTextureSize/CloudOffsetPerSecond/SnowPointSize (fork issue 884; OPENBFME_LOCAL151_TESTS)
+include(cmake/Local152.cmake)   # LOCAL-152: Ennorath 1.9.8.4 War of the Ring online — >2 players, host-free land transfer, observer seat (fork issue 885; OPENBFME_LOCAL152_TESTS)
 include(cmake/Local130.cmake)   # LOCAL-130: 50 most shared helpers + RW 0x6760CA / 0x677898 construction ambient (fork issue 829; OPENBFME_LOCAL130_TESTS)
 include(cmake/Local133.cmake)   # LOCAL-133: W3DLaserDraw width/fanWidth and tile factor clamps (fork issue 849; OPENBFME_LOCAL133_TESTS)
 include(cmake/Local139.cmake)   # LOCAL-139: global game data fields (fork issue 856; OPENBFME_LOCAL139_TESTS)
@@ -597,6 +598,7 @@ include(cmake/Local140.cmake)   # LOCAL-140: object-level unread mod fields (for
 include(cmake/Local141.cmake)   # LOCAL-141: S-7364 repeated press, S-704 VoiceCrush, S-1462 LW audio filter, S-1952 colours (fork issue 858; OPENBFME_LOCAL141_TESTS)
 include(cmake/Local131.cmake)   # LOCAL-131: matrix red buttons I (fork issue 837; OPENBFME_LOCAL131_TESTS)
 include(cmake/Local143.cmake)   # LOCAL-143: Ennorath 1.9.8.5 exe edits (11 pySAGE sections; fork issue 860; OPENBFME_LOCAL143_TESTS)
+include(cmake/Local150.cmake)   # LOCAL-150: SymbioticStructuresBody & SpawnBehavior own RW functions (fork issue 883; OPENBFME_LOCAL150_TESTS)
 include(cmake/Local142.cmake)   # LOCAL-142: open game-logic stops (fork issue 859; OPENBFME_LOCAL142_TESTS)
 include(cmake/Local101.cmake)   # LOCAL-101: special AI modules SiegeDockingBehavior & HordeWorkerAIUpdate (fork issue 771; OPENBFME_LOCAL101_TESTS)
 include(cmake/Local103.cmake)   # LOCAL-103: client draw modules (issue #773; OPENBFME_LOCAL103_TESTS)
@@ -1459,6 +1461,7 @@ add_executable(openbfme_tests
     ${OPENBFME_LOCAL148_TESTS}
     ${OPENBFME_LOCAL149_TESTS}
     ${OPENBFME_LOCAL151_TESTS}
+    ${OPENBFME_LOCAL152_TESTS}
         ${OPENBFME_LOCAL130_TESTS}
         ${OPENBFME_LOCAL133_TESTS}
         ${OPENBFME_LOCAL136_TESTS}
@@ -1467,6 +1470,7 @@ add_executable(openbfme_tests
         ${OPENBFME_LOCAL141_TESTS}
     ${OPENBFME_LOCAL131_TESTS}
         ${OPENBFME_LOCAL143_TESTS}
+        ${OPENBFME_LOCAL150_TESTS}
         ${OPENBFME_LOCAL142_TESTS}
     ${OPENBFME_LOCAL101_TESTS}
     ${OPENBFME_LOCAL103_TESTS}
