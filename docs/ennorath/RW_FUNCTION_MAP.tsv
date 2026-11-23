@@ -19649,7 +19649,7 @@ HordeContain	0	0x0086D4CD	none		vcall +0x1bc	callee 0x00865598 (ported)
 HordeContain	0	0x0086D562	ported		vcall +0x1bc		
 HordeContain	0	0x0086D5BB	none		vcall +0x1bc	callee 0x00865598 (ported)	
 HordeContain	0	0x0086D614	ported		vcall +0x1bc		
-HordeContain	0	0x0086D6FD	partial				
+HordeContain	0	0x0086D6FD	ported				
 HordeContain	0	0x0086D755	ported				
 HordeContain	0	0x0086D75E	ported				
 HordeContain	0	0x0086D7E6	none			callee 0x00865598 (ported)	HordeContain::rva0046A677 (tier B)

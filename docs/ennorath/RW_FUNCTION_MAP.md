@@ -2,7 +2,7 @@
 
 Command: `python tools/mod/rw_function_map.py --game /content/game_assets/bfme_assets/RotWK/game.dat --ini /content/drive/MyDrive/for-arena/ennorath-ini-1.9.8.3.zip --inventory workspace/rebuild_inventory.json --decomp workspace/rebuild/xmap/rw_map.csv --out docs/ennorath/RW_FUNCTION_MAP`
 
-Rows: 52638; ported 30820, partial 816, none 12572, library 8430.
+Rows: 52638; ported 30821, partial 815, none 12572, library 8430.
 library: code the port replaces wholesale (STL, strings, the C runtime, the Lua VM, compiler-generated destructors, the INI / Xfer
 infrastructure): tools/mod/rw_library_functions.tsv, made by tools/mod/rw_library_functions.py; a citation still wins (ported).
 Counts are per module/function pair, not unique functions.
@@ -4360,7 +4360,6 @@ calls; their targets are not followed.
 | HordeContain | 644 | 0 | 0x0086FEAD | 14 | none |  |
 | HordeContain | 644 | 0 | 0x008707A0 | 14 | none |  |
 | HordeContain | 644 | 0 | 0x0086C8B9 | 13 | none |  |
-| HordeContain | 644 | 0 | 0x0086D6FD | 12 | partial |  |
 | HordeContain | 644 | 0 | 0x008762DD | 12 | none |  |
 | HordeContain | 644 | 0 | 0x0086BD7D | 11 | none |  |
 | HordeContain | 644 | 0 | 0x0086C758 | 11 | none |  |
