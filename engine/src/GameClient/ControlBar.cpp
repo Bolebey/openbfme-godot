@@ -16,6 +16,7 @@
 #include "GameLogic/GameLogic.h"
 #include "GameLogic/GameMessage.h"
 #include "GameLogic/Module/ProductionUpdate.h"
+#include "GameLogic/Module/AIUpdate.h"
 #include "GameLogic/Object/Object.h"
 #include "GameLogic/Object/ExperienceTracker.h"
 #include "GameLogic/ObjectTemplateInfo.h"
@@ -188,6 +189,18 @@ ButtonState ControlBar::evaluate(const CommandButton &b, Object &obj, bool &comm
 	if ((b.hasOption(COMMAND_OPTION_MOUNTED_ONLY) && !obj.testModelCondition(mounted)) || (b.hasOption(COMMAND_OPTION_UNMOUNTED_ONLY) && obj.testModelCondition(mounted)))
 	{
 		return ButtonState::Restricted;
+	}
+	// RW 0x9427EB .. 0x942807: ON_GROUND_ONLY (option bit 30, 0x40000000) calls Object->m_ai (+0x260) vslot 0x228 (RW 0x66288A);
+	// a nonzero result jumps to RW 0x9438C8 (availability 0, ButtonState::Restricted).
+	if (b.hasOption(COMMAND_OPTION_ON_GROUND_ONLY))
+	{
+		if (const AIUpdateInterface *ai = obj.getAIUpdateInterface())
+		{
+			if (ai->isMovingAlongPortal())
+			{
+				return ButtonState::Restricted;
+			}
+		}
 	}
 	// RW 0x942490: each mask is an ANY intersection. SPECIAL_POWER defers this check until after readiness (RW 0x9435C3 / 0x9435DC).
 	if (b.m_command != GUI_COMMAND_SPECIAL_POWER && !modelConditionsAllow(b, obj))

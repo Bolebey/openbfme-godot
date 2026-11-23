@@ -591,6 +591,7 @@ include(cmake/Local140.cmake)   # LOCAL-140: object-level unread mod fields (for
 include(cmake/Local141.cmake)   # LOCAL-141: S-7364 repeated press, S-704 VoiceCrush, S-1462 LW audio filter, S-1952 colours (fork issue 858; OPENBFME_LOCAL141_TESTS)
 include(cmake/Local131.cmake)   # LOCAL-131: matrix red buttons I (fork issue 837; OPENBFME_LOCAL131_TESTS)
 include(cmake/Local143.cmake)   # LOCAL-143: Ennorath 1.9.8.5 exe edits (11 pySAGE sections; fork issue 860; OPENBFME_LOCAL143_TESTS)
+include(cmake/Local142.cmake)   # LOCAL-142: open game-logic stops (fork issue 859; OPENBFME_LOCAL142_TESTS)
 include(cmake/Local101.cmake)   # LOCAL-101: special AI modules SiegeDockingBehavior & HordeWorkerAIUpdate (fork issue 771; OPENBFME_LOCAL101_TESTS)
 include(cmake/Local103.cmake)   # LOCAL-103: client draw modules (issue #773; OPENBFME_LOCAL103_TESTS)
 include(cmake/Local109.cmake)   # LOCAL-109: builders and walls second pass (fork issue 787; OPENBFME_LOCAL109_TESTS)
@@ -1448,6 +1449,7 @@ add_executable(openbfme_tests
         ${OPENBFME_LOCAL141_TESTS}
     ${OPENBFME_LOCAL131_TESTS}
         ${OPENBFME_LOCAL143_TESTS}
+        ${OPENBFME_LOCAL142_TESTS}
     ${OPENBFME_LOCAL101_TESTS}
     ${OPENBFME_LOCAL103_TESTS}
     ${OPENBFME_LOCAL109_TESTS}
