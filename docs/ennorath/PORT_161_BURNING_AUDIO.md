@@ -1,8 +1,13 @@
 # Port 161 / P-89: burning terrain audio — investigation
 
-Status: implementation and eight synthetic tests committed; full-target execution pending.
-The early analysis/stop sections below are historical; the resumed section records the Port 290 landing.
-No claim of passing PORT-161 tests yet.
+Status: implemented and verified on the full `openbfme_tests` target (Release,
+Godot OFF, Ninja -j1). PORT-161: 8 cases / 153 assertions passed. The negative
+control fails without the producer notifications, and the normal binary passes
+again afterward. Audible in-game acceptance remains with the owner.
+
+**Reading this log:** the investigation and parked/build-pending sections are
+historical checkpoints. The final verification section below supersedes their
+status; Port 290 has landed and is not an outstanding dependency.
 
 ## Sources
 
@@ -200,3 +205,72 @@ cell registration regression, then the unmodified binary must pass PORT-161
 again. Tracked source, normal archive, normal binary and hash pins are not
 modified by this control. Execution results remain pending; this describes
 the scheduled verification, not a claim it already succeeded.
+
+
+## Final verification
+
+Verified source state: `07d27cd30738f3059fb8de962010f94254e94d7e`
+(last engine/test edit: `0e126a497`). Full target build, not a reduced harness:
+
+```
+cmake -S engine -B engine/build -G Ninja -DCMAKE_BUILD_TYPE=Release -DOPENBFME_BUILD_GODOT=OFF
+cmake --build engine/build -j1 --target openbfme_tests
+engine/build/openbfme_tests -tc="PORT-161*"
+[doctest] test cases:   8 |   8 passed | 0 failed | 7256 skipped
+[doctest] assertions: 153 | 153 passed | 0 failed |
+[doctest] Status: SUCCESS!
+```
+
+The skipped count here is the test-name filter, not a claim of a full-suite
+run. The full suite and installed-game scenarios were not run. Neighbor checks:
+
+| Filter | Passed cases | Passed assertions |
+|---|---:|---:|
+| `PORT-290*,fire logic:*` | 14 | 164 |
+| `audio4 LGA:*` | 2 | 44 |
+| `save4d weather*` | 1 | 34 |
+
+Negative control: a separate source copy returns before
+`notifyBurningCell` sends anything. It replaces only that object in a private
+core archive, then relinks the full test binary to a separate path. The case
+`PORT-161 burning grid cell registers anonymous audio and extinguishes without a ghost`
+fails at `REQUIRE(b.events.size() == 3)`: actual 0; 1 case failed,
+9 assertions passed / 1 failed. The unchanged normal binary then passes
+PORT-161 again: 8 cases / 153 assertions. No tracked sources, hash pins,
+normal object files, normal archive or normal binary were changed for this
+negative control. Session logs are under ignored
+`workspace/port161-verification/`.
+
+### Behavior / evidence / regression map
+
+| Behavior | RW evidence | Synthetic test in test_port_161.cpp |
+|---|---|---|
+| Temporary construction, resident copy, temporary destruction; coordinate/weight/key payload | 0x6862B6 / 0x686355 / 0x686311, vtable 0xC11830, 0x685E3B / 0x686A60 | burning grid cell registers anonymous audio and extinguishes without a ghost |
+| Newly-lit cancellation does not construct a resident or emit audio | 0x68715E..0x6871AB / 0x6887AE | quiet fuel and pre-residency extinguishing do not produce burning audio |
+| Clear destroys residents without lookup temporaries | 0x686D3C -> 0x686311 -> 0x685E65 | reset unregisters each resident once without a temporary lookup |
+| Registration frame persists; simulation CRC unaffected by audio bookkeeping | cell frame 0x686441; native v3 adaptation, not a retail-file claim | saved registration frame survives replacement and keeps simulation CRC |
+| Only frame -1 retries at tenth slice; once stamped, no duplicate retry | 0x688CCF..0x688D02 -> 0x685E0A..0x685E2A | old snapshot registers only on tenth slice and does not update twice |
+| Global gate refuses notification, but constructor still stamps frame | 0x60D5FF / 0x60D633, 0x685E55..0x685E5D | gate frame drops constructor notifications without periodic re-add |
+| Tree template fuel enters the fire grid, not a new tree object | 0x683F80 -> 0x686A82 | tree fuel registers cell audio without creating a tree object |
+| Removing one value-based cell contribution preserves other cell/object contributions | 0x971326 / 0x971392 | extinguishing a cell preserves another cell and an object contribution |
+
+INFERENCE / native adaptation: pre-v3 OpenBFME saves have no registration
+frame. They explicitly migrate to -1 for RW's delayed registration; v3 stores
+the frame after the coordinate list. These audio-only fields are saved but
+not added to simulation CRC: no simulation reader consumes them. No existing
+test expectation or hash pin was changed. Shared runtime tie order (S-7512)
+and ducking / Living World / crowds (remaining S-248) are unchanged, outside
+this producer-only follow-up. No new shared-runtime substitute is introduced.
+
+### Owner check (not executed here)
+
+In Ennorath, select the Cardolan scout and use its second ability on a forest.
+Listen near the burning cells: the fire-group crackle should accompany the
+existing ground fire / tree sinking. Extinguish or wait for the fire to finish:
+no lingering loop. Check a quiet forest stays quiet, then repeat around
+save/load and a map restart. Also check existing object/army LGA sounds per
+the audio entries in VISUAL_REGRESSIONS.md. The synthetic tests verify the
+producer and consumer weights, not that installed samples are audible.
+
+No upstream PR: this is a pure audio/display change without before/after
+in-game snapshots, so the upstream acceptance gate is not met.
