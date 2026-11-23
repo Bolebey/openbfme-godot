@@ -340,6 +340,8 @@ public:
 	OBFME_MODULE_XFER(WeaponFireSpecialAbilityUpdate) // lane SAVE-4b
 	WeaponFireSpecialAbilityUpdate(Thing *thing, const WeaponFireSpecialAbilityUpdateModuleData *data); // RW 0x895D98
 	~WeaponFireSpecialAbilityUpdate() override;
+	bool allowsSpecialPowerUse(const Coord3D *loc = nullptr) const override;
+	UpdateSleepTime update() override;
 	void finishAbility(bool ownerDying, bool aborted) override; // RW 0x896033
 	unsigned shotsFired() const { return m_shots; }
 	Weapon *ownedWeapon() { return m_weapon.get(); } // RW +0x88: made and loaded in the constructor (RW 0x895DE1 .. 0x895E22)
@@ -347,6 +349,7 @@ public:
 	void crc(StateHasher &h) const override;
 
 protected:
+	void startPacking(bool success) override;
 	bool continuePreparation() override; // RW 0x895E60
 	void startUnpacking() override;      // RW 0x895ECE
 	void triggerAbilityEffect() override; // RW 0x8961F7
@@ -393,6 +396,7 @@ private:
 };
 
 // RW vtable 0x00C64D14; name/key RW 0x00895836 / 0x0089585C; s1 no-op RW 0x008E38D8
+// RW 0x0089583C (dtor -> RW 0x00854D9A)
 class HeroModeSpecialAbilityUpdate : public SpecialAbilityUpdate
 {
 public:
@@ -408,6 +412,8 @@ private:
 	const HeroModeSpecialAbilityUpdateModuleData *m_hm;
 };
 
+// Local 87: RW 0x008C6D2B (getModuleName), RW 0x008C6DAD (getModuleNameKey), RW 0x008C6E46 (data dtor).
+// RW 0x008C6E62 (dtor -> RW 0x00854D9A)
 class LevelGrantSpecialPower : public SpecialAbilityUpdate
 {
 public:
@@ -432,6 +438,7 @@ private:
 };
 
 // RW vtable 0x00C64C54; name/key RW 0x008943FC / 0x00894422; s1 no-op RW 0x008E38D8
+// RW 0x00894402 (dtor -> RW 0x00854D9A)
 class ModelConditionSpecialAbilityUpdate : public SpecialAbilityUpdate
 {
 public:
@@ -457,12 +464,14 @@ private:
 // it merges: ToggleMounted's trigger with the replacement RW 0x8B228C (RW 0x8B140D's twin over the + 0xE8 / + 0xEC fields) and ModelCondition's emotion
 // pulse (RW 0x8B2584), ToggleMounted's finishAfterPacking (RW 0x8B202A) and initiate (RW 0x8B1FDA), ModelCondition's startUnpacking (RW 0x89455B), a
 // finishAbility of both (RW 0x8B208A), and the base continuePreparation (RW 0x852A3E: no early out at the second trigger).
+// RW 0x008B1E94 (getModuleName), RW 0x008B1F14 (getModuleNameKey), RW 0x008B1FA3 (scalar deleting dtor -> 0x008B1E6A).
+// RW 0x008B1E6A (dtor -> RW 0x00854D9A)
 class SummonReplacementSpecialAbilityUpdate : public SpecialAbilityUpdate, public CreateModuleInterface
 {
 public:
 	OBFME_MODULE_XFER(SummonReplacementSpecialAbilityUpdate)
 	SummonReplacementSpecialAbilityUpdate(Thing *thing, const SummonReplacementSpecialAbilityUpdateModuleData *data); // RW 0x8B1F59
-	CreateModuleInterface *getCreate() override { return this; }
+	CreateModuleInterface *getCreate() override { return this; } // RW 0x008B42E6 (BehaviorModule::getCreate, shared with SpecialDisguiseUpdate)
 	void onCreate() override {}
 	void onBuildComplete() override; // RW 0x8B1FBF: TriggerInstantlyOnCreate triggers at once
 	void initiateIntentToDoSpecialPower(const SpecialPowerTemplate *t, Object *target, const Coord3D *loc, unsigned options, int extra) override; // RW 0x8B1FDA
@@ -490,12 +499,14 @@ private:
 // + 0x130 bit 12) on with ForceMountedWhenDisguising's mount (RW 0x8B45BF), or off; the drawable of DisguiseAsTemplate replaces the object's (client). RW 0x8B4702
 // ends it from SPECIAL_SMITE_CANCELDISGUISE's unpack (RW 0x8538DD), SPECIAL_ATTRIBUTEMOD_CANCELDISGUISE's trigger (RW 0x8549DD) and attribute modifier power
 // (RW 0x897840), a stealth detector (RW 0x8A6644) and the mount toggles' CancelDisguiseWhenDismounting (RW 0x8B17C2 / 0x8B26BB).
+// RW 0x008B42E0 (getModuleName), RW 0x008B429B (getModuleNameKey), RW 0x008B43F4 (scalar deleting dtor -> 0x008B4271).
+// RW 0x008B4271 (dtor -> RW 0x00854D9A)
 class SpecialDisguiseUpdate : public SpecialAbilityUpdate, public CreateModuleInterface
 {
 public:
 	OBFME_MODULE_XFER(SpecialDisguiseUpdate) // lane SAVE-4b
 	SpecialDisguiseUpdate(Thing *thing, const SpecialDisguiseUpdateModuleData *data); // RW 0x8B439F
-	CreateModuleInterface *getCreate() override { return this; }
+	CreateModuleInterface *getCreate() override { return this; } // RW 0x008B42E6 (BehaviorModule::getCreate, shared with SummonReplacementSpecialAbilityUpdate)
 	void onCreate() override {}
 	void onBuildComplete() override;                            // RW 0x8B4410
 	void finishAbility(bool ownerDying, bool aborted) override; // RW 0x8B4521

@@ -21,6 +21,7 @@
 #include "GameLogic/Module/SpecialAbilityModules.h"
 #include "GameLogic/Module/SpellBookPowers.h"
 #include "Common/INIException.h"
+#include "GameLogic/AI/AerialPathfinder.h" // PORT-318: the AerialPathfindNoFlyZone block (RW 0x60095C)
 #include "GameLogic/ContainParseHooks.h"
 #include "GameLogic/Weapon.h"
 #include "GameClient/FXList.h"
@@ -109,6 +110,7 @@ RetailObjectWorld::State::State(ArchiveFileSystem &fs)
 		"CreateAHeroSystem", "AwardSystem", // HERO-2: TheCreateAHeroSystem (its own file, RW 0x61A10F)
 		"LinearCampaign", // CAMP-1: TheLinearCampaignManager (RW 0x5ECCB9)
 		"MissionObjectiveList", // CAMPUI-1: TheMissionObjectiveTracker's block (RW 0x836497)
+		"AerialPathfindNoFlyZone", // PORT-318: TheAerialPathfinder's block (RW 0x60095C -> RW 0x777F76)
 		"GlowEffect", "Fire" }; // GLOW-1: RW 0x70B734 (GlowEffectStore); Fire: RW 0x70C77C
 	// AUDIO-1: the audio blocks (AudioEvent, DialogEvent, MusicTrack, ..., EvaEvent, AudioSettings, MiscAudio) are parsed for real
 	skip.insert(skip.end(), AudioIniState::blockKeywords().begin(), AudioIniState::blockKeywords().end());
@@ -150,6 +152,10 @@ RetailObjectWorld::State::State(ArchiveFileSystem &fs)
 	SpellStores::registerBlocks(m_env.blocks); // SPELL-1
 	m_linearCampaigns.registerBlock(m_env.blocks); // CAMP-1
 	m_env.blocks.registerBlock("MissionObjectiveList", [this](INI *ini) { MissionObjectiveTracker::parseList(ini, m_mapObjectives, m_mapObjectivesParsed); });
+	// PORT-318: TheAerialPathfinder's no-fly zone block (RW 0x60095C), parsed into the subsystem's list (RW 0x777F76) with its TriggerArea looked up in
+	// the trigger list of the map whose map.ini this is (RW 0x6825F6 over RW 0xDA21FC); applyMapIni selects that list for the parse
+	m_env.blocks.registerBlock("AerialPathfindNoFlyZone",
+		[this](INI *ini) { AerialPathfinder::parseNoFlyZoneBlock(ini, m_mapTriggers); });
 }
 
 const AudioIniState &RetailObjectWorld::audio() const
@@ -316,6 +322,20 @@ RetailObjectWorld::ContextScope::~ContextScope()
 RetailObjectWorld::RetailObjectWorld(ArchiveFileSystem &fs)
 	: m_fs(fs), m_s(std::make_unique<State>(fs))
 {
+	installFxParseServices();
+}
+
+// PORT-330 (S-190): the world's FXList blocks (and the client's FX player, which parses the FX files again) check a `Sound` nugget's name against
+// TheAudio (RW 0x73B217 -> RW 0x73AA94) and an `EvaEvent*` name against TheEva (RW 0x5DE588 -> RW 0x5DE0D8) while the block parses. Both tables are
+// this world's (m_s->m_audio), and their subsystem inits (RW 0x4538DA, RW 0x5DE837) precede TheFXListStore's own (RW 0x63AF2D onward).
+void RetailObjectWorld::installFxParseServices()
+{
+	// built once and kept across reloads: the FX player holds the pointer, the state it answers from is swapped under it
+	if (!m_fxParseServices)
+	{
+		m_fxParseServices = MakeWorldFXListParseServices(*this);
+	}
+	m_s->m_recorder.fxLists->setParseServices(m_fxParseServices.get());
 }
 
 RetailObjectWorld::State::~State() = default;
@@ -368,6 +388,7 @@ void RetailObjectWorld::reloadState()
 	unregisterContext();
 	m_s.reset(); // every store the INI load made goes (the old one first: no two states in memory)
 	m_s = std::make_unique<State>(m_fs);
+	installFxParseServices(); // PORT-330: the new state's FXList store, and the answers from its TheAudio / TheEva tables
 	std::string error;
 	if (!loadState(&error)) // selects this world's context, as load() does
 	{
@@ -590,7 +611,7 @@ bool RetailObjectWorld::load(std::string *error)
 	return true;
 }
 
-RetailObjectWorld::MapIniResult RetailObjectWorld::applyMapIni(const std::string &mapDir)
+RetailObjectWorld::MapIniResult RetailObjectWorld::applyMapIni(const std::string &mapDir, const std::vector<TriggerArea> *mapTriggers)
 {
 	MapIniResult result;
 	if (!m_loaded)
@@ -610,6 +631,12 @@ RetailObjectWorld::MapIniResult RetailObjectWorld::applyMapIni(const std::string
 	}
 	m_dirty = true;
 	m_gameMapApplied = m_gameLive;
+	// PORT-318: the no-fly zones are map state of TheAerialPathfinder (RW 0xDE7958, the list at + 0x10): its reset slot clears the list (DONOR BFME2
+	// 0x0022C9D2) and this load's blocks fill it again (RW 0x60095C -> RW 0x777F76), so a zone of the previous map never outlives the trigger list it
+	// points into. The trigger list of the map being applied is the one the block parser looks names up in (RW 0x6825F6).
+	const std::vector<TriggerArea> *const triggersBefore = m_s->m_mapTriggers;
+	m_s->m_mapTriggers = mapTriggers;
+	AerialPathfinder::resetNoFlyZones();
 	const size_t defsBefore = m_s->m_things->definitions().size();
 	const size_t recordsBefore = m_s->m_recorder.records.size();
 	ContextScope context(*this); // this world's stores AND audio validator for the whole parse; the previous live context returns on exit
@@ -641,6 +668,7 @@ RetailObjectWorld::MapIniResult RetailObjectWorld::applyMapIni(const std::string
 		result.definitions.push_back(defs[i].kind + " " + defs[i].name);
 	}
 	result.blocksRecorded = m_s->m_recorder.records.size() - recordsBefore;
+	m_s->m_mapTriggers = triggersBefore; // no map.ini of a later load looks names up in a map that is gone (every INI error above was caught)
 	return result;
 }
 

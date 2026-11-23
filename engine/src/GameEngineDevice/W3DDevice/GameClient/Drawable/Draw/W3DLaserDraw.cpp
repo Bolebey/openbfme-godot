@@ -1,4 +1,5 @@
-// OpenBFME. GPL-3.0. See W3DLaserDraw.h (RW 0x4C917B / 0xBE1798 / 0x4C8A6C / 0x740659, donor BFME2 W3DLaserDraw*).
+// OpenBFME. GPL-3.0. See W3DLaserDraw.h (RW 0x004C917B / 0x00BE1798 / 0x004C8A6C / 0x00740659, donor BFME2 W3DLaserDraw*).
+// TARGET RW 0x004C93FD W3DLaserDraw scalar deleting destructor (~W3DLaserDraw RW 0x004C9229).
 
 #include "GameEngineDevice/W3DDevice/GameClient/Drawable/Draw/W3DLaserDraw.h"
 #include "GameClient/LaserUpdate.h"
@@ -353,7 +354,8 @@ std::vector<W3DLaserBeam> W3DLaserDrawState::build(const W3DLaserDrawModuleData 
 				beam.segment = (int)segment;
 				beam.beam = i;
 				beam.index = (int)segment * (int)data.m_numBeams + i; // RW 0x4C8EBF
-				beam.fanWidth = m_fanWidth;                            // RW 0x4C8F95: Set_Width(width, m_at30)
+				// RW 0x4C8F95 -> SegmentedLineClass::Set_Width (RW 0x0055DBE0): clamps both width and fanWidth to >= 0.0f
+				beam.fanWidth = m_fanWidth > 0.0f ? m_fanWidth : 0.0f;
 
 				float width;
 				if (data.m_numBeams == 1) // RW 0x4C8EC7
@@ -365,20 +367,27 @@ std::vector<W3DLaserBeam> W3DLaserDrawState::build(const W3DLaserDrawModuleData 
 					const float scale = (float)i / ((float)data.m_numBeams - kOne); // RW 0x4C8EE0 .. 0x4C8F09
 					width = (data.m_innerBeamWidth + scale * (data.m_outerBeamWidth - data.m_innerBeamWidth)) * widthScale;
 				}
-				beam.width = width;
+				beam.width = width > 0.0f ? width : 0.0f;
 
-				// RW 0x4C8F14: m_textures[0] and Tile
+				// RW 0x4C8F14: m_textures[0] (Set_Texture RW 0x0055DB80 -> RW 0x00B57240) and Tile
 				beam.tileAppliedSkip = true;
 				if (firstTextureLoaded && data.m_tile)
 				{
 					const float length = length3(laserPoints[1], laserPoints[0]);
-					beam.tileFactor = data.m_tilingScalar / width * m_textureAspectRatio * length; // RW 0x4C8F73 .. 0x4C8F84
+					// RW 0x4C8F73 .. 0x4C8F84 -> SegmentedLineClass::Set_Texture_Tile_Factor (RW 0x0055DCE0)
+					// -> SegLineRendererClass::Set_Texture_Tile_Factor (RW 0x00590A40): clamps factor to [0.0f, 50.0f] (RW 0xBD88C4)
+					float tf = data.m_tilingScalar / width * m_textureAspectRatio * length;
+					if (tf > 50.0f)
+						tf = 50.0f;
+					else if (!(tf > 0.0f))
+						tf = 0.0f;
+					beam.tileFactor = tf;
 					beam.tileAppliedSkip = false;
 				}
 
 				for (int k = 0; k < 3; ++k)
 				{
-					beam.points[0][k] = laserPoints[0][k]; // RW 0x4C8FBB: Set_Points(2, laserPoints)
+					beam.points[0][k] = laserPoints[0][k]; // RW 0x4C8FBB -> Set_Points (RW 0x0055E9F0)
 					beam.points[1][k] = laserPoints[1][k];
 				}
 
@@ -400,7 +409,7 @@ std::vector<W3DLaserBeam> W3DLaserDrawState::build(const W3DLaserDrawModuleData 
 				// RW 0x4C905D: the envelope update runs once per beam, in and out are the module's +0x2C
 				m_envelope.update(&m_opacity);
 				beam.opacity = m_opacity;
-				beam.color[0] = red * m_opacity; // RW 0x4C9062 .. 0x4C90A8
+				beam.color[0] = red * m_opacity; // RW 0x4C9062 .. 0x4C90A8 -> Set_Color (RW 0x0055DC20)
 				beam.color[1] = green * m_opacity;
 				beam.color[2] = blue * m_opacity;
 				beam.textureIndex = m_textureIndex; // RW 0x4C90B6: m_textures[m_at28]

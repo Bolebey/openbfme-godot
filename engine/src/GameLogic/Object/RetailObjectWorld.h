@@ -51,6 +51,9 @@
 
 // Common/Audio/AudioIni.h pulls GameLogic/ObjectFilter.h (another ModelConditionFlags than Common/ModelState.h): forward declared here.
 class AudioIniState;
+class FXListParseServices;
+// GameClient/MapChunks.h's polygon trigger: the map's trigger list a map.ini block looks its TriggerArea up in (applyMapIni)
+struct TriggerArea;
 
 class RetailObjectWorld
 {
@@ -128,9 +131,11 @@ public:
 	};
 	// Loads <mapDir>\map.ini and <mapDir>\solo.ini (load type 2) into a world as a fresh load makes it: when an earlier map or game changed
 	// this world, it is reloaded first (reload()). mapDir is the map's directory (MapClassification::mapDirectory), e.g. "maps\\map wor fangorn"
-	// in the archives or a user map's folder (lane MOD-5). Throws
+	// in the archives or a user map's folder (lane MOD-5). `mapTriggers` is the trigger list of the map being applied (its TriggerAreas chunk: the
+	// list LiveGame hands the ScriptEngine at newGame, and the list RW's TerrainLogic holds at RW 0xDA21FC); the AerialPathfindNoFlyZone block looks
+	// its TriggerArea up there (RW 0x6825F6). Null/absent: no block finds a trigger. Throws
 	// std::logic_error before load() and while a game of this world whose map is applied is live.
-	MapIniResult applyMapIni(const std::string &mapDir);
+	MapIniResult applyMapIni(const std::string &mapDir, const std::vector<TriggerArea> *mapTriggers = nullptr);
 
 	// Lane MAPRESET-1 (stop S-3808, the owner's decision of 2026-10-12: a deliberate departure from RotWK, whose PlayerTemplateStore and
 	// SkirmishAIManager keep a map's map.ini blocks for the session: their reset is the empty RW 0x63F3BF, and GameLogic::reset drops only
@@ -157,6 +162,11 @@ public:
 	const ControlBarSchemeStore &schemes() const { return m_s->m_schemes; }
 	ControlBarSchemeStore &schemes() { return m_s->m_schemes; }
 	const FXListStore &fxLists() const { return *m_s->m_recorder.fxLists; }
+	// PORT-330 (S-190): the FXList block's parse-time name checks, answered from this world's TheAudio / TheEva tables (FXListParseServices.cpp). The
+	// world's own load installs them on its FXList store; the client's FX player (FXPlayback, which parses the FX files again) takes them from here,
+	// as retail has one TheAudio and one TheEva for both loads. The services belong to the WORLD, not to the state reload() replaces, so a player
+	// that took this pointer keeps a valid one across a reload (they answer from the current state's tables).
+	FXListParseServices *fxListParseServices() const { return m_fxParseServices.get(); }
 	const FXParticleSystem::FXParticleSystemTemplateStore *fxParticleSystems() const { return m_s->m_recorder.fxParticleSystems.get(); }
 
 	std::vector<std::string> acceptanceStops() const;
@@ -227,6 +237,7 @@ private:
 		CreateAHeroSystem m_createAHero;              // HERO-2
 		std::vector<MissionObjective> m_mapObjectives; // lane CAMPUI-1: map.ini's MissionObjectiveList
 		bool m_mapObjectivesParsed = false;
+		const std::vector<TriggerArea> *m_mapTriggers = nullptr; // PORT-318: the trigger list the map.ini being applied is parsed against
 		std::unique_ptr<AudioIniState> m_audio;
 		std::unique_ptr<SkirmishAIStore> m_skirmishAI;
 		WeaponStores m_weaponStores; // WEAPON-1: the Weapon, Armor and DamageFX blocks have real parsers
@@ -248,4 +259,11 @@ private:
 	bool m_dirty = false;          ///< lane MAPRESET-1: a map or a game changed the state since its (re)load
 	bool m_gameLive = false;       ///< lane MAPRESET-1: beginGame .. endGame
 	bool m_gameMapApplied = false; ///< the live game's map.ini is applied
+	// PORT-330 (S-190): the FXList block's parse-time name checks. RW resolves them through two GLOBAL tables whose subsystem inits (TheAudio
+	// RW 0x4538DA, TheEva RW 0x5DE837) run before TheFXListStore's own load: a `Sound` nugget's name is asked of TheAudio (RW 0x73B217 ->
+	// RW 0x73AA94, `Invalid Sound '%s'`) and an `EvaEvent*` name of TheEva (RW 0x5DE588 -> RW 0x5DE0D8, `Expected a recognized Eva event name or
+	// 'None'`). The world owns the two tables (the state's m_audio), so it answers for them; the FXList store keeps a bare pointer to this.
+	// Held here rather than in State: reload() destroys State, and the client's FX player holds the pointer across reloads.
+	std::unique_ptr<FXListParseServices> m_fxParseServices;
+	void installFxParseServices(); ///< builds m_fxParseServices for the current state's tables (the constructor, and reload() when it is kept)
 };

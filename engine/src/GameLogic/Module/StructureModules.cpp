@@ -242,6 +242,7 @@ void StructureModules::registerAll(ModuleFactory &modules)
 	// StructureBody: ActiveBody's data (RW tables 0xC71D68 + the empty 0xC84858)
 	modules.bindTypedData<ActiveBodyModuleData>("StructureBody", MODULETYPE_BEHAVIOR);
 	bindRuntime<StructureBody, ActiveBodyModuleData>(modules, "StructureBody");
+	// InactiveBody: getModuleName RW 0x008C18F1, getModuleNameKey RW 0x008C19A6
 	modules.bindTypedData<InactiveBodyModuleData>("InactiveBody", MODULETYPE_BEHAVIOR);
 	bindRuntime<InactiveBody, InactiveBodyModuleData>(modules, "InactiveBody");
 	modules.bindTypedData<RespawnBodyModuleData>("RespawnBody", MODULETYPE_BEHAVIOR);
@@ -250,6 +251,8 @@ void StructureModules::registerAll(ModuleFactory &modules)
 	bindRuntime<DelayedDeathBody, DelayedDeathBodyModuleData>(modules, "DelayedDeathBody");
 	modules.bindTypedData<SymbioticStructuresBodyModuleData>("SymbioticStructuresBody", MODULETYPE_BEHAVIOR);
 	bindRuntime<SymbioticStructuresBody, SymbioticStructuresBodyModuleData>(modules, "SymbioticStructuresBody");
+	// RW 0x007A7D78 (getModuleName -> "LifetimeUpdate"), RW 0x007A7DB5 (getModuleNameKey lazy cache),
+	// RW 0x007A7D5F (~LifetimeUpdate), RW 0x007A7E25 (scalar deleting destructor)
 	modules.bindTypedData<LifetimeUpdateModuleData>("LifetimeUpdate", MODULETYPE_BEHAVIOR);
 	bindRuntime<LifetimeUpdate, LifetimeUpdateModuleData>(modules, "LifetimeUpdate");
 	modules.bindTypedData<StructureCollapseUpdateModuleData>("StructureCollapseUpdate", MODULETYPE_BEHAVIOR);
@@ -260,6 +263,9 @@ void StructureModules::registerAll(ModuleFactory &modules)
 	// lane TOPPLE-1: RW 0xC69680 table, runtime RW 0x8A8BB4 (GameLogic/Module/StructureToppleUpdate.h)
 	modules.bindTypedData<StructureToppleUpdateModuleData>("StructureToppleUpdate", MODULETYPE_BEHAVIOR);
 	bindRuntime<StructureToppleUpdate, StructureToppleUpdateModuleData>(modules, "StructureToppleUpdate");
+	// RW 0x0064ED68 / RW 0x0064EDA0 / RW 0xC6A490 table, runtime RW 0x008AB8D7 (GameLogic/Module/StructureToppleUpdate.h)
+	modules.bindTypedData<ToppleUpdateModuleData>("ToppleUpdate", MODULETYPE_BEHAVIOR);
+	bindRuntime<ToppleUpdate, ToppleUpdateModuleData>(modules, "ToppleUpdate");
 }
 
 // ---- StructureBody ------------------------------------------------------------------------------------------------------------------
@@ -278,19 +284,22 @@ void StructureBody::crc(StateHasher &h) const
 }
 
 // ---- InactiveBody -------------------------------------------------------------------------------------------------------------------
+// RW 0x8C1A06: the constructor starts by calling the body base 0x8C1946, stores vtables 0xC71978 / 0xC72F08 / 0xC718C8 and
+// zero in +0x18 (m_dieCalled); RW 0x8C1A43 calls Object::setEffectivelyDead(true) (RW 0x68D950).
 InactiveBody::InactiveBody(Thing *thing, const InactiveBodyModuleData *data)
 	: BehaviorModule(thing, data)
 {
 	getObject()->friend_setEffectivelyDead(true); // RW 0x8C1A43 -> 0x68D950
 }
 
-// RW 0x8C18F7
+// RW 0x8C18F7: type 8 (UNRESISTABLE) at RW 0x8C18FE answers the amount from the input +0x1C, every other type answers zero.
 float InactiveBody::estimateDamage(const DamageInfoInput &input) const
 {
 	return input.m_damageType == DAMAGE_UNRESISTABLE ? input.m_amount : 0.0f;
 }
 
-// RW 0x8C1A75
+// RW 0x8C1A75: the null check is RW 0x8C1A7E; healing (type 7) goes to the body's second slot RW 0x8C1A8D,
+// type 8 clears noEffect at RW 0x8C1AA8 and runs onDie once (RW 0x8C1AAC .. 0x8C1ABB).
 void InactiveBody::attemptDamage(DamageInfo &info)
 {
 	if (info.m_input.m_damageType == DAMAGE_HEALING)
@@ -321,6 +330,8 @@ void InactiveBody::attemptDamage(DamageInfo &info)
 	}
 }
 
+// RW 0x8C191D: RW 0x8C1921 checks the DamageInfo pointer, RW 0x8C1925 tests type 7; the healing branch zeroes the
+// output at RW 0x8C1935 / 0x8C193A and sets noEffect at RW 0x8C193F, otherwise RW 0x8C192E calls attemptDamage.
 void InactiveBody::attemptHealing(DamageInfo &info)
 {
 	if (info.m_input.m_damageType != DAMAGE_HEALING)
@@ -682,6 +693,29 @@ void DelayedDeathBody::crc(StateHasher &h) const
 }
 
 // ---- SymbioticStructuresBody -----------------------------------------------------------------------------------------------------------------
+void SymbioticStructuresBody::setSymbiote(ObjectID id)
+{
+	if (m_symbioteId != INVALID_ID && m_symbioteId != id)
+	{
+		if (Object *oldObj = getObject()->logic().findObjectByID(m_symbioteId))
+		{
+			if (ActiveBody *oldBody = dynamic_cast<ActiveBody *>(oldObj->getBodyModule()))
+			{
+				if (oldBody->symbiotePartnerId() == getObject()->getID())
+				{
+					oldBody->setSymbiotePartner(INVALID_ID);
+				}
+			}
+		}
+	}
+	m_symbioteId = id;
+	if (m_symbioteId != INVALID_ID)
+	{
+		(void)symbioteBody(); // RW 0x008C4EE0: bind ActiveBody +0xEC back-reference immediately
+	}
+}
+
+// RW 0x008C4EE0 (refreshSymbiote): resolves symbiote object by ID (+0x104) and writes this object's ID into ActiveBody +0xEC
 BodyModuleInterface *SymbioticStructuresBody::symbioteBody() const
 {
 	if (m_symbioteId == INVALID_ID)
@@ -689,30 +723,125 @@ BodyModuleInterface *SymbioticStructuresBody::symbioteBody() const
 		return nullptr;
 	}
 	Object *o = getObject()->logic().findObjectByID(m_symbioteId);
-	return o ? o->getBodyModule() : nullptr;
+	BodyModuleInterface *b = o ? o->getBodyModule() : nullptr;
+	if (ActiveBody *ab = dynamic_cast<ActiveBody *>(b))
+	{
+		if (const Object *self = getObject())
+		{
+			ab->setSymbiotePartner(self->getID()); // RW 0x8C4F1D .. 0x8C4F29
+		}
+	}
+	return b;
 }
 
+// RW 0x008C5304 (primary vslot 1, loadPostProcess): find first object whose name equals m_symbiote (+0x64),
+// copy its transform (RW 0x70BA76), store its ID at +0x104, and sync model/dead/rubble/pathfind (RW 0x008C4CF4).
+void SymbioticStructuresBody::loadPostProcess()
+{
+	Object *self = getObject();
+	if (!self)
+	{
+		return;
+	}
+	GameLogic &logic = self->logic();
+	if (m_symbioticData && !m_symbioticData->m_symbiote.empty())
+	{
+		for (Object *o = logic.getFirstObject(); o; o = o->getNextObject())
+		{
+			if (o->getName() == m_symbioticData->m_symbiote)
+			{
+				self->setTransform(o->getPosition(), o->getBasis()); // RW 0x8C5371 -> 0x70BA76
+				m_symbioteId = o->getID();                           // RW 0x8C537B
+				break;
+			}
+		}
+	}
+	syncFromSymbiote(); // RW 0x8C5388 -> 0x008C4CF4
+}
+
+// RW 0x008C4CF4 (syncFromSymbiote): copies symbiote's model conditions (RW 0x5E3BA5), sets effectivelyDead from
+// getHealth() <= 0 (RW 0x68D950), updates geometry height & NO_COLLISIONS for RUBBLE vs live (RW 0x8C4D4F..0x8C4DBA),
+// and re-enters the object in the pathfinder map (RW 0x6E85FB / 0x6E85E9).
+void SymbioticStructuresBody::syncFromSymbiote()
+{
+	if (m_symbioteId == INVALID_ID)
+	{
+		return;
+	}
+	Object *self = getObject();
+	if (!self)
+	{
+		return;
+	}
+	GameLogic &logic = self->logic();
+	Object *symbiote = logic.findObjectByID(m_symbioteId);
+	if (!symbiote)
+	{
+		return;
+	}
+	Object::ModelConditionBits emptyClear{};
+	self->clearAndSetModelConditionFlags(emptyClear, symbiote->getModelConditionBits()); // RW 0x8C4D28 -> 0x5E3BA5 -> 0x68D607
+	self->friend_setEffectivelyDead(getHealth() <= 0.0f);                                // RW 0x8C4D31 .. 0x8C4D45 -> 0x68D950
+	const BodyDamageType dmgState = getDamageState();                                    // RW 0x8C4D4F
+	const ThingTemplate *tt = self->getTemplate();
+	if (dmgState == BODY_RUBBLE)
+	{
+		const std::int8_t tplRubble = tt ? tt->structureRubbleHeight() : 0; // RW 0x8C4D7D: movsx byte [tt + 0x607]
+		const float rubbleHeight = tplRubble > 0 ? static_cast<float>(tplRubble) : logic.settings().defaultStructureRubbleHeight; // RW 0x8C4D8B..0x8C4DA2
+		self->setGeometryMaxHeight(rubbleHeight);                                        // RW 0x8C4DAE -> 0x68B2CB
+		self->setStatus((unsigned)CombatNames::statuses().noCollisions, true);           // RW 0x8C4DB3..0x8C4DBA -> 0x62684D(4, 1)
+	}
+	else
+	{
+		const float maxH = tt ? ObjectGeometry::maxHeightAbovePosition(ObjectGeometry::cachedShapesOf(*tt->getFinalOverride())) : 0.0f;            // RW 0x8C4D63 -> 0xAD1920
+		self->setGeometryMaxHeight(maxH);                                                // RW 0x8C4D6E -> 0x68B2CB
+		self->setStatus((unsigned)CombatNames::statuses().noCollisions, false);          // RW 0x8C4D73..0x8C4DBA -> 0x62684D(4, 0)
+	}
+	if (AIWorld *world = logic.aiWorld(); world && world->mapReady())
+	{
+		world->removeObjectFromPathfindMap(*self); // RW 0x8C4DCA -> 0x6E85FB
+		world->addObjectToPathfindMap(*self);      // RW 0x8C4DDA -> 0x6E85E9
+	}
+}
+
+// RW 0x008C4F2D
 float SymbioticStructuresBody::getHealth() const
 {
 	BodyModuleInterface *b = symbioteBody();
 	return b ? b->getHealth() : 0.0f;
 }
+// RW 0x008C4EA4 (body vslot +0x14)
+float SymbioticStructuresBody::getHealthPercent() const
+{
+	BodyModuleInterface *b = symbioteBody();
+	return b ? b->getHealthPercent() : 0.0f;
+}
+// RW 0x008C4F84 (body vslot +0x70)
+float SymbioticStructuresBody::getPreviousHealth() const
+{
+	BodyModuleInterface *b = symbioteBody();
+	return b ? b->getPreviousHealth() : 0.0f;
+}
+// RW 0x008C51EE
 float SymbioticStructuresBody::getMaxHealth() const
 {
 	BodyModuleInterface *b = symbioteBody();
 	return b ? b->getMaxHealth() : 0.0f;
 }
+// RW 0x008C521F
 float SymbioticStructuresBody::getInitialHealth() const
 {
 	BodyModuleInterface *b = symbioteBody();
 	return b ? b->getInitialHealth() : 0.0f;
 }
+// RW 0x008C4FF9 (RW 0x008C5017: push 3; pop eax -> BODY_RUBBLE when unlinked)
 BodyDamageType SymbioticStructuresBody::getDamageState() const
 {
 	BodyModuleInterface *b = symbioteBody();
-	return b ? b->getDamageState() : BODY_PRISTINE;
+	return b ? b->getDamageState() : BODY_RUBBLE;
 }
-void SymbioticStructuresBody::attemptDamage(DamageInfo &) {} // RW slot 0 is a `ret 4` stub: the symbiotic object itself takes no damage
+void SymbioticStructuresBody::attemptDamage(DamageInfo &) {} // RW slot 0 (0x009F3A3C) is a `ret 4` stub: the symbiotic object itself takes no damage
+// RW 0x008C4F62
 void SymbioticStructuresBody::attemptHealing(DamageInfo &info)
 {
 	if (BodyModuleInterface *b = symbioteBody())
@@ -720,12 +849,49 @@ void SymbioticStructuresBody::attemptHealing(DamageInfo &info)
 		b->attemptHealing(info);
 	}
 }
+// RW 0x008C51BC
 float SymbioticStructuresBody::estimateDamage(const DamageInfoInput &input) const
 {
 	BodyModuleInterface *b = symbioteBody();
 	return b ? b->estimateDamage(input) : 0.0f;
 }
-// RW body vslots 0x40 / 0x44 forward to the resolved symbiote (RW 0x8C4FD7 / 0x8C5100).
+// RW 0x008C52DB (body vslot +0x8C)
+bool SymbioticStructuresBody::isIndestructible() const
+{
+	BodyModuleInterface *b = symbioteBody();
+	return b ? b->isIndestructible() : false;
+}
+// RW 0x008C5250 (body vslot +0x90)
+float SymbioticStructuresBody::getDodgePercent() const
+{
+	BodyModuleInterface *b = symbioteBody();
+	return b ? b->getDodgePercent() : 0.0f;
+}
+// RW 0x008C505F (body vslot +0x74)
+std::string SymbioticStructuresBody::getGrabObjectName() const
+{
+	BodyModuleInterface *b = symbioteBody();
+	return b ? b->getGrabObjectName() : std::string();
+}
+// RW 0x008C4FB5 (body vslot +0x78)
+const std::string *SymbioticStructuresBody::getGrabFXName() const
+{
+	BodyModuleInterface *b = symbioteBody();
+	return b ? b->getGrabFXName() : nullptr;
+}
+// RW 0x008C5284 (body vslot +0x7C)
+float SymbioticStructuresBody::getGrabDamage() const
+{
+	BodyModuleInterface *b = symbioteBody();
+	return b ? b->getGrabDamage() : 0.0f;
+}
+// RW 0x008C5146 (body vslot +0x80)
+Coord2D SymbioticStructuresBody::getGrabOffset() const
+{
+	BodyModuleInterface *b = symbioteBody();
+	return b ? b->getGrabOffset() : Coord2D{};
+}
+// RW body vslots 0x40 / 0x44 forward to the resolved symbiote (RW 0x8C4FD7 / 0x008C5100).
 bool SymbioticStructuresBody::lastDamageRecordType(int &type) const
 {
 	BodyModuleInterface *b = symbioteBody();
@@ -736,10 +902,88 @@ bool SymbioticStructuresBody::lastDamageRecordNoEffect(bool &noEffect) const
 	BodyModuleInterface *b = symbioteBody();
 	return b && b->lastDamageRecordNoEffect(noEffect);
 }
+// RW 0x008C5100 (body vslot +0x44)
 UnsignedInt SymbioticStructuresBody::lastDamageFrame() const
 {
 	BodyModuleInterface *b = symbioteBody();
 	return b ? b->lastDamageFrame() : 0xFFFFFFFFu;
+}
+// RW 0x008C5123 (body vslot +0x48)
+UnsignedInt SymbioticStructuresBody::getLastHealingFrame() const
+{
+	BodyModuleInterface *b = symbioteBody();
+	return b ? b->getLastHealingFrame() : 0xFFFFFFFFu;
+}
+// RW 0x008C519A (body vslot +0x4C)
+ObjectID SymbioticStructuresBody::takeLastAttacker()
+{
+	BodyModuleInterface *b = symbioteBody();
+	return b ? b->takeLastAttacker() : INVALID_ID;
+}
+// RW 0x008C501C (body vslot +0x3C)
+std::uint32_t SymbioticStructuresBody::getArmorSetFlags() const
+{
+	BodyModuleInterface *b = symbioteBody();
+	return b ? b->getArmorSetFlags() : 0u;
+}
+// RW 0x008C53AF (body vslot +0xA0): applies symbiote's damage state model conditions to this object (RW 0x6903B6)
+void SymbioticStructuresBody::onSymbioteDamageStateChanged(BodyDamageType newState)
+{
+	Object *self = getObject();
+	if (!self)
+	{
+		return;
+	}
+	Object::ModelConditionBits clear{}, set{};
+	const int damaged = CombatNames::modelCondition("DAMAGED");
+	const int really = CombatNames::modelCondition("REALLYDAMAGED");
+	const int rubble = CombatNames::modelCondition("RUBBLE");
+	for (int bit : { damaged, really, rubble })
+	{
+		clear[(size_t)bit >> 5] |= 1u << (bit & 31);
+	}
+	const int on = newState == BODY_DAMAGED ? damaged : newState == BODY_REALLYDAMAGED ? really : newState == BODY_RUBBLE ? rubble : -1;
+	if (on >= 0)
+	{
+		set[(size_t)on >> 5] |= 1u << (on & 31);
+	}
+	self->clearAndSetModelConditionFlags(clear, set); // RW 0x8C53BF -> 0x6903B6
+}
+// RW 0x008C53D0 (body vslot +0xA4): syncs from symbiote (RW 0x008C4CF4); at full health clears DAMAGED/REALLYDAMAGED/RUBBLE
+// (0x43..0x45) and UNDER_CONSTRUCTION (2) / RECONSTRUCTING (0x15); when playHealFx is true plays HealingBuffFx (+0x48).
+void SymbioticStructuresBody::onSymbioteHealthChanged(float, bool playHealFx)
+{
+	syncFromSymbiote(); // RW 0x8C53E7 -> 0x008C4CF4
+	Object *self = getObject();
+	if (!self)
+	{
+		return;
+	}
+	if (getHealth() == getMaxHealth()) // RW 0x8C53EC .. 0x8C540A
+	{
+		Object::ModelConditionBits clear{}, emptySet{};
+		const int damaged = CombatNames::modelCondition("DAMAGED");       // 0x43
+		const int really = CombatNames::modelCondition("REALLYDAMAGED");  // 0x44
+		const int rubble = CombatNames::modelCondition("RUBBLE");         // 0x45
+		for (int bit : { damaged, really, rubble })
+		{
+			clear[(size_t)bit >> 5] |= 1u << (bit & 31);
+		}
+		self->clearAndSetModelConditionFlags(clear, emptySet); // RW 0x8C5421 -> 0x5E3B79
+		static const int kUnderConstruction = CombatNames::statuses().underConstruction; // 2
+		static const int kReconstructing = CombatNames::status("RECONSTRUCTING");        // 0x15
+		self->setStatus((unsigned)kUnderConstruction, false); // RW 0x8C542C -> 0x62684D(2, 0)
+		self->setStatus((unsigned)kReconstructing, false);    // RW 0x8C5437 -> 0x62684D(0x15, 0)
+	}
+	if (playHealFx && m_symbioticData) // RW 0x8C543C .. 0x8C5455
+	{
+		GameLogic &logic = self->logic();
+		const std::string &fx = m_symbioticData->m_healingBuffFxSet ? m_symbioticData->m_healingBuffFx : logic.settings().defaultUnitHealingBuffFxList;
+		if (FXEventLog::isFXName(fx))
+		{
+			logic.fxEvents().emit(FXEventLog::objectEvent(FXEvent::OBJECT_FX, "HealingBuffFx", logic.getFrame(), fx, *self)); // RW 0x4B1B5A
+		}
+	}
 }
 void SymbioticStructuresBody::crc(StateHasher &h) const
 {
@@ -1030,6 +1274,7 @@ void RubbleRiseUpdate::crc(StateHasher &h) const
 }
 
 // ---- lane SAVE-4b: the snapshots (OpenBFME native, S-4190: each class's fields in its crc's order) ---------------------------------------------------
+// RW 0x008C4BB2
 void StructureBody::xfer(Xfer &x)
 {
 	SnapshotXfer::version(x, 1, 1);
@@ -1037,6 +1282,7 @@ void StructureBody::xfer(Xfer &x)
 	x.xferObjectID(&m_constructorObjectID);
 }
 
+// RW 0x008C1AEA (primary slot 3 +0x0C): version (1, 1), BodyModule::xfer (RW 0x00993419), m_dieCalled (+0x18)
 void InactiveBody::xfer(Xfer &x)
 {
 	SnapshotXfer::version(x, 1, 1);
@@ -1044,6 +1290,7 @@ void InactiveBody::xfer(Xfer &x)
 	x.xferBool(&m_dieCalled);
 }
 
+// RW 0x008A8110 (UpdateModule::xfer + version 1 + fields +0x24..+0x40; OpenBFME native snapshot order, S-4190)
 void StructureCollapseUpdate::xfer(Xfer &x)
 {
 	SnapshotXfer::version(x, 1, 1);
@@ -1075,6 +1322,7 @@ void RespawnBody::xfer(Xfer &x)
 	ActiveBody::xfer(x);
 }
 
+// RW 0x008C5976 (OpenBFME native snapshot order, S-4190)
 void DelayedDeathBody::xfer(Xfer &x)
 {
 	SnapshotXfer::version(x, 1, 1);
@@ -1083,6 +1331,7 @@ void DelayedDeathBody::xfer(Xfer &x)
 	x.xferBool(&m_checked);
 }
 
+// RW 0x008C4C07
 void SymbioticStructuresBody::xfer(Xfer &x)
 {
 	SnapshotXfer::version(x, 1, 1);
@@ -1090,10 +1339,17 @@ void SymbioticStructuresBody::xfer(Xfer &x)
 	x.xferObjectID(&m_symbioteId);
 }
 
+// RW 0x007A7E88 (LifetimeUpdate::xfer): UpdateModule::xfer (RW 0x850C60), skipped on CRC (0x7A7E9C), then version (1, 2),
+// m_dieFrame (+0x20), m_startFrame (+0x24), and for version >= 2 m_waitingForWakeUp (+0x28, RW 0x7A7ECC..0x7A7EDA).
 void LifetimeUpdate::xfer(Xfer &x)
 {
-	SnapshotXfer::version(x, 1, 1);
+	XferVersion v{ 1, 2 };
+	x.xferVersion(v);
 	xferUpdateModule(x);
 	x.xferUnsignedInt(&m_dieFrame);
 	x.xferUnsignedInt(&m_startFrame);
+	if (v.current >= 2)
+	{
+		x.xferBool(&m_waitingForWakeUp);
+	}
 }

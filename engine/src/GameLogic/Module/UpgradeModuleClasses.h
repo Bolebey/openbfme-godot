@@ -57,6 +57,7 @@ public:
 	static void buildFieldParse(MultiIniFieldParse &p);
 };
 
+// RW 0x008B8A81 (getModuleName), RW 0x008B8A87 (getModuleNameKey), RW 0x008B8B1F / RW 0x008B8A61 (dtor)
 class StatusBitsUpgrade : public UpgradeModule
 {
 public:
@@ -81,6 +82,7 @@ public:
 	static void buildFieldParse(MultiIniFieldParse &p);
 };
 
+// RW 0x008BA577 (getModuleName), RW 0x008BA57D (getModuleNameKey), RW 0x008BA64C / RW 0x008BA557 (dtor)
 class ModelConditionUpgrade : public UpgradeModule
 {
 public:
@@ -104,6 +106,7 @@ public:
 	static void buildFieldParse(MultiIniFieldParse &p);
 };
 
+// RW 0x008B7586 (getModuleName), RW 0x008B758C (getModuleNameKey), RW 0x008B7602 / RW 0x008B7566 (dtor)
 class ArmorUpgrade : public UpgradeModule
 {
 public:
@@ -128,6 +131,7 @@ public:
 	static void buildFieldParse(MultiIniFieldParse &p);
 };
 
+// RW 0x008B9838 (getModuleName), RW 0x008B983E (getModuleNameKey), RW 0x008B98D6 / RW 0x008B9818 (dtor)
 class WeaponSetUpgrade : public UpgradeModule
 {
 public:
@@ -150,6 +154,7 @@ public:
 	static void buildFieldParse(MultiIniFieldParse &p);
 };
 
+// RW 0x008B7B85 (getModuleName), RW 0x008B7BB4 (getModuleNameKey), RW 0x008B7C4C / RW 0x008B7B65 (dtor)
 class CommandSetUpgrade : public UpgradeModule
 {
 public:
@@ -182,6 +187,7 @@ public:
 	static void buildFieldParse(MultiIniFieldParse &p);
 };
 
+// RW 0x008B8D42 (getModuleName), RW 0x008B8D48 (getModuleNameKey), RW 0x008B8DE0 / RW 0x008B8D22 (dtor)
 class DoCommandUpgrade : public UpgradeModule
 {
 public:
@@ -257,6 +263,7 @@ public:
 	static void buildFieldParse(MultiIniFieldParse &p);
 };
 
+// RW 0x008BC03F (getModuleName), RW 0x008BC05B (getModuleNameKey), RW 0x008BC0F3 / RW 0x008BC01F (dtor)
 class RemoveUpgradeUpgrade : public UpgradeModule
 {
 public:
@@ -300,6 +307,32 @@ private:
 	unsigned m_appliedFrame = 0; ///< the logic frame + 1 of the last implementation; 0: never applied
 };
 
+// PYSAGE 1.9.8.7 .wmfeat 0xF3A000 .. 0xF3A1E6 (ennorath.portrait-upgrade, hooks RW 0x65A93F, 0x694F06, 0x92D052):
+// PortraitUpgrade changes an object's portrait (Portrait, +0x138) and/or button icon (ButtonImage, +0x13C) when upgraded
+// without changing the hero form. First active PortraitUpgrade with a non-empty field wins (matching .wmfeat 0xF3A153).
+class PortraitUpgradeModuleData : public UpgradeModuleData
+{
+public:
+	std::string m_portrait;    // + 0x138 (Portrait, RW 0x42EE5E)
+	std::string m_buttonImage; // + 0x13C (ButtonImage, RW 0x42EE5E)
+	static void buildFieldParse(MultiIniFieldParse &p);
+};
+
+class PortraitUpgrade : public UpgradeModule
+{
+public:
+	OBFME_MODULE_XFER(PortraitUpgrade)
+	PortraitUpgrade(Thing *thing, const PortraitUpgradeModuleData *data) : UpgradeModule(thing, data), m_data(data) {}
+	static std::string imageOf(const Object &obj, bool portrait);
+
+protected:
+	void upgradeImplementation() override;
+	void processUpgradeRemoval() override {}
+
+private:
+	const PortraitUpgradeModuleData *m_data;
+};
+
 // GrantUpgradeCreate (create RW 0x6508A3, table RW 0xC70158): UpgradeToGrant (+8, a name looked up when it is granted: RW 0x66F5E5, an unknown name grants
 // nothing), ExemptStatus (+0xC, RW 0x7B1E5C, empty by default), GiveOnBuildComplete (+0x1C). onCreate RW 0x8BD15E: without GiveOnBuildComplete, when
 // ExemptStatus holds UNDER_CONSTRUCTION and the object is not under construction, the upgrade is granted; onBuildComplete RW 0x8BD1D4: once (the create
@@ -314,6 +347,7 @@ public:
 	static void buildFieldParse(MultiIniFieldParse &p);
 };
 
+// RW 0x008BD0CD (getModuleName), RW 0x008BD0EC (getModuleNameKey), RW 0x008BD142 (scalar deleting dtor -> RW 0x008BD0D3)
 class GrantUpgradeCreate : public BehaviorModule, public CreateModuleInterface
 {
 public:

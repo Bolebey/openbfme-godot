@@ -7,7 +7,9 @@ Columns:
   fields_total     Ennorath INI fields in the last field audit (tools/mod/field_audit.py)
   fields_open      fields with work left: parsed-unused, not-read, stub-block, missing-module, parsed-only-module, no-table-row, less the
                    fields proven unread in RotWK (from 2026-11-17: fields_proven_unread)
-  modules_missing  docs/ennorath/MODULE_GAPS.md rows with state `missing`
+  modules_missing  module classes the mod's data uses that the engine does not port (`missing`) in the maps run's live table
+                   module-queue.tsv next to --audit (tools/colab/nightly_maps.sh, from 2026-11-22); without it the old hand snapshot
+                   docs/ennorath/MODULE_GAPS.md (2026-10-30, stale: its 10 "missing" classes were all ported by 2026-11-22)
   problems_total   docs/ennorath/PROBLEMS.md entries (### P-N)
   problems_done    entries whose status line is checked ([x])
   stops_open       docs/STOPS.md rows not `closed` (tools/stops_count.py)
@@ -23,6 +25,8 @@ Columns:
   funcs_total      distinct RotWK functions of the module (class) map, docs/ennorath/RW_FUNCTION_MAP.tsv (tools/mod/rw_function_map.py:
                    every module the mod's INI uses and what its functions call; from 2026-11-19, owner: the bar must count the class map)
   funcs_open       of those, functions with no `ported` row (none or partial): the home page's share
+  mods_total       RotWK's reads of the mod's attribute modifiers (docs/ennorath/MODIFIER_READERS.tsv, tools/mod/modifier_map.py; from 2026-11-19)
+  mods_open        of those, reads the port does not have (status not `ported` / `ported-via-call`): the home page's share
   gaps_specific    distinct RotWK functions the failing buttons' main classes lack (docs/ennorath/MATRIX_GAPS.tsv, `main class` rows,
                    `specific none`): the work the matrix still points at. Both empty in rows before 2026-11-16 and when a file is missing
 
@@ -50,7 +54,7 @@ import stops_count  # noqa: E402
 OUT = REPO / "docs" / "ennorath" / "PROGRESS.tsv"
 COLUMNS = ["date", "rev", "fields_total", "fields_open", "modules_missing", "problems_total", "problems_done", "stops_open", "audit",
            "buttons_red", "gaps_specific", "stops_new", "stops_closed", "buttons_total", "fields_proven_unread", "scripts_total", "scripts_open",
-           "funcs_total", "funcs_open"]
+           "funcs_total", "funcs_open", "mods_total", "mods_open"]
 GREEN = {"PASS", "STANCE", "DISABLED", "INVENTORY", "TEMPORARY", "MEMBER", "MOD-DATA", "NO-TARGET", "BY-DESIGN", "ORDER", "NO-AURA"}  # by design, or fine when swept alone (matrix review 2026-11-17)
 # not red, but not judged either (owner 2026-11-18): the faction table counts them in a column of their own, not with the idle ones (tools/matrix_run.py)
 UNVERIFIED = {"MOD-DATA", "NO-TARGET", "ORDER", "NO-AURA"}
@@ -114,6 +118,15 @@ def audit_counts(tsv: Path, stops_text: str = "") -> tuple[int, int, int]:
     open_rows = [r for r in rows if r["status"] in OPEN_STATUSES]
     proven = sum(1 for r in open_rows if proven_unread(r["field"], re.findall(r"S-\d+\b", r.get("stop") or ""), stops))
     return len(rows), len(open_rows) - proven, proven
+
+
+def modules_missing(audit: Path | None, gaps_md: str) -> int:
+    """Module classes the mod uses and the engine lacks: the live module-queue.tsv beside the audit, else the 2026-10-30 snapshot."""
+    queue = audit.parent / "module-queue.tsv" if audit else None
+    if queue and queue.exists():
+        rows = list(csv.DictReader(queue.read_text(encoding="utf-8").splitlines(), delimiter="\t"))
+        return sum(1 for r in rows if r.get("status") == "missing")
+    return sum(1 for l in gaps_md.splitlines() if "| missing |" in l)
 
 
 def matrix_counts(rev: str | None) -> tuple[str, str]:
@@ -226,9 +239,23 @@ def func_counts(rev: str | None) -> tuple[str, str]:
     except (OSError, subprocess.CalledProcessError):
         return "", ""
     status: dict[str, bool] = {}
-    for r in csv.DictReader(text.splitlines(), delimiter="	"):
+    for r in csv.DictReader(text.splitlines(), delimiter="\t"):
+        if r["status"] == "library":
+            continue  # code the port replaces wholesale (tools/mod/rw_library_functions.tsv, owner 2026-11-21): neither total nor open
         status[r["function"]] = status.get(r["function"], False) or r["status"] == "ported"
     return (str(len(status)), str(sum(1 for v in status.values() if not v))) if status else ("", "")
+
+
+def mod_counts(rev: str | None) -> tuple[str, str]:
+    """mods_total / mods_open from MODIFIER_READERS.tsv; empty when missing."""
+    try:
+        text = read("docs/ennorath/MODIFIER_READERS.tsv", rev)
+    except (OSError, subprocess.CalledProcessError):
+        return "", ""
+    rows = list(csv.DictReader(text.splitlines(), delimiter="\t"))
+    if not rows:
+        return "", ""
+    return str(len(rows)), str(sum(1 for r in rows if r.get("status") not in ("ported", "ported-via-call")))
 
 
 def load() -> list[dict[str, str]]:
@@ -258,7 +285,7 @@ def main() -> int:
         return 0
     rev = a.rev or subprocess.run(["git", "-C", str(REPO), "rev-parse", "--short=8", "HEAD"], capture_output=True, text=True).stdout.strip()
     total, done = problems(read("docs/ennorath/PROBLEMS.md", a.rev))
-    missing = sum(1 for l in read("docs/ennorath/MODULE_GAPS.md", a.rev).splitlines() if "| missing |" in l)
+    missing = modules_missing(a.audit, read("docs/ennorath/MODULE_GAPS.md", a.rev))
     stops = stops_count.open_count(read("docs/STOPS.md", a.rev))
     if a.audit:
         ftotal, fopen, fproven = audit_counts(a.audit, read("docs/STOPS.md", a.rev))
@@ -278,6 +305,7 @@ def main() -> int:
     row["buttons_total"] = matrix_total(a.rev)
     row["scripts_total"], row["scripts_open"] = script_counts(a.rev)
     row["funcs_total"], row["funcs_open"] = func_counts(a.rev)
+    row["mods_total"], row["mods_open"] = mod_counts(a.rev)
     earlier = [r for r in rows if r["date"] < a.date]
     row["stops_new"], row["stops_closed"] = stop_delta(earlier[-1]["rev"] if earlier else None, a.rev)
     if not a.write:

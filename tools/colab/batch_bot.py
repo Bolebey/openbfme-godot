@@ -113,6 +113,15 @@ def gh(*args: str) -> str:
 _ENV: dict | None = None
 
 
+def no_issue_env() -> dict:
+    """agent_env without a branch issue: a batch holds the stops of many issues, so tools/fragments.py check must not take the station
+    agent's `git config openbfme.issue` (or $OPENBFME_ISSUE) for the batch's (batch 2026-11-21f died on it: S-7429 of #515 refused for #810)."""
+    env = {k: v for k, v in agent_env().items() if k != "OPENBFME_ISSUE"}
+    n = int(env.get("GIT_CONFIG_COUNT") or 0)
+    env.update({"GIT_CONFIG_COUNT": str(n + 1), f"GIT_CONFIG_KEY_{n}": "openbfme.issue", f"GIT_CONFIG_VALUE_{n}": ""})
+    return env
+
+
 def agent_env() -> dict:
     global _ENV
     if _ENV is None:
@@ -275,6 +284,8 @@ def ensure_tree() -> None:
     if not (WT / ".git").exists():
         sh(["git", "worktree", "prune"], cwd=REPO)
         sh(["git", "worktree", "add", "--detach", str(WT), BASE], cwd=REPO, check=True)
+    # docs/STOPS.md merges by stop id (tools/stops_merge.py, .gitattributes merge=stops; owner 2026-11-19): a conflict left after it is real
+    sh(["git", "config", "merge.stops.driver", "python3 tools/stops_merge.py %O %A %B"], cwd=REPO)
 
 
 def pr_files(n: int) -> list[str]:
@@ -361,6 +372,9 @@ def resolve(n: int, pending: list[tuple[int, str]]) -> list[str]:
         elif m:  # add/add of the same stop id: the earlier PR keeps it, this PR's fragment is renumbered after the merge commit
             pending.append((int(m.group(1)), sh(["git", "show", f":3:{f}"]).stdout))
             git("checkout", "-q", "--ours", "--", f)
+        elif f == "docs/STOPS.md":  # tools/stops_merge.py (the merge driver) already merged it by stop id: what is left is a real conflict
+            left.append(f)
+            continue
         elif f in UNION or (f.startswith("engine/cmake/") and f.endswith(".cmake")):
             parts = [sh(["git", "show", f":{k}:{f}"]).stdout for k in (2, 1, 3)]
             tmp = [WT.parent / f".batch-merge{k}" for k in range(3)]
@@ -438,7 +452,7 @@ def merge_batch(name: str, prs: list[dict], out: list[int]) -> tuple[list[dict],
             moved = True
     if moved:
         git(*AUTHOR, "commit", "-q", "--no-verify", "-m", f"Batch {name}: stops renumbered whose id main already has")
-    check = sh([sys.executable, "tools/fragments.py", "check"])
+    check = sh([sys.executable, "tools/fragments.py", "check"], env=no_issue_env())
     if check.returncode:
         raise RuntimeError(f"fragments still broken after the merges:\n{check.stdout}")
     return merged, conflicted, renumbered
@@ -701,7 +715,7 @@ def report(name: str, out_dir: Path, rows: dict) -> Path:
 LOOP_STATE = Path(os.environ.get("BATCH_LOOP_STATE", str(RUNS / "loop.json")))
 OLD_LOOP_STATE = Path("/content/sandbox/batch-loop.json")
 # Owner 2026-11-19: "если на 2 песочнице нету готовых пр на сборку 30 мин то включался проверяльщик как на 1 песочнице" — after HELP_AFTER_S
-# with no green PR and no batch, a loop round runs one PR checker cycle (pr_checker.py --once --no-helper); claims on the Drive keep the
+# with no batch (since 2026-11-20 also while green PRs wait for the third), a loop round runs one PR checker cycle (pr_checker.py --once --no-helper); claims on the Drive keep the
 # two checkers off the same PR (pr_checker.py claim_check), the batch claims keep the two batchers off the same PRs (claimed above).
 HELP_AFTER_S = 30 * 60
 INSTALL = Path("/content/sandbox")
@@ -760,8 +774,10 @@ def stack_base(last: str | None, pending: bool, waited_s: float) -> tuple[str | 
 
 
 def helper_due(st: dict, now: float) -> bool:
-    """No green PR and no batch for HELP_AFTER_S: time to check a PR instead (the round marks ready_at whenever it sees a green PR)."""
-    return now - max(st.get("finished", 0), st.get("ready_at", 0)) >= HELP_AFTER_S   # shared state: a restart does not reset the wait
+    """No batch for HELP_AFTER_S: time to check a PR instead. Owner 2026-11-20: also while one or two green PRs wait for the third (the old
+    rule counted from the last green PR seen, so with 1-2 green PRs waiting the bot stood idle for hours); a round that starts a batch runs it
+    first, so the help only fills the rounds that would wait anyway, and it brings the third green PR sooner."""
+    return now - st.get("finished", 0) >= HELP_AFTER_S   # shared state: a restart does not reset the wait
 
 
 def install(name: str) -> Path:
@@ -793,11 +809,49 @@ def load_loop_state() -> dict:
     return {}
 
 
+def dead_claims(sandbox: str) -> list[Path]:
+    """This sandbox's claims whose run died with the runtime: no report, no batch branch (called only while no run goes here). Colab
+    restarts every runtime about daily; 2026-11-21e and 21h died mid-run and held their PRs for CLAIM_HOURS."""
+    dead = []
+    for f in sorted(RUNS.glob("*/claim.json")) if RUNS.exists() else []:
+        try:
+            d = json.loads(f.read_text())
+        except (OSError, ValueError):
+            continue
+        if d.get("sandbox") != sandbox or (f.parent / "report.md").exists():
+            continue
+        if sh(["git", "rev-parse", "-q", "--verify", f"refs/remotes/origin/batch/{f.parent.name}"], cwd=REPO).returncode == 0:
+            continue
+        dead.append(f)
+    return dead
+
+
+def release_dead_claims(a) -> list[str]:
+    sandbox = Path("/content/sandbox_id").read_text().strip() if Path("/content/sandbox_id").exists() else "?"
+    done = []
+    for f in dead_claims(sandbox):
+        name = f.parent.name
+        (f.parent / "report.md").write_text(f"# Партия {name}: оборвалась\n\nРантайм песочницы {sandbox} перезапустился посреди партии; "
+                                            "её PR вернулись в очередь.\n", encoding="utf-8")
+        for n in json.loads(f.read_text()).get("prs") or []:
+            if not getattr(a, "no_comment", False):
+                try:
+                    p = json.loads(gh("pr", "view", str(n), "--json", "number,headRefOid"))
+                    gh("pr", "comment", str(n), "--body", left_comment(name, p, "партия оборвалась (перезапуск песочницы), не из-за этого PR: снова ждёт партии"))
+                except Exception:  # the PR may be closed meanwhile: the report alone frees the claim
+                    pass
+        done.append(name)
+    return done
+
+
 def loop_round(a, st: dict) -> str:
     """One round; returns the line for the log."""
     sh(["git", "fetch", "-q", "--prune", "origin"], cwd=REPO)
     if run_going():
         return "a batch run is going: waiting"
+    freed = release_dead_claims(a)
+    if freed:
+        return f"released the claims of batches that died with the runtime: {', '.join(freed)}"
     last = st.get("green")
     base, wait_s = stack_base(last, bool(last) and unlanded(last), time.time() - st.get("finished", 0))
     if base is None:
@@ -866,7 +920,7 @@ def cmd_loop(a) -> int:
         if a.once:
             return 0
         if not a.no_helper and not run_going() and helper_due(st, time.time()):
-            say(f"{HELP_AFTER_S // 60} мин без зелёных PR и партий: один цикл проверщика PR (pr_checker.py --once)")
+            say(f"{HELP_AFTER_S // 60} мин без новой партии: один цикл проверщика PR (pr_checker.py --once)")
             rc = help_check()
             say(f"цикл проверщика закончен (код {rc}); дальше партии")
             continue

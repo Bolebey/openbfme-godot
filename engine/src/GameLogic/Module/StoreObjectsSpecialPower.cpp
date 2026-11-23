@@ -8,6 +8,7 @@
 #include "GameLogic/GameLogic.h"
 #include "GameLogic/Object/Object.h"
 #include "GameLogic/Object/PartitionManager.h"
+#include "GameLogic/ObjectFilter.h"
 #include "GameLogic/ObjectFilterMatch.h"
 #include "GameLogic/ObjectTemplateInfo.h"
 #include "GameLogic/SnapshotXfer.h"
@@ -27,6 +28,7 @@ void StoreObjectsSpecialPowerModuleData::buildFieldParse(MultiIniFieldParse &p) 
     p.add(kFields);
 }
 
+// RW 0x008D1EA7
 void StoreObjectsSpecialPower::triggerAbilityEffect() {
     SpecialAbilityUpdate::triggerAbilityEffect();
     Object *source = getObject();
@@ -35,18 +37,15 @@ void StoreObjectsSpecialPower::triggerAbilityEffect() {
     const SpecialPowerModule *power = mySpecialPowerModule();
     const SpecialPowerTemplate *powerTemplate = power ? power->getSpecialPowerTemplate() : nullptr;
     if (!powerTemplate) throw std::logic_error("StoreObjectsSpecialPower: special power module or template is missing");
-    if (!powerTemplate->m_objectFilter) {
-        logic.noteStop("[S-523] StoreObjectsSpecialPower: the special power's default ObjectFilter is unverified");
-        return;
-    }
-    const ObjectFilter &allowed = *powerTemplate->m_objectFilter;
+    // S-523 (closed, issue #555): an unset filter is RW's default — rule NONE, both masks empty (RW 0x763D11 over the all-zero KindOf mask RW 0xDE49E4): it allows nothing, so the search below finds nothing, as in retail
+    const ObjectFilter &allowed = specialPowerFilterOrDefault(powerTemplate->m_objectFilter.get());
     const int horde = ObjectTemplateInfoBuilder::kindOfIndex("HORDE");
     if (horde < 0) throw std::logic_error("StoreObjectsSpecialPower: HORDE kind is unavailable");
     PartitionFilterFn filter([&](Object &candidate) {
         return &candidate != source && !candidate.isEffectivelyDead()
             && !candidate.testStatus(38)
+            && candidate.isOffMap() == source->isOffMap() // RW 0x008D1F4C: PartitionFilterSameMapStatus (vtable RW 0x00C0F374, slot +4 RW 0x00660E93: Object +0x458 bit 3)
             && ObjectFilterMatch::allows(logic, allowed, candidate, source->getControllingPlayer());
-        // RW 0xC0F374: same off-map bit; the port has no off-map objects (S-856).
     });
     const auto hits = logic.partition().iterateObjectsInRange(m_targetPos, m_store->radius,
         FROM_CENTER_2D, { &filter }, ITER_SORTED_NEAR_TO_FAR);

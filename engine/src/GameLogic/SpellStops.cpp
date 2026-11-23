@@ -11,8 +11,6 @@ std::vector<std::string> SpellStops::lines()
 		"[S-521] intrinsic sciences: PlayerTemplate IntrinsicSciences / IntrinsicSciencesMP are kept as names by the PlayerTemplate parser (S-145) and resolved when a player's "
 		"sciences reset (RW 0x6AED4B); an unknown name is a runtime error at the game start instead of retail's INI error (RW 0x73B4A0 at parse time)",
 		"[S-522] SpecialPower without a store: RW 0x7B212F reads TheSpecialPowerStore without a null test; the port throws INIException(3, \"TheSpecialPowerStore==NULL\")",
-		"[S-523] SpecialPower ObjectFilter / ForbiddenObjectFilter defaults: the constructor (RW 0x7B1F5B) builds them with RW 0x763D11 from the KindOf mask global RW 0xDE49E4, "
-		"not identified; an unset filter is null here and a parsed one starts from the parser's default",
 		"[S-524] PlayerSkillPointsScalarTable: the ExperienceScalarTable store (RW 0xDE4704, block RW 0x689920) is not ported; RW 0x782AA4 scales a player's skill points by it only "
 		"while GameLogic + 0x114 != 3, which no skirmish reaches (S-525)",
 		"[S-525] GameLogic + 0x114 is taken as 3 in every skirmish (constructor RW 0x6301D3; the other writers RW 0x7790EA, 0x779CB4, 0x779D23, 0x779F20 and 0x82BC22, found by "
@@ -45,7 +43,7 @@ std::vector<std::string> SpellStops::lines()
 		"[S-530] ObjectCreationList: the block (RW 0x5F0462) and its five nugget tables parse; CreateObject, ApplyRandomForce, FireWeapon, Attack, "
 		"SkipIfSignificantlyAirborne, OffsetInLocalSpace, WaypointSpawnPoints, InvulnerableTime, and OCL::create(primary, secondary) run (PORT-237); "
 		"not run (counted, noted once each as '[S-530] ObjectCreationList: not run: ...'): CreateDebris, PutInContainer, ClearRemovables, TREE / SHRUB / "
-		"OPTIMIZED_PROP templates, MoveUsesStrafeUpdate, the FloatUpdate / FadeAndDieOrnamentUpdate / SpawnedModelConditionCreate dispositions; OCLSpecialPower "
+		"OPTIMIZED_PROP templates, MoveUsesStrafeUpdate, the FloatUpdate / SpawnedModelConditionCreate dispositions; OCLSpecialPower "
 		"runs CREATE_AT_LOCATION, USE_OWNER_OBJECT, CREATE_ABOVE_LOCATION, USE_SECONDARY_OBJECT_LOCATION (with secondary position) and UpgradeName; "
 		"the map edge cases (0, 1, 2, 6) and the army spawn points (7) are counted",
 		"[S-531] casting: the ActionManager test (RW 0x82DFB7) keeps only the module / percent-ready / requirements parts (unit cost, range, terrain, shroud and forbidden objects "

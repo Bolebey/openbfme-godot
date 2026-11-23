@@ -10,6 +10,7 @@
 #include "Common/Audio/AudioRequests.h"
 #include "GameLogic/Combat/CombatLineOfSight.h"
 #include "GameLogic/AI/AIWorld.h"
+#include "GameLogic/AttributeModifiers.h"
 #include "GameLogic/SnapshotXfer.h"
 #include "GameLogic/Module/GiantBirdAIUpdate.h"
 #include "GameLogic/Module/EmotionModules.h"
@@ -18,6 +19,8 @@
 #include "GameLogic/Object/Contain/OpenContainRuntime.h"
 
 #include "Common/GameCommon.h"
+#include "Common/ModEngineFeatures.h"
+#include "GameLogic/ExperienceWorld.h"
 #include "Common/INIException.h"
 #include "Common/LightPointSystem.h"
 #include "Common/Player.h"
@@ -657,7 +660,7 @@ bool SpecialAbilityUpdate::allowsSpecialPowerUse(const Coord3D *loc) const
 		getObject()->logic().noteStop("[S-1043] SpecialAbilityUpdate: the grab enums' room test (RW 0x851BA2) of a contain that is not an OpenContain is not ported; the power is refused");
 		return false;
 	}
-	return (int)c->getContainCount() < open->getContainMax();
+	return c->getContainCount() < static_cast<unsigned>(open->getContainMax()); // RW 0x851BC4..0x851BC6: cmp edi, eax; jb
 }
 
 // RW 0x851551
@@ -1498,7 +1501,11 @@ void SpecialAbilityUpdate::triggerAbilityEffect()
 	{
 		if (Player *p = obj->getControllingPlayer())
 		{
-			p->science().addSkillPoints((float)skill, false); // RW 0x782AA4(points, 0)
+			// PYSAGE 1.9.8.7 .wmfeat 0xF3A3F7 (hook RW 0x853FA0): caster with CANT_EARN_POWERPOINTS earns no power points
+			if (!ExperienceWorld::cantEarnPowerPoints(obj))
+			{
+				p->science().addSkillPoints((float)skill, false); // RW 0x782AA4(points, 0)
+			}
 		}
 	}
 	// PORT-113 (issue #280), RW 0x853FA5 .. 0x853FCB: with TheLightPointSystem (RW 0xDE8C04; retail always has one) and an owner, the owner pays the
@@ -1935,13 +1942,20 @@ void SpecialAbilityUpdate::startPacking(bool success)
 	}
 	if (success && t)
 	{
-		const int type = t->getFinalOverride()->m_type; // RW 0x85365C / 0x85366A -> 0x688D3C, + 0x1C
+		const SpecialPowerTemplate *fo = t->getFinalOverride(); // RW 0x85365C / 0x85366A / 0x8536A8 -> 0x688D3C
+		const int type = fo->m_type; // + 0x1C
 		if (type == 0x1A || type == 0x1D)
 		{
 			// RW 0x853661 .. 0x85368D: SPECIAL_BLACKLOTUS_CAPTURE_BUILDING (0x1A) / SPECIAL_INFANTRY_CAPTURE_BUILDING (0x1D) -> 0x7DD (VoiceCaptureBuildingComplete)
 			AudioApi::postUnitVoice(0x7DD, obj->getID(), t);
 		}
-		// RW 0x853679 (0x7DE VoiceTaskComplete on other powers) and RW 0x8536BD (EvaEventToPlayOnSuccess) remain outside Port 86
+		// RW 0x853679 (0x7DE VoiceTaskComplete on other powers) remains outside Port 86
+		// RW 0x853468 (0x853692 .. 0x8536BD): Local 139 (fork issue 856) — if controlling player is local player, report SpecialPowerTemplate::m_evaEventToPlayOnSuccess (+0x44)
+		const Player *owner = obj->getControllingPlayer();
+		if (owner && owner == obj->logic().players().getLocalPlayer() && !fo->m_evaEventToPlayOnSuccess.empty())
+		{
+			AudioApi::reportEva(fo->m_evaEventToPlayOnSuccess, obj->getPosition()); // RW 0x8536BD -> 0x5DD9EE
+		}
 	}
 }
 
@@ -2198,7 +2212,13 @@ public:
 	GameLogicRandom &logicRandom() override { return m_obj.logic().random(); }
 	std::uint32_t weaponBonusConditionMask() override { return m_obj.weaponBonusConditionMask(); }
 	const WeaponBonusSet *globalWeaponBonusSet() override { return m_obj.logic().settings().globalWeaponBonusSet.get(); }
-	float rateOfFireAttributeProduct() override { return 1.0f; }
+	// RW 0x6CEF6D (Weapon::privateFireWeapon) -> RW 0x6CF042: source->getAttributeModifierProduct(0x15, &factor, nullptr, true) (RW 0x68C82D).
+	float rateOfFireAttributeProduct() override
+	{
+		float rof = 1.0f;
+		m_obj.attributeModifierProduct(ATTRIBUTE_RATE_OF_FIRE, nullptr, true, rof);
+		return rof;
+	}
 	bool containedAmmo(const ObjectFilter &, unsigned &count) override
 	{
 		count = 0;
@@ -2251,7 +2271,7 @@ ObjectWeapons *WeaponFireSpecialAbilityUpdate::weaponHost()
 	return m_ownHost.get();
 }
 
-// RW 0x895BFB (DONOR BFME2 0x0049256B): deletes m_weapon (+0x88) via Weapon::~Weapon (RW 0x6CDB57 -> 0x6CD0BE, destroying any ProjectileStreamName object)
+// RW 0x895BFB (scalar deleting dtor RW 0x00895E44 -> 0x895BFB + operator delete RW 0x42F6A0; DONOR BFME2 0x0049256B): deletes m_weapon (+0x88) via Weapon::~Weapon (RW 0x6CDB57 -> 0x6CD0BE, destroying any ProjectileStreamName object)
 WeaponFireSpecialAbilityUpdate::~WeaponFireSpecialAbilityUpdate()
 {
 	if (m_weapon && getObject())
@@ -2273,6 +2293,67 @@ int WeaponFireSpecialAbilityUpdate::specialWeaponCondition() const
 	case 6: return 590;
 	default: return -1;
 	}
+}
+
+// RW 0x896156 (special-power interface slot +0x20): the minimum applies to every point,
+// the maximum only to IMMOBILE casters. Object-target requirements pass a null point.
+bool WeaponFireSpecialAbilityUpdate::allowsSpecialPowerUse(const Coord3D *loc) const
+{
+	if (!m_weapon)
+	{
+		return false;
+	}
+	if (loc)
+	{
+		Object *owner = getObject();
+		if (!owner)
+		{
+			return false;
+		}
+		const WeaponTemplate &weapon = *m_weapon->getTemplate();
+		const float edge2 = CircleDistanceSquaredToPoint(*owner->getPosition(), CombatQueries::boundingCircleRadius(*owner), *loc);
+		const float min = WeaponTemplateMinimumRange(weapon);
+		if (SimMath::pc24MulW(min, min) > edge2)
+		{
+			return false;
+		}
+		static const int immobile = CombatNames::kindOf("IMMOBILE");
+		if (owner->isKindOf(immobile))
+		{
+			const float max = SimMath::pc24Sub(ObjectWeapons::abilityWeaponRange(weapon, *owner), 2.5f);
+			if (edge2 > SimMath::pc24MulW(max, max))
+			{
+				return false;
+			}
+		}
+	}
+	return SpecialAbilityUpdate::allowsSpecialPowerUse(loc);
+}
+
+// RW 0x896370: during unpacking track a live object target at the current locomotor's
+// turn rate, before the base advances the packing state. Not a new AI face order.
+UpdateSleepTime WeaponFireSpecialAbilityUpdate::update()
+{
+	if (m_packingState == 2)
+	{
+		Object *victim = target();
+		AIUpdateInterface *ai = getObject()->getAIUpdateInterface();
+		Locomotor *loco = ai ? ai->curLocomotor() : nullptr;
+		if (victim && loco)
+		{
+			const Coord3D pos = *victim->getPosition();
+			LocomotorHost &host = ai->locomotorHost();
+			loco->rotateTowardsWrapper(host, pos, nullptr);
+			host.setTransform(loco->matrix());
+		}
+	}
+	return SpecialAbilityUpdate::update();
+}
+
+// RW 0x895C6B: this override always packs through the success branch.
+void WeaponFireSpecialAbilityUpdate::startPacking(bool)
+{
+	SpecialAbilityUpdate::startPacking(true);
 }
 
 // RW 0x895E60
@@ -2311,19 +2392,22 @@ void WeaponFireSpecialAbilityUpdate::triggerAbilityEffect()
 {
 	Object *obj = getObject();
 	ObjectWeapons *weapons = m_weapon ? weaponHost() : obj->getWeapons();
-	// RW 0x896210: the FiringTracker's RW 0x8E302A(1) (the object's + 0x248) is COMBAT-1's: not called here
+	ObjectWeapons *tracked = obj->getWeapons(); // only the actual owner set has the FiringTrackerHelper
+	if (tracked)
+	{
+		tracked->resetFiringTracker(true); // RW 0x8961F7: before suppression and readiness
+	}
 	if (!(isHorde(*obj) && m_data->m_suppressForHordes))
 	{
 		Object *victim = target();
 		if (victim && isHorde(*victim))
 		{
 			// RW 0x896263: a horde target is shot through one of its members (HordeContain vslot 0x110)
-			if (ContainModuleInterface *c = victim->getContain())
+			if (auto *hc = dynamic_cast<HordeContain *>(victim->getContain()))
 			{
-				const ContainModuleInterface::ContainedItemsList *items = c->getContainedItemsList();
-				if (items && !items->empty())
+				if (Object *member = hc->firstMember()) // RW 0x87055D includes members entering a garrison
 				{
-					victim = items->front();
+					victim = member;
 				}
 			}
 		}
@@ -2334,10 +2418,13 @@ void WeaponFireSpecialAbilityUpdate::triggerAbilityEffect()
 			{
 				const Coord3D at = (isZero(m_targetPos) || m_wf->m_needLivingTargets) ? *obj->getPosition() : m_targetPos;
 				weapons->fireExtraWeaponAt(*m_weapon, at); // RW 0x6CF3D2
+				if (tracked) tracked->trackAbilityShot(*m_weapon, INVALID_ID, at);
 			}
 			else
 			{
+				const ObjectID id = victim->getID(); // capture before delivery can kill the victim
 				weapons->fireExtraWeapon(*m_weapon, *victim); // RW 0x6CF328
+				if (tracked) tracked->trackAbilityShot(*m_weapon, id, {});
 			}
 			++m_shots;
 			obj->setStatus(kStatusIgnoreAI, true); // RW 0x6907BD(now + BusyForDuration): IGNORE_AI_COMMAND and its expiry (Object + 0x448)
@@ -2382,10 +2469,7 @@ void toggleMount(Object &obj, AIUpdateInterface &ai, bool cancelDisguiseWhenDism
 	{
 		setCondition(obj, kMcMounted, true);           // Object + 0x124 bit 22
 		ai.chooseLocomotorSet(kLocomotorSetMounted);   // AI vslot 0x238(7)
-		if (weapons)
-		{
-			weapons->setWeaponSetFlag(kWeaponSetMounted, true); // RW 0x691059(0x15)
-		}
+		obj.setWeaponSetFlag(kWeaponSetMounted, true); // RW 0x691059(0x15) on the OBJECT
 		obj.setArmorSetFlag(kArmorSetMounted, true);   // RW 0x68BE59(6)
 		return;
 	}
@@ -2398,10 +2482,7 @@ void toggleMount(Object &obj, AIUpdateInterface &ai, bool cancelDisguiseWhenDism
 	}
 	setCondition(obj, kMcMounted, false);
 	ai.chooseLocomotorSet(0);
-	if (weapons)
-	{
-		weapons->setWeaponSetFlag(kWeaponSetMounted, false); // RW 0x691106(0x15)
-	}
+	obj.setWeaponSetFlag(kWeaponSetMounted, false); // RW 0x691106(0x15) on the OBJECT
 	obj.setArmorSetFlag(kArmorSetMounted, false);  // RW 0x68BE6B(6)
 	if (cancelDisguiseWhenDismounting && obj.testModelCondition(300))
 	{
@@ -2475,11 +2556,21 @@ Object *replaceWithTemplate(Object &old, const std::string &mountedTemplate, con
 }
 
 // RW 0x8B1FDA (lane SUMMON-1): an object whose current locomotor (AI + 0x1F0, RW 0x68B31D) has a max speed of 0 for its condition (RW 0x5E3F49) refuses the
-// initiate (no IGNORE_AI_COMMAND either); an object without AI or locomotor does not
+// initiate (no IGNORE_AI_COMMAND either); an object without AI or locomotor does not.
+// PYSAGE 1.9.8.7 .wmfeat 0xF3A940 (hook RW 0x8B1FFE in RW 0x8B1FDA / RW 0x8B1FF7, ennorath.toggle-mounted-zero-speed): when curLocomotorSpeed == 0,
+// also checks AI + 0x1F8 (locomotorSetSpeed); if the LocomotorSet's own Speed is 0, allow the toggle.
 bool mountInitiateRefused(const Object &obj)
 {
 	const AIUpdateInterface *ai = obj.getAIUpdateInterface();
-	return ai && ai->curLocomotor() && ai->curLocomotorSpeed() == 0.0f;
+	if (!ai || !ai->curLocomotor() || ai->curLocomotorSpeed() != 0.0f)
+	{
+		return false;
+	}
+	if (ModEngineFeatures::has(ModEngineFeature::EnnorathToggleMountedZeroSpeed) && ai->locomotorSetSpeed() == 0.0f)
+	{
+		return false;
+	}
+	return true;
 }
 
 // WhichSpecialPower (RW 0x89455B / 0x8945C1 / 0x8B208A: 0 USER_... at Object + 0x134 bit 10, 1 .. 3 SPECIAL_POWER_1 .. 3 at + 0x124 bits 19 .. 21)
@@ -2703,10 +2794,7 @@ void HeroModeSpecialAbilityUpdate::triggerAbilityEffect()
 void HeroModeSpecialAbilityUpdate::onEffectExpired()
 {
 	m_effectExpiry = 0;
-	if (ObjectWeapons *w = getObject()->getWeapons())
-	{
-		w->setWeaponSetFlag(kWeaponSetHeroMode, false); // RW 0x691106(0x1B)
-	}
+	getObject()->setWeaponSetFlag(kWeaponSetHeroMode, false); // RW 0x691106(0x1B) on the OBJECT
 }
 
 // RW 0x8958BD
@@ -2718,7 +2806,7 @@ void HeroModeSpecialAbilityUpdate::startUnpacking()
 		// RW 0x8958CA: RW 0x691014(0x1B) asks the template for a weapon set with WEAPONSET_HERO_MODE (RW 0x73F6B9) before setting the flag
 		if (w->hasWeaponSetFor(kWeaponSetHeroMode))
 		{
-			w->setWeaponSetFlag(kWeaponSetHeroMode, true);
+			getObject()->setWeaponSetFlag(kWeaponSetHeroMode, true);
 		}
 	}
 	m_effectExpiry = now() + m_hm->m_heroEffectFrames;
@@ -3126,10 +3214,7 @@ void SpecialDisguiseUpdate::applyLook(bool ownLook)
 		{
 			ai->chooseLocomotorSet(kLocomotorSetMounted); // AI vslot 0x238(7)
 		}
-		if (ObjectWeapons *weapons = obj->getWeapons())
-		{
-			weapons->setWeaponSetFlag(kWeaponSetMounted, true); // RW 0x691059(0x15)
-		}
+		obj->setWeaponSetFlag(kWeaponSetMounted, true); // RW 0x691059(0x15) on the OBJECT
 		obj->setArmorSetFlag(kArmorSetMounted, true); // RW 0x68BE59(6)
 	}
 	const ThingTemplate *disguise = m_sd->m_disguiseAsTemplate.empty() ? nullptr : obj->logic().things().findTemplate(m_sd->m_disguiseAsTemplate);
@@ -3227,6 +3312,7 @@ SpecialPowerUpdateInterface *SpecialAbilityModules::findUpdate(const Object &obj
 void SpecialAbilityModules::registerAll(ModuleFactory &modules)
 {
 	bindRuntime<SpecialAbilityUpdate, SpecialAbilityUpdateModuleData>(modules, "SpecialAbilityUpdate");
+	// getModuleClassName RW 0x00895C65 (returns 0xC0B420), getModuleNameKey RW 0x00895D15 (NameKeyGenerator RW 0x5487EC)
 	bindRuntime<WeaponFireSpecialAbilityUpdate, WeaponFireSpecialAbilityUpdateModuleData>(modules, "WeaponFireSpecialAbilityUpdate");
 	bindRuntime<ToggleMountedSpecialAbilityUpdate, ToggleMountedSpecialAbilityUpdateModuleData>(modules, "ToggleMountedSpecialAbilityUpdate");
 	bindRuntime<HeroModeSpecialAbilityUpdate, HeroModeSpecialAbilityUpdateModuleData>(modules, "HeroModeSpecialAbilityUpdate");
@@ -3300,6 +3386,7 @@ std::vector<std::string> SpecialAbilityModules::hero2StopLines()
 // Retail SpecialAbilityUpdate::xfer is RW 0x00852782 (versions 1..3: fields +0x74, +0x3C, +0x28, +0x40, +0x44, +0x5C, +0x24, +0x2C, +0x64 list, +0x68,
 // +0x7D, +0x30, +0x7E..+0x81, +0x70, +0x82..+0x83, +0x7C, +0x34/+0x38 sound handles, v2 +0x78/+0x50, v3 +0x60). The port transfers its fields in
 // declaration order, then the crc counters.
+// RW 0x00851E38 (SpecialAbilityUpdate::getModuleNameKey)
 void SpecialAbilityUpdate::xfer(Xfer &x)
 {
 	// lane PORT-93: version 2 adds whether the ActiveLoopSound's handle is held (RW 0x8528C8 / 0x8528DB transfer the two handles; here the audio side keeps
@@ -3374,17 +3461,29 @@ void WeaponFireSpecialAbilityUpdate::xfer(Xfer &x)
 	x.xferUnsignedInt(&m_shots);
 }
 
+// RW 0x008B1054 (slot 3): version window (1, 2), delegates to SpecialAbilityUpdate::xfer (RW 0x00852782), then
+// when version >= 2 transfers m_replaceAfterPacking (+0x8C, RW 0x008B107A .. 0x008B108B).
+// Also cited here: getModuleName RW 0x008B104E ("ToggleMountedSpecialAbilityUpdate"), getModuleNameKey RW 0x008B1097,
+// deleting dtor RW 0x008B1126 -> ~ToggleMountedSpecialAbilityUpdate RW 0x008B1024 -> ~SpecialAbilityUpdate RW 0x00854D9A.
 void ToggleMountedSpecialAbilityUpdate::xfer(Xfer &x)
 {
-	SnapshotXfer::version(x, 1, 1);
+	XferVersion v{ 1, 2 };
+	x.xferVersion(v);
 	SpecialAbilityUpdate::xfer(x);
-	x.xferBool(&m_replaceAfterPacking);
+	if (v.current >= 2)
+	{
+		x.xferBool(&m_replaceAfterPacking);
+	}
+	else if (x.isLoading())
+	{
+		m_replaceAfterPacking = false;
+	}
 	x.xferUnsignedInt(&m_toggles);
 	x.xferObjectID(&m_replacement);
 }
 
 // RW 0x008C6E67 (slot 3): version 1, delegates to SpecialAbilityUpdate::xfer (RW 0x00852782).
-// Deleting dtor RW 0x008958A1 -> 0x0089583C chains to ~SpecialAbilityUpdate (RW 0x00854D9A).
+// RW 0x0089585C (getModuleNameKey); deleting dtor RW 0x008958A1 -> 0x0089583C chains to ~SpecialAbilityUpdate (RW 0x00854D9A).
 void HeroModeSpecialAbilityUpdate::xfer(Xfer &x)
 {
 	SnapshotXfer::version(x, 1, 1);
@@ -3399,7 +3498,7 @@ void LevelGrantSpecialPower::xfer(Xfer &x)
 }
 
 // RW 0x008C6E67 (slot 3): version 1, delegates to SpecialAbilityUpdate::xfer (RW 0x00852782).
-// Deleting dtor RW 0x0089453F -> 0x00894402 chains to ~SpecialAbilityUpdate (RW 0x00854D9A).
+// RW 0x00894422 (getModuleNameKey); deleting dtor RW 0x0089453F -> 0x00894402 chains to ~SpecialAbilityUpdate (RW 0x00854D9A).
 void ModelConditionSpecialAbilityUpdate::xfer(Xfer &x)
 {
 	SnapshotXfer::version(x, 1, 1);
@@ -3407,6 +3506,7 @@ void ModelConditionSpecialAbilityUpdate::xfer(Xfer &x)
 	x.xferUnsignedInt(&m_emotions);
 }
 
+// RW 0x008B1EE7 (slot 3): version 1, SpecialAbilityUpdate::xfer (RW 0x00852782), m_replaceAfterPacking (+0x8C).
 void SummonReplacementSpecialAbilityUpdate::xfer(Xfer &x)
 {
 	SnapshotXfer::version(x, 1, 1); // lane SUMMON-1
@@ -3417,6 +3517,7 @@ void SummonReplacementSpecialAbilityUpdate::xfer(Xfer &x)
 	x.xferUnsignedInt(&m_emotions);
 }
 
+// RW 0x008B4301 (slot 3): UpdateModule::xfer (RW 0x00850C60), version 2, m_isDisguised (+0x90, kept on Object status here), m_opacity (+0x8C), SpecialAbilityUpdate::xfer (RW 0x00852782).
 void SpecialDisguiseUpdate::xfer(Xfer &x)
 {
 	SnapshotXfer::version(x, 1, 1);

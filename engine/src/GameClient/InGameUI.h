@@ -23,6 +23,7 @@
 
 class CommandButton;
 class GameLogic;
+class ThingTemplate;
 class FormationAssistant;
 class MessageStream;
 struct HudContext;
@@ -97,6 +98,8 @@ public:
 	void setTargetFlashHandler(std::function<void(ObjectID)> handler) { m_targetFlashHandler = std::move(handler); }
 	void flashSpecialPowerTarget(ObjectID id) { if (m_targetFlashHandler) m_targetFlashHandler(id); }
 	int selectMatching(HudContext &ctx, bool acrossMap);
+	// PYSAGE 1.9.8.5 .padsel 0xEDE094 / 0xEDE128: STRUCTURE + BASE_FOUNDATION + EXPANSION_PAD templates match if equivalent or share '<Prefix>ExpansionPad' before 'Side'/'Corner'.
+	static bool isSameExpansionPad(GameLogic &logic, const ThingTemplate *a, const ThingTemplate *b);
 
 	// ---- the GUI command (ZH setGUICommand / getGUICommand: the command button waiting for a target) ----
 	const CommandButton *getGUICommand() const { return m_guiCommand; }
@@ -127,7 +130,7 @@ public:
 	// the steps of the last disable edge / DISABLE_INPUT in the order they ran (HudInput keeps the vector); the tests pin retail's order with it
 	void setStepLog(std::vector<std::string> *log) { m_stepLog = log; }
 	// lane OWNERFIX-1: a map script's DISABLE_INPUT (enable false) / ENABLE_INPUT (true). ScriptActions DISABLE_INPUT (RW 0x7BC586, BFME2 decomp
-	// ScriptActionsRva003BBAD3.cpp, tier A), in retail's order: setInputEnabled(false) (RW 0x69B5DA: the edge above), Mouse::setVisibility(false) (RW 0x5EDD0F),
+	// ScriptActions.cpp, tier A), in retail's order: setInputEnabled(false) (RW 0x69B5DA: the edge above), Mouse::setVisibility(false) (RW 0x5EDD0F),
 	// MSG_DESTROY_SELECTED_GROUP (true) appended to the stream (0x3EC, TheMessageStream vslot 0x48), vslot 0x110 deselectAllDrawables (RW 0x69C817, posts
 	// nothing itself), the waypoint mode off (+ 0x8B0 = 0), then the control bar's help provider reset (RW 0x8076CD: InGameHud::scriptInput) and the LookAt
 	// translator's flags (RW 0x83AB5D: InGameHud::scriptInput). ENABLE_INPUT (RW 0x7BC5E9): setInputEnabled(true), setVisibility(true)

@@ -28,10 +28,9 @@
 // PORT-280 (fork issue 647): SetBonusModelConditionOnSpeedBonus (data + 0x41 -> UPGRADE_ECONOMY_BONUS bit 332 when Player::getProductionTimeChange(BonusForType)
 // < 0, RW 0x8A1C30 .. 0x8A1C77) and SpeedBonusAudioLoop (data + 0x48, handle module + 0x12C: RW 0x8A1C7C .. 0x8A1D4F starts when bonus < 0 and the producer is
 // neither effectively dead nor UNDER_CONSTRUCTION, else removes; dtor RW 0x8A198B / RW 0x8A1B36 removes at RW 0x8A19FF; xfer RW 0x8A3111 transfers at RW 0x8A35A6).
-// NOT PORTED (stop S-203): audio (voices), the EVA messages, the entry name /
-// script naming (RW +0x40), the BuildFadeInOnCreateList extra objects' drawables, SecondaryQueue selection of the
-// dispatcher is ported but hero queues are not. Entry + 0x3C horde target: the setter (slot 14, RW 0x8A03A0) is ported (LOCAL-23); its reader
-// (the made unit joining that horde) is not ported and was not located in RW (Ennorath's EvilPort has no DestinationTemplate, so it never queues).
+// PORT-231 (#554): script naming of produced objects (RW 0x8A253B / 0x8A2624) and horde join of entry + 0x3C (RW 0x8A2A67 -> 0x8A171F -> 0x8A07E0).
+// NOT PORTED (stop S-203): audio (voices), the EVA messages, the BuildFadeInOnCreateList extra objects' drawables, SecondaryQueue selection of the
+// dispatcher is ported but hero queues are not, the pending template name set (RW +0x130) and the score keeper.
 
 #pragma once
 
@@ -63,7 +62,7 @@ enum ProductionType
 
 typedef std::uint32_t ProductionID;
 
-// RW 0x8A08D3
+// RW 0x8A08D3 (scalar deleting dtor RW 0x008A3084)
 struct ProductionEntry
 {
 	ProductionType type = PRODUCTION_INVALID;
@@ -143,12 +142,15 @@ public:
 	// RW 0x697403 / 0x697800, read at RW 0x79402B); the port passes it as this argument. Retail (every other caller) passes false
 	virtual bool queueCreateUnit(const ThingTemplate *unitType, int buildIndex, ProductionID productionID, int value30, bool batch, const std::string &name, bool flag44,
 								 bool ignoreCommandPoints) = 0;
+	virtual bool isUnitInQueue(ProductionID productionID) const = 0;     // slot 9, RW 0x008A03C1
 	virtual void cancelUnitCreate(ProductionID productionID) = 0;        // slot 10, RW 0x8A13EE
+	virtual void cancelUnitCreateByTemplate(const ThingTemplate *unitType, bool immediate) = 0; // slot 13, RW 0x008A30A0
 	virtual void setEntryHordeTarget(ProductionID productionID, ObjectID hordeTarget) = 0; // slot 14, RW 0x8A03A0 (DONOR BFME2 0x0049CC15)
 	virtual void cancelUnitCreateByType(const ThingTemplate *type, bool all) = 0; // slot 5, RW 0x8A0428
 	virtual int countUnitTypeInQueue(const ThingTemplate *type) const = 0; // slot 7, RW 0x8A056C (type 1 entries only)
 	virtual bool isSecondaryQueue() const = 0;                           // slot 30, RW 0x8A06E2
 	virtual int getProductionCount() const = 0;                          // slot 17
+	virtual int countValue30InQueue(int value30) const = 0;              // slot 19, RW 0x008A0625
 	virtual const ProductionEntry *firstProduction() const = 0;          // slot 21
 	virtual const ProductionEntry *nextProduction(const ProductionEntry *e) const = 0; // slot 22
 	virtual void setHoldDoorOpen(int door, bool hold) = 0;               // slot 23, RW 0x8A0D8A
@@ -193,12 +195,15 @@ public:
 	using ProductionUpdateInterface::queueCreateUnit;
 	bool queueCreateUnit(const ThingTemplate *unitType, int buildIndex, ProductionID productionID, int value30, bool batch, const std::string &name, bool flag44,
 						 bool ignoreCommandPoints) override;
+	bool isUnitInQueue(ProductionID productionID) const override;
 	void cancelUnitCreate(ProductionID productionID) override;
+	void cancelUnitCreateByTemplate(const ThingTemplate *unitType, bool immediate) override;
 	void setEntryHordeTarget(ProductionID productionID, ObjectID hordeTarget) override; // slot 14, RW 0x8A03A0
 	void cancelUnitCreateByType(const ThingTemplate *type, bool all) override;
 	int countUnitTypeInQueue(const ThingTemplate *type) const override;
 	bool isSecondaryQueue() const override { return m_data->m_secondaryQueue; }
-	int getProductionCount() const override { return (int)m_queue.size(); }
+	int getProductionCount() const override { return (int)m_queue.size(); } // slot 17, RW 0x009F9F37
+	int countValue30InQueue(int value30) const override; // slot 19, RW 0x008A0625
 	const ProductionEntry *firstProduction() const override { return m_queue.empty() ? nullptr : m_queue.front().get(); }
 	const ProductionEntry *nextProduction(const ProductionEntry *e) const override; // RW 0x8A1904
 	void setHoldDoorOpen(int door, bool hold) override;
@@ -268,4 +273,5 @@ private:
 	unsigned m_heroCountdown = 0;                          ///< RW +0x128 (lane HERO-1: frames between two revives, RW 0x8A2C1E)
 	std::uint32_t m_speedBonusAudioKey;                    ///< PORT-280: audio-side holder key for SpeedBonusAudioLoop (retail handle RW + 0x12C)
 	bool m_speedBonusAudioHeld = false;                    ///< PORT-280: retail + 0x12C != 1 (saved in xfer RW 0x8A35A6, not hashed)
+	std::vector<std::string> m_pendingCancelTemplates;     ///< RW +0x130 (slot 13 RW 0x008A30A0, drained by RW 0x008A1B52)
 };

@@ -11,6 +11,7 @@
 #include "GameClient/ModelConditionAudioLoopClientBehavior.h"
 #include "GameClient/RenderInterpolation.h"
 #include "GameClient/StealthLook.h"
+#include "GameClient/SwayClientUpdate.h"
 #include "GameLogic/ObjectTemplateInfo.h"
 #include "GameEngineDevice/W3DDevice/GameClient/Drawable/Draw/W3DTreeDraw.h"
 #include "GameEngineDevice/W3DDevice/GameClient/Drawable/Draw/W3DModelDrawVariants.h"
@@ -213,6 +214,8 @@ void Drawable::addEntry(DrawServices &services, const ThingTemplate::Nugget &nug
 				// Drawable::showModule (RW 0x6789B4); the template answers which tags exist (the drawable makes every draw module of its template, S-114)
 				o.hasModule = [this](const std::string &tag) { return ClientEventRecorder::templateHasDrawModuleTag(*m_template, tag); };
 				o.setModuleVisible = [this](const std::string &tag, bool visible) { scriptModuleVisible(tag, visible); };
+				// LOCAL-106: Drawable::getShouldAnimate (RW 0x00675655), called from W3DScriptedModelDraw::doDrawModule (RW 0x004BF615)
+				o.shouldAnimate = [this](bool animationsRequirePower) { return getShouldAnimate(animationsRequirePower); };
 				if (const W3DHordeModelDrawModuleData *hd = dynamic_cast<const W3DHordeModelDrawModuleData *>(nugget.data.get()))
 				{
 					e.draw.reset(new W3DHordeModelDraw(*hd, 2, services.drawAssets, services.random, &services.host, o)); // LOD HIGH (S-114)
@@ -883,6 +886,8 @@ void Drawable::syncFromSnapshot(const ObjectSnapshot &rec, UnsignedInt snapshotF
 	updateConstruction(rec, snapshotFrame, alpha); // RENDER-2 (DrawableConstruction.cpp)
 	updatePhantomLook(rec);                        // lane FBSIM-1
 	m_moveSpeed = rec.moveSpeed;                   // lane SMOOTH-3: the walk / run cycle's speed source (RW 0x4B67D4)
+	m_disabledMask = rec.disabledMask;             // LOCAL-106: RW 0x00675670 (Object +0x1C8)
+	m_scriptStatus = rec.scriptStatus;             // LOCAL-106: RW 0x00675667 (Object +0x457)
 	m_scriptTarget = rec.scriptTarget;             // lane FX-3
 	m_effectivelyDead = rec.effectivelyDead;       // PORT-267: the floor gate RW 0x4CEBEC..0x4CEBFD
 	applyPhysicsXform(rec, p);                     // LOCAL-25: presentation physics
@@ -924,9 +929,42 @@ void Drawable::prepareSync(const ObjectSnapshot &rec, UnsignedInt snapshotFrame,
 	updateConstruction(rec, snapshotFrame, alpha); // RENDER-2 (DrawableConstruction.cpp)
 	updatePhantomLook(rec);                        // lane FBSIM-1
 	m_moveSpeed = rec.moveSpeed;                   // lane SMOOTH-3: the walk / run cycle's speed source (RW 0x4B67D4)
+	m_disabledMask = rec.disabledMask;             // LOCAL-106: RW 0x00675670 (Object +0x1C8)
+	m_scriptStatus = rec.scriptStatus;             // LOCAL-106: RW 0x00675667 (Object +0x457)
 	m_scriptTarget = rec.scriptTarget;             // lane FX-3
 	// LOCAL-25: no presentation physics here: this runs on the job pool, and the step draws the shared client random (the ordered pass of
 	// DrawableManager makes it)
+}
+
+// LOCAL-106: Drawable::getShouldAnimate (RW 0x00675655; called from W3DScriptedModelDraw::doDrawModule RW 0x004BF615).
+// RotWK 2.01 only (BFME2 1.06 0x004BFDFE has no call to getShouldAnimate).
+bool Drawable::getShouldAnimate(bool animationsRequirePower) const
+{
+	if (m_objectId == INVALID_ID)
+	{
+		return true; // RW 0x00675655..0x0067565E: no object bound -> animate
+	}
+	if (animationsRequirePower && (m_scriptStatus & 0x02u) != 0)
+	{
+		return false; // RW 0x00675660..0x0067566E: Object +0x457 bit 1 (OBJECT_STATUS_SCRIPT_UNPOWERED)
+	}
+	if (m_disabledMask == DISABLEDMASK_NONE)
+	{
+		return true; // RW 0x00675670..0x0067567F: call 0x009325B4 (BitFlags::any)
+	}
+	if ((m_disabledMask & (1u << DISABLED_USER_FROZEN)) != 0)
+	{
+		return false; // RW 0x00675681..0x00675686: test ah, 8 (bit 11 = 0x800)
+	}
+	if ((m_disabledMask & ((1u << DISABLED_EMP) | (1u << DISABLED_UNMANNED))) != 0)
+	{
+		return false; // RW 0x00675688..0x0067568A: test al, 0x24 (bits 2 | 5)
+	}
+	if (animationsRequirePower && (m_disabledMask & (1u << DISABLED_UNDERPOWERED)) != 0)
+	{
+		return false; // RW 0x0067568C..0x00675695: test al, 0x40 (bit 6)
+	}
+	return true; // RW 0x0067569B
 }
 
 void Drawable::updatePhantomLook(const ObjectSnapshot &rec)
@@ -1721,6 +1759,29 @@ bool Drawable::entryTransform(const DrawEntry &e, Matrix3D &outMatrix) const
 		pos.z += basis[8] * k;
 	}
 	const float scale = getInstanceScale();
+	if (m_hasInstanceMatrix)
+	{
+		Matrix3D world;
+		for (int r = 0; r < 3; ++r)
+		{
+			for (int c = 0; c < 3; ++c)
+			{
+				world.Row[r][c] = basis[r * 3 + c];
+			}
+		}
+		world.Row[0][3] = pos.x;
+		world.Row[1][3] = pos.y;
+		world.Row[2][3] = pos.z;
+		Matrix3D::Multiply(world, m_instanceMatrix, &outMatrix);
+		for (int r = 0; r < 3; ++r)
+		{
+			for (int c = 0; c < 3; ++c)
+			{
+				outMatrix.Row[r][c] *= scale;
+			}
+		}
+		return false;
+	}
 	for (int r = 0; r < 3; ++r)
 	{
 		for (int c = 0; c < 3; ++c)
@@ -1732,6 +1793,29 @@ bool Drawable::entryTransform(const DrawEntry &e, Matrix3D &outMatrix) const
 	outMatrix.Row[1][3] = pos.y;
 	outMatrix.Row[2][3] = pos.z;
 	return false;
+}
+
+void Drawable::setInstanceMatrix(const Matrix3D &xfrm)
+{
+	m_instanceMatrix = xfrm;
+	m_hasInstanceMatrix = true;
+}
+
+float Drawable::getZRotation() const
+{
+	const float *b = getBasis();
+	return std::atan2(b[3], b[0]);
+}
+
+void Drawable::updateSway(const W3DVegetationSway::Breeze &breeze, bool visible, bool burnedOrDead)
+{
+	for (const auto &m : m_clientModules)
+	{
+		if (auto *sway = dynamic_cast<SwayClientUpdate *>(m.get()))
+		{
+			sway->clientUpdate(breeze, m_services.random, visible, burnedOrDead);
+		}
+	}
 }
 
 // ------------------------------------------------------------------------------------------------

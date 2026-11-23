@@ -9,6 +9,7 @@
 #include "GameClient/BeaconClientUpdate.h"
 #include "GameClient/EvaAnnounceClientCreate.h"
 #include "GameClient/RadarMarkerClientUpdate.h"
+#include "GameClient/SwayClientUpdate.h"
 #include "GameClient/LaserUpdate.h"
 #include "GameClient/ClientBehaviorModules.h"
 #include "GameClient/ModelConditionAudioLoopClientBehavior.h"
@@ -244,14 +245,16 @@ void AnimationSoundClientBehavior::computeRange(AudioManager *audio)
 	m_rangeSq = range * range;
 }
 
+// AnimationSoundClientBehavior: getModuleName RW 0x008CE22F, getModuleNameKey RW 0x008CE309, ~AnimationSoundClientBehavior RW 0x008CE1DF.
 AnimationSoundClientBehavior::~AnimationSoundClientBehavior()
 {
 	if (m_manager)
 	{
-		m_manager->remove(this); // RW 0x8CE20C
+		m_manager->remove(this); // RW 0x008CE1DF / RW 0x8CE20C
 	}
 }
 
+// RW 0x008CE235 (marks module dirty on AnimationSoundManager RW 0x83F159)
 void AnimationSoundClientBehavior::reactToTransformChange(const Coord3D *, float)
 {
 	if (m_manager)
@@ -708,6 +711,7 @@ void ClientBehaviorModules::registerAll(ModuleFactory &modules)
 	BeaconClientUpdate::registerClass(modules);                    // lane CHAT-1: the multiplayer beacon's minimap pulse
 	TerrainResourceClientBehavior::registerClass(modules);         // both editions: RW 0x6549B1 / BFME2 0x654C56, the resource building's selection feedback (S-5030)
 	RadarMarkerClientUpdate::registerClass(modules);               // both editions: RW 0x65287A / BFME2 0x652B1F, radar ping/marker (S-2451)
+	SwayClientUpdate::registerClass(modules);                      // LOCAL-103: RW 0x008CD514 / 0x008CD51A / 0x008CD55F / 0x008CD675 / 0x008CD93F / 0x008CD9CD
 	LaserUpdate::registerClass(modules);                           // both editions: RW 0x64D1FB / BFME2 0x64D56A, laser beam update (issue #284, S-7218)
 	W3DTornadoDraw::registerClass(modules);                 // both editions: RW 0x00464930, BFME2 0x0046513A
 	W3DProjectileStreamDraw::registerClass(modules);        // both editions: RW 0x004648A7, BFME2 0x00465063

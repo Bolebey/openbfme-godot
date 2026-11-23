@@ -67,6 +67,7 @@ public:
 	static void buildFieldParse(MultiIniFieldParse &p);
 };
 
+// RW 0x008B9ED8 (dtor -> RW 0x0086393B)
 class SpellRechargeModifierUpgrade : public UpgradeModule, public CreateModuleInterface
 {
 public:
@@ -112,6 +113,7 @@ public:
 	static void buildFieldParse(MultiIniFieldParse &p);
 };
 
+// RW 0x008BC73B (getModuleName), RW 0x008BC741 (getModuleNameKey), RW 0x008BC7D9 / RW 0x008BC71B (dtor)
 class CommandPointsUpgrade : public UpgradeModule
 {
 public:
@@ -129,6 +131,7 @@ private:
 	const CommandPointsUpgradeModuleData *m_data;
 };
 
+// RW 0x008B9B0F (non-deleting dtor -> UpgradeModule::~UpgradeModule 0x86393B)
 class CostModifierUpgrade : public UpgradeModule, public CreateModuleInterface
 {
 public:

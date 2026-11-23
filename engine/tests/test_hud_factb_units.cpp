@@ -37,6 +37,7 @@
 #include "GameLogic/Module/TransportContain.h"
 #include "GameLogic/Module/HeroAbilityModules.h"
 #include "GameLogic/Module/HordeDispatchSpecialPower.h"
+#include "GameLogic/Module/SiegeModules.h"
 #include "Common/Thing/ThingTemplate.h"
 #include "GameLogic/Module/HeroModules.h"
 #include "GameLogic/Module/SpellBookPowers.h"
@@ -58,6 +59,7 @@
 #include "GameLogic/WeaponNugget.h"
 #include "GameLogic/WeaponState.h"
 #include "GameLogic/WeaponStores.h"
+#include "GameLogic/System/ShroudManager.h"
 #include "Common/PlayerHeroList.h"
 
 #include <algorithm>
@@ -223,18 +225,67 @@ const std::set<std::string> &sweepSkips()
 // their own soldiers, Azog's Crack the Whip goblins)
 const char *ownHordeOf(const std::string &faction)
 {
-	return faction == "FactionMordor" ? "MordorFighterHorde" : faction == "FactionWild" ? "GoblinFighterHorde" : faction == "FactionAngmar" ? "AngmarDarkDunedainHorde" : "IsengardFighterHorde";
+	return faction == "FactionMordor" ? "MordorFighterHorde" : faction == "FactionWild" ? "GoblinFighterHorde" : faction == "FactionAngmar" ? "AngmarDarkDunedainHorde" : faction == "FactionEvilmen" ? "HaradFighterHorde" : "IsengardFighterHorde";
 }
 
 // the faction's own soldier, the capturable unit for a store-list power (lane PORT-261): the same mapping as ownHordeOf, the member template
 const char *ownSoldierOf(const std::string &faction)
 {
-	return faction == "FactionMordor" ? "MordorFighter" : faction == "FactionWild" ? "GoblinFighter" : faction == "FactionAngmar" ? "AngmarDarkDunedain" : "IsengardFighter";
+	return faction == "FactionMordor" ? "MordorFighter" : faction == "FactionWild" ? "GoblinFighter" : faction == "FactionAngmar" ? "AngmarDarkDunedain" : faction == "FactionEvilmen" ? "HaradFighter" : "IsengardFighter";
 }
 
 bool isPowerCommand(int c)
 {
 	return c == GUI_COMMAND_SPECIAL_POWER || c == GUI_COMMAND_SPECIAL_POWER_TOGGLE || c == GUI_COMMAND_SPECIAL_POWER_FROM_COMMAND_CENTER;
+}
+
+// Port 287's reproduction scenes, not aliases for SpecialPowerTemplate. In this overlay the old
+// button is only on the soldier. Clicking that soldier in its battalion selects the HORDE producer
+// (RW 0x7108F2), whose own command set supplies a different button, tested in its own matrix row.
+struct ChargeScene
+{
+	const char *soldier;
+	const char *oldButton;
+	const char *horde;
+	const char *hordeButton;
+};
+
+constexpr ChargeScene kChargeScenes[] = {
+	{ "AngmarSnowTroll", "Command_AngmarTrollChargeAttack", "AngmarSnowTrollHorde", "Command_SnowTrollChargeNoAimAttack" },
+	{ "AngmarDarkDunedain", "Command_AngmarChargeAttack", "AngmarDarkDunedainHorde", "Command_DDChargeNoAimAttack" },
+	{ "WildMarauderSwords", "Command_AngmarTrollChargeAttack", "WildMarauderSwordHorde", "Command_HalftrollChargeAttack" },
+	{ "WildMarauderSwordBanner", "Command_AngmarTrollChargeAttack", "WildMarauderSwordHorde", "Command_HalftrollChargeAttack" },
+};
+
+bool wearsChargeScene(const ChargeScene &scene, const factb::Inventory &inventory, const GameLogic &logic, const CommandStore &commands)
+{
+	const ThingTemplate *horde = logic.things().findTemplate(scene.horde);
+	if (!horde || !inventory.find(factb::Kind::Horde, scene.horde))
+	{
+		return false;
+	}
+	horde = horde->getFinalOverride();
+	bool hasSoldier = false;
+	for (const ThingTemplate::Nugget &nug : horde->behaviorModules().nuggets())
+	{
+		if (const auto *hd = dynamic_cast<const HordeContainBehaviorData *>(nug.data.get()))
+		{
+			const auto &payload = hd->horde.m_transport.m_initialPayload;
+			const auto &banners = hd->horde.m_bannerCarriersAllowed;
+			hasSoldier = std::any_of(payload.begin(), payload.end(), [&](const InitialPayloadEntry &p) { return p.name == scene.soldier; })
+			          || std::any_of(banners.begin(), banners.end(), [&](const std::string &b) { return b == scene.soldier; });
+		}
+	}
+	const CommandSet *set = commands.findCommandSet(factb::stringFieldOf(*horde, "CommandSet"));
+	for (int i = 0; hasSoldier && set && i < CommandSet::MAX_BUTTONS; ++i)
+	{
+		const CommandButton *b = set->getCommandButton(i);
+		if (b && b->getFinalOverride()->m_name == scene.hordeButton)
+		{
+			return true;
+		}
+	}
+	return false;
 }
 
 // the modules of `o` and of its members that carry the power
@@ -472,6 +523,25 @@ void unitsSweep(const std::string &faction, Results &res, bool sweep)
 			{
 				u->setCommandSetOverride(wearSet); // what the CommandSetUpgrade does once its upgrade is in (RW: Object's command set override string)
 			}
+			// LOCAL-113 (PORT-276): a self-detonating trap with StartsActive AutoAbilityBehavior (Saleme*Trap) would auto-detonate during spawn's
+			// g.step(20) when the nearby enemy horde walks into MaxScanRange; pause that auto-ability before stepping so the sweep can test the button
+			for (const std::unique_ptr<BehaviorModule> &m : u->modules())
+			{
+				if (const WeaponFireSpecialAbilityUpdate *wf = dynamic_cast<const WeaponFireSpecialAbilityUpdate *>(m.get()))
+				{
+					if (wf->abilityData()->m_specialPowerTemplate && wf->ownedWeapon() && wf->ownedWeapon()->getTemplate())
+					{
+						const unsigned mask = wf->ownedWeapon()->getTemplate()->m_affectsMask;
+						if ((mask & (WEAPON_AFFECTS_SELF | WEAPON_KILLS_SELF)) && !(mask & WEAPON_AFFECTS_ENEMIES))
+						{
+							if (AutoAbilityBehavior *aa = AutoAbilityBehavior::forPower(*u, wf->abilityData()->m_specialPowerTemplate->getName()))
+							{
+								aa->setAutoButton(nullptr);
+							}
+						}
+					}
+				}
+			}
 			refreshTargets();
 			g.step(20); // a horde's members are made, the objects settle
 			toughen(g.logic(), enemyUnitId);
@@ -517,6 +587,11 @@ void unitsSweep(const std::string &faction, Results &res, bool sweep)
 			res.fail(e->name, temporary ? "TEMPORARY: a temporary object (a deletion / lifetime timer, or a slave without its master): it leaves by design"
 			                            : "left the world in its first 20 frames (twice, at two sites)");
 			continue;
+		}
+		ObjectID objStartHigh = 0;
+		for (Object *o = g.logic().getFirstObject(); o; o = o->getNextObject())
+		{
+			objStartHigh = std::max(objStartHigh, o->getID());
 		}
 		std::set<const CommandButton *> seen;
 		// the matrix: one round per command set the inventory found for the object (round 0 is the set the fresh object wears)
@@ -567,6 +642,9 @@ void unitsSweep(const std::string &faction, Results &res, bool sweep)
 					continue;
 				}
 				const std::string item = e->name + " " + cb->m_name;
+				const bool hordeCharge = sweep && std::any_of(std::begin(kChargeScenes), std::end(kChargeScenes), [&](const ChargeScene &scene) {
+					return e->name == scene.horde && cb->m_name == scene.hordeButton;
+				});
 				if (sweep && sweepSkips().count(item))
 				{
 					continue; // tools/matrix_run.py's rerun after a crash: reported already, or the press that crashed
@@ -623,7 +701,7 @@ void unitsSweep(const std::string &faction, Results &res, bool sweep)
 					break;
 				}
 				enemyName = attempt == 1 ? "GondorBoromir" : firstEnemy;
-				if (!spawn(upgrade ? 0 : 10))
+				if (!spawn((upgrade || cb->m_command == GUI_COMMAND_TOGGLE_STANCE) ? 0 : 10))
 				{
 					res.fail(item, "the unit left the world in its first 20 frames");
 					continue;
@@ -649,21 +727,127 @@ void unitsSweep(const std::string &faction, Results &res, bool sweep)
 					res.fail(item, "the unit could not be selected with a click (selection " + g.selectionText() + ")");
 					continue;
 				}
+				if (hordeCharge && g.rig.local->selection() != std::vector<ObjectID>{ uid })
+				{
+					res.fail(item, "the member click did not select exactly its horde (RW 0x7108F2; selection " + g.selectionText() + ")");
+					continue;
+				}
 				ControlBarButton b;
 				if (!g.reveal(u, [&](const CommandButton &x) { return &x == cb; }, b))
 				{
-					// a button neither the arc nor the side bar shows (RW 0x92FF5C / 0x92F082: InPalantir past window 5, or neither flag) is off the bar in retail
-					// too: the context command or a hotkey reaches it (hud4 placement test)
-					const ControlBar::Placement place = ControlBar::placementOf(*cb, i, 0);
-					if (cb->m_showButton && (place.arc || place.side))
+					// LOCAL-132: an earlier button on the same object may have swapped its CommandSet via a map-wide aura / upgrade
+					// (e.g. GaladrielDarkMirror's Command_GaladrielMirrorVision spawns GaladrielMirrorVisionBase, Range 300000, granting
+					// Upgrade_GaladrielMirrorUsed -> CommandSetUpgrade). Clear spawned leftovers and respawn fresh before judging.
+					bool recovered = false;
+					if (cs && u && u->getCommandSetName() != cs->m_name)
 					{
-						// 2026-11-17 (matrix review): HIDE_WHILE_DISABLED (option bit 22, RW 0x943B39) hides a disabled button in retail too:
-						// off the bar is the grey verdict, not a fault (15 of 20 NOT-ON-BAR were fortress expansions and upgrade-gated powers)
-						res.fail(item, (cb->m_options & (1u << 22)) ? "DISABLED: needs its condition (HIDE_WHILE_DISABLED: hidden while disabled, as in retail)"
-						                                            : "not on the bar");
+						std::vector<Object *> extras;
+						for (Object *o = g.logic().getFirstObject(); o; o = o->getNextObject())
+						{
+							if (o->getID() > objStartHigh && !o->isKindOfName("SPELL_BOOK"))
+							{
+								extras.push_back(o);
+							}
+						}
+						for (Object *o : extras)
+						{
+							g.logic().destroyObject(o);
+						}
+						g.step(2);
+						if (spawn() && (u = g.logic().findObjectByID(uid)) && g.select(u) && g.reveal(u, [&](const CommandButton &x) { return &x == cb; }, b))
+						{
+							recovered = true;
+						}
 					}
-					continue;
+					if (!recovered)
+					{
+						// a button neither the arc nor the side bar shows (RW 0x92FF5C / 0x92F082: InPalantir past window 5, or neither flag) is off the bar in retail
+						// too: the context command or a hotkey reaches it (hud4 placement test)
+						// LOCAL-113: a slot at or past InitialVisible that no submenu button in the CommandSet opens (e.g. HaradFortressCommandSet slot 32
+						// Command_SpecialAbilityFortressHaradSpyTechAI, placed off-menu solely for AI AutoAbilityBehavior) is off the bar in retail too
+						bool slotReachable = !cs || i < cs->m_initialVisible;
+						for (int k = 0; !slotReachable && k < CommandSet::STORAGE; ++k)
+						{
+							const CommandButton *opener = cs->getCommandButton(k);
+							if (opener && opener->m_commandRangeCount > 0 && opener->m_commandRangeStart > 0
+								&& i >= opener->m_commandRangeStart && i < opener->m_commandRangeStart + opener->m_commandRangeCount)
+							{
+								slotReachable = true;
+							}
+						}
+						const ControlBar::Placement place = ControlBar::placementOf(*cb, i, 0);
+						if (slotReachable && cb->m_showButton && (place.arc || place.side))
+						{
+							// LOCAL-132: RW 0x943050 (GUI_COMMAND_OBJECT_UPGRADE): a missing UpgradeTemplate returns COMMAND_HIDDEN (3)
+							if ((cb->m_command == GUI_COMMAND_OBJECT_UPGRADE || cb->m_command == GUI_COMMAND_PLAYER_UPGRADE)
+								&& !cb->m_upgradeName.empty() && TheUpgradeCenter && !TheUpgradeCenter->findUpgrade(cb->m_upgradeName))
+							{
+								res.fail(item, "MOD-DATA: upgrade template " + cb->m_upgradeName + " does not exist in INI (hidden in RotWK, RW 0x943050)");
+							}
+							else
+							{
+								// 2026-11-17 (matrix review): HIDE_WHILE_DISABLED (option bit 22, RW 0x943B39) hides a disabled button in retail too:
+								// off the bar is the grey verdict, not a fault (15 of 20 NOT-ON-BAR were fortress expansions and upgrade-gated powers)
+								res.fail(item, (cb->m_options & (1u << 22)) ? "DISABLED: needs its condition (HIDE_WHILE_DISABLED: hidden while disabled, as in retail)"
+								                                            : "not on the bar");
+							}
+						}
+						continue;
+					}
 				}
+				// PORT-274 (issue #641): the *unmet* model gate, by name. A button with an EnableOnModelCondition mask is restricted while none of
+				// its bits is set, and one whose DisableOnModelCondition mask meets the object's bits is restricted while it does: those are the two
+				// halves of RW 0x942490 (docs/re says the enable is an ANY intersection and the disable wins). The sweep must name the condition it
+				// could not set instead of pressing a restricted button and calling the refusal "sent nothing": that verdict is what MATRIX.tsv
+				// filed as NO-SEND for the mumakil's USER_9 (an AttributeModifier aura grants it, no button sets it) and for Erkenbrand's MOUNTED.
+				auto modelGate = [&](const CommandButton &button, const Object &object) -> std::string {
+					std::string enable;
+					const Object::ModelConditionBits &bitWords = object.getModelConditionBits();
+					bool anyEnable = false;
+					for (size_t w = 0; w < button.m_enableOnModelCondition.size(); ++w)
+					{
+						const std::uint32_t mask = button.m_enableOnModelCondition[w];
+						if (!mask)
+						{
+							continue;
+						}
+						anyEnable = true;
+						if (bitWords[w] & mask)
+						{
+							return std::string(); // one enable bit is set: the gate is met (an ANY intersection, RW 0x942490)
+						}
+						for (int bit = 0; bit < 32; ++bit)
+						{
+							if (mask & (1u << bit))
+							{
+								const char *name = ModelCondition::nameOf((int)(w * 32 + bit));
+								enable += (enable.empty() ? "" : " ");
+								enable += name ? name : "?";
+							}
+						}
+					}
+					if (anyEnable)
+					{
+						return "needs model " + enable;
+					}
+					std::string disable;
+					for (size_t w = 0; w < button.m_disableOnModelCondition.size(); ++w)
+					{
+						const std::uint32_t hit = bitWords[w] & button.m_disableOnModelCondition[w];
+						for (int bit = 0; bit < 32; ++bit)
+						{
+							if (hit & (1u << bit))
+							{
+								const char *name = ModelCondition::nameOf((int)(w * 32 + bit));
+								disable += (disable.empty() ? "" : " ");
+								disable += name ? name : "?";
+							}
+						}
+					}
+					// a DisableOnModelCondition gate is unmet only while the object carries the bit
+					return disable.empty() ? std::string() : ("disabled by model " + disable);
+				};
+				const std::string modelWhy = modelGate(*cb, *u);
 				// lane DEVPORT-3C: a button with an EnableOnModelCondition mask (ROTWK-C's port of RW 0x942733's model condition gate: Lurtz's Carnage needs
 				// WEAPONSET_TOGGLE_1, the Goblin King's stinger MOUNTED or HERO) is restricted until the player's weapon toggle / mount below; it is checked after them
 				bool modelGated = false;
@@ -708,7 +892,50 @@ void unitsSweep(const std::string &faction, Results &res, bool sweep)
 				// a condition the sweep cannot give (option / other / none) keeps DISABLED: needs ... The player upgrades the fixture
 				// grants are removed with the unit (clear()), so one button's fixture does not leak into the next; sciences stay
 				// (PlayerScience has no per-science removal, and a science only ever unlocks).
-				const greyfix::Row *greyRow = sweep && b.state != ButtonState::Enabled && b.state != ButtonState::Active ? greyfix::findRow(greyTable, e->name, cb->m_name) : nullptr;
+				// LOCAL-148 (issue #881): a button starting NotReady (availability 5) is either a StopSpecialPower waiting for its
+				// target power to be active (RW 0x8CACC6 / RW 0x943585, e.g. MordorSiegeTower's SiegeRetract), or a weapon clip
+				// reload (RW 0x9431F9 .. 0x943247, RW 0x6CEE89: ballistae with InstantLoadClipOnActivate = No) / an unpaused
+				// AvailableAtStart = No special power (RW 0x943585 .. 0x9435D2: Witch-king / Khamul fellbeast toggles, Karsh's
+				// 240s summons). Wait out the timer before consulting MATRIX_GREY.tsv; StopSpecialPower has no timer and names its gate.
+				std::string stopPowerDetail;
+				if (b.state == ButtonState::NotReady)
+				{
+					const SpecialPowerTemplate *spTmpl = TheSpecialPowerStore && !cb->m_specialPowerName.empty()
+						? TheSpecialPowerStore->findSpecialPowerTemplate(cb->m_specialPowerName) : nullptr;
+					SpecialPowerModuleInterface *spMod = spTmpl ? SpecialPowerModules::findModule(*u, spTmpl) : nullptr;
+					if (const StopSpecialPower *stopMod = dynamic_cast<const StopSpecialPower *>(spMod))
+					{
+						const auto *stopData = dynamic_cast<const StopSpecialPowerModuleData *>(stopMod->getModuleData());
+						const std::string targetName = stopData && !stopData->m_stopPowerTemplateName.empty()
+							? stopData->m_stopPowerTemplateName : std::string("its target power");
+						stopPowerDetail = "DISABLED: needs StopSpecialPower target " + targetName + " active (RW 0x8CACC6 / RW 0x943585)";
+					}
+					else
+					{
+						for (int waited = 0; b.state == ButtonState::NotReady && waited < 30 * 300; waited += 30)
+						{
+							g.step(30);
+							if (!(u = g.logic().findObjectByID(uid)) || !g.select(u) || !g.reveal(u, [&](const CommandButton &x) { return &x == cb; }, b))
+							{
+								break;
+							}
+						}
+						if (!u)
+						{
+							res.fail(item, "the unit left the world while its button became ready");
+							continue;
+						}
+						if (b.button != cb)
+						{
+							res.fail(item, "the button left the bar while becoming ready");
+							continue;
+						}
+					}
+				}
+				// LOCAL-148: availability 8 (ButtonState::Purchased, RW 0x9430C8 / RW 0x942FF9 / RW 0x9431A6) is an upgrade the
+				// object or player already holds (e.g. GrantUpgradeCreate on ElvenRivendellLancerHordeMod_up), not a grey restriction.
+				const bool alreadyPurchased = b.state == ButtonState::Purchased;
+				const greyfix::Row *greyRow = sweep && !alreadyPurchased && stopPowerDetail.empty() && b.state != ButtonState::Enabled && b.state != ButtonState::Active ? greyfix::findRow(greyTable, e->name, cb->m_name) : nullptr;
 				bool fixtureApplied = false;
 				std::string fixtureDetail;
 				if (greyRow)
@@ -819,13 +1046,22 @@ void unitsSweep(const std::string &faction, Results &res, bool sweep)
 							g.select(u);
 							if (!g.reveal(u, [&](const CommandButton &x) { return &x == cb; }, b))
 							{
-								res.fail(item, "the button left the bar after the fixture");
+								if (cs && u->getCommandSetName() != cs->m_name)
+								{
+									// LOCAL-132: NeededUpgrade triggered CommandSetUpgrade (e.g. GondorTowerShieldGuardHordeShieldWall level 2),
+									// replacing this placeholder button with the upgraded set's button (swept in that set's round)
+									res.fail(item, "DISABLED: needs its upgrade, which switches CommandSet to " + u->getCommandSetName());
+								}
+								else
+								{
+									res.fail(item, "the button left the bar after the fixture");
+								}
 								continue;
 							}
 							// 2026-11-18: an unpause upgrade with ObeyRechageOnTrigger starts the power's recharge (RW 0x943585 .. 0x9435D2: not paused,
 							// progress below 1 -> not ready, the clock), as in retail: the sweep waits the recharge out (up to 3 minutes of game time)
 							// before it judges the button, instead of calling a recharging button GREY-BUG
-							for (int waited = 0; b.state == ButtonState::NotReady && waited < 30 * 180; waited += 30)
+							for (int waited = 0; b.state == ButtonState::NotReady && waited < 30 * 300; waited += 30)
 							{
 								g.step(30);
 								if (!(u = g.logic().findObjectByID(uid)) || !g.select(u) || !g.reveal(u, [&](const CommandButton &x) { return &x == cb; }, b))
@@ -896,13 +1132,31 @@ void unitsSweep(const std::string &faction, Results &res, bool sweep)
 				// 2026-11-18 (owner: "все бери из кода"): RW 0x943050 (getCommandAvailability case 7, OBJECT_UPGRADE): an object with no production
 				// queue (RW 0x68C327) has the button disabled in retail too. A horde member or slaved unit swept alone has none (its horde or master
 				// buys it): the grey verdict with that reason, not GREY-BUG
-				if (fixtureDetail.empty() && cb->m_command == GUI_COMMAND_OBJECT_UPGRADE && !u->getProductionUpdate() && b.state == ButtonState::Restricted)
+				// LOCAL-148: a MATRIX_GREY.tsv row with no effective gate ("DISABLED: needs none...") must not mask the exact
+				// retail runtime gate from RW 0x942733 (Purchased, StopSpecialPower, no ProductionUpdate, !affectedByUpgrade, no StancesBehavior).
+				const bool needsNone = fixtureDetail.empty() || fixtureDetail.rfind("DISABLED: needs none", 0) == 0;
+				if (alreadyPurchased)
+				{
+					fixtureDetail = "DISABLED: already purchased (RW 0x9430C8 / RW 0x942FF9: availability 8)";
+				}
+				else if (!stopPowerDetail.empty())
+				{
+					fixtureDetail = stopPowerDetail;
+				}
+				else if (needsNone && cb->m_command == GUI_COMMAND_OBJECT_UPGRADE && !u->getProductionUpdate() && b.state == ButtonState::Restricted)
 				{
 					fixtureDetail = "DISABLED: needs a production queue on the object (RW 0x943050 case 7, RW 0x68C327: disabled in retail too; its horde or master buys it)";
 				}
+				else if (needsNone && cb->m_command == GUI_COMMAND_OBJECT_UPGRADE && u->getProductionUpdate() && b.state == ButtonState::Restricted)
+				{
+					if (const UpgradeTemplate *up = s.world->upgrades().findUpgrade(cb->m_upgradeName); up && !u->hasUpgrade(up) && !u->affectedByUpgrade(up))
+					{
+						fixtureDetail = "DISABLED: object not affected by " + cb->m_upgradeName + " (RW 0x9430F2 -> RW 0x694914: no UpgradeMux module triggered or RequiredObjectFilter unmet, disabled in retail too)";
+					}
+				}
 				// MATRIX_TODO 3 (2026-11-18): RW 0x942A77 restricts the stance button of an object without a StancesBehavior; a horde member made alone
 				// (RhudaurWolfRider) has none of its own: its horde carries it and is swept on its own
-				if (fixtureDetail.empty() && cmd == GUI_COMMAND_TOGGLE_STANCE && !StancesBehavior::of(*u) && b.state == ButtonState::Restricted)
+				if (needsNone && cmd == GUI_COMMAND_TOGGLE_STANCE && !StancesBehavior::of(*u) && b.state == ButtonState::Restricted)
 				{
 					fixtureDetail = "DISABLED: needs a StancesBehavior (RW 0x942A77: restricted without one, as in retail; a horde member's stance is its horde's)";
 				}
@@ -927,9 +1181,19 @@ void unitsSweep(const std::string &faction, Results &res, bool sweep)
 				}
 				if (b.state != ButtonState::Enabled && b.state != ButtonState::Active && !modelGated)
 				{
-					res.fail(item, !fixtureDetail.empty() ? fixtureDetail
-						: fixtureApplied && greyRow ? greyfix::bugDetail(*greyRow) + str(" (button state %d)", (int)b.state) + conflicts // the state tells restricted from not ready
-						: str("state %d at level %d (not enabled)", (int)b.state, u->getExperienceTracker() ? u->getExperienceTracker()->getRank() : 0));
+					// PORT-274: a button whose own model gate is unmet (an enable mask with none of its bits set, or a disable mask the
+					// object meets) is grey in retail too (RW 0x942490): name the condition, do not press it, and do not call the refusal
+					// "sent nothing"
+					if (!modelWhy.empty())
+					{
+						res.fail(item, "DISABLED: " + modelWhy);
+					}
+					else
+					{
+						res.fail(item, !fixtureDetail.empty() ? fixtureDetail
+							: fixtureApplied && greyRow ? greyfix::bugDetail(*greyRow) + str(" (button state %d)", (int)b.state) + conflicts // the state tells restricted from not ready
+							: str("state %d at level %d (not enabled)", (int)b.state, u->getExperienceTracker() ? u->getExperienceTracker()->getRank() : 0));
+					}
 					continue;
 				}
 				const auto unportedBefore = g.hud->controlBar().unportedPresses();
@@ -1293,6 +1557,18 @@ void unitsSweep(const std::string &faction, Results &res, bool sweep)
 					return s;
 				};
 				collect();
+				if (sweep)
+				{
+					const auto *scene = std::find_if(std::begin(kChargeScenes), std::end(kChargeScenes), [&](const ChargeScene &sc) {
+						return e->name == sc.soldier && cb->m_name == sc.oldButton;
+					});
+					if (scene != std::end(kChargeScenes) && wearsChargeScene(*scene, inv, g.logic(), s.world->commands()))
+					{
+						res.fail(item, std::string("MEMBER: standalone soldier's old button, not an alias; the member click selects its horde. See the effect check for ")
+									   + scene->horde + " " + scene->hordeButton + " (RW 0x7108F2)");
+						continue;
+					}
+				}
 				if (mods.empty())
 				{
 					// 2026-11-17 (matrix review): when no template of the unit or its members (the mod's INI) lists a module for the power
@@ -1434,9 +1710,21 @@ void unitsSweep(const std::string &faction, Results &res, bool sweep)
 				}
 				if (b.state != ButtonState::Enabled && b.state != ButtonState::Active)
 				{
-					res.fail(item, !fixtureDetail.empty() ? fixtureDetail
-						: fixtureApplied && greyRow ? greyfix::bugDetail(*greyRow)
-						: str("state %d at level 10%s (not enabled)", (int)b.state, modelGated ? " after the weapon toggle / mount" : ""));
+					// PORT-274: the power branch's same verdict: an unmet model gate is named, never reported as a missing press
+					const std::string powerWhy = modelGate(*cb, *u);
+					if (!fixtureDetail.empty())
+					{
+						res.fail(item, fixtureDetail);
+					}
+					else if (!powerWhy.empty())
+					{
+						res.fail(item, "DISABLED: " + powerWhy);
+					}
+					else
+					{
+						res.fail(item, fixtureApplied && greyRow ? greyfix::bugDetail(*greyRow)
+							: str("state %d at level 10%s (not enabled)", (int)b.state, modelGated ? " after the weapon toggle / mount" : ""));
+					}
 					continue;
 				}
 				struct TempTarget
@@ -1461,12 +1749,15 @@ void unitsSweep(const std::string &faction, Results &res, bool sweep)
 				const bool targetless = !cb->hasOption(COMMAND_OPTION_NEED_TARGET_ENEMY_OBJECT | COMMAND_OPTION_NEED_TARGET_NEUTRAL_OBJECT
 													   | COMMAND_OPTION_NEED_TARGET_ALLY_OBJECT | COMMAND_OPTION_NEED_TARGET_POS);
 				bool atOwn = false, stageOwn = false, atEnemy = false, closerEnemy = false, needsHeal = false, needsStealMoney = false, needsTimerRefresh = false, needsStore = false;
+				bool needsFireToExtinguish = false, needsMetaImpact = false;
 				for (const EffectProbe::Expect &x : EffectProbe::take(g.logic(), u, t).expects)
 				{
 					closerEnemy = closerEnemy
 								  || (targetless
 									  && (x.kind == EffectProbe::TERROR || x.kind == EffectProbe::EMOTION || x.kind == EffectProbe::LUA_EVENT
-										  || x.kind == EffectProbe::META_IMPACT));
+										  || x.kind == EffectProbe::META_IMPACT || x.kind == EffectProbe::DAMAGE));
+					needsFireToExtinguish = needsFireToExtinguish || (x.kind == EffectProbe::FIRE_LOGIC && x.fireLogicType == 1);
+					needsMetaImpact = needsMetaImpact || x.kind == EffectProbe::META_IMPACT;
 					atOwn = atOwn || x.kind == EffectProbe::LEVEL || x.kind == EffectProbe::HEAL || x.kind == EffectProbe::TIMER_REFRESH
 							|| (x.kind == EffectProbe::MODEL_CONDITION && x.scope == EffectProbe::Expect::SCOPE_PLAYER);
 					stageOwn = stageOwn || atOwn || x.kind == EffectProbe::MODIFIER;
@@ -1480,15 +1771,58 @@ void unitsSweep(const std::string &faction, Results &res, bool sweep)
 					needsTimerRefresh = needsTimerRefresh || x.kind == EffectProbe::TIMER_REFRESH;
 				}
 				// targetless AoEs (screech / emotion / blinding light radius 85) need the enemy soldiers nearby
+				float wfMinRange = 0.0f, wfMaxRange = 0.0f, wfSmallTargetlessRadius = 0.0f;
+				if (t && TheWeaponStore)
+				{
+					for (const std::unique_ptr<BehaviorModule> &m : u->modules())
+					{
+						const WeaponFireSpecialAbilityUpdate *wf = dynamic_cast<const WeaponFireSpecialAbilityUpdate *>(m.get());
+						if (!wf || wf->abilityData()->m_specialPowerTemplateName != t->getName()) continue;
+						const auto *wfd = static_cast<const WeaponFireSpecialAbilityUpdateModuleData *>(wf->getModuleData());
+						const WeaponTemplate *wt = wfd && !wfd->m_specialWeapon.empty() ? TheWeaponStore->findWeaponTemplate(wfd->m_specialWeapon) : nullptr;
+						if (!wt) continue;
+						wfMinRange = std::max(wfMinRange, wt->m_minimumAttackRange);
+						wfMaxRange = std::max(wfMaxRange, wt->m_attackRange);
+						if (targetless)
+						{
+							for (const std::shared_ptr<WeaponNugget> &n : wt->m_nuggets)
+							{
+								if (n->kind() == NUGGET_DAMAGE || n->kind() == NUGGET_DOT)
+								{
+									const float r = static_cast<const DamageNugget *>(n.get())->m_radius;
+									if (r > 0.0f && (wfSmallTargetlessRadius == 0.0f || r < wfSmallTargetlessRadius)) wfSmallTargetlessRadius = r;
+								}
+							}
+						}
+					}
+				}
 				if (closerEnemy)
 				{
 					if (Object *old = g.logic().findObjectByID(enemyUnitId))
 					{
 						g.logic().destroyObject(old);
 					}
-					enemyUnitId = g.rig.make(enemyName, c.x + 80.0f, c.y + 20.0f, enemy)->getID();
+					const float dx = (wfSmallTargetlessRadius > 0.0f && wfSmallTargetlessRadius < 80.0f) ? std::max(15.0f, wfSmallTargetlessRadius * 0.65f) : 80.0f;
+					const float dy = (wfSmallTargetlessRadius > 0.0f && wfSmallTargetlessRadius < 80.0f) ? 0.0f : 20.0f;
+					enemyUnitId = g.rig.make(enemyName, c.x + dx, c.y + dy, enemy)->getID();
 					g.step(5);
 					toughen(g.logic(), enemyUnitId);
+				}
+				else if (wfMinRange > 0.0f && enemyUnitId != INVALID_ID)
+				{
+					// WeaponFireSpecialAbilityUpdate::allowsSpecialPowerUse (RW 0x896156) rejects targets closer than MinimumAttackRange
+					if (Object *eu = g.logic().findObjectByID(enemyUnitId))
+					{
+						const float d = sweep_probe::dist2d(c, *eu->getPosition());
+						if (d < wfMinRange + 30.0f)
+						{
+							const float want = wfMaxRange > wfMinRange + 60.0f ? std::min(wfMinRange + 100.0f, wfMaxRange - 30.0f) : wfMinRange + 80.0f;
+							g.logic().destroyObject(eu);
+							enemyUnitId = g.rig.make(enemyName, c.x + want, c.y + 20.0f, enemy)->getID();
+							g.step(5);
+							toughen(g.logic(), enemyUnitId);
+						}
+					}
 				}
 				// lane PORT-261: an ability that stores units (SPECIAL_STORE_LIST_2) is pointed at the open ground; an allied unit must be in the radius to capture
 				if (needsStore)
@@ -1504,9 +1838,9 @@ void unitsSweep(const std::string &faction, Results &res, bool sweep)
 				{
 					ownHordeId = g.rig.make(ownHordeOf(faction), c.x - 100.0f, c.y + 100.0f)->getID();
 				}
-				auto pickFilteredTemplate = [&](const ObjectFilter &filter, const Player *ownerPlayer) -> const ThingTemplate * {
+				auto pickFilteredTemplate = [&](const ObjectFilter &filter, const Player *ownerPlayer, bool skipStructures = false) -> const ThingTemplate * {
 					auto usable = [&](const ThingTemplate *tt) {
-						return tt && !factb::hasKindOf(*tt, "UNATTACKABLE") && !factb::hasKindOf(*tt, "INERT")
+						return tt && (!skipStructures || !factb::hasKindOf(*tt, "STRUCTURE")) && !factb::hasKindOf(*tt, "UNATTACKABLE") && !factb::hasKindOf(*tt, "INERT")
 							   && !factb::hasKindOf(*tt, "PROJECTILE")
 							   && ObjectFilterMatch::allows(g.logic(), filter, tt, ownerPlayer, g.rig.local);
 					};
@@ -1515,6 +1849,13 @@ void unitsSweep(const std::string &faction, Results &res, bool sweep)
 						if (const ThingTemplate *tt = g.logic().things().findTemplate(inc); usable(tt))
 						{
 							return tt;
+						}
+					}
+					if (skipStructures)
+					{
+						if (const ThingTemplate *hero = g.logic().things().findTemplate("GondorBoromir"); usable(hero))
+						{
+							return hero;
 						}
 					}
 					for (const ThingTemplate *tt : g.logic().things().templates())
@@ -1538,7 +1879,12 @@ void unitsSweep(const std::string &faction, Results &res, bool sweep)
 								g.logic().destroyObject(ally);
 								allyId = INVALID_ID;
 							}
-							tempTarget.id = g.rig.make(tt->getName(), c.x - 120.0f, c.y - 60.0f)->getID();
+							Object *madeAlly = g.rig.make(tt->getName(), c.x - 120.0f, c.y - 60.0f);
+							if (needsHeal && madeAlly->getBodyModule())
+							{
+								madeAlly->getBodyModule()->setInitialHealthPercent(50.0f);
+							}
+							tempTarget.id = madeAlly->getID();
 							g.step(3);
 						}
 					}
@@ -1547,6 +1893,12 @@ void unitsSweep(const std::string &faction, Results &res, bool sweep)
 				{
 					// item 4 (MATRIX_TODO, 2026-11-18): SPECIAL_REPAIR_STRUCTURE (0x8A) takes an own STRUCTURE (ActionManager RW 0x82DAE9 case 0x8A,
 					// RepairSpecialPower RW 0x8CCB85), not the unit's own copy (the scene's ally): one is made, at half health so a repair has work
+					// LOCAL-132: remove the unit's own ally copy first so its StartsActive AutoAbilityBehavior cannot claim soleHealingBenefactor (RW 0x82D908)
+					if (Object *ally = allyId != INVALID_ID ? g.logic().findObjectByID(allyId) : nullptr)
+					{
+						g.logic().destroyObject(ally);
+						allyId = INVALID_ID;
+					}
 					Object *own = g.rig.make("GondorBarracks", c.x - 140.0f, c.y - 80.0f);
 					own->getBodyModule()->setInitialHealthPercent(50.0f);
 					tempTarget.id = own->getID();
@@ -1554,19 +1906,56 @@ void unitsSweep(const std::string &faction, Results &res, bool sweep)
 				}
 				else if (cb->hasOption(COMMAND_OPTION_NEED_TARGET_ENEMY_OBJECT) && t && t->m_objectFilter)
 				{
+					auto swResistOf = [](const ThingTemplate *tt) -> float {
+						const ThingTemplate *fo = tt ? tt->getFinalOverride() : nullptr;
+						const FieldValue *sv = fo ? fo->findField("ShockwaveResistance") : nullptr;
+						return (sv && std::get_if<float>(sv)) ? *std::get_if<float>(sv) : 0.0f;
+					};
 					Object *eu = g.logic().findObjectByID(enemyUnitId);
 					Object *eb = g.logic().findObjectByID(enemyBuildingId);
-					const bool okU = eu && ObjectFilterMatch::allows(g.logic(), *t->m_objectFilter, *eu, g.rig.local);
-					const bool okB = eb && ObjectFilterMatch::allows(g.logic(), *t->m_objectFilter, *eb, g.rig.local);
+					const bool okU = eu && (!needsMetaImpact || swResistOf(static_cast<const ThingTemplate *>(eu->getTemplate())) == 0.0f)
+						&& ObjectFilterMatch::allows(g.logic(), *t->m_objectFilter, *eu, g.rig.local);
+					const bool okB = eb && !needsMetaImpact && ObjectFilterMatch::allows(g.logic(), *t->m_objectFilter, *eb, g.rig.local);
 					if (!okU && !okB)
 					{
-						if (const ThingTemplate *tt = pickFilteredTemplate(*t->m_objectFilter, enemy))
+						const ThingTemplate *tt = nullptr;
+						if (needsMetaImpact)
+						{
+							// LOCAL-131: MetaImpactNugget rejects STRUCTURE and resists when ShockwaveResistance * 0.2 >= ShockWaveAmount (RW 0x9100AA);
+							// prefer a 0-resistance non-STRUCTURE enemy matching ObjectFilter (e.g. a hobbit/hero without ShockwaveResistance for BalrogWhip).
+							for (const ThingTemplate *ct : g.logic().things().templates())
+							{
+								if (ct && !factb::hasKindOf(*ct, "STRUCTURE") && !factb::hasKindOf(*ct, "UNATTACKABLE") && !factb::hasKindOf(*ct, "INERT")
+									&& !factb::hasKindOf(*ct, "PROJECTILE") && factb::hasKindOf(*ct, "SELECTABLE")
+									&& swResistOf(ct) == 0.0f && ObjectFilterMatch::allows(g.logic(), *t->m_objectFilter, ct, enemy, g.rig.local))
+								{
+									tt = ct;
+									break;
+								}
+							}
+						}
+						if (!tt)
+						{
+							tt = pickFilteredTemplate(*t->m_objectFilter, enemy, needsMetaImpact);
+						}
+						if (tt)
 						{
 							tempTarget.id = g.rig.make(tt->getName(), c.x + 150.0f, c.y - 50.0f, enemy)->getID();
 							tempEnemyTarget = true;
 							g.step(5);
 							toughen(g.logic(), tempTarget.id);
 						}
+					}
+				}
+				else if (cb->hasOption(COMMAND_OPTION_NEED_TARGET_POS) && !cb->hasOption(COMMAND_OPTION_NEED_TARGET_ENEMY_OBJECT | COMMAND_OPTION_NEED_TARGET_ALLY_OBJECT | COMMAND_OPTION_NEED_TARGET_NEUTRAL_OBJECT)
+						 && t && (t->m_flags & SPF_NEEDS_OBJECT_FILTER) && t->m_objectFilter
+						 && (t->m_objectFilter->relationships & (ObjectFilter::REL_ALLIES | ObjectFilter::REL_SAME_PLAYER))
+						 && !(t->m_objectFilter->relationships & ObjectFilter::REL_ENEMIES))
+				{
+					if (const ThingTemplate *tt = pickFilteredTemplate(*t->m_objectFilter, g.rig.local))
+					{
+						tempTarget.id = g.rig.make(tt->getName(), c.x - 100.0f, c.y + 60.0f)->getID();
+						g.step(5);
 					}
 				}
 				else if (cb->hasOption(COMMAND_OPTION_NEED_TARGET_POS) && !cb->hasOption(COMMAND_OPTION_NEED_TARGET_ENEMY_OBJECT | COMMAND_OPTION_NEED_TARGET_ALLY_OBJECT | COMMAND_OPTION_NEED_TARGET_NEUTRAL_OBJECT)
@@ -1590,6 +1979,244 @@ void unitsSweep(const std::string &faction, Results &res, bool sweep)
 								toughen(g.logic(), tempTarget.id);
 							}
 						}
+					}
+				}
+				else if (cb->hasOption(COMMAND_OPTION_NEED_TARGET_POS) && !cb->hasOption(COMMAND_OPTION_NEED_TARGET_ENEMY_OBJECT | COMMAND_OPTION_NEED_TARGET_ALLY_OBJECT | COMMAND_OPTION_NEED_TARGET_NEUTRAL_OBJECT)
+						 && atOwn && !atEnemy && t)
+				{
+					// lane LOCAL-87: position powers on own units with a narrow ObjectFilter (SPF_NEEDS_OBJECT_FILTER, e.g. Golfimbul / Malbeth / Narin / Sharku /
+					// Lorgan / Pippin) or LevelGrantSpecialPower AcceptanceFilter (Legolas's Train Archers) need a matching own target at the cast spot
+					const ObjectFilter *ownFilter = t->m_objectFilter.get();
+					if (!ownFilter)
+					{
+						for (const std::unique_ptr<BehaviorModule> &m : u->modules())
+						{
+							if (const LevelGrantSpecialPower *lg = dynamic_cast<const LevelGrantSpecialPower *>(m.get()))
+							{
+								if (const auto *ld = dynamic_cast<const LevelGrantSpecialPowerModuleData *>(lg->getModuleData());
+									ld && ld->m_specialPowerTemplate == t && ld->m_acceptanceFilter)
+								{
+									ownFilter = ld->m_acceptanceFilter.get();
+									break;
+								}
+							}
+						}
+					}
+					Object *oh = ownHordeId != INVALID_ID ? g.logic().findObjectByID(ownHordeId) : nullptr;
+					if (ownFilter && (!oh || !ObjectFilterMatch::allows(g.logic(), *ownFilter, *oh, g.rig.local)))
+					{
+						if (const ThingTemplate *tt = pickFilteredTemplate(*ownFilter, g.rig.local))
+						{
+							tempTarget.id = g.rig.make(tt->getName(), c.x - 100.0f, c.y + 60.0f)->getID();
+							g.step(5);
+						}
+					}
+				}
+				else if (cb->hasOption(COMMAND_OPTION_NEED_TARGET_POS) && !cb->hasOption(COMMAND_OPTION_NEED_TARGET_ENEMY_OBJECT | COMMAND_OPTION_NEED_TARGET_ALLY_OBJECT | COMMAND_OPTION_NEED_TARGET_NEUTRAL_OBJECT)
+						 && !atOwn && !atEnemy && t)
+				{
+					// lane LOCAL-87: ActivateModuleSpecialPower triggering a SpecialPowerModule whose AttributeModifierAffects restricts targets
+					// (e.g. Mouth of Sauron's Worte des Elends affecting enemy +HERO only) needs a matching target at the cast spot
+					const ObjectFilter *modFilter = nullptr;
+					bool modFilterAlliesOnly = false;
+					for (const std::unique_ptr<BehaviorModule> &m : u->modules())
+					{
+						const ActivateModuleSpecialPower *am = dynamic_cast<const ActivateModuleSpecialPower *>(m.get());
+						const auto *amd = am ? dynamic_cast<const ActivateModuleSpecialPowerModuleData *>(am->getModuleData()) : nullptr;
+						if (!amd || amd->m_specialPowerTemplate != t)
+						{
+							continue;
+						}
+						for (const ActivateModuleSpecialPowerModuleData::Entry &e : amd->m_triggers)
+						{
+							const NameKeyType key = g.logic().things().nameKeys().findKey(e.tag);
+							BehaviorModule *act = key == NAMEKEY_INVALID ? nullptr : u->findModuleByTag(key);
+							if (const SpecialPowerModule *sp = dynamic_cast<const SpecialPowerModule *>(act))
+							{
+								if (const auto *spd = dynamic_cast<const SpecialPowerModuleData *>(sp->getModuleData());
+									spd && !spd->m_attributeModifier.empty() && spd->m_attributeModifierAffects)
+								{
+									modFilter = spd->m_attributeModifierAffects.get();
+									modFilterAlliesOnly = !spd->m_targetEnemy && !spd->m_targetAllSides && !spd->m_reEnableAntiCategory && spd->m_antiCategory == 0;
+									break;
+								}
+							}
+						}
+						if (modFilter)
+						{
+							break;
+						}
+					}
+					if (!modFilter && (t->m_flags & SPF_NEEDS_OBJECT_FILTER) && t->m_objectFilter)
+					{
+						// LOCAL-113: OCLSpecialPower with SPF_NEEDS_OBJECT_FILTER (RW 0x82DEA6, e.g. AngmarGulmataur runes / GondorAdvisor market trade)
+						// needs a matching object within RadiusCursorRadius at the cast spot
+						Object *eu = g.logic().findObjectByID(enemyUnitId);
+						Object *eb = g.logic().findObjectByID(enemyBuildingId);
+						Object *oh = ownHordeId != INVALID_ID ? g.logic().findObjectByID(ownHordeId) : nullptr;
+						Object *al = allyId != INVALID_ID ? g.logic().findObjectByID(allyId) : nullptr;
+						const bool anyMatch = (eu && ObjectFilterMatch::allows(g.logic(), *t->m_objectFilter, *eu, g.rig.local))
+						                      || (eb && ObjectFilterMatch::allows(g.logic(), *t->m_objectFilter, *eb, g.rig.local))
+						                      || (oh && ObjectFilterMatch::allows(g.logic(), *t->m_objectFilter, *oh, g.rig.local))
+						                      || (al && ObjectFilterMatch::allows(g.logic(), *t->m_objectFilter, *al, g.rig.local));
+						if (!anyMatch)
+						{
+							if (const ThingTemplate *tt = pickFilteredTemplate(*t->m_objectFilter, g.rig.local))
+							{
+								tempTarget.id = g.rig.make(tt->getName(), c.x - 100.0f, c.y + 60.0f)->getID();
+								g.step(5);
+							}
+							else if (const ThingTemplate *tt = pickFilteredTemplate(*t->m_objectFilter, enemy))
+							{
+								tempTarget.id = g.rig.make(tt->getName(), c.x + 120.0f, c.y + 120.0f, enemy)->getID();
+								tempEnemyTarget = true;
+								g.step(5);
+								toughen(g.logic(), tempTarget.id);
+							}
+						}
+					}
+					if (modFilter)
+					{
+						Object *eu = g.logic().findObjectByID(enemyUnitId);
+						Object *eb = g.logic().findObjectByID(enemyBuildingId);
+						Object *oh = ownHordeId != INVALID_ID ? g.logic().findObjectByID(ownHordeId) : nullptr;
+						const bool anyMatch = (!modFilterAlliesOnly && eu && ObjectFilterMatch::allows(g.logic(), *modFilter, *eu, g.rig.local))
+						                      || (!modFilterAlliesOnly && eb && ObjectFilterMatch::allows(g.logic(), *modFilter, *eb, g.rig.local))
+						                      || (oh && ObjectFilterMatch::allows(g.logic(), *modFilter, *oh, g.rig.local));
+						if (!anyMatch)
+						{
+							if (!modFilterAlliesOnly)
+							{
+								if (const ThingTemplate *tt = pickFilteredTemplate(*modFilter, enemy))
+								{
+									tempTarget.id = g.rig.make(tt->getName(), c.x + 120.0f, c.y + 120.0f, enemy)->getID();
+									tempEnemyTarget = true;
+									g.step(5);
+									toughen(g.logic(), tempTarget.id);
+								}
+							}
+							if (tempTarget.id == INVALID_ID)
+							{
+								if (const ThingTemplate *tt = pickFilteredTemplate(*modFilter, g.rig.local))
+								{
+									tempTarget.id = g.rig.make(tt->getName(), c.x + 120.0f, c.y + 120.0f)->getID();
+									g.step(5);
+								}
+							}
+						}
+					}
+				}
+				// LOCAL-113 (RW 0x893D61): a NEED_TARGET_POS WeaponFireSpecialAbilityUpdate whose weapon has a MinimumAttackRange (e.g. AngmarTrollSling
+				// plague barrels, MinimumAttackRange 150) refuses targets closer than minRange + boundingRadius; place an enemy in the valid ring
+				if (cb->hasOption(COMMAND_OPTION_NEED_TARGET_POS) && tempTarget.id == INVALID_ID && t)
+				{
+					Object *eu = g.logic().findObjectByID(enemyUnitId);
+					if (eu && !ActionManager::canDoSpecialPowerAtLocation(*u, *eu->getPosition(), t, cb->m_options))
+					{
+						float minR = 0.0f;
+						for (const std::unique_ptr<BehaviorModule> &m : u->modules())
+						{
+							if (const WeaponFireSpecialAbilityUpdate *wf = dynamic_cast<const WeaponFireSpecialAbilityUpdate *>(m.get()))
+							{
+								if (wf->abilityData()->m_specialPowerTemplate == t && wf->ownedWeapon() && wf->ownedWeapon()->getTemplate())
+								{
+									minR = std::max(minR, WeaponTemplateMinimumRange(*wf->ownedWeapon()->getTemplate()));
+								}
+							}
+						}
+						if (minR > 0.0f)
+						{
+							const float dist = minR + CombatQueries::boundingCircleRadius(*u) + 80.0f;
+							for (const Coord3D d : { Coord3D{ dist, 0.0f, 0.0f }, Coord3D{ -dist, 0.0f, 0.0f }, Coord3D{ 0.0f, dist, 0.0f }, Coord3D{ 0.0f, -dist, 0.0f } })
+							{
+								const Coord3D spot{ c.x + d.x, c.y + d.y, g.logic().getGroundHeight(c.x + d.x, c.y + d.y) };
+								if (ActionManager::canDoSpecialPowerAtLocation(*u, spot, t, cb->m_options))
+								{
+									tempTarget.id = g.rig.make(enemyName, spot.x, spot.y, enemy)->getID();
+									tempEnemyTarget = true;
+									g.step(5);
+									toughen(g.logic(), tempTarget.id);
+									break;
+								}
+							}
+						}
+					}
+				}
+				if (targetless && t && tempTarget.id == INVALID_ID)
+				{
+					// LOCAL-131: targetless SpecialPowerModule / ProductionSpeedBonus with a specific AttributeModifierAffects filter and AffectsSelf=No
+					// (e.g. Thranduil THRANDUIL_OBJECTFILTER, Wulfgar IsengardTavern) needs a matching allied object within AttributeModifierRange
+					for (const std::unique_ptr<BehaviorModule> &m : u->modules())
+					{
+						const SpecialPowerModule *spm = dynamic_cast<const SpecialPowerModule *>(m.get());
+						const SpecialPowerModuleData *spd = spm ? spm->spData() : nullptr;
+						if (!spd || spd->m_specialPowerTemplate != t || spd->m_attributeModifier.empty() || spd->m_attributeModifierAffectsSelf || !spd->m_attributeModifierAffects)
+						{
+							continue;
+						}
+						const ObjectFilter &flt = *spd->m_attributeModifierAffects;
+						const bool isAllied = !spd->m_targetEnemy && spd->m_antiCategory == 0;
+						if (!isAllied || flt.includeNames.empty())
+						{
+							continue;
+						}
+						Object *al = allyId != INVALID_ID ? g.logic().findObjectByID(allyId) : nullptr;
+						Object *oh = ownHordeId != INVALID_ID ? g.logic().findObjectByID(ownHordeId) : nullptr;
+						const bool hasMatch = (al && ObjectFilterMatch::allows(g.logic(), flt, *al, g.rig.local))
+						                      || (oh && ObjectFilterMatch::allows(g.logic(), flt, *oh, g.rig.local));
+						if (!hasMatch)
+						{
+							if (const ThingTemplate *tt = pickFilteredTemplate(flt, g.rig.local))
+							{
+								tempTarget.id = g.rig.make(tt->getName(), c.x - 100.0f, c.y + 60.0f)->getID();
+								g.step(5);
+								break;
+							}
+						}
+					}
+				}
+				if (targetless && t && TheWeaponStore && tempTarget.id == INVALID_ID)
+				{
+					for (const std::unique_ptr<BehaviorModule> &m : u->modules())
+					{
+						const WeaponFireSpecialAbilityUpdate *wf = dynamic_cast<const WeaponFireSpecialAbilityUpdate *>(m.get());
+						if (!wf || wf->abilityData()->m_specialPowerTemplateName != t->getName()) continue;
+						const auto *wfd = static_cast<const WeaponFireSpecialAbilityUpdateModuleData *>(wf->getModuleData());
+						const WeaponTemplate *wt = wfd && !wfd->m_specialWeapon.empty() ? TheWeaponStore->findWeaponTemplate(wfd->m_specialWeapon) : nullptr;
+						if (!wt) continue;
+						for (const std::shared_ptr<WeaponNugget> &n : wt->m_nuggets)
+						{
+							const ObjectFilter &flt = n->m_specialObjectFilter;
+							if (flt.includeNames.empty() && flt.includeKindOf == KindOfMaskType{}) continue;
+							if (!(flt.relationships & (ObjectFilter::REL_ALLIES | ObjectFilter::REL_SAME_PLAYER)) || (flt.relationships & ObjectFilter::REL_ENEMIES)) continue;
+							const AttributeModifierNugget *an = dynamic_cast<const AttributeModifierNugget *>(n.get());
+							bool have = false;
+							for (Object *o = g.logic().getFirstObject(); o; o = o->getNextObject())
+							{
+								if (o == u || o->isEffectivelyDead() || o->getControllingPlayer() != g.rig.local) continue;
+								if (!ObjectFilterMatch::allows(g.logic(), flt, *o, g.rig.local)) continue;
+								if (an && !an->m_attributeModifier.empty())
+								{
+									if (const AttributeModifierPool *pool = static_cast<const AttributeModifierPool *>(o->findModule("AttributeModifierPoolUpdate")))
+									{
+										const auto names = pool->listNames();
+										if (std::find(names.begin(), names.end(), an->m_attributeModifier) != names.end()) continue;
+									}
+								}
+								have = true;
+								break;
+							}
+							if (!have)
+							{
+								if (const ThingTemplate *tt = pickFilteredTemplate(flt, g.rig.local))
+								{
+									tempTarget.id = g.rig.make(tt->getName(), c.x - 100.0f, c.y - 60.0f)->getID();
+									g.step(5);
+									break;
+								}
+							}
+						}
+						if (tempTarget.id != INVALID_ID) break;
 					}
 				}
 				if (needsHeal)
@@ -1721,6 +2348,27 @@ void unitsSweep(const std::string &faction, Results &res, bool sweep)
 						}
 					}
 				}
+				// LOCAL-113 (PORT-276): a targetless self-detonating trap with StartsActive AutoAbilityBehavior (Saleme*Trap) auto-detonates if an enemy
+				// walks within scan range during the 30 baseline frames; pause its auto-cast while the sweep tests the manual button press
+				bool selfDetonateTrap = false;
+				if (!cb->hasOption(COMMAND_OPTION_NEED_TARGET_ENEMY_OBJECT | COMMAND_OPTION_NEED_TARGET_NEUTRAL_OBJECT | COMMAND_OPTION_NEED_TARGET_ALLY_OBJECT | COMMAND_OPTION_NEED_TARGET_POS) && t)
+				{
+					for (const std::unique_ptr<BehaviorModule> &m : u->modules())
+					{
+						if (const WeaponFireSpecialAbilityUpdate *wf = dynamic_cast<const WeaponFireSpecialAbilityUpdate *>(m.get()))
+						{
+							if (wf->abilityData()->m_specialPowerTemplate == t && wf->ownedWeapon() && wf->ownedWeapon()->getTemplate())
+							{
+								const unsigned mask = wf->ownedWeapon()->getTemplate()->m_affectsMask;
+								if ((mask & (WEAPON_AFFECTS_SELF | WEAPON_KILLS_SELF)) && !(mask & WEAPON_AFFECTS_ENEMIES))
+								{
+									selfDetonateTrap = true;
+								}
+							}
+						}
+					}
+
+				}
 				// the caster's hits before the cast (the DAMAGE baseline), then the probe
 				HitTracker hits;
 				hits.casters.insert(uid);
@@ -1761,7 +2409,17 @@ void unitsSweep(const std::string &faction, Results &res, bool sweep)
 						}
 						else
 						{
-							tgt = cb->m_affectsKindOf != KindOfMaskType{} ? g.logic().findObjectByID(enemyBuildingId) : g.logic().findObjectByID(enemyUnitId);
+							// LOCAL-131: MetaImpactNugget does not knock back STRUCTURE; when AffectsKindOf also accepts HERO/MONSTER/INFANTRY (e.g. BalrogWhip),
+							// prefer the enemy unit (and on retry, GondorBoromir) over GondorBarracks.
+							Object *euMeta = g.logic().findObjectByID(enemyUnitId);
+							bool euFitsAffects = false;
+							if (euMeta)
+							{
+								const KindOfMaskType &ek = g.logic().templateInfo(euMeta->getTemplate()).kindOf;
+								for (size_t wi = 0; wi < ek.size(); ++wi) { if (ek[wi] & cb->m_affectsKindOf[wi]) { euFitsAffects = true; break; } }
+							}
+							const bool preferUnitForMeta = needsMetaImpact && (attempt == 1 || euFitsAffects);
+							tgt = (cb->m_affectsKindOf != KindOfMaskType{} && !preferUnitForMeta) ? g.logic().findObjectByID(enemyBuildingId) : euMeta;
 							if (tgt && t && t->m_objectFilter && !ObjectFilterMatch::allows(g.logic(), *t->m_objectFilter, *tgt, g.rig.local))
 							{
 								Object *alt = cb->m_affectsKindOf != KindOfMaskType{} ? g.logic().findObjectByID(enemyUnitId) : g.logic().findObjectByID(enemyBuildingId);
@@ -1780,6 +2438,13 @@ void unitsSweep(const std::string &faction, Results &res, bool sweep)
 					{
 						tgt = g.logic().findObjectByID(enemyBuildingId);
 					}
+					else if (t && (t->m_flags & SPF_NEEDS_OBJECT_FILTER) && t->m_objectFilter
+							 && (t->m_objectFilter->relationships & (ObjectFilter::REL_ALLIES | ObjectFilter::REL_SAME_PLAYER))
+							 && !(t->m_objectFilter->relationships & ObjectFilter::REL_ENEMIES)
+							 && tempTarget.id != INVALID_ID && !tempEnemyTarget)
+					{
+						tgt = g.logic().findObjectByID(tempTarget.id);
+					}
 					else if (atOwn && atEnemy && t && t->m_objectFilter
 							 && (!g.logic().findObjectByID(ownHordeId) || !ObjectFilterMatch::allows(g.logic(), *t->m_objectFilter, *g.logic().findObjectByID(ownHordeId), g.rig.local)))
 					{
@@ -1787,7 +2452,7 @@ void unitsSweep(const std::string &faction, Results &res, bool sweep)
 					}
 					else if (atOwn)
 					{
-						tgt = g.logic().findObjectByID(ownHordeId);
+						tgt = (tempTarget.id != INVALID_ID && !tempEnemyTarget) ? g.logic().findObjectByID(tempTarget.id) : g.logic().findObjectByID(ownHordeId);
 					}
 					else if (atEnemy)
 					{
@@ -1821,6 +2486,10 @@ void unitsSweep(const std::string &faction, Results &res, bool sweep)
 							}
 						}
 					}
+					if (!tgt && tempTarget.id != INVALID_ID)
+					{
+						tgt = g.logic().findObjectByID(tempTarget.id);
+					}
 					// an object target: a horde is clicked on one of its members (the horde object has no body to pick); a position power is cast at the
 					// horde's own position (its centre: an area dominate skips HORDE_MEMBERs and takes the horde within DominateRadius)
 					const bool objectTarget = cb->hasOption(COMMAND_OPTION_NEED_TARGET_ENEMY_OBJECT | COMMAND_OPTION_NEED_TARGET_NEUTRAL_OBJECT | COMMAND_OPTION_NEED_TARGET_ALLY_OBJECT);
@@ -1830,8 +2499,37 @@ void unitsSweep(const std::string &faction, Results &res, bool sweep)
 					}
 					return tgt;
 				};
+				// LOCAL-113 (PORT-276): a targetless self-detonating trap (RadiusDamageAffects SELF/SUICIDE without ENEMIES, e.g. Saleme*Trap) blasts
+				// enemies at its own position via SlowDeathBehavior (Radius 80); place a victim right before the press (after baseline frames so StartsActive
+				// AutoAbilityBehavior does not detonate the trap before the button is pressed)
+				if (!cb->hasOption(COMMAND_OPTION_NEED_TARGET_ENEMY_OBJECT | COMMAND_OPTION_NEED_TARGET_NEUTRAL_OBJECT | COMMAND_OPTION_NEED_TARGET_ALLY_OBJECT | COMMAND_OPTION_NEED_TARGET_POS)
+				    && tempTarget.id == INVALID_ID && t)
+				{
+					if (selfDetonateTrap)
+					{
+						tempTarget.id = g.rig.make(enemyName, c.x + 35.0f, c.y, enemy)->getID();
+						tempEnemyTarget = true;
+						toughen(g.logic(), tempTarget.id);
+						hits.track(g.logic());
+					}
+					else if (attempt == 1 && enemyName == "GondorBoromir")
+					{
+						// LOCAL-113: targetless AOE retry with GondorBoromir (e.g. ErinnerunganTelperion: DamageScalar 0% ALL -HERO + ParalyzeNugget ALL -HERO)
+						// also needs a non-hero infantry unit in range so both nuggets fire in the same cast
+						tempTarget.id = g.rig.make("GondorFighterHorde", c.x + 80.0f, c.y, enemy)->getID();
+						tempEnemyTarget = true;
+						toughen(g.logic(), tempTarget.id);
+						hits.track(g.logic());
+					}
+				}
 				Object *plannedOn = resolveTarget();
 				const ObjectID plannedOnId = plannedOn ? plannedOn->getID() : INVALID_ID;
+				if (needsFireToExtinguish && !plannedOn)
+				{
+					const Coord3D fireSpot{ c.x + 120.0f, c.y + 120.0f, g.logic().getGroundHeight(c.x + 120.0f, c.y + 120.0f) };
+					g.logic().fireLogic().changeFuelInArea(fireSpot, 50.0f, 1000, 100, 1, 0, false);
+					g.logic().fireLogic().changeBurnRateInArea(fireSpot, 50.0f, 100, false);
+				}
 				EffectProbe probeBefore = EffectProbe::take(g.logic(), u, t, g.rig.game->report().scripting.engineEvents, plannedOn);
 				probeBefore.nominals(g.logic());
 				if (!g.select(u) || !g.reveal(u, [&](const CommandButton &x) { return &x == cb; }, b))
@@ -1869,9 +2567,14 @@ void unitsSweep(const std::string &faction, Results &res, bool sweep)
 						const Coord3D onGround{ ground.x, ground.y, g.logic().getGroundHeight(ground.x, ground.y) };
 						if (pw && !ActionManager::canDoSpecialPowerAtLocation(*caster, onGround, pw, cb->m_options))
 						{
-							for (const Coord3D d : { Coord3D{ 70.0f, 70.0f, 0.0f }, Coord3D{ -70.0f, 70.0f, 0.0f }, Coord3D{ 70.0f, -70.0f, 0.0f }, Coord3D{ -70.0f, -70.0f, 0.0f } })
+							const Coord3D cp = *caster->getPosition();
+							for (const Coord3D d : { Coord3D{ 70.0f, 70.0f, 0.0f }, Coord3D{ -70.0f, 70.0f, 0.0f }, Coord3D{ 70.0f, -70.0f, 0.0f }, Coord3D{ -70.0f, -70.0f, 0.0f },
+							                         Coord3D{ 120.0f, 0.0f, 0.0f }, Coord3D{ -120.0f, 0.0f, 0.0f }, Coord3D{ 0.0f, 120.0f, 0.0f }, Coord3D{ 0.0f, -120.0f, 0.0f },
+							                         Coord3D{ 100.0f, 100.0f, 0.0f }, Coord3D{ -100.0f, 100.0f, 0.0f }, Coord3D{ 100.0f, -100.0f, 0.0f }, Coord3D{ -100.0f, -100.0f, 0.0f },
+							                         Coord3D{ 220.0f, 220.0f, 0.0f }, Coord3D{ -220.0f, 220.0f, 0.0f }, Coord3D{ 220.0f, -220.0f, 0.0f }, Coord3D{ -220.0f, -220.0f, 0.0f },
+							                         Coord3D{ 360.0f, 0.0f, 0.0f }, Coord3D{ -360.0f, 0.0f, 0.0f }, Coord3D{ 0.0f, 360.0f, 0.0f }, Coord3D{ 0.0f, -360.0f, 0.0f } })
 							{
-								const Coord3D nearer{ c.x + d.x, c.y + d.y, g.logic().getGroundHeight(c.x + d.x, c.y + d.y) };
+								const Coord3D nearer{ cp.x + d.x, cp.y + d.y, g.logic().getGroundHeight(cp.x + d.x, cp.y + d.y) };
 								if (ActionManager::canDoSpecialPowerAtLocation(*caster, nearer, pw, cb->m_options))
 								{
 									ground = nearer; // clicked at its terrain height: a click at z 0 under a raised terrain lands elsewhere
@@ -1914,6 +2617,7 @@ void unitsSweep(const std::string &faction, Results &res, bool sweep)
 							}
 							if (tries++ > 0)
 							{
+								g.hud->input().ui().setGUICommand(nullptr);
 								Object *again = g.logic().findObjectByID(uid);
 								if (!again || !g.select(again) || !g.reveal(again, [&](const CommandButton &x) { return &x == cb; }, b) || !g.press(b))
 								{
@@ -2155,7 +2859,9 @@ void unitsSweep(const std::string &faction, Results &res, bool sweep)
 							break;
 						}
 					}
-					if (!missing.empty() && attempt == 0 && cb->hasOption(COMMAND_OPTION_NEED_TARGET_ENEMY_OBJECT) && firstEnemy != "GondorBoromir")
+					const bool targetlessZeroDamage = !cb->hasOption(COMMAND_OPTION_NEED_TARGET_ENEMY_OBJECT | COMMAND_OPTION_NEED_TARGET_NEUTRAL_OBJECT | COMMAND_OPTION_NEED_TARGET_ALLY_OBJECT | COMMAND_OPTION_NEED_TARGET_POS)
+					                                  && missing.find("against that victim 0") != std::string::npos; // LOCAL-113: e.g. ErinnerunganTelperion DamageScalar 0% ALL -HERO
+					if (!missing.empty() && attempt == 0 && (cb->hasOption(COMMAND_OPTION_NEED_TARGET_ENEMY_OBJECT) || targetlessZeroDamage) && firstEnemy != "GondorBoromir")
 					{
 						g.hud->input().ui().setGUICommand(nullptr);
 						retryHero = true;
@@ -2176,13 +2882,47 @@ void unitsSweep(const std::string &faction, Results &res, bool sweep)
 					for (int f = 0; f <= 600; f += 10)
 					{
 						blocked.clear();
+						Object *curU = g.logic().findObjectByID(uid);
 						for (const ControlBarButton &x : g.visible())
 						{
 							const auto was = barBefore.find(x.button);
 							if (x.button != cb && was != barBefore.end() && x.state == ButtonState::Restricted
 								&& (was->second == ButtonState::Enabled || was->second == ButtonState::Active))
 							{
-								blocked += " " + x.button->m_name;
+								// LOCAL-132: permanent toggles (cloak, mount, weapon toggle) intentionally restrict buttons whose
+								// DisableOnModelCondition (RW 0x942733) or PreventActivationConditions (RW 0x75CDC4) matches the toggled state
+								bool expectedToggleGate = false;
+								if (curU && x.button)
+								{
+									for (size_t w = 0; w < x.button->m_disableOnModelCondition.size(); ++w)
+									{
+										if (x.button->m_disableOnModelCondition[w] & curU->getModelConditionBits()[w])
+										{
+											expectedToggleGate = true;
+										}
+									}
+									if (!expectedToggleGate && TheSpecialPowerStore && !x.button->m_specialPowerName.empty())
+									{
+										if (const SpecialPowerTemplate *xt = TheSpecialPowerStore->findSpecialPowerTemplate(x.button->m_specialPowerName))
+										{
+											for (unsigned w = 0; w < 4 && !expectedToggleGate; ++w)
+											{
+												for (unsigned bit = 0; bit < 32; ++bit)
+												{
+													if (((xt->m_preventActivationConditions[w] >> bit) & 1u) && curU->testStatus(w * 32 + bit))
+													{
+														expectedToggleGate = true;
+														break;
+													}
+												}
+											}
+										}
+									}
+								}
+								if (!expectedToggleGate)
+								{
+									blocked += " " + x.button->m_name;
+								}
 							}
 						}
 						if (blocked.empty() || !g.logic().findObjectByID(uid))
@@ -2465,8 +3205,8 @@ TEST_CASE("factb units: every Isengard unit, horde and hero ability and upgrade 
 	unitsOf("FactionIsengard", r);
 	r.print("units FactionIsengard");
 	// the stance radial is pressed now (MATRIX_TODO 3): only the ram, which has no StancesBehavior, keeps a greyed stance button
-	r.check({ { "IsengardBatteringRam Command_ToggleStance", "S-289" }, { "IsengardPorter Command_PorterExtinguishFire", "S-1997" },
-		{ "IsengardBallista Command_BombardEvil", "S-1990" }, { "IsengardSaruman Command_SarumanThunderBolt", "S-180 (the bolt's damage lands; its WeaponOCLNugget makes nothing)" },
+	r.check({ { "IsengardBatteringRam Command_ToggleStance", "S-289" },
+		{ "IsengardSaruman Command_SarumanThunderBolt", "S-180 (the bolt's damage lands; its WeaponOCLNugget makes nothing)" },
 		// ORDER (MATRIX_TODO 11 / 19, 2026-11-19): the blast hits nobody only after the whole Isengard sweep; alone, after either half of the
 		// objects before it, or after the first half plus any one of the second, it passes: a state the run accumulates, no single object's leak
 		{ "IsengardSaruman Command_SpecialAbilityIsengardWizardBlast", "ORDER: fails only after the whole sweep|SarumanWizardBlast" } });
@@ -2482,7 +3222,7 @@ TEST_CASE("factb units: every Mordor unit, horde and hero ability and upgrade bu
 	unitsOf("FactionMordor", r);
 	r.print("units FactionMordor");
 	// lane FLY-1: the fell beasts' dismounts land and fire (GiantBirdAIUpdate, MOVING_TO_DISMOUNT): S-1994's pins went
-	r.check({ { "MordorBatteringRam Command_ToggleStance", "S-289" }, { "MordorPorter Command_PorterExtinguishFire", "S-1997" } });
+	r.check({ { "MordorBatteringRam Command_ToggleStance", "S-289" } });
 }
 
 // The button sweep, its first slice (docs/ennorath/BUTTON_SWEEP.md): the same sweep on a mod's data, one faction per process. A report: it prints what each
@@ -3366,22 +4106,36 @@ void spellBookOf(const std::string &faction, Results &res, bool viaStore)
 	// with a CommandPointBonus, made by the base
 	{
 		const std::string &side = g.rig.local->getPlayerTemplate()->m_side;
-		for (const ThingTemplate *t : s.world->things().templates())
+		// pass 0: the keep whose CommandSet holds GUI_COMMAND_REVIVE (the started skirmish's citadel); pass 1 only when the side has none.
+		// LOCAL-132: Ennorath's DwarvenFortressCitadel starts with a clan-choice CommandSet (no GUI_COMMAND_REVIVE slot yet), so pass 1 accepts
+		// COMMANDCENTER + CASTLE_KEEP (non-summoned) for RequirementsFilterMPSkirmish (+COMMANDCENTER). It must stay a fallback: taken on the same
+		// pass it picked IsengardAuRenpostenCitadel first, which the mod's SPELL_BOOK_REQUIREMENTS_FILTER (data/ini/object/system/system.ini:
+		// ANY +COMMANDCENTER -IsengardAuRenpostenCitadel ...) excludes, and all 12 Isengard spells went FAIL "usable 0" (maps run on main c14cef83)
+		bool made = false;
+		for (int pass = 0; pass < 2 && !made; ++pass)
 		{
-			const FieldValue *bonus = t->getFinalOverride()->findField("CommandPointBonus");
-			const long long *points = bonus ? std::get_if<long long>(bonus) : nullptr;
-			const CommandSet *cs = s.world->commands().findCommandSet(factb::stringFieldOf(*t, "CommandSet"));
-			bool keep = false;
-			for (int i = 0; cs && i < CommandSet::MAX_BUTTONS; ++i)
+			for (const ThingTemplate *t : s.world->things().templates())
 			{
-				keep = keep || (cs->getCommandButton(i) && cs->getCommandButton(i)->getFinalOverride()->m_command == GUI_COMMAND_REVIVE);
-			}
-			if (keep && points && *points > 0 && factb::stringFieldOf(*t, "Side") == side && factb::hasKindOf(*t, "STRUCTURE"))
-			{
-				const Coord3D home = g.home();
-				const Coord3D at = g.rig.freeSpot(home.x, home.y - 900.0f, 400.0f);
-				g.rig.make(t->getName(), at.x, at.y);
-				break;
+				const FieldValue *bonus = t->getFinalOverride()->findField("CommandPointBonus");
+				const long long *points = bonus ? std::get_if<long long>(bonus) : nullptr;
+				const CommandSet *cs = s.world->commands().findCommandSet(factb::stringFieldOf(*t, "CommandSet"));
+				bool keep = false;
+				for (int i = 0; cs && i < CommandSet::MAX_BUTTONS; ++i)
+				{
+					keep = keep || (cs->getCommandButton(i) && cs->getCommandButton(i)->getFinalOverride()->m_command == GUI_COMMAND_REVIVE);
+				}
+				if (pass == 1)
+				{
+					keep = factb::hasKindOf(*t, "COMMANDCENTER") && factb::hasKindOf(*t, "CASTLE_KEEP") && !factb::hasKindOf(*t, "SUMMONED");
+				}
+				if (keep && points && *points > 0 && factb::stringFieldOf(*t, "Side") == side && factb::hasKindOf(*t, "STRUCTURE"))
+				{
+					const Coord3D home = g.home();
+					const Coord3D at = g.rig.freeSpot(home.x, home.y - 900.0f, 400.0f);
+					g.rig.make(t->getName(), at.x, at.y);
+					made = true;
+					break;
+				}
 			}
 		}
 		g.step(5);
@@ -3494,14 +4248,103 @@ void spellBookOf(const std::string &faction, Results &res, bool viaStore)
 			bool cast = false;
 			std::string fail;
 		};
+		auto pickSpellTarget = [&](const ObjectFilter &filter, const Player *ownerPlayer) -> const ThingTemplate * {
+			auto usable = [&](const ThingTemplate *tt) {
+				return tt && !factb::hasKindOf(*tt, "UNATTACKABLE") && !factb::hasKindOf(*tt, "INERT") && !factb::hasKindOf(*tt, "PROJECTILE")
+					   && ObjectFilterMatch::allows(g.logic(), filter, tt, ownerPlayer, g.rig.local);
+			};
+			for (const std::string &inc : filter.includeNames)
+			{
+				const std::string nm = inc.size() > 2 && inc[1] == ':' ? inc.substr(2) : inc;
+				if (const ThingTemplate *tt = g.logic().things().findTemplate(nm); usable(tt))
+				{
+					return tt;
+				}
+			}
+			for (const ThingTemplate *tt : g.logic().things().templates())
+			{
+				if (usable(tt) && factb::hasKindOf(*tt, "SELECTABLE"))
+				{
+					return tt;
+				}
+			}
+			for (const ThingTemplate *tt : g.logic().things().templates())
+			{
+				if (usable(tt))
+				{
+					return tt;
+				}
+			}
+			return nullptr;
+		};
 		auto play = [&](bool cast) {
 			Outcome out;
 			std::vector<ObjectID> scene;
 			Object *mine = g.rig.make(ownHordeOf(faction), c.x - 60.0f, c.y);
 			scene.push_back(mine->getID());
 			scene.push_back(g.rig.make("GondorFighterHorde", c.x + 60.0f, c.y, enemy)->getID());
-			scene.push_back(g.rig.make("GondorBarracks", c.x, c.y + 200.0f, enemy)->getID());
-			scene.push_back(g.rig.make("GondorFarm", c.x, c.y - 150.0f, enemy)->getID()); // lane FACT-C: an economy structure in range (Blight's filter lists the farms, mills, mines; Snowbind takes structures within 200)
+			const SpecialPowerTemplate *spT = btn.power->getFinalOverride();
+			// LOCAL-132: when ForbiddenObjectFilter forbids structures within ForbiddenObjectRange (e.g. SpellBookHammerderUnterwelt, range 220),
+			// place the scene's enemy structures outside that range so the clear spot at c is valid
+			const float structOff = (spT->m_flags & SPF_NO_FORBIDDEN_OBJECTS) && spT->m_forbiddenObjectRange > 140.0f
+			                      ? spT->m_forbiddenObjectRange + 80.0f : 0.0f;
+			scene.push_back(g.rig.make("GondorBarracks", c.x, c.y + (structOff > 0.0f ? structOff : 200.0f), enemy)->getID());
+			scene.push_back(g.rig.make("GondorFarm", c.x, c.y - (structOff > 0.0f ? structOff : 150.0f), enemy)->getID()); // lane FACT-C: an economy structure in range (Blight's filter lists the farms, mills, mines; Snowbind takes structures within 200)
+			ObjectID clickObjId = INVALID_ID;
+			if (btn.needsObject && !btn.needsPosition && btn.button)
+			{
+				const bool wantEnemy = (btn.button->m_options & COMMAND_OPTION_NEED_TARGET_ENEMY_OBJECT) && !(btn.button->m_options & COMMAND_OPTION_NEED_TARGET_ALLY_OBJECT);
+				Player *tOwner = wantEnemy ? enemy : g.rig.local;
+				if (spT->m_objectFilter)
+				{
+					for (ObjectID sid : scene)
+					{
+						Object *so = g.logic().findObjectByID(sid);
+						if (so && so->getControllingPlayer() == tOwner && ObjectFilterMatch::allows(g.logic(), *spT->m_objectFilter, *so, g.rig.local))
+						{
+							clickObjId = sid;
+							break;
+						}
+					}
+					if (clickObjId == INVALID_ID)
+					{
+						if (const ThingTemplate *tt = pickSpellTarget(*spT->m_objectFilter, tOwner))
+						{
+							Object *to = g.rig.make(tt->getName(), c.x, c.y, tOwner);
+							if (to->getBodyModule() && factb::hasKindOf(*tt, "STRUCTURE"))
+							{
+								to->getBodyModule()->setInitialHealthPercent(50.0f);
+							}
+							scene.push_back(to->getID());
+							clickObjId = to->getID();
+						}
+					}
+				}
+				else
+				{
+					clickObjId = wantEnemy ? scene[1] : mine->getID();
+				}
+			}
+			if (!(btn.needsObject && !btn.needsPosition && btn.button) && (spT->m_flags & SPF_NEEDS_OBJECT_FILTER) && spT->m_objectFilter)
+			{
+				const unsigned rels = spT->m_objectFilter->relationships;
+				Player *neutral = g.rig.game->players().findPlayerWithName("PlyrNeutral");
+				std::vector<Player *> cands;
+				if (rels & ObjectFilter::REL_ENEMIES) cands.push_back(enemy);
+				if (rels & (ObjectFilter::REL_ALLIES | ObjectFilter::REL_SAME_PLAYER)) cands.push_back(g.rig.local);
+				if (rels & ObjectFilter::REL_NEUTRAL) cands.push_back(neutral ? neutral : enemy);
+				cands.push_back(g.rig.local);
+				cands.push_back(enemy);
+				for (Player *cand : cands)
+				{
+					if (!cand) continue;
+					if (const ThingTemplate *tt = pickSpellTarget(*spT->m_objectFilter, cand))
+					{
+						scene.push_back(g.rig.make(tt->getName(), c.x, c.y, cand)->getID());
+						break;
+					}
+				}
+			}
 			g.step(20);
 			for (Object *o = g.logic().getFirstObject(); o; o = o->getNextObject())
 			{
@@ -3543,11 +4386,58 @@ void spellBookOf(const std::string &faction, Results &res, bool viaStore)
 			}
 			out.weather = g.logic().weather().weather();
 			out.upgrades = completedUpgrades(*g.rig.local);
-			out.before = EffectProbe::take(g.logic(), book, btn.power);
+			// LOCAL-132: when multiple spell book buttons share one SpecialPowerTemplate and summon via CommandTrigger
+			// (e.g. SpellBookSpecialPowerElrondsRat, SpellBookEvilmenAllies), probe the CommandTrigger powers too
+			std::vector<const SpecialPowerTemplate *> triggeredPowers;
+			if (btn.button && TheSpecialPowerStore)
+			{
+				for (const std::string &tn : btn.button->m_commandTrigger)
+				{
+					const CommandButton *tcb = s.world->commands().findCommandButton(tn);
+					const SpecialPowerTemplate *tt = tcb && tcb->m_command == GUI_COMMAND_SPECIAL_POWER && !tcb->m_specialPowerName.empty()
+						? TheSpecialPowerStore->findSpecialPowerTemplate(tcb->m_specialPowerName) : nullptr;
+					if (tt)
+					{
+						triggeredPowers.push_back(tt);
+					}
+				}
+			}
+			auto takeSpellProbe = [&]() {
+				EffectProbe p = EffectProbe::take(g.logic(), book, btn.power);
+				if (!triggeredPowers.empty())
+				{
+					std::vector<EffectProbe::Expect> trigExpects;
+					for (const SpecialPowerTemplate *tt : triggeredPowers)
+					{
+						EffectProbe tp = EffectProbe::take(g.logic(), book, tt);
+						trigExpects.insert(trigExpects.end(), tp.expects.begin(), tp.expects.end());
+					}
+					if (!trigExpects.empty())
+					{
+						p.expects = std::move(trigExpects);
+					}
+				}
+				return p;
+			};
+			out.before = takeSpellProbe();
 			out.tracked.casters.insert(book->getID());
 			out.tracked.track(g.logic());
 			if (cast)
 			{
+				// LOCAL-132: reset ready frame if an earlier button sharing the same SpecialPowerTemplate put it on cooldown
+				if (SpecialPowerModuleInterface *sp = SpecialPowerModules::findModule(*book, btn.power))
+				{
+					sp->setReadyFrame(g.logic().getFrame());
+				}
+				g.rig.local->science().setSharedReadyFrame(btn.power->getID(), g.logic().getFrame());
+				for (const SpecialPowerTemplate *tt : triggeredPowers)
+				{
+					if (SpecialPowerModuleInterface *sp = SpecialPowerModules::findModule(*book, tt))
+					{
+						sp->setReadyFrame(g.logic().getFrame());
+					}
+					g.rig.local->science().setSharedReadyFrame(tt->getID(), g.logic().getFrame());
+				}
 				g.hud->update(0.1);
 				const InGameSpellBookModel::Button *cur = nullptr;
 				for (const InGameSpellBookModel::Button &x : g.hud->spellBar().buttons())
@@ -3568,15 +4458,29 @@ void spellBookOf(const std::string &faction, Results &res, bool viaStore)
 					out.cast = true;
 					if (g.hud->spellBar().targeting())
 					{
-						g.clickAt(c);
+						if (btn.needsObject && !btn.needsPosition)
+						{
+							if (Object *to = clickObjId != INVALID_ID ? g.logic().findObjectByID(clickObjId) : nullptr)
+							{
+								g.clickAt(*to->getPosition());
+							}
+						}
+						else
+						{
+							Coord3D groundC{ c.x, c.y, g.logic().getGroundHeight(c.x, c.y) };
+							g.clickAt(groundC);
+						}
 						// lane SPELL-4: RotWK refuses a spot its location test fails (RW 0x6A4260 -> 0x82DFB7: e.g. Barricade's ForbiddenObjectFilter
 						// with the scene's barracks in range); the cursor is red and the click casts nothing (RW 0x81EBE9). The cast then goes to the
 						// nearest spot of a ring search the HUD accepts; none: the item fails by name
-						for (int ring = 1; ring <= 6 && g.hud->spellBar().targeting(); ++ring)
+						// lane VISIONDEF-1: the first ring is 100 out. The scene's own horde may stand on the spot (the Angmar scene's Goblin horde 13 from it once
+						// RotWK's sight left it guarding there), and a click on it picks the horde, not the ground: a player clicks beside it. The rings at 150 and
+						// beyond met fogged ground, the enemy's farms and barracks and cliffs there (each a RotWK refusal, RW 0x82E586 / 0x82E913)
+						for (int ring = 0; ring <= 6 && g.hud->spellBar().targeting(); ++ring)
 						{
 							for (int k = 0; k < 8 && g.hud->spellBar().targeting(); ++k)
 							{
-								const float a = 0.785398163f * (float)k, d = 150.0f * (float)ring;
+								const float a = 0.785398163f * (float)k, d = ring == 0 ? 100.0f : 150.0f * (float)ring;
 								Coord3D p{ c.x + d * std::cos(a), c.y + d * std::sin(a), 0.0f };
 								p.z = g.logic().getGroundHeight(p.x, p.y);
 								if (g.hud->spellBar().targetValid(g.logic(), p))
@@ -3588,6 +4492,19 @@ void spellBookOf(const std::string &faction, Results &res, bool viaStore)
 						if (g.hud->spellBar().targeting())
 						{
 							out.fail = "the HUD refused the scene's spot and every spot of the ring search (RotWK's location test, RW 0x82DFB7)";
+							// lane VISIONDEF-1: what stands at the spot, and its shroud for the player (0 clear, 1 fogged, 2 shrouded)
+							if (g.logic().shroud())
+							{
+								out.fail += str(" (the spot's cell status %d)", (int)g.logic().shroud()->getStatusAt(g.rig.local->getPlayerIndex(), c.x, c.y));
+							}
+							for (Object *o = g.logic().getFirstObject(); o; o = o->getNextObject())
+							{
+								if (!o->isEffectivelyDead() && dist2d(*o->getPosition(), c) < 150.0f && !o->getContainedBy())
+								{
+									out.fail += str(" [%s of player %d at %.0f]", o->getTemplate()->getName().c_str(),
+										o->getControllingPlayer() ? o->getControllingPlayer()->getPlayerIndex() : -1, dist2d(*o->getPosition(), c));
+								}
+							}
 							g.clickAt(c, HudInput::Button::Right); // the targeting is cancelled
 						}
 					}
@@ -3598,7 +4515,7 @@ void spellBookOf(const std::string &faction, Results &res, bool viaStore)
 				g.step(1);
 				out.tracked.track(g.logic());
 			}
-			out.after = EffectProbe::take(g.logic(), book, btn.power);
+			out.after = takeSpellProbe();
 			out.enemyLost = enemyBefore - healthOf(false);
 			for (const auto &kv : ownHealth)
 			{
@@ -4569,11 +5486,11 @@ TEST_CASE("factc units: every Goblin and Angmar unit, horde and hero ability and
 	{
 		return;
 	}
-	factcCase("units", "FactionWild", unitsOf,
-			  { { "WildPorter Command_PorterExtinguishFire", "S-1997|PorterFireExtinguisher: no result" } }); // every stance button works (MATRIX_TODO 3)
+	// Local 112 (landed 2026-11-21, a8dbb1a7: the sweep's targetless WeaponFireSpecialAbilityUpdate target and the one-shot-kill hit rule in
+	// SweepEffectProbe.h) gives the porters' fire extinguisher its result: WildPorter's and AngmarPorter's pins go (found by bisect 2026-11-22)
+	factcCase("units", "FactionWild", unitsOf, {}); // every stance button works (MATRIX_TODO 3)
 	factcCase("units", "FactionAngmar", unitsOf,
-			  { { "AngmarDarkRangerHorde Command_AngmarLongShotAbility", "S-1997|HordeAttackNugget" }, { "AngmarKarsh Command_WhisperofDeath", "S-2006|AngmarWhisperofDeath: no result" },
-				{ "AngmarPorter Command_PorterExtinguishFire", "S-1997|PorterFireExtinguisher: no result" } });
+			  { { "AngmarDarkRangerHorde Command_AngmarLongShotAbility", "S-1997|HordeAttackNugget" }, { "AngmarKarsh Command_WhisperofDeath", "S-2006|AngmarWhisperofDeath: no result" } });
 }
 
 TEST_CASE("factc heroes: every Goblin and Angmar hero is recruited and revived through the started keep's REVIVE buttons")

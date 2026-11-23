@@ -95,6 +95,7 @@ public:
 	// adds its own fields after the base's. A load goes into the module of the same object, made from the same template
 	void xferAIState(class Xfer &x); ///< the module as one transaction (a refused load leaves it as it was: AIXfer::transaction)
 	virtual void xferAIStateBody(class Xfer &x);
+	virtual void loadPostProcess() {} // RW 0x00667BEF
 	// lane SAVE-4e: the module's part of Object::xfer's module list (obfme:Objects): its own version, then UpdateModule's (the next call frame); every
 	// other field is xferAIState's in obfme:AIWorld (SAVE-4c), which a subclass extends through xferAIStateBody. Native (S-4220: retail's
 	// AIUpdateInterface::xfer RW 0x667416 holds the AI state here)
@@ -181,6 +182,9 @@ public:
 	ObjectID targetHordeId() const { return m_targetHorde; }
 	// RW 0x698F06 -> the AI part: the unit is dead (its machine goes to AI_DEAD, its movers stop)
 	void onDie();
+	// RW 0x0063F3BF (AIUpdateInterface primary vslot +0x24C, called by Object::onDie RW 0x00698FB5): empty in base;
+	// DozerAIUpdate (RW 0x0088BF7A) removes any unplaced phantom structure on builder death.
+	virtual void onOwnerDie() {}
 	bool isAiInDeadState() const { return m_mover->isAiDead(); }
 	// the AI module's fields the mood scan reads (the module data is raw: S-326)
 	struct CombatSettings
@@ -204,7 +208,8 @@ public:
 	const CombatSettings &combatSettings() const { return m_combat; }
 	// lane BUILD-3, RW 0x667C76 AIUpdateInterface::findNearestLabeledContactPointOnTarget(target, out, callerPos, preferred): the SpecialContactPoints labels in order;
 	// the first for which the target has a contact point (Object::getWorldspaceBestContactPoint RW 0x690BD2, mode 0) gives `out`; false when none has one
-	bool findNearestLabeledContactPointOnTarget(const Object &target, Coord3D &out, const Coord3D &callerPos, bool preferred) const;
+	// Local 142 (S-7342): RW 0x667C76 format string RW 0xC0FE30 names 4th arg skipCollideTest; callers 0x6EA11E (0), 0x76B70C/0x76DE1B/0x76E200 (0), 0x8ADF07 (1).
+	bool findNearestLabeledContactPointOnTarget(const Object &target, Coord3D &out, const Coord3D &callerPos, bool skipCollideTest) const;
 	// lane TARGET-1: RotWK's getNextMoodTarget(calledByAI, calledDuringIdle) (RW 0x66844A): the target the unit's mood suggests (AI::findClosestEnemy with
 	// the mood's qualifiers and attack priority info), null when it looks for none now; calledByAI keeps the cadence (AI + 0x21C, MoodAttackCheckRate)
 	Object *getNextMoodTarget(bool calledByAI, bool calledDuringIdle);
@@ -274,6 +279,28 @@ public:
 	bool aiWanderInPlace(CommandSourceType source);
 	// Local 84: RW 0x0066D6D5 joinTeam (AI vslot 103): sync newly-joined member with an existing teammate's state or move to it
 	void joinTeam();
+	// Local 114: RW 0x0066B6B8 privateMoveToAndEvacuate (AICMD 0x03, AI vslot 19 / +0x4C, state 28 AI_MOVE_AND_EVACUATE; DONOR BFME2 0x0026B6B2)
+	bool aiMoveToAndEvacuate(const Coord3D &pos, CommandSourceType source);
+	// Local 114: RW 0x0066B72D privateMoveToAndEvacuateAndExit (AICMD 0x04, AI vslot 20 / +0x50, state 29 AI_MOVE_AND_EVACUATE_AND_EXIT -> 30 AI_MOVE_AND_DELETE; DONOR BFME2 0x0026B720)
+	bool aiMoveToAndEvacuateAndExit(const Coord3D &pos, CommandSourceType source);
+	// Local 114: RW 0x006AF1AC -> RW 0x0066E0DC privateEvacuate (AICMD 0x19/0x1B, AI vslot 48 / +0xC0; DONOR BFME2 0x0026DDED)
+	bool aiEvacuate(bool exposeStealthUnits, CommandSourceType source);
+	// Local 114: RW 0x0066E078 privateGetHealed (AICMD 0x15, AI vslot 46 / +0xB8 -> ActionManager::canGetHealedAt RW 0x0082C798 -> aiEnterObject; DONOR BFME2 0x0026DD89)
+	bool aiGetHealed(Object *healDepot, CommandSourceType source);
+	// Local 114: RW 0x0066E0AA privateGetRepaired (AICMD 0x16, AI vslot 47 / +0xBC -> ActionManager::canGetRepairedAt RW 0x0082C4E9 -> aiDock; DONOR BFME2 0x0026DDBB)
+	bool aiGetRepaired(Object *repairDepot, CommandSourceType source);
+	// Local 114: RW 0x00664533 privateMoveToObject / aiCombineObject (AICMD 0x45, AI vslot 50 / +0xC8 -> ActionManager::canCombineObjects RW 0x0082C254 -> state 60 AI_COMBINE; DONOR BFME2 0x0026472F)
+	bool aiCombineObject(Object *target, CommandSourceType source);
+	// Local 114: RW 0x0066B88C bfmePrivateCommand3C / aiEnterAndAttack (AICMD 0x3C, AI vslot 82 / +0x148, state 49 AI_ENTER_AND_ATTACK; DONOR BFME2 0x0026B86A)
+	bool aiEnterAndAttack(Object *container, CommandSourceType source);
+	// Local 114: RW 0x00664952 bfmeGoCSE / aiPanicCower (AICMD 0x2F, AI vslot 83 / +0x14C, state 21 AI_PANIC_COWER; DONOR BFME2 0x00264B4E)
+	bool aiPanicCower(Object *sourceObj, CommandSourceType source);
+	// Local 114: RW 0x0066C148 bfmePrivateCommand49 / aiAttackMoveToObject (AICMD 0x49, AI vslot 41 / +0xA4; DONOR BFME2 0x0026C0D6)
+	bool aiAttackMoveToObject(Object *target, CommandSourceType source);
+	// Local 114: RW 0x00663EF4 micropathToPosition (AI vslot 139 / +0x22C; DONOR BFME2 0x0026412B)
+	bool micropathToPosition(const Coord3D &pos);
+	// Local 114: RW 0x0066708E appendPositionToLocomotorPath (AI vslot 134 / +0x218; DONOR BFME2 0x00267266)
+	void appendPositionToLocomotorPath(const Coord3D &pos, int portalWaypointID = PathNode::NO_WAYPOINT);
 	// PORT-203: AI command 0x37 (RW 0x7C8154 aiGuardTunnelNetwork) -> aiDoCommand's gate, then privateGuardTunnelNetwork RW 0x664ABF (AI vslot 0xF8):
 	// enter state 0x18 (AI_TUNNEL_NETWORK_GUARD, AITunnelNetworkGuardState)
 	bool aiGuardTunnelNetwork(int mode, CommandSourceType source);
@@ -405,6 +432,9 @@ public:
 	// ---- queries ----
 	bool isIdle() const override;             // RW 0x6643FC
 	bool isMoving() const;                    // RW 0x664485
+	// RW 0x66288A (AIUpdateInterface vslot 0x228; DONOR BFME2 0x00262BA9): true while following a path (goal 1 or 4)
+	// with an active locomotor (+0x1F0) whose current or next optimised node carries a portal waypoint id (RW 0x5E2DF4 / 0x661E50).
+	bool isMovingAlongPortal() const;
 	// lane AI-2: RW vslot 0x1BC (RW 0x662B3C): the current state's slot 0x24 (AIState::isActive), true without a current state
 	bool isStateActive() const { return !m_machine || !m_machine->currentState() ? true : m_machine->currentState()->isActive(); }
 	// Port 257: RW vslot 0x1D0 (RW 0x662B28): the current state's slot 0x34 (AIState::isFollowThru), true without a current state
@@ -637,8 +667,9 @@ public:
 	// the emotion states' stop lines (S-1021 / S-1027)
 	static std::vector<std::string> emotionStops();
 
-	// ZH Object::reactToTransformChange -> Pathfinder::updatePos: the unit's position cell follows it (RW 0x8E26B7)
-	void reactToTransformChange();
+	// ZH Object::reactToTransformChange -> Pathfinder::updatePos: the unit's position cell follows it (RW 0x8E26B7); true when it took a new cell (lane
+	// VISIONDEF-1: Object::updateTriggerAreaFlags samples the vision ground ring again then, RW 0x6926F6)
+	bool reactToTransformChange();
 	// RW 0x66E233 through the collision pass of AIWorld
 	void onCollide(PathfindObject &other) { m_mover->onCollide(other); }
 

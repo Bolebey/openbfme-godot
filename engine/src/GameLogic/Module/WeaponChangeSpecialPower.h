@@ -26,6 +26,8 @@
 //                       doSpecialPowerAtLocation, which the class does not override;
 //   0x4B612F            a static helper of the module data that builds a string from the constant RW 0xDC62B8 (RW 0x435F30) and returns its argument;
 //   0x464A09            returns the constant RW 0xBDBA8C, the SAME function in the other ModuleData table RW 0xC651C0: a shared data-class helper, not this class's.
+//   * the target / location forms (doSpecialPowerAtObject RW 0x8C82E2, doSpecialPowerAtLocation RW 0x8C82EE) forward the options to
+//     doSpecialPower and ignore the target (overrides below).
 
 #pragma once
 
@@ -48,12 +50,15 @@ public:
 	static void buildFieldParse(MultiIniFieldParse &p);
 };
 
+// Local 87: RW 0x008C82A7 (getModuleName), RW 0x008C82FA (getModuleNameKey), RW 0x008C82AD / RW 0x008C83BA (dtors), RW 0x008C6583 (base dtor thunk), RW 0x004B612F (empty-string helper).
 class WeaponChangeSpecialPowerModule : public SpecialPowerModule
 {
 public:
 	OBFME_MODULE_XFER(WeaponChangeSpecialPowerModule) // lane SAVE-4b: SpecialPowerModule's
 	WeaponChangeSpecialPowerModule(Thing *thing, const WeaponChangeSpecialPowerModuleData *data) : SpecialPowerModule(thing, data), m_data(data) {}
-	void doSpecialPower(unsigned options) override; // RW 0x8C8420
+	void doSpecialPower(unsigned options) override; // RW 0x008C8420
+	void doSpecialPowerAtObject(Object *target, unsigned options) override { (void)target; doSpecialPower(options); } // RW 0x008C82E2
+	void doSpecialPowerAtLocation(const Coord3D &loc, unsigned options) override { (void)loc; doSpecialPower(options); } // RW 0x008C82EE
 
 	static void registerClass(ModuleFactory &modules);
 

@@ -377,7 +377,7 @@ void ShareExperienceBehavior::share(float value)
 	{
 		hits.push_back(h.object);
 	}
-	const bool heroesShareWithHeroes = true; // TheGameLogic + 0x9F (INFERENCE: 1 in a game, RW 0x62D299)
+	const bool heroesShareWithHeroes = logic.getHeroExperienceSharing(); // PORT-301: TheGameLogic + 0x9F (RW 0x883428: cmp byte ptr [eax + 0x9F], 0)
 	for (Object *c : hits)
 	{
 		if (heroSource && !heroesShareWithHeroes && isKind(*c, "HERO"))
@@ -1284,7 +1284,7 @@ void WeaponModeSpecialPowerUpdate::initiate()
 	Object *obj = getObject();
 	if (m_data->m_lockWeaponSlot == 5)
 	{
-		// RW 0x89843E: RW 0x68FDF7 is a popcount over the data's four WeaponSetFlags words (cmp edi, 4); an empty mask skips the loop
+		// RW 0x89843E: RW 0x68FDF7 is a popcount over the data's four WeaponSetFlags words (cmp edi, 4); an empty mask skips the loop. Each set bit goes through RW 0x691059 on the OBJECT (RW 0x89843E .. 0x898470)
 		bool anyFlag = false;
 		for (std::uint32_t word : m_data->m_weaponSetFlags)
 		{
@@ -1296,9 +1296,7 @@ void WeaponModeSpecialPowerUpdate::initiate()
 			{
 				if ((m_data->m_weaponSetFlags[(size_t)bit >> 5] >> (bit & 31)) & 1u)
 				{
-					// RW 0x691059 is an OBJECT method (this + 0x38C, then the weapon set update RW 0x6C99E2 and the model condition mirror
-					// RW 0xC16958): an object without a weapon set keeps the bits in its own words and mirrors the condition just the same.
-					obj->setWeaponSetFlag(bit, true);
+					obj->setWeaponSetFlag(bit, true); // RW 0x691059 is an OBJECT method (Object + 0x38C; weapon set update RW 0x6C99E2, model condition mirror RW 0xC16958): weaponless included
 				}
 			}
 		}
@@ -1328,6 +1326,7 @@ UpdateSleepTime WeaponModeSpecialPowerUpdate::update()
 	Object *obj = getObject();
 	// P-141 (RW 0x8983C1 -> 0x68DF11, Both editions): release lock through Contain/HordeContain even when a horde container itself has no weapons
 	ObjectWeapons::releaseObjectWeaponLock(*obj, LOCKED_PERMANENTLY);
+	// RW 0x8983C8 .. 0x8983EC: the mask's bits, each through RW 0x691106 on the OBJECT
 	for (int bit = 0; bit < 0x68; ++bit)
 	{
 		if ((m_data->m_weaponSetFlags[(size_t)bit >> 5] >> (bit & 31)) & 1u)
@@ -1386,17 +1385,13 @@ DualWeaponBehavior::DualWeaponBehavior(Thing *thing, const DualWeaponBehaviorMod
 UpdateSleepTime DualWeaponBehavior::setClose(bool close)
 {
 	Object *obj = getObject();
-	ObjectWeapons *weapons = obj->getWeapons();
 	static const int kMcClose = modelConditionIndex("WEAPONSTATE_CLOSE_RANGE");
-	const bool isClose = weapons && MaskTest(weapons->weaponSetFlags(), (unsigned)kWeaponSetCloseRange);
+	const bool isClose = MaskTest(obj->getWeaponSetFlags(), (unsigned)kWeaponSetCloseRange); // RW 0x668303 reads the OBJECT's word
 	if (close == isClose)
 	{
 		return (UpdateSleepTime)LOGICFRAMES_PER_SECOND; // RW 0x85E119 / 0x85E16B
 	}
-	if (weapons)
-	{
-		weapons->setWeaponSetFlag(kWeaponSetCloseRange, close); // RW 0x691059 / 0x691106 (7)
-	}
+	obj->setWeaponSetFlag(kWeaponSetCloseRange, close); // RW 0x691059 / 0x691106 (7) on the OBJECT
 	if (obj->testModelCondition(kMcClose) != close) // Object + 0x120 bit 0, then RW 0x68B53C
 	{
 		Object::ModelConditionBits clearBits{}, setBits{};
@@ -1416,8 +1411,7 @@ UpdateSleepTime DualWeaponBehavior::update()
 		return UPDATE_SLEEP_FOREVER;
 	}
 	const int fps = LOGICFRAMES_PER_SECOND;
-	ObjectWeapons *weapons = obj->getWeapons();
-	const bool rampage = weapons && MaskTest(weapons->weaponSetFlags(), (unsigned)kWeaponSetRampage);
+	const bool rampage = MaskTest(obj->getWeaponSetFlags(), (unsigned)kWeaponSetRampage);
 	if (rampage)
 	{
 		return (UpdateSleepTime)fps;
@@ -1430,7 +1424,7 @@ UpdateSleepTime DualWeaponBehavior::update()
 	}
 	if (m_data->m_useHordeRangeWeapon && hordeContainer)
 	{
-		return setClose(weapons && MaskTest(weapons->weaponSetFlags(), (unsigned)kWeaponSetCloseRange)); // RW 0x85E003 .. 0x85E019
+		return setClose(MaskTest(obj->getWeaponSetFlags(), (unsigned)kWeaponSetCloseRange)); // RW 0x85E003 .. 0x85E019
 	}
 	static const int kUsingAbility = modelConditionIndex("USING_SPECIAL_ABILITY"), kMounted = modelConditionIndex("MOUNTED");
 	if (obj->testModelCondition(kUsingAbility))
@@ -2497,10 +2491,10 @@ void HeroAbilityModules::registerAll(ModuleFactory &modules)
 	bindRuntime<BloodthirstyUpdate, BloodthirstyUpdateModuleData>(modules, "BloodthirstyUpdate");
 	bindRuntime<ShareExperienceBehavior, ShareExperienceBehaviorModuleData>(modules, "ShareExperienceBehavior");
 	bindRuntime<DamageFilteredCreateObjectDie, DamageFilteredCreateObjectDieModuleData>(modules, "DamageFilteredCreateObjectDie");
-	bindRuntime<AutoAbilityBehavior, AutoAbilityBehaviorModuleData>(modules, "AutoAbilityBehavior");
+	bindRuntime<AutoAbilityBehavior, AutoAbilityBehaviorModuleData>(modules, "AutoAbilityBehavior"); // RW 0x0085D436 (getModuleName), RW 0x0085D43C (getModuleNameKey)
 	bindRuntime<WeaponModeSpecialPowerUpdate, WeaponModeSpecialPowerUpdateModuleData>(modules, "WeaponModeSpecialPowerUpdate");
-	bindRuntime<DualWeaponBehavior, DualWeaponBehaviorModuleData>(modules, "DualWeaponBehavior");
-	bindRuntime<TemporarilyDefectUpdate, TemporarilyDefectUpdateModuleData>(modules, "TemporarilyDefectUpdate");
+	bindRuntime<DualWeaponBehavior, DualWeaponBehaviorModuleData>(modules, "DualWeaponBehavior"); // RW 0x0085DE48, RW 0x0085DE54, RW 0x0085DE2F, RW 0x0085DF21
+	bindRuntime<TemporarilyDefectUpdate, TemporarilyDefectUpdateModuleData>(modules, "TemporarilyDefectUpdate"); // RW 0x008D0AB1, RW 0x008D0AB7, RW 0x008D0A98, RW 0x008D0B6E
 	bindRuntime<DominateEnemySpecialPower, DominateEnemySpecialPowerModuleData>(modules, "DominateEnemySpecialPower"); // RW 0x00652C4B, RW 0x008D0E17, RW 0x008D0E3D
 	bindRuntime<ActivateModuleSpecialPower, ActivateModuleSpecialPowerModuleData>(modules, "ActivateModuleSpecialPower");
 	bindRuntime<ArrowStormUpdate, ArrowStormUpdateModuleData>(modules, "ArrowStormUpdate");
@@ -2640,11 +2634,19 @@ std::vector<std::string> HeroAbilityModules::stopLines()
 }
 
 // ---- lane SAVE-4b: the snapshots (OpenBFME native, S-4190, unless noted) ----------------------------------------------------------------------------------
+// PORT-301: retail's layout (RW 0x8E3BB1, tier A, (1, 1)): the version (RW 0x404F15) and the base xfer (RW 0x850C60) and nothing else — the share counter is the
+// port's own diagnostics, not state (SAVES.md section 6), so it is not saved. The port's own version 1 wrote it after the base: version 2 drops it and a
+// version 1 snapshot's counter is read and dropped, so an older save still loads (SAVES.md section 5, the versioned blocks)
 void ShareExperienceBehavior::xfer(Xfer &x)
 {
-	SnapshotXfer::version(x, 1, 1);
+	XferVersion v{ 1, 2 };
+	x.xferVersion(v);
 	xferUpdateModule(x);
-	SnapshotXfer::u64(x, m_shares);
+	if (v.current == 1)
+	{
+		unsigned long long shareCounter = 0;
+		SnapshotXfer::u64(x, shareCounter); // the port's version 1 wrote the share counter here (read and dropped)
+	}
 }
 
 // retail's layout (DamageFilteredCreateObjectDie::xfer RW 0x88927E, tier A, (1, 1): the version, the base xfer, u32, i32): + 0x18 the frame of the last
@@ -2684,6 +2686,7 @@ void WeaponModeSpecialPowerUpdate::xfer(Xfer &x)
 	x.xferBool(&m_active);
 }
 
+// RW 0x0085DF3D (DualWeaponBehavior::xfer: version (1,2), UpdateModule::xfer RW 0x850C60, m_closeRequest +0x20, m_lastSwitch +0x24)
 void DualWeaponBehavior::xfer(Xfer &x)
 {
 	SnapshotXfer::version(x, 1, 1);
@@ -2693,6 +2696,7 @@ void DualWeaponBehavior::xfer(Xfer &x)
 	x.xferUnsignedInt(&m_switches);
 }
 
+// RW 0x008D0B8A (TemporarilyDefectUpdate::xfer: version (1,3), UpdateModule::xfer RW 0x850C60, m_endFrame +0x20, m_startFrame +0x24, m_dominator +0x28)
 void TemporarilyDefectUpdate::xfer(Xfer &x)
 {
 	SnapshotXfer::version(x, 1, 1);
@@ -2718,6 +2722,7 @@ void ActivateModuleSpecialPower::xfer(Xfer &x)
 	x.xferUnsignedInt(&m_activations);
 }
 
+// RW 0x00894327 (slot 3): SpecialAbilityUpdate::xfer (RW 0x00852782), version 1, m_targets (+0x88), m_current (+0x8C), m_shotsAtCurrent (+0x90), m_done (+0x98), m_shots (+0x94).
 void ArrowStormUpdate::xfer(Xfer &x)
 {
 	SnapshotXfer::version(x, 1, 1);
@@ -2746,6 +2751,7 @@ void FellBeastSwoopPower::xfer(Xfer &x)
 	x.xferUnsignedInt(&m_commands);
 }
 
+// RW 0x008B0923 (slot 3): SpecialAbilityUpdate::xfer (RW 0x00852782), version 2, m_followers (+0x88), m_started (+0x90), m_endFrame (+0x8C), m_inner (+0x94), m_outer (+0x98).
 void RousingSpeechUpdate::xfer(Xfer &x)
 {
 	SnapshotXfer::version(x, 1, 1);
@@ -2758,7 +2764,7 @@ void RousingSpeechUpdate::xfer(Xfer &x)
 	x.xferUnsignedInt(&m_inspired);
 }
 
-// RW 0x0089659F (slot 3): version 1, delegates to SpecialAbilityUpdate::xfer (RW 0x00852782).
+// RW 0x0089659F (slot 3): version 1, delegates to SpecialAbilityUpdate::xfer (RW 0x00852782); RW 0x0089643F (getModuleNameKey).
 // Inherited base tail-calls: RW 0x00896435 (finishAbility -> 0x008530BA), RW 0x0089643A (update -> 0x00854DF7),
 // RW 0x008B0BAC (continuePreparation -> 0x00852A3E), RW 0x00896484 (dtor -> 0x00896415 -> ~SpecialAbilityUpdate 0x00854D9A).
 void TeleportSpecialAbilityUpdate::xfer(Xfer &x)

@@ -610,7 +610,7 @@ bool SpecialPowerModule::requirementsMet() const
 	const std::shared_ptr<const ObjectFilter> &f = kind3 ? m_spData->m_requirementsFilterMPSkirmish : m_spData->m_requirementsFilterStrategic;
 	if (!f || !f->flag)
 	{
-		return true;
+		return true; // RW 0x896A0E: an unset RequirementsFilterMPSkirmish — no requirements test in a skirmish (not the RW 0xDE49E4 object-filter default of S-523, which is closed)
 	}
 	return !p || p->hasObjectMatching(*f, true);
 }
@@ -1034,6 +1034,11 @@ bool SpecialPowerModule::initiate(Object *target, const Coord3D *loc, unsigned o
 	{
 		return false;
 	}
+	// RW 0x897E9E .. 0x897EA3: keep the target's id at + 0x2C (only for a cast with a target; the interface's slot 0x50, RW 0x7B0F25, answers with it)
+	if (target)
+	{
+		m_targetId = target->getID();
+	}
 	++m_initiates;
 	// lane LUMBER1: the enum switch's SPECIAL_HARVEST case (RW 0x897EC6 .. 0x897F07, enum 0x8D: the workers' Harvest button): the object's AI (+ 0x260) and its
 	// player's ResourceGatheringManager (+ 0x304) find a tree (RW 0x8FA834); found: aiHarvest(position, CMD_FROM_AI) (RW 0x771655) and the AI byte + 0x3CC
@@ -1120,7 +1125,7 @@ void SpecialPowerModule::doSpecialPower(unsigned options)
 	effectAtLocation(pos, nullptr);
 }
 
-// RW 0x8980EF + the subclass (at the target's position, RW 0x8CC5A6)
+// RW 0x8980EF + the subclass (e.g. PlayerHealSpecialPower::doSpecialPowerAtObject RW 0x008CC594, at the target's position RW 0x8CC5A6)
 void SpecialPowerModule::doSpecialPowerAtObject(Object *target, unsigned options)
 {
 	if (!target)
@@ -1136,7 +1141,7 @@ void SpecialPowerModule::doSpecialPowerAtObject(Object *target, unsigned options
 	effectAtLocation(pos, target);
 }
 
-// RW 0x89816C + the subclass
+// RW 0x89816C + the subclass (e.g. PlayerHealSpecialPower::doSpecialPowerAtLocation RW 0x008CC574)
 void SpecialPowerModule::doSpecialPowerAtLocation(const Coord3D &loc, unsigned options)
 {
 	baseDo(&loc, nullptr, options);
@@ -1151,6 +1156,7 @@ void SpecialPowerModule::crc(StateHasher &h) const
 	h.addU32(m_pauseFrame);
 	h.addFloat(m_pausedPercent);
 	h.addBool(m_updateDisabled);
+	h.addU32(m_targetId);
 	h.addU32(m_triggers);
 	h.addU32(m_applied); // lane HERO-1
 }
@@ -1855,6 +1861,8 @@ void ManTheWallsSpecialPower::manTheWalls()
 	static const int kHorde = ObjectTemplateInfoBuilder::kindOfIndex("HORDE");
 
 	// Step 1: Query for allied TACTICAL_MARKER objects (RW 0x8CBCCE, DONOR BFME2 0x004C78AF)
+	// MarkerEntry ctor RW 0x008CB742, copy ctor RW 0x008CB758 (vector<Object*> copy RW 0x005F1920),
+	// vector<MarkerEntry> push_back RW 0x008CBC97, range destroy RW 0x008CBA27, dtor RW 0x008CBB86.
 	struct MarkerEntry
 	{
 		Object *marker;
@@ -1885,7 +1893,7 @@ void ManTheWallsSpecialPower::manTheWalls()
 		}
 	}
 
-	// Step 3: Assign hordes to markers (RW 0x8CBB53, DONOR BFME2 0x004C7734 / 0x004C76AC)
+	// Step 3: Assign hordes to markers (RW 0x8CBB53 -> balanced marker selector RW 0x008CBACB, DONOR BFME2 0x004C7734 / 0x004C76AC)
 	for (Object *horde : hordes)
 	{
 		const Coord3D &hordePos = *horde->getPosition();
@@ -1928,7 +1936,8 @@ void ManTheWallsSpecialPower::manTheWalls()
 		markers[chosenIndex].members.push_back(horde);
 	}
 
-	// Step 4: Issue group move order for each marker with members (RW 0x8CBEC3 -> 0x8CB5A6, DONOR BFME2 0x004C7167)
+	// Step 4: Issue group move order for each marker with members (RW 0x008CB5A6, group-add loop RW 0x008CB4F1, DONOR BFME2 0x004C7167)
+	// RW 0x008CB5E1 pushes 0 (CMD_FROM_PLAYER) to AIGroup::groupMoveToPosition (RW 0x00774897).
 	for (const MarkerEntry &entry : markers)
 	{
 		if (entry.members.empty())
@@ -1942,7 +1951,7 @@ void ManTheWallsSpecialPower::manTheWalls()
 			ids.push_back(member->getID());
 		}
 		AIGroup group(logic, ids);
-		group.groupMoveToPosition(*entry.marker->getPosition(), false, CMD_FROM_AI);
+		group.groupMoveToPosition(*entry.marker->getPosition(), false, CMD_FROM_PLAYER);
 	}
 }
 
@@ -1974,7 +1983,7 @@ void ManTheWallsSpecialPower::xfer(Xfer &x)
 // Retail's SpecialPowerModule::xfer is not one of the inventory's named rows; the port's fields (RW + 0x14 .. + 0x28) and its counters, in declaration order.
 void SpecialPowerModule::xfer(Xfer &x)
 {
-	SnapshotXfer::version(x, 1, 1);
+	SnapshotXfer::version(x, 2, 2); // 2: + m_targetId (the target initiate kept, RW + 0x2C); version 1 saves are refused
 	xferBehaviorModule(x);
 	x.xferUnsignedInt(&m_rechargeLength);
 	x.xferUnsignedInt(&m_readyFrame);
@@ -1982,6 +1991,7 @@ void SpecialPowerModule::xfer(Xfer &x)
 	x.xferUnsignedInt(&m_pauseFrame);
 	x.xferReal(&m_pausedPercent);
 	x.xferBool(&m_updateDisabled);
+	x.xferObjectID(&m_targetId);
 	x.xferUnsignedInt(&m_triggers);
 	x.xferUnsignedInt(&m_applied);
 	SnapshotXfer::u64(x, m_unported);

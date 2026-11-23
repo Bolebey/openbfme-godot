@@ -399,6 +399,8 @@ void TerrainResourceClientBehavior::removeSelectionFeedback()
 	}
 }
 
+// RW 0x00652BF1 (getModuleName), RW 0x00652BAC (getModuleNameKey), RW 0x00652BF7 (scalar deleting dtor -> ~TerrainResourceClientBehavior RW 0x008D0A08),
+// RW 0x008CE37F (shared empty ClientBehavior::xfer)
 void TerrainResourceClientBehavior::registerClass(ModuleFactory &modules)
 {
 	// both editions: RW 0x6549B1 / BFME2 0x654C56 friend_newModuleInstance, RW 0x708243 / BFME2 0x706A6E ModuleData::friend_newModuleData (emptyTables in grammar)
@@ -720,6 +722,8 @@ void TerrainResourceFeedback::updatePlacement(const GameLogic &logic, int localP
 		}
 		if (!m_claimCircles.empty() || !m_claimArcs.empty())
 		{
+			// CircleCollector cleanup & arc helpers: RW 0x008E94F2 (clearDecals), RW 0x008E9702 (~CircleCollector),
+			// RW 0x008E99C0 (addAngle), RW 0x008EC1C7 (decal release).
 			m_claimCircles.clear(); // placeBuildAvailable(null): RW 0x69C606 / 0x69C80B clears the collector
 			m_claimArcs.clear();
 			m_circleSignature = 0;

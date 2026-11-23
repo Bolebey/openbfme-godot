@@ -5,6 +5,8 @@
 
 #include "Common/GameCommon.h"
 #include "Common/StateHash.h"
+#include "Common/Thing/ThingTemplate.h"
+#include "GameLogic/Combat/ObjectWeapons.h"
 #include "GameLogic/AI/AIGuard.h"
 #include "GameLogic/AI/AIWorld.h"
 #include "GameLogic/GameLogic.h"
@@ -114,6 +116,7 @@ void AIStateMachine::defineState(unsigned id, std::unique_ptr<AIState> state, un
 	}
 }
 
+// RW 0x008DB9F4 (StateMachine::internalGetState)
 AIState *AIStateMachine::findState(unsigned id) const
 {
 	auto it = m_states.find(id);
@@ -573,6 +576,24 @@ StateReturnType AIIdleState::onEnter()
 	m_initialSleepOffset = (unsigned short)ai().getObject()->logic().random().getValue(0, (int)kIdleCountdownDelay, "AIStates.cpp", 0x520);
 	// RW 0x7489B6: the stance countdown (+ 0x22) is 5 again on every entry (DONOR BFME2 0x00346FD0 AIIdleStateOnEnter.cpp: `m_22 = 5`)
 	m_stancesCountdown = 5;
+	// RW 0x007489B6 (0x007489D9..0x007489EF; DONOR BFME2 0x00346FD0 Rva0033FE65OnEnter.cpp):
+	// if ThingTemplate::ShouldClearShotsOnIdle (+0x645, row RW 0xDA4888) is set, zero FiringTracker::m_count (+0x20).
+	if (Object *obj = ai().getObject())
+	{
+		if (const ThingTemplate *tt = obj->getTemplate())
+		{
+			if (const FieldValue *v = tt->getFinalOverride()->findField("ShouldClearShotsOnIdle"))
+			{
+				if (const bool *b = std::get_if<bool>(v); b && *b)
+				{
+					if (ObjectWeapons *w = obj->getWeapons())
+					{
+						w->firingTracker().clearShotCount();
+					}
+				}
+			}
+		}
+	}
 	return STATE_CONTINUE; // never sleep at the start: the cell check runs the first time through
 }
 
@@ -1101,6 +1122,64 @@ void AIFollowPathState::crc(StateHasher &h) const
 	{
 		m_move->crc(h);
 	}
+}
+
+// ---- Local 114: AIMoveAndEvacuateState (states 28 & 29, ctor RW 0x0074477D, onEnter RW 0x00750512, update RW 0x00755734, onExit RW 0x0074B9BB) ----
+
+// RW 0x00750512 (DONOR BFME2 0x0034EB7E AIMoveAndEvacuateState::onEnter)
+StateReturnType AIMoveAndEvacuateState::onEnter()
+{
+	Object *obj = ai().getObject();
+	if (!obj)
+	{
+		return STATE_FAILURE;
+	}
+	machine().lock(); // RW 0x0075051D: mov byte ptr [eax + 0x38], 1
+	m_origin = *obj->getPosition(); // RW 0x00750521..0x00750529: state + 0x4C = obj + 0x38
+	m_adjustsDestination = true; // RW 0x0075054C: mov byte ptr [ebx + 0x48], 1
+	m_goalPosition = machine().goalObject() ? *machine().goalObject()->getPosition() : machine().goalPosition();
+	return AIMoveToMachineState::onEnter();
+}
+
+// RW 0x00755734 (DONOR BFME2 0x00353C27 AIMoveAndEvacuateState::update)
+StateReturnType AIMoveAndEvacuateState::update()
+{
+	Object *obj = ai().getObject();
+	if (!obj || obj->isEffectivelyDead())
+	{
+		return STATE_FAILURE;
+	}
+	const StateReturnType status = AIMoveToMachineState::update();
+	if (status != STATE_CONTINUE)
+	{
+		if (obj->isEffectivelyDead())
+		{
+			return STATE_FAILURE;
+		}
+		ai().aiEvacuate(false, CMD_FROM_AI); // RW 0x00755773..0x0075577A: push 2; push 0; call 0x6AF1AC
+		if (Team *team = obj->getTeam())
+		{
+			team->setActive(); // RW 0x0075577F..0x0075578F: [team + 0x5D / 0x5E] = 1
+		}
+	}
+	return status;
+}
+
+// RW 0x0074B9BB (DONOR BFME2 0x00349FD0 AIMoveAndEvacuateState::onExit)
+void AIMoveAndEvacuateState::onExit(StateExitType status)
+{
+	machine().unlock(); // RW 0x0074B9C1: mov byte ptr [eax + 0x38], 0
+	machine().setGoalPosition(m_origin); // RW 0x0074B9CC: call 0x661EFE (sets m_goalPosition = m_origin and clears goal angle)
+	machine().clearGoalAngle();
+	AIMoveToMachineState::onExit(status);
+}
+
+void AIMoveAndEvacuateState::crc(StateHasher &h) const
+{
+	AIMoveToMachineState::crc(h);
+	h.addFloat(m_origin.x);
+	h.addFloat(m_origin.y);
+	h.addFloat(m_origin.z);
 }
 
 // ---- Local 84: AIMoveAndDeleteState (state 30, AICMD 0x38 RW 0x0066B7A2), AIMoveToPositionAndDieState (state 55, AICMD 0x41 RW 0x0066B817),

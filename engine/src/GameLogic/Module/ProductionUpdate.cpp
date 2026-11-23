@@ -206,6 +206,7 @@ void ProductionUpdateModuleData::buildFieldParse(MultiIniFieldParse &p)
 	p.add(kProductionUpdateFieldParse);
 }
 
+// Snapshot name RW 0x008A18DA, getModuleNameKey RW 0x008A192A
 void ProductionUpdate::registerClass(ModuleFactory &modules)
 {
 	modules.bindTypedData<ProductionUpdateModuleData>("ProductionUpdate", MODULETYPE_BEHAVIOR);
@@ -812,6 +813,64 @@ void ProductionUpdate::cancelUnitCreateByType(const ThingTemplate *type, bool al
 }
 
 // RW 0x8A056C
+// slot 9, RW 0x008A03C1
+bool ProductionUpdate::isUnitInQueue(ProductionID id) const
+{
+	for (const auto &e : m_queue)
+	{
+		// RW 0x00729661: PRODUCTION_UNIT (1) or PRODUCTION_BUILD_INDEX (3)
+		if ((e->type == PRODUCTION_UNIT || e->type == PRODUCTION_BUILD_INDEX) && e->productionID == id)
+		{
+			return true;
+		}
+	}
+	return false;
+}
+
+// slot 19, RW 0x008A0625
+int ProductionUpdate::countValue30InQueue(int value30) const
+{
+	int count = 0;
+	for (const auto &e : m_queue)
+	{
+		if (e->value30 == value30)
+		{
+			++count;
+		}
+	}
+	return count;
+}
+
+// slot 13, RW 0x008A30A0
+void ProductionUpdate::cancelUnitCreateByTemplate(const ThingTemplate *unitType, bool immediate)
+{
+	if (!unitType)
+	{
+		return;
+	}
+	if (!immediate)
+	{
+		m_pendingCancelTemplates.push_back(unitType->getName());
+		return;
+	}
+	// RW 0x008A30BF .. 0x008A310B: cancel every unfinished (< 100.0f, RW 0xBD88D8) unit or hero entry
+	// whose template is equivalent (RW 0x73D5C2)
+	std::vector<ProductionID> toCancel;
+	for (const auto &e : m_queue)
+	{
+		if (e->percentComplete < 100.0f &&
+			(e->type == PRODUCTION_UNIT || e->type == PRODUCTION_BUILD_INDEX) &&
+			BuildAssistant::isEquivalentTo(unitType, e->objectToProduce))
+		{
+			toCancel.push_back(e->productionID);
+		}
+	}
+	for (ProductionID id : toCancel)
+	{
+		cancelUnitCreate(id);
+	}
+}
+
 int ProductionUpdate::countUnitTypeInQueue(const ThingTemplate *type) const
 {
 	int n = 0;
@@ -1023,7 +1082,19 @@ UpdateSleepTime ProductionUpdate::update()
 	GameLogic &logic = us->logic();
 	const UnsignedInt now = logic.getFrame();
 	const DoorBits &bits = doorBits();
-	// (the pending template name set RW +0x130 (RW 0x8A1B52) is filled by a slot whose caller is not located)
+	// RW 0x008A1B52: drain deferred template cancellations queued by slot 13 (RW 0x008A30A0)
+	if (!m_pendingCancelTemplates.empty())
+	{
+		std::vector<std::string> pending = std::move(m_pendingCancelTemplates);
+		m_pendingCancelTemplates.clear();
+		for (const std::string &name : pending)
+		{
+			if (const ThingTemplate *tt = logic.things().findTemplate(name))
+			{
+				cancelUnitCreateByTemplate(tt, true);
+			}
+		}
+	}
 	pauseHeroEntries(); // RW 0x8A0669 (lane HERO-1)
 	ProductionEntry *entry = currentEntry();
 	Player *player = us->getControllingPlayer();
@@ -1191,6 +1262,85 @@ void ProductionUpdate::awardProductionExperience(Object *newObj, const Productio
 	}
 }
 
+// PORT-231 (RW 0x008A253B .. 0x008A25D7 / 0x008A2624 .. 0x008A26BC): register script name on a newly produced unit
+namespace
+{
+void applyProducedScriptName(GameLogic &logic, Object &newObj, const std::string &name)
+{
+	if (name.empty())
+	{
+		return;
+	}
+	ScriptEngine &se = logic.scriptEngine();
+	if (se.getUnitNamed(name) != nullptr || se.didUnitExist(name))
+	{
+		se.transferObjectName(name, newObj); // RW 0x00759467 (sets Object + 0x88 name)
+	}
+	else
+	{
+		newObj.friend_setNameUncached(name);
+		se.nameInCache(name, newObj); // RW 0x0060A1D5
+	}
+}
+
+// PORT-231 (RW 0x008A171F -> 0x008A07E0): migrate entry->hordeTarget (and its HORDE members) from its container into the newly built container
+void migrateHordeTarget(GameLogic &logic, const ProductionEntry &entry, Object &newObj)
+{
+	if (entry.hordeTarget == INVALID_ID)
+	{
+		return;
+	}
+	Object *target = logic.findObjectByID(entry.hordeTarget);
+	ContainModuleInterface *dstContain = newObj.getContain();
+	if (!target || !dstContain)
+	{
+		return;
+	}
+	Object *oldContainer = target->getContainedBy();
+	auto moveItem = [&](Object *item) {
+		if (!item)
+		{
+			return;
+		}
+		Object *itemContainer = item->getContainedBy();
+		const bool itemInHorde = itemContainer && itemContainer->isKindOfName("HORDE");
+		if (oldContainer)
+		{
+			if (ContainModuleInterface *oc = oldContainer->getContain())
+			{
+				oc->removeFromContain(item, false); // RW 0x008A07FF / 0x008A082B
+			}
+		}
+		if (itemInHorde)
+		{
+			if (ContainModuleInterface *hc = itemContainer->getContain())
+			{
+				if (HordeContainInterface *hci = hc->getHordeContainInterface())
+				{
+					hci->releaseMemberForGarrison(item); // RW 0x008A0823 -> slot 0xA8 RW 0x0086EBF4
+				}
+			}
+		}
+		dstContain->addToContain(item); // RW 0x008A083D
+	};
+	moveItem(target);
+	if (target->isKindOfName("HORDE"))
+	{
+		if (ContainModuleInterface *tc = target->getContain())
+		{
+			if (const ContainModuleInterface::ContainedItemsList *items = tc->getContainedItemsList())
+			{
+				const std::vector<Object *> members(items->begin(), items->end());
+				for (Object *m : members)
+				{
+					moveItem(m);
+				}
+			}
+		}
+	}
+}
+} // namespace
+
 // RW 0x8A1F8A .. 0x8A2EC4
 void ProductionUpdate::completeUnit(ProductionEntry *entry, Player *player, UnsignedInt now)
 {
@@ -1283,11 +1433,16 @@ void ProductionUpdate::completeUnit(ProductionEntry *entry, Player *player, Unsi
 					removeFromProductionQueue(entry); // RW 0x8A2513 -> 0x8A2EF6
 					return;
 				}
+				applyProducedScriptName(logic, *newObj, entry->name); // RW 0x008A253B .. 0x008A25D7
 				newObj->setProducer(us); // RW 0x8A2788 (RW 0x625E0A, the object's group, is not ported)
 			}
 			else
 			{
-				ObjectStatusMaskType status{}; // RW 0x8A25DC: bit 55 CREATE_DRAWABLE_WITH_LOW_DETAIL when the AIData flag at +0xBB is set (not ported)
+				ObjectStatusMaskType status{};
+				if (logic.settings().forceHordesToLowLOD) // RW 0x8A1B9F -> RW 0x8A25DC .. 0x8A25F4: AIData +0xBB sets bit 55 CREATE_DRAWABLE_WITH_LOW_DETAIL
+				{
+					MaskSet(status, OBJECT_STATUS_CREATE_DRAWABLE_WITH_LOW_DETAIL, true);
+				}
 				logic.setPendingProducer(us->getID());
 				newObj = logic.newObject(entry->objectToProduce, player->getDefaultTeam(), status);
 				logic.setPendingProducer(INVALID_ID);
@@ -1297,6 +1452,7 @@ void ProductionUpdate::completeUnit(ProductionEntry *entry, Player *player, Unsi
 					removeFromProductionQueue(entry);
 					return;
 				}
+				applyProducedScriptName(logic, *newObj, entry->name); // RW 0x008A2624 .. 0x008A26BC
 				// lane MODCOMPAT-MOD1: RW 0x8A26BD .. 0x8A270E: an entry with its + 0x44 flag (ObjectCreationUpgrade's UseBuildingProduction queue) hands the new
 				// object to the producer's SlaveWatcherBehavior (RW 0x68BDA5 by name key, RW 0x887AF5)
 				if (entry->flag44)
@@ -1386,7 +1542,11 @@ void ProductionUpdate::completeUnit(ProductionEntry *entry, Player *player, Unsi
 				}
 			}
 			newObj->updateUpgradeModules();
-			// RW 0x8A294D .. 0x8A29EC: voice / EVA events (audio), the player's unit created hook, then CreateModule::onBuildComplete on every create module
+			// RW 0x8A294D .. 0x8A29EC: voice / EVA events (audio), the player's unit created hook (RW 0x8A29E5 -> 0x6AA688, PORT-198), then CreateModule::onBuildComplete
+			if (player)
+			{
+				player->onUnitCreated(us, newObj);
+			}
 			for (const std::unique_ptr<BehaviorModule> &m : newObj->modules())
 			{
 				if (CreateModuleInterface *create = m->getCreate())
@@ -1400,6 +1560,8 @@ void ProductionUpdate::completeUnit(ProductionEntry *entry, Player *player, Unsi
 			{
 				AudioApi::postUnitVoice(0x7DA, newObj->getID(), getObject()->getID());
 			}
+			// PORT-231 (RW 0x008A2A67 -> 0x008A171F): migrate entry->hordeTarget into newObj's contain
+			migrateHordeTarget(logic, *entry, *newObj);
 			// RW 0x8A2A8C: BuildFadeInOnCreateTime (tt + 0x354, read above) times 5 frames delays the exit and holds the unit disabled
 			m_postExitDelay = (unsigned)SimMath::truncToInt32(SimMath::mulf32(fade, (float)LOGICFRAMES_PER_SECOND));
 			newObj->setSpecialModelConditionState(kJustBuilt, m_postExitDelay);
@@ -1568,6 +1730,14 @@ void ProductionUpdate::crc(StateHasher &h) const
 	h.addBool(m_cancellingAll);
 	h.addBool(m_factoryDisabled);
 	h.addU32(m_heroCountdown); // lane HERO-1
+	if (!m_pendingCancelTemplates.empty()) // LOCAL-91: hashed only while a cancellation waits, so the hashes of a game without one stay as they were
+	{
+		h.addU32((std::uint32_t)m_pendingCancelTemplates.size());
+		for (const std::string &name : m_pendingCancelTemplates)
+		{
+			h.addString(name);
+		}
+	}
 }
 
 // ---- lane SAVE-4b: the snapshot (OpenBFME native, S-4190: the queue's entries with their templates by name, then the crc's fields) ---------------------
@@ -1575,8 +1745,9 @@ void ProductionUpdate::crc(StateHasher &h) const
 void ProductionUpdate::xfer(Xfer &x)
 {
 	// PORT-280: version 2 adds whether SpeedBonusAudioLoop's handle is held (RW 0x8A35A6 .. 0x8A35BA, retail v>=3 transfers module + 0x12C through TheAudio);
-	// untouched modules save version 1 so existing streams stay unchanged.
-	XferVersion version{ 1, (std::uint8_t)(x.isLoading() || m_speedBonusAudioHeld ? 2 : 1) };
+	// untouched modules save version 1 so existing streams stay unchanged. LOCAL-91: version 3 adds the pending template cancellations (RW + 0x130),
+	// written only while one waits (a module without one keeps version 1 / 2)
+	XferVersion version{ 1, (std::uint8_t)(x.isLoading() || !m_pendingCancelTemplates.empty() ? 3 : m_speedBonusAudioHeld ? 2 : 1) };
 	x.xferVersion(version);
 	xferUpdateModule(x);
 	GameLogic &logic = getObject()->logic();
@@ -1652,5 +1823,22 @@ void ProductionUpdate::xfer(Xfer &x)
 	else if (x.isLoading())
 	{
 		stopSpeedBonusAudioLoop();
+	}
+	if (version.current >= 3)
+	{
+		std::uint32_t pendingCount = x.isLoading() ? 0 : (std::uint32_t)m_pendingCancelTemplates.size();
+		x.xferCount(&pendingCount, 2, sizeof(std::string));
+		if (x.isLoading())
+		{
+			m_pendingCancelTemplates.resize(pendingCount);
+		}
+		for (std::uint32_t i = 0; i < pendingCount; ++i)
+		{
+			x.xferAsciiString(&m_pendingCancelTemplates[i]);
+		}
+	}
+	else if (x.isLoading())
+	{
+		m_pendingCancelTemplates.clear();
 	}
 }

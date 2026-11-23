@@ -209,7 +209,8 @@ void bindRuntime(ModuleFactory &modules, const char *name)
 	});
 }
 
-// SiegeAIUpdate (RW 0x893BBA): the base AI with RotWK's isAllowedToRespondToAiCommands (RW 0x893C80)
+// SiegeAIUpdate (RW 0x893BBA; getModuleName RW 0x00893BF2, getModuleNameKey RW 0x00893C1F,
+// dtor RW 0x00893BF8, scalar deleting dtor RW 0x00893C64): the base AI with RotWK's isAllowedToRespondToAiCommands (RW 0x893C80)
 class SiegeAIUpdate : public AIUpdateInterface
 {
 public:
@@ -238,6 +239,7 @@ public:
 		return true;
 	}
 };
+// RW 0x0089DF93 (v1, AIUpdateInterface::xfer)
 void SiegeAIUpdate::xfer(Xfer &x)
 {
 	XferVersion v{ 1, 1 };
@@ -491,6 +493,19 @@ Coord3D SiegeDockingBehavior::dockDirection(int index) const
 	return *getObject()->getPosition();
 }
 
+// RW 0x0085D1CD (SiegeDockingBehavior::loadPostProcess): initialize dock bones if xfer did not restore them.
+// In retail RW 0x0085D1CD calls initializeBones (RW 0x85CE65) then UpdateModule::loadPostProcess (RW 0x4D0EAF);
+// gating on !m_initialized preserves entries and reservedBy already restored by xfer (RW 0x0085D08F).
+void SiegeDockingBehavior::loadPostProcess()
+{
+	if (!m_initialized)
+	{
+		initializeBones(); // RW 0x85CE65
+		m_initialized = true;
+	}
+}
+
+// RW 0x0085D08F (SiegeDockingBehavior::xfer)
 void SiegeDockingBehavior::xfer(Xfer &x)
 {
 	SnapshotXfer::version(x, 1, 1);
@@ -1292,6 +1307,7 @@ void SiegeDeploySpecialPower::setPhase(int next)
 	}
 }
 
+// RW 0x008C9FC8
 void SiegeDeploySpecialPower::xfer(Xfer &x)
 {
 	SnapshotXfer::version(x, 1, 1);

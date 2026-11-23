@@ -71,6 +71,12 @@ public:
 	// advances the render clock; `presentedFrame` is the latest published logic frame and `alpha` the fraction through it
 	// (the fade steps per logic frame and lerps the last two steps by alpha: the retail draw's frameFraction, GameEngine + 0x3C)
 	void update(double ms, std::uint32_t presentedFrame = 0, double alpha = 1.0);
+	// Port 331 (S-1364): RotWK MillisecondsAfterStartToStartFadeUp (LinearCampaign::startMission RW 0x5EACF9 writes mission->fadeUpFrames,
+	// default 7 RW 0x5EBA4A, to TheGameLogic + 0x90; RW 0x62B620 .. 0x62B906 starts black "FadeWholeScreen", schedules RW 0x627062 to wait until
+	// currentFrame >= fadeUpFrames and then reverses "FadeWholeScreen", and resets TheGameLogic + 0x90 to 7).
+	void startMissionFadeUp(unsigned fadeUpFrames = 7);
+	bool missionFadeUpWaiting() const { return m_missionFadeUpActive; }
+	unsigned missionFadeUpTargetFrame() const { return m_missionFadeUpTarget; }
 
 	bool moving() const { return m_move.active || m_rotate.active; }
 	bool hasTarget() const { return m_hasTarget; }
@@ -79,6 +85,8 @@ public:
 	float angle() const { return m_angle; }
 	bool resetView() const { return m_resetView; } ///< a RESET_CAMERA asked for the default pitch / zoom
 	bool letterbox() const { return m_letterbox; }
+	float guardBandBiasX() const { return m_guardBandBiasX; }
+	float guardBandBiasY() const { return m_guardBandBiasY; }
 	bool inputDisabled() const { return m_inputDisabled; }
 	const std::string &captionLabel() const { return m_captionLabel; }
 	double captionMsLeft() const { return m_captionMs; }
@@ -158,10 +166,14 @@ private:
 	// currentIntensity, and the presented frame they were latched on (retail latches once per logic frame, RW 0x63252F)
 	float m_fadePrev = -1.0f, m_fadeCur = 0.0f;
 	std::uint32_t m_fadePresent = 0xFFFFFFFFu;
+	bool m_missionFadeUpActive = false;    ///< RW 0x627062: waiting for presentedFrame >= m_missionFadeUpTarget to fade up from black
+	unsigned m_missionFadeUpTarget = 7;    ///< RW 0x5EBA4A / 0x625502: default 7 logic frames (MillisecondsAfterStartToStartFadeUp)
 	bool m_hasTarget = false, m_hasAngle = false, m_resetView = false;
 	Coord3D m_target;
 	float m_angle = 0.0f;
 	bool m_letterbox = false, m_inputDisabled = false;
+	float m_guardBandBiasX = 0.0f; ///< LOCAL-94: RW W3DView + 0x78 (setGuardBandBias RW 0x48B5FC from RESIZE_VIEW_GUARDBAND RW 0x7BD6E9)
+	float m_guardBandBiasY = 0.0f; ///< LOCAL-94: RW W3DView + 0x7C
 	std::string m_captionLabel;
 	double m_captionMs = 0.0;
 	unsigned m_captionSerial = 0;

@@ -101,6 +101,17 @@ public:
 	bool hadMembers() const { return m_hadMembers; }
 	void setHadMembers() { m_hadMembers = true; }
 
+	// lane THREATLEVEL-1: the map scripts' cached enemy threat around the team (RW + 0x120, a float) and its deadline frame (RW + 0x124); the constructor
+	// (RW 0x7A6C91) clears both and Team::xfer (RW 0x7A5C06: xferReal + 0x120, xferUnsignedInt + 0x124; BFME2 TeamXfer.cpp:196-197) writes them.
+	// GameLogic/ScriptEngine/ScriptThreat.cpp reads and refreshes them (RW 0x7A6A20 / 0x7A5B03)
+	float scriptThreatCache() const { return m_scriptThreat; }
+	unsigned scriptThreatDeadline() const { return m_scriptThreatDeadline; }
+	void setScriptThreatCache(float value, unsigned deadline)
+	{
+		m_scriptThreat = value;
+		m_scriptThreatDeadline = deadline;
+	}
+
 	// lane CAMP-1H: the team's script state (TARGET FACTS, rotwk201_game.exe; the constructor RW 0x7A6C91 clears it, the INI-free parts of Team::updateState
 	// RW 0x7A208C and Team::updateGenericScripts RW 0x7A267D read and write it, ScriptEngine::updateTeamState runs both)
 	struct ScriptState
@@ -193,7 +204,7 @@ public:
 
 	// the members, in insertion order
 	Object *getFirstMember() const { return m_head; }
-	// lane AIPOW-1: retail's member list (Team + 0x38, walked by RW 0x66362D / 0x6632C9) starts at the NEWEST member (Object::prependToTeamMemberList RW
+	// lane AIPOW-1: retail's member list (Team + 0x38, walked by RW 0x0066362D / RW 0x006632C9) starts at the NEWEST member (Object::prependToTeamMemberList RW
 	// 0x68AD89 links each new member at the head), so retail's order is this list's reverse: walk from here with friend_teamPrev
 	Object *getLastMember() const { return m_tail; }
 	unsigned getMemberCount() const { return m_count; }
@@ -218,6 +229,8 @@ private:
 	std::uint32_t m_teamTarget = 0;         ///< lane SCRIPT-3: + 0x114
 	int m_currentWaypoint = -1;             ///< lane SCRIPT-3: + 0x6C
 	bool m_hadMembers = false;              ///< lane CAMP-1: + 0x128
+	float m_scriptThreat = 0.0f;            ///< lane THREATLEVEL-1: + 0x120
+	unsigned m_scriptThreatDeadline = 0;    ///< lane THREATLEVEL-1: + 0x124
 	ScriptState m_script;                   ///< lane CAMP-1H
 	bool m_aiRecruitableOverrideSet = false; ///< lane PORT-40: + 0x110
 	bool m_aiRecruitableOverride = false;    ///< lane PORT-40: + 0x111
@@ -271,6 +284,24 @@ public:
 	Team *getFirstTeam() const { return m_teams.empty() ? nullptr : m_teams.front(); }
 	// lane CAMP-1: the head of retail's instance list (prototype + 0x334): a new team is PREPENDED (RW 0x79FA5C -> RW 0x79F9D0), so the head is the newest
 	Team *getNewestTeam() const { return m_teams.empty() ? nullptr : m_teams.back(); }
+	// Both editions: RW 0x007A0086 (DONOR BFME2 0x0039D731 TeamPrototype::findTeamByID): 0 -> nullptr; scans prototype's team instances (+0x334) by TeamID.
+	Team *findTeamByID(TeamID id) const
+	{
+		if (id == 0)
+		{
+			return nullptr;
+		}
+		for (Team *t : m_teams)
+		{
+			if (t && t->getID() == id)
+			{
+				return t;
+			}
+		}
+		return nullptr;
+	}
+	// Both editions: RW 0x007A00B0 (DONOR BFME2 0x0039D75B TeamPrototype::countTeamInstances): counts non-null Team instances in prototype's instance list (+0x334).
+	int countTeamInstances() const { return static_cast<int>(m_teams.size()); }
 	// lane CAMP-1H: the TeamTemplateInfo's scripts (read from the dict once)
 	const TeamTemplateScripts &templateScripts() const;
 

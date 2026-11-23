@@ -44,6 +44,7 @@
 #pragma once
 
 #include "Common/Thing/Thing.h"
+#include "GameLogic/SimMath.h"
 #include "GameLogic/Module/BehaviorModule.h"
 #include "GameLogic/Module/DieModule.h"
 #include "GameLogic/ObjectTypes.h"
@@ -52,6 +53,7 @@
 #include "GameLogic/ArmorSet.h"
 #include "GameLogic/BitFlags.h"
 #include "GameLogic/Damage.h"
+#include "GameLogic/WeaponSet.h"
 #include "Common/Player.h"
 #include "Common/Upgrade.h"
 
@@ -164,6 +166,9 @@ public:
 	bool isUnderConstruction() const { return testStatus(OBJECT_STATUS_UNDER_CONSTRUCTION); }
 	// lane DECOMP-3: RW 0x691269 Object::isAbleToAttack (BFME2 decomp Object_isAbleToAttack.cpp, tier B same-shape: RotWK's offsets); see Object.cpp
 	bool isAbleToAttack() const;
+	// PORT-198 (RW 0x68D6A6 / 0x68B5FA): per-target / per-weapon attack eligibility (CanAttackResult)
+	CanAttackResult getAbleToAttackSpecificObject(AbleToAttackType attackType, const Object *victim, CommandSourceType source) const;
+	CanAttackResult getAbleToUseWeaponAgainstTarget(AbleToAttackType attackType, const Object *victim, const Coord3D *pos, CommandSourceType source) const;
 	// RW + 0x33C: what the owner paid for this object (a float; ProductionUpdate stores the entry's cost, RW 0x8A1B9F); RefundDie refunds a share of it
 	float getBuildCostPaid() const { return m_buildCostPaid; }
 	// lane UPGRADE-1: RW + 0x340, the money queued OBJECT upgrades cost (ProductionUpdate::queueUpgrade RW 0x8A10C8 adds to it)
@@ -193,6 +198,10 @@ public:
 	// RW 0x691059 / 0x691106 Object::setWeaponSetFlag / clearWeaponSetFlag (GameLogic/WeaponSetToggle.cpp): the flag, the weapon set update, the mapped model
 	// condition and the SWAPPING_TO_WEAPONSET_n special model condition
 	void setWeaponSetFlag(int bit, bool on);
+	// RW 0x68DECA / 0x6911B7 Object::setWeaponSetFlags / clearWeaponSetFlags: every bit of the mask, then ONE weapon set update (RW 0x6C99E2); the clear also
+	// mirrors into the model conditions named by the mask (RW 0x6911B7's second loop: the object's condition word has the bit -> cleared, one notify each).
+	// Mutates the object's flags whether or not it has a weapon set (RW writes Object + 0x38C)
+	void setWeaponSetFlags(const WeaponConditionFlags &mask, bool on);
 	bool hasAnyWeapon() const;
 	// ZH Object::getRelationship: this object's team toward the other's (NEUTRAL when either has no team or is undetectable RW 0x68D850)
 	Relationship getRelationship(const Object &other) const;
@@ -250,6 +259,7 @@ public:
 	bool addAttributeModifier(const std::string &listName, int duration);
 	// RW 0x68F259 (lane INTEG-1): a ModifierList by name leaves the object; a horde passes it to its HordeContain (slot 0x1DC), everything else to its pool
 	void removeAttributeModifier(const std::string &listName);
+	void clearAllAttributeModifiers(); ///< RW 0x006998D0 (DONOR BFME2 0x00298E6A)
 	// RW 0x68C818 / 0x68C82D: the attribute queries of the object's pool (false when it has none or no active list answers)
 	bool attributeModifierSum(int type, const char *name, float &out) const;
 	bool attributeModifierProduct(int type, const char *name, bool innate, float &out) const;
@@ -317,7 +327,7 @@ public:
 	// RW 0x692443: a set type: other than HELD resumes the countdowns (RW 0x68B961(0)), a rider held forever by it is cleared too, the expiry and the bit go,
 	// USER_PARALYZED / USER_FROZEN clear PARALYZED (and notify), then checkDisabledStatus runs
 	void clearDisabled(unsigned type);
-	bool isDisabledByType(unsigned type) const { return type < DISABLED_TYPE_COUNT && (m_disabled & (1u << type)) != 0; }
+	bool isDisabledByType(unsigned type) const { return type < DISABLED_TYPE_COUNT && (m_disabled & (1u << type)) != 0; } ///< RW 0x005E42B6
 	// RW 0x68B961: every module's special power interface pauses (true) or resumes (false) its countdown
 	void pauseAllSpecialPowers(bool pause);
 	// lane SCRIPT-2: the script status byte (RW Object + 0x457, ZH ObjectScriptStatusBit: 1 SCRIPT_DISABLED, 2 SCRIPT_UNPOWERED, 4 SCRIPT_UNSELLABLE,
@@ -341,6 +351,16 @@ public:
 	// object for every player except its controlling owner (RW 0x625759). Both editions match.
 	void maskObject(bool on);
 	bool isMasked() const { return m_masked; }
+	// lane THREATLEVEL-1: the map scripts' cached enemy threat around the object (RW + 0x464, a float) and its deadline frame (RW + 0x468); the
+	// constructor (RW 0x69990F) clears both. Retail RotWK's Object::xfer (RW 0x697F28) does not write them; the OpenBFME snapshot does (version 3, as
+	// BFME2 1.06's xfer does: the state hash covers them). GameLogic/ScriptEngine/ScriptThreat.cpp reads and refreshes them (RW 0x697B41 / 0x69609F)
+	float scriptThreatCache() const { return m_scriptThreat; }
+	UnsignedInt scriptThreatDeadline() const { return m_scriptThreatDeadline; }
+	void setScriptThreatCache(float value, UnsignedInt deadline)
+	{
+		m_scriptThreat = value;
+		m_scriptThreatDeadline = deadline;
+	}
 
 	// lane SCRIPT-2: the trigger areas the object is in (RW 0x69264D, from reactToTransformChange when the position changed). Entries at + 0x3DC
 	// (trigger, + 4 entered, + 5 exited, + 6 inside; the count + 0x45A, at most 7: "***WARNING: Too many nested triggers"), the last change frame
@@ -354,7 +374,15 @@ public:
 		bool inside = false;
 	};
 	static constexpr int MAX_TRIGGERS_IN = 7;
-	void updateTriggerAreaFlags();
+	// `pathCellChanged`: the AI's pathfinder updatePos of this transform change took a new position cell (RW 0x6926F6 -> 0x8E26B7 answered 1)
+	void updateTriggerAreaFlags(bool pathCellChanged);
+	// lane VISIONDEF-1: RW + 0x1C4 (BFME2 1.06 + 0x1C4, ObjectSetTriggerAreaFlagsForChangeInPosition.cpp m_averageGroundHeight), the ground reference of
+	// the vision height bonus (getVisionRange RW 0x68E43B / getShroudClearingRange RW 0x68E4E2: 1 + clamp((z - it) * VisionBonusPercentPerFoot)). The
+	// constructor clears it (RW 0x699A77); the first position change sets it to the object's own z while it is still 0 (reactToTransformChange RW
+	// 0x6935EC, BFME2 0x692D49); RW 0x69264D (BFME2 0x691EB1) samples the ring of VisionBonusTestSegments ground heights again only when the pathfinder
+	// gave the unit a new position cell. An object without an AI keeps the z of its first move
+	float visionGroundReference() const { return m_visionGroundRef; }
+	void updateVisionGroundReference();
 	// lane CASTLEAREA-1: RW 0x68B9E9 (from PolygonTrigger removal, RW 0x6263AF): every entry of `trigger` is cleared (no exit is reported), then RW 0x68B98E keeps
 	// the entries still inside with their entered / exited flags cleared
 	void removeTriggerEntries(int trigger);
@@ -468,6 +496,9 @@ public:
 	BodyModuleInterface *getBodyModule() const { return m_body; }
 	ContainModuleInterface *getContain() const { return m_contain; }
 	AIUpdateInterface *getAIUpdateInterface() const { return m_ai; }
+	// RW 0x68C3E6 / Object::rva0028BD17: one shared typed scan of module slot 32
+	// (+0x80), in module order, for the repair query.
+	RepairQueryInterface *getRepairQueryInterface() const;
 	// lane UBER-2B: the modules whose getCollide answers, in module order (ObjectCollide::onCollide walked every module per contact pair: 4% of a 10k battle)
 	const std::vector<CollideModuleInterface *> &collideModules() const { return m_collideModules; }
 	bool collideModulesKnown() const { return m_collideModulesKnown; } ///< every collide module answers pairFactsKnown (ObjectCollide::PairFacts)
@@ -540,7 +571,7 @@ public:
 	// ---- the object list (GameLogic keeps it; spec 5.4: append at the tail) -----------------------------------------------
 	Object *getNextObject() const { return m_next; }
 	Object *getPrevObject() const { return m_prev; }
-	// ZH Object::isInList(Object **pListHead)
+	// RW 0x0068BB4B / DONOR BFME2 Object::isInList(Object **pListHead)
 	bool isInList(Object *const *listHead) const { return m_next != nullptr || m_prev != nullptr || *listHead == this; }
 
 	// ---- the recorded transform (client interpolation data) ----------------------------------------------------------------
@@ -554,6 +585,16 @@ public:
 	float getRecordedOrientation() const { return m_recordedAngle; }
 	const float *getRecordedBasis() const { return m_recordedBasis; } ///< row major, as Thing::getBasis (read by the client's RenderInterpolation)
 	const Coord3D &getPreviousPosition() const { return m_previousPosition; }
+
+	// RW 0x00665342 (Object::getPlanarDirectionTo -> RW 0x006635F4 Thing::getPlanarDirectionTo; DONOR BFME2 Object::getPlanarDirectionTo; both BFME2 1.06 and RotWK 2.01):
+	// returns (other->pos.x - this->pos.x, other->pos.y - this->pos.y, 0.0f) in float32 (subss).
+	Coord3D getPlanarDirectionTo(const Object *other) const
+	{
+		if (!other) return Coord3D{ 0.0f, 0.0f, 0.0f };
+		const Coord3D *a = getPosition();
+		const Coord3D *b = other->getPosition();
+		return Coord3D{ SimMath::subf32(b->x, a->x), SimMath::subf32(b->y, a->y), 0.0f };
+	}
 
 	// lane BACKLOG4 (S-1222): RW 0x693919 (BFME2 decomp ObjectRva00293105.cpp Object::rva00293105 is the donor, tier B edited: RotWK adds the status
 	// test). Nothing with the status 0x66 (SUMMONING_REPLACEMENT, + 0xA0 bit 6); every module whose special power update interface (behaviour slot 0x64)
@@ -579,6 +620,9 @@ public:
 	// TARGET RW 0x68DA67 (BFME2 decomp ObjectRva0028D412.cpp, tier B same-shape): the same with Thing::setTransformMatrix (RW 0x70BA76), the horde's slot
 	// 0x1B4 (RW 0x86D8FE) and no AI part.
 	void teleportTransform(const Coord3D *pos, const float basis[9]);
+	// TARGET RW 0x0068D58C Object::topple(dir, speed, options) (DONOR BFME2 0x0068CEBC): finds ToppleUpdate (RW 0x68BDA5), tests isAbleToBeToppled
+	// (RW 0x008AB7FB) and applies the toppling force (RW 0x008ABAAD).
+	void topple(const Coord3D *toppleDirection, float toppleSpeed, unsigned options = 0);
 	// The drawable's RW 0x674B1F(1) (BFME2 decomp DrawableInterpolationRebuild.cpp, tier A), the forced gather: the recorded transform, the current
 	// transform, P0, P1, the drawn transform and the drawn position all become the object's current ones, P2 the position and P3 the pending position
 	// (none after a recordTransform), and the drawable's frame stamp (+ 0x244) is -1. The port's client draws from the snapshot of the completed frame
@@ -661,6 +705,8 @@ private:
 	bool m_scriptSelectable = false; ///< RW +0x454: ctor initializes from SELECTABLE; hash only deviations from the template-derived default
 	bool m_scriptSelectableExplicit = false; ///< RW 0x4B2D5E / 0x4B583C: draw-module override (-1 unset vs explicit 0/1) for WALK_ON_TOP_OF_WALL
 	bool m_masked = false;           ///< RW + 0x459 bit 1 (maskObject; hashed when set)
+	float m_scriptThreat = 0.0f;              ///< lane THREATLEVEL-1: RW + 0x464 (hashed and saved once a refresh armed the deadline)
+	UnsignedInt m_scriptThreatDeadline = 0;   ///< lane THREATLEVEL-1: RW + 0x468
 	TriggerEntry m_triggers[MAX_TRIGGERS_IN];  ///< lane SCRIPT-2: RW + 0x3DC
 	int m_triggerCount = 0;                      ///< RW + 0x45A
 	bool m_singleUseCommandUsed = false;         ///< PORT-220: RW + 0x45B (hashed when set, xfer v6)
@@ -671,6 +717,7 @@ private:
 	mutable std::unique_ptr<OwnGeometryCache> m_ownGeometry;
 	UnsignedInt m_enteredOrExitedFrame = 0;      ///< RW + 0x414
 	std::int32_t m_triggerCellX = 0, m_triggerCellY = 0; ///< RW + 0x418 / + 0x41C (the integer position of the last check)
+	float m_visionGroundRef = 0.0f;                      ///< RW + 0x1C4 (lane VISIONDEF-1, see visionGroundReference)
 
 	bool m_hasChargeAttackAbility = false; ///< RW 0x699AC6 / 0x69A549: computed once after the initial modules (Object + 0x251)
 	bool m_hasGeometryHeights = false;     ///< Port 34: m_ownGeometry->heights holds per-shape extents from setGeometryMaxHeight (in padding: sizeof(Object) unchanged)

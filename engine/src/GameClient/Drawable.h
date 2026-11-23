@@ -27,6 +27,8 @@
 #include "Common/Module.h"
 #include "Common/ModelState.h"
 #include "Common/Thing/Thing.h"
+#include "GameEngineDevice/W3DDevice/GameClient/W3DVegetationSway.h"
+#include "Libraries/WWVegas/WWMath/matrix3d.h"
 #include "Common/Thing/ThingTemplate.h"
 #include "GameClient/ClientEvents.h"
 #include "GameClient/ContainedPose.h"
@@ -292,11 +294,27 @@ public:
 	bool modelConditionsDirty() const { return m_flagsDirty; }
 	// the weapon cycle the last flush carried (-1: the object had no current weapon), what UseWeaponTiming animations divide by
 	int weaponTimingFrames() const { return m_hasWeaponTiming ? m_weaponTimingFrames : -1; }
+	// LOCAL-106: Drawable::getShouldAnimate (RW 0x00675655; called from W3DScriptedModelDraw::doDrawModule RW 0x004BF615).
+	// Also RW 0x006712E8 (template/object geometry info): the drawable holds its object id and snapshot state.
+	bool getShouldAnimate(bool animationsRequirePower) const;
+	void setDisabledState(DisabledMaskType disabledMask, std::uint8_t scriptStatus)
+	{
+		m_disabledMask = disabledMask;
+		m_scriptStatus = scriptStatus;
+	}
 	// incremented whenever the model condition flags are set: the device layer re-reads the draw frames of a drawable whose count changed
 	unsigned getChangeCount() const { return m_changeCount; }
 
 	float getInstanceScale() const { return m_scale; }
 	void setInstanceScale(float scale) { m_scale = scale; }
+	// LOCAL-103 (RW 0x006714C0 / 0x008CD70C): per-drawable instance matrix (e.g. SwayClientUpdate)
+	const Matrix3D &getInstanceMatrix() const { return m_instanceMatrix; }
+	void setInstanceMatrix(const Matrix3D &xfrm);
+	bool hasInstanceMatrix() const { return m_hasInstanceMatrix; }
+	// RW 0x00B261F0 Matrix3D::Get_Z_Rotation on the drawable's world transform
+	float getZRotation() const;
+	// LOCAL-103: step SwayClientUpdate modules on this drawable (RW 0x008CD675)
+	void updateSway(const W3DVegetationSway::Breeze &breeze, bool visible, bool burnedOrDead);
 	// 0xAARRGGBB of the owner's colour for model recolour (RW 0x6712A6: [drawable + 0x3AA] flag, 0 when showsHouseColor is false)
 	std::uint32_t getHouseColor() const { return m_houseColor; }
 	void setHouseColor(std::uint32_t argb);
@@ -610,7 +628,7 @@ public:
 		TINT_STATUS_CUSTOM = 0x20u,                 ///< RW 0x675E9A: custom tint envelope (+0x6C..+0x88)
 	};
 	void setTintStatus(UnsignedInt statusBits) { m_tintStatus |= statusBits; }   // RW +0x118
-	void clearTintStatus(UnsignedInt statusBits) { m_tintStatus &= ~statusBits; }
+	void clearTintStatus(UnsignedInt statusBits) { m_tintStatus &= ~statusBits; } // RW 0x00670913
 	bool testTintStatus(UnsignedInt statusBits) const { return (m_tintStatus & statusBits) != 0u; }
 	UnsignedInt tintStatus() const { return m_tintStatus; }
 	// RW 0x671A73 / BFME2 0x671753 (Drawable::setCustomTintEnvelope) + caller `or [drawable+0x118], 0x20` (RW 0x5E0127 / 0x4D1241 / 0x6ED185)
@@ -656,6 +674,8 @@ private:
 	std::vector<DrawEntry> m_entries;
 	std::vector<std::unique_ptr<DrawableModule>> m_clientModules;
 	std::vector<ModelConditionAudioLoopClientBehavior *> m_audioLoops; ///< those of m_clientModules the flush tells (RW 0x67449C)
+	Matrix3D m_instanceMatrix;
+	bool m_hasInstanceMatrix = false;
 	bool m_evaFirstSighted = false; // RW Drawable +0x114 bit 0x80; sighting consumer S-709 / Local 13
 	bool m_evaEnemySighted = false; // RW Drawable +0x445
 	bool m_evaEnemySightedAfterRespawn = false; // RW Drawable +0x446
@@ -688,6 +708,8 @@ private:
 	bool m_buildingEntries = false;                                     ///< lane BUILD-4: the constructor is making the draw modules
 	std::vector<std::pair<std::string, bool>> m_pendingModuleRequests; ///< lane BUILD-4: script module requests made meanwhile
 	float m_moveSpeed = 0.0f; ///< lane SMOOTH-3: the presented record's moveSpeed (the Distance animations' speed sync)
+	DisabledMaskType m_disabledMask = DISABLEDMASK_NONE; ///< LOCAL-106 (RW 0x00675670): Object +0x1C8
+	std::uint8_t m_scriptStatus = 0;                     ///< LOCAL-106 (RW 0x00675667): Object +0x457
 	DrawableScriptTarget m_scriptTarget; ///< lane FX-3
 	// lane PERF-3: the angle whose rotation basis syncFromSnapshot last set and that basis; a render frame that presents the same angle (bit for bit) on that
 	// basis skips setOrientation's trigonometry (its result would be these same values)

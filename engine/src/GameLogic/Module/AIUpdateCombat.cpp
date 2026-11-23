@@ -29,6 +29,7 @@
 #include "GameLogic/Object/Object.h"
 #include "GameLogic/Object/PartitionManager.h"
 #include "GameLogic/ObjectTemplateInfo.h"
+#include "GameLogic/Module/SpawnBehavior.h"
 #include "GameLogic/Module/StancesBehavior.h"
 #include "GameLogic/System/InvisibilityManager.h"
 #include "GameLogic/SimMath.h"
@@ -224,12 +225,13 @@ void AIUpdateInterface::readCombatSettings(const ModuleData *data)
 	}
 }
 
-bool AIUpdateInterface::findNearestLabeledContactPointOnTarget(const Object &target, Coord3D &out, const Coord3D &callerPos, bool preferred) const
+bool AIUpdateInterface::findNearestLabeledContactPointOnTarget(const Object &target, Coord3D &out, const Coord3D &callerPos, bool skipCollideTest) const
 {
-	// RW 0x667C76: the labels of module data + 0x58 in order, the first success wins
+	// RW 0x667C76 (format string RW 0xC0FE30: skipCollideTest=%s; pushes [ebp+0x14] to RW 0x690BD2 at RW 0x667D87):
+	// the labels of module data + 0x58 in order, the first success wins
 	for (const std::string &label : m_combat.specialContactPoints)
 	{
-		if (ObjectGeometry::worldspaceBestContactPoint(target, callerPos, label, 0, 0, preferred, out))
+		if (ObjectGeometry::worldspaceBestContactPoint(target, callerPos, label, 0, 0, skipCollideTest, out))
 		{
 			return true;
 		}
@@ -350,8 +352,11 @@ bool AIUpdateInterface::aiAttackObject(Object *victim, CommandSourceType source,
 	{
 		return false;
 	}
+	const bool spawnsAreTheWeapons = obj->isKindOf((unsigned)CombatNames::kinds().spawnsAreTheWeapons);
 	ObjectWeapons *w = obj->getWeapons();
-	if (!w || !w->canAttackObject(*victim, source, false))
+	// PORT-198 (RW 0x66BD33): SPAWNS_ARE_THE_WEAPONS bypasses the self-weapon gate here, enters AI_ATTACK_OBJECT (failing cleanly to AI_IDLE if !w),
+	// and unconditionally dispatches slot 3 at 0x66BEC3 without pre-checking slave capability or shroud.
+	if (!spawnsAreTheWeapons && (!w || !w->canAttackObject(*victim, source, false)))
 	{
 		return false;
 	}
@@ -363,7 +368,7 @@ bool AIUpdateInterface::aiAttackObject(Object *victim, CommandSourceType source,
 	m_machine->setState(AI_ATTACK_OBJECT);
 	// lane PLAY-2 (Sol r1): the command's shot limit goes on the current weapon after the state's entry lifted it (RW 0x74D0FC; ZH privateAttackObject's
 	// setMaxShotCount); privateAttackPosition's ContinueAttackRange redirect passes its limit here (RW 0x66DF02 .. 0x66DF0C)
-	if (Weapon *cur = w->currentWeapon())
+	if (Weapon *cur = w ? w->currentWeapon() : nullptr)
 	{
 		cur->clearWhenFiringEnds(); // lane ATKRESET-1, RW 0x66BE77: the old shot's FiringDuration lock ends; the next shot waits only for its delay (+ 0x18)
 		cur->setMaxShotCount(maxShotsToFire);
@@ -379,6 +384,13 @@ bool AIUpdateInterface::aiAttackObject(Object *victim, CommandSourceType source,
 	if (source == CMD_FROM_PLAYER || source == CMD_FROM_SCRIPT)
 	{
 		postEnterStateAttackVoice(*obj, *victim);
+	}
+	if (spawnsAreTheWeapons)
+	{
+		if (SpawnBehaviorInterface *spawn = SpawnBehaviorInterface::of(*obj))
+		{
+			spawn->orderSlavesToAttackTarget(victim, maxShotsToFire, source); // RW 0x66BEC3 -> slot 3 (0xC)
+		}
 	}
 	wakeUpNow();
 	return true;

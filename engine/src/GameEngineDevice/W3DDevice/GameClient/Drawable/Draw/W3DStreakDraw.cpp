@@ -1,4 +1,7 @@
-// OpenBFME. GPL-3.0. See W3DStreakDraw.h (RW 0x4CFD13 / 0xBE39F8 / 0x4CF884, donor BFME1 0x77D6B0).
+// OpenBFME. GPL-3.0. See W3DStreakDraw.h (RW 0x004CFD13 / 0x00BE39F8 / 0x004CF884, donor BFME1 0x77D6B0).
+// TARGET RW 0x004B1B3F xfer, RW 0x004B612F getModelName, RW 0x004CF73F setHidden, RW 0x004CF839 getModuleNameKey,
+// RW 0x004CF87E GetSnapshotName, RW 0x004CFC30 scalar deleting dtor, RW 0x004CFC4C reactToTransformChange,
+// RW 0x004CFC54 doDrawModule, RW 0x004CF7C6 ~W3DStreakDraw, RW 0x004CFE66 ModuleData scalar deleting dtor, RW 0x004CFD6F ~W3DStreakDrawModuleData.
 
 #include "GameEngineDevice/W3DDevice/GameClient/Drawable/Draw/W3DStreakDraw.h"
 
@@ -67,6 +70,8 @@ namespace W3DStreakDrawTables
 const FieldParse *streak() { return kStreakFieldParse; }
 }
 
+// StreakLineClass helpers ported in W3DStreakTrail / W3DStreakDraw: Set_Color RW 0x00567773, Set_Width RW 0x00567790,
+// Set_Point_Location RW 0x00567900, Get_Point_Location RW 0x00567947, Add_Point RW 0x00567EEE, Remove_Point RW 0x00567F18.
 void W3DStreakTrail::update(const W3DStreakDrawModuleData &data, const float position[3])
 {
 	W3DStreakPoint np;

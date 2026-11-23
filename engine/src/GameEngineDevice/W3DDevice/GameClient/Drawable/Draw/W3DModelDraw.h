@@ -262,6 +262,7 @@ struct W3DLodOptions // one row of Horde LodOptions (RW 0xBDCA20)
 // W3DModelDrawModuleData: the RotWK table of 57 rows (RW 0xBE1320). Named after ZH's class; the binary names only
 // W3DScriptedModelDraw (the string "W3DModelDraw" is not in game.dat), which is the registered module.
 // Derives from the ModuleData of Common/Module.h so ModuleFactory::bindTypedData<T> can bind the three draw classes (OBJ-1 contract).
+// RW 0x004C82DA (~W3DModelDrawModuleData)
 class W3DModelDrawModuleData : public ModuleData
 {
 public:
@@ -314,7 +315,15 @@ public:
 	bool m_affectedByStealth = true;          ///< constructor default 1 (RW 0x4C873C, +0x15E)
 	bool m_highDetailOnly = false;
 	std::string m_rampMesh1, m_rampMesh2, m_wallBoundsMesh, m_raisedWallMesh;
-	std::string m_embedPortalName, m_embedPortalKind; ///< EmbedPortal NAME ramp|ladder (RW 0x4C30BD; kind kept as the text)
+	// LOCAL-106 (RW 0x004B7A22 / 0x004C30BD / 0x0088FCBB): EmbedPortal list at ModuleData +0x11C (8 bytes each: kind + bone name)
+	struct W3DEmbedPortalInfo
+	{
+		std::string name;
+		std::string kind;
+	};
+	std::string m_embedPortalName, m_embedPortalKind; ///< EmbedPortal NAME ramp|ladder (RW 0x4C30BD; last entry)
+	std::vector<W3DEmbedPortalInfo> m_embedPortals;   ///< RW 0x004B7A22: all EmbedPortal entries (+0x11C)
+	bool m_allowsUnhideWhileInHorde = false;          ///< LOCAL-106 (RW 0x00464A02 / 0x0047836C): ModuleData +0x15E
 	std::vector<W3DRandomTextureInfo> m_randomTextures;
 	std::vector<W3DAttachModelInfo> m_attachModels;
 	std::vector<std::string> m_timeOfDayTextureRaw; ///< TimeOfDayTexture / BurntTexture words (RW 0x4C42A8 / 0x4C3321), kept raw (stop S-094)

@@ -46,25 +46,6 @@ enum WeaponChoiceCriteria
 	PREFER_TEMPLATE_DEFAULT = 5
 };
 
-// ZH AbleToAttackType (RW 0x6C8652 attackType: bit 3 = ATTACK_CONTINUED, 4 = ATTACK_TUNNEL_NETWORK_GUARD)
-enum AbleToAttackType
-{
-	ATTACK_NEW_TARGET = 0,
-	ATTACK_NEW_TARGET_FORCED = 1,
-	ATTACK_TUNNEL_NETWORK_GUARD = 4,
-	ATTACK_CONTINUED = 8,
-	ATTACK_CONTINUED_FORCED = 9
-};
-
-// ZH CanAttackResult (RW 0x68B5FA / RW 0x6C8652)
-enum CanAttackResult
-{
-	ATTACKRESULT_NOT_POSSIBLE = 0,
-	ATTACKRESULT_INVALID_SHOT = 1,
-	ATTACKRESULT_POSSIBLE_AFTER_MOVING = 2,
-	ATTACKRESULT_POSSIBLE = 3
-};
-
 // ZH WeaponLockType
 enum WeaponLockType
 {
@@ -96,7 +77,8 @@ public:
 	// the object's WeaponSet conditions (WeaponSetFlags, RW Object + 0x3xx; ZH Object::m_weaponSetFlags): a change re-selects the set
 	const WeaponSetFlags &weaponSetFlags() const { return m_flags; }
 	void setWeaponSetFlag(int bit, bool on);
-	// lane UPGRADE-1: RW 0x68DECA / 0x6911B7 Object::setWeaponSetFlags / clearWeaponSetFlags: every bit of the mask, then ONE weapon set update (RW 0x6C99E2)
+	// lane UPGRADE-1: RW 0x68DECA / 0x6911B7 Object::setWeaponSetFlags / clearWeaponSetFlags: every bit of the mask, then ONE weapon set update (RW 0x6C99E2);
+	// the clear, then RW 0x6911B7's second loop (the owner's model conditions named by the mask cleared one by one)
 	void setWeaponSetFlags(const WeaponSetFlags &mask, bool on);
 	// RW 0x6C99E2
 	void updateWeaponSet();
@@ -149,8 +131,10 @@ public:
 	// TOP20 #21 r3: canAttackObject without the order's shroud gate (VIS-1, RW 0x82C167: the action helper's, not RW 0x6C9147's): the attack machine's
 	// continue test RW 0x7417E4 .. 0x741807 calls RW 0x68D6A6 -> RW 0x6C9147, which has no shroud test
 	bool canAttackObjectNoShroud(const Object &victim, CommandSourceType source, bool forced) const;
-	// PORT-208 (issue #490): RW 0x68B5FA Object::getAbleToUseWeaponAgainstTarget -> RW 0x6C8652 WeaponSet::getAbleToUseWeaponAgainstTarget
+	// PORT-208 (issue #490) & PORT-198 (issue #465): RW 0x68B5FA / 0x68D6A6 / 0x6C8652 / 0x6C9147
+	static bool canAttackObjectGates(const Object &sourceObj, const Object &victim, CommandSourceType source, bool forced);
 	CanAttackResult getAbleToUseWeaponAgainstTarget(int attackType, const Object *victim, const Coord3D *pos, CommandSourceType source) const;
+	CanAttackResult getAbleToAttackSpecificObject(int attackType, const Object *victim, CommandSourceType source) const;
 
 	// ---- range ---------------------------------------------------------------------------------------------------------------------
 	// RW 0x6CC653: Weapon::isWithinAttackRange(source, victim, extra, checkMinRange) for the current weapon; the AI passes extra 0 and checkMin true
@@ -181,6 +165,7 @@ public:
 	float currentAttackRange() const;
 	// lane ARCHER-1: RW 0x6CA935(source): the current weapon's attack range with no target (the scale applied twice, WeaponGetAttackRangeNoTarget); 0 without one
 	float currentAttackRangeNoTarget() const;
+	static float abilityWeaponRange(const WeaponTemplate &weapon, Object &source);
 	// RW 0x6CA935(source) on `weapon` (one of this object's): its attack range with no target for another source object, the bonus and the
 	// range host taken from that source as RW 0x6ED8AB's call does (ObjectWeapons.cpp); 0 for a weapon without a template
 	float attackRangeNoTargetFor(const Weapon &weapon, const Object &source) const;
@@ -208,6 +193,8 @@ public:
 	Weapon *crushRevengeWeapon() const { return m_crushRevengeWeapon.get(); }
 	// RW 0x6CF328 Weapon::fireWeapon(source, victim): privateFireWeapon at an object, no lock, no tracker
 	void fireExtraWeapon(Weapon &w, Object &victim);
+	// LOCAL-97: RW 0x006CF407 Weapon::forceFireWeapon(source, victim): privateFireWeapon RW 0x6CEF6D with ignoreRanges = true (arg 6 = 1)
+	void forceFireExtraWeapon(Weapon &w, Object &victim);
 	// lane SPELL-2 / HERO-1: RW 0x6CF3D2 Weapon::forceFireWeapon(source, pos): privateFireWeapon at a position (ZH: no victim, ranges ignored), no lock, no tracker
 	void fireExtraWeaponAt(Weapon &w, const Coord3D &pos);
 	// lane HERO-1: a weapon of its own (WeaponFireSpecialAbilityUpdate RW 0x895E1A: RW 0x68B150(template, slot 0), owner 0, RW 0x6CEE0F loadAmmoNow)
@@ -261,6 +248,7 @@ public:
 	FiringTracker &firingTracker() { return m_tracker; }
 	// lane HUD-4: RW 0x8E302A on the object's FiringTracker (Object + 0x248) with this set as its host
 	void resetFiringTracker(bool hard);
+	void trackAbilityShot(const Weapon &weapon, ObjectID victim, const Coord3D &pos);
 	const FiringTracker &firingTracker() const { return m_tracker; }
 
 	// ---- the projectile hook (PROJ-1) and the report -------------------------------------------------------------------------------
@@ -295,7 +283,7 @@ private:
 	WeaponHost &host();
 	WeaponRangeHost &rangeHost();
 	static void fireTempWeapon(const WeaponTemplate *t, Object *source, const WeaponShotTarget &target); // lane DECOMP-1
-	RangeSubject subjectOf(const Object &obj) const;
+	static RangeSubject subjectOf(const Object &obj);
 
 	Object *m_owner;
 	WeaponSetFlags m_flags{};

@@ -22,7 +22,9 @@
 
 class ThingTemplate;
 class W3DScriptedModelDraw;
+class Xfer;
 
+// RW 0x004CA69F (~W3DSupplyDraw), RW 0x004CA70E (~W3DSupplyDrawModuleData)
 class W3DSupplyDraw
 {
 public:
@@ -40,6 +42,9 @@ public:
 
 	int totalBones() const { return m_totalBones; }
 	int visibleBones() const { return m_visibleBones; }
+	void setTotalAndVisibleBones(int total, int visible) { m_totalBones = total; m_visibleBones = visible; }
+	// RW 0x004CA6B8 (DONOR BFME2 0x000CAEDF): version(1, 1), xfers m_totalBones (+0x2E8) and m_visibleBones (+0x2EC)
+	void xfer(Xfer &x);
 
 private:
 	void findTotalBones(const ModelConditionFlags &flags, float scale);

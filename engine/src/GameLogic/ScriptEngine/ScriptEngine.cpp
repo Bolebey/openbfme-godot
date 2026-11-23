@@ -22,6 +22,10 @@
 #include "GameLogic/ScriptEngine/ScriptActions.h"
 #include "GameLogic/ScriptEngine/ScriptConditions.h"
 #include "GameLogic/ScriptEngine/ScriptTemplates.h"
+#include "GameLogic/ScriptEngine/ScriptThreat.h"
+#include "GameLogic/SkirmishAI/AITacticalAI.h"
+#include "GameLogic/SkirmishAI/SkirmishAIManager.h"
+#include "GameLogic/System/ThreatFinder.h"
 #include "Common/Thing/ThingFactory.h"
 #include "GameLogic/ObjectTemplateInfo.h"
 #include "GameLogic/SimMath.h"
@@ -150,6 +154,10 @@ void ScriptEngine::reset()
 	for (std::vector<TriggeredSpecialPower> &l : m_completedUpgrades) // lane MODCOMPAT-AI: RW 0x607FB3
 	{
 		l.clear();
+	}
+	for (auto &m : m_objectCounts) // LOCAL-94: DONOR BFME2 0x00209ABE (ScriptEngine::reset clears the 20 m_objectCounts maps at RW + 0x1A264)
+	{
+		m.clear();
 	}
 	m_genericScripts.clear(); // lane CAMP-1H
 	m_thisTeam = nullptr;
@@ -291,7 +299,7 @@ bool ScriptEngine::runTeamCreateActions(TeamPrototype &proto)
 
 // ---- names ------------------------------------------------------------------------------------------------------------------------------------
 
-// RW 0x72C43C: "Side/name" -> (Side, name); a name without '/' belongs to the current side
+// RW 0x0072C43C (split) / RW 0x0072CDAB (DONOR BFME2 0x0032B389 Rva0032B389Join: "Side/name" join): a name without '/' belongs to the current side
 std::pair<std::string, std::string> ScriptEngine::qualify(const std::string &name) const
 {
 	const size_t slash = name.find('/');
@@ -313,6 +321,7 @@ ScriptEngine::Counter &ScriptEngine::counter(const std::string &name)
 	return m_counters[qualify(name)];
 }
 
+// Both editions: RW 0x00608249 (DONOR BFME2 0x0020881A ScriptEngine::rva0020881A)
 bool *ScriptEngine::findFlag(const std::string &name)
 {
 	auto it = m_flags.find(qualify(name));
@@ -336,6 +345,7 @@ ScriptEngine::RSide *ScriptEngine::findSide(const std::string &name)
 	return nullptr;
 }
 
+// Both editions: RW 0x007B712D (DONOR BFME2 0x003B6633 Rva003B573E::rva003B6633) -> RW 0x007B6287 (DONOR BFME2 0x003B573E Rva003B573E::rva003B573E)
 ScriptEngine::RScript *ScriptEngine::findScriptIn(RGroup &g, const std::string &name)
 {
 	for (std::unique_ptr<RScript> &s : g.scripts)
@@ -371,8 +381,8 @@ ScriptEngine::RGroup *ScriptEngine::findGroupIn(RGroup &g, const std::string &na
 	return nullptr;
 }
 
-// RW 0x604A5D: the qualified name's side list (RW 0x604986: the player whose name key is the side part), then the script by name in it
-// (INFERENCE: RW 0x7B72EC's name index covers the list's scripts at every group depth; the first in file order wins)
+// RW 0x00604A5D: the qualified name's side list (RW 0x00604986: the player whose name key is the side part), then the script by name in it
+// (RW 0x007B72C3 ScriptList::findScriptByName: the name index covers the list's scripts at every group depth; the first in file order wins).
 ScriptEngine::RScript *ScriptEngine::findScript(const std::string &name)
 {
 	const std::pair<std::string, std::string> q = qualify(name);
@@ -380,6 +390,7 @@ ScriptEngine::RScript *ScriptEngine::findScript(const std::string &name)
 	return side ? findScriptIn(side->root, q.second) : nullptr;
 }
 
+// Both editions: RW 0x007B72EC (DONOR BFME2 0x003B6911 ScriptList::rva003B6911) looks up a script group by name in the side's ScriptList.
 ScriptEngine::RGroup *ScriptEngine::findGroup(const std::string &name)
 {
 	const std::pair<std::string, std::string> q = qualify(name);
@@ -570,6 +581,21 @@ const std::vector<std::string> *ScriptEngine::findObjectList(const std::string &
 		}
 	}
 	return nullptr;
+}
+
+// Both editions: RW 0x00603B6A (DONOR BFME2 0x00204224 ObjectTypes::getNthInList)
+std::string ScriptEngine::objectListGetNth(const std::string &list, int index) const
+{
+	if (index < 0)
+	{
+		return std::string();
+	}
+	const std::vector<std::string> *types = findObjectList(list);
+	if (!types || static_cast<size_t>(index) >= types->size())
+	{
+		return std::string();
+	}
+	return (*types)[static_cast<size_t>(index)];
 }
 
 // ---- the named object cache ---------------------------------------------------------------------------------------------------------------------
@@ -940,7 +966,7 @@ bool ScriptEngine::evaluateConditionsNoContext(const Script &s)
 	return false;
 }
 
-// RW 0x6092A9
+// RW 0x006092A9 (Condition::getUiFlags RW 0x007B327D -> ScriptEngine::getConditionTemplate RW 0x00603263)
 bool ScriptEngine::evaluateCondition(const ScriptCondition &c)
 {
 	++m_stats.conditionsEvaluated;
@@ -966,7 +992,7 @@ bool ScriptEngine::evaluateCondition(const ScriptCondition &c)
 	}
 }
 
-// RW 0x60C1C9
+// RW 0x0060C1C9 (ScriptAction::getUiFlags RW 0x007B3355 -> ScriptEngine::getActionTemplate RW 0x00603270)
 void ScriptEngine::executeActions(const std::vector<ScriptActionRec> &actions, RScript &s)
 {
 	// lane MODS-3: opt-in diagnostic only (OPENBFME_TRACE_SCRIPTS=<side name> or "*"): every action a script of that side runs, to stderr; no
@@ -1387,7 +1413,11 @@ bool ScriptEngine::executeEngineAction(const ScriptActionRec &a)
 		std::vector<std::string> names;
 		if (const std::vector<std::string> *list = findObjectList(what))
 		{
-			names = *list;
+			// RW 0x00605B1B .. 0x00605B67: walks index 0 .. size - 1 via ObjectTypes::getNthInList (RW 0x00603B6A)
+			for (int i = 0; static_cast<size_t>(i) < list->size(); ++i)
+			{
+				names.push_back(objectListGetNth(what, i));
+			}
 		}
 		else
 		{
@@ -1451,7 +1481,7 @@ bool ScriptEngine::executeEngineAction(const ScriptActionRec &a)
 	}
 	case ACT_SET_COUNTER_TO_UNIT_THREAT:
 	case ACT_SET_COUNTER_TO_TEAM_THREAT:
-		noteUnportedAction(ScriptTemplates::action(a.resolved)->name); // engine-owned, not ported (S-1180)
+		setCounterToThreat(a, a.resolved == ACT_SET_COUNTER_TO_TEAM_THREAT); // lane THREATLEVEL-1: RW 0x60C1C9 -> RW 0x608BCA(action, 440)
 		return true;
 	default:
 		if (a.resolved >= ACT_CAMERA_FADE_FIRST && a.resolved <= ACT_CAMERA_FADE_LAST)
@@ -1461,6 +1491,47 @@ bool ScriptEngine::executeEngineAction(const ScriptActionRec &a)
 		}
 		return false;
 	}
+}
+
+// lane THREATLEVEL-1: RW 0x608BCA ScriptEngine::setCounterToThreat (tier B, BFME2 0x609003, decomp ScriptEngine.cpp:3400; executeActions RW 0x60C1C9 sends
+// 439 with false and 440 with true, BFME2 0x60C5C7 ScriptEngineExecuteActions.cpp:69-70). Both editions; the threat sum itself is edition-specific
+// (ScriptThreat.h).
+//   * the counter of parameter 0 (RW 0x60817A; retail returns when there is none, ours is get-or-create), the radius parameter 2 (real), the value 0.0f;
+//   * team (440): getTeamNamed(parameter 1) (RW 0x759FDA), then RW 0x7A6A20(radius); no team: the value stays 0;
+//   * unit (439): the unit by the name of parameter 1 (RW 0x75A243; none: 0). A unit whose template has KindOf THREAT_FINDER (bit 195: template + 0x120
+//     bit 3) asks the finder of the same name in TheThreatFinderManager (RW 0xDE8888 -> RW 0x7EE260; none: 0) for its controlling player's (RW 0x68B678)
+//     enemies, RW 0x7EE166(out, player, 0, 0), and takes the record's first float; any other unit answers RW 0x697B41(radius);
+//   * counter = cvttss2si(value) (RW 0x608CFD: truncation).
+void ScriptEngine::setCounterToThreat(const ScriptActionRec &a, bool team)
+{
+	Counter &c = counter(param(a.params, 0).stringValue);
+	const float radius = param(a.params, 2).realValue;
+	const std::string &name = param(a.params, 1).stringValue;
+	float value = 0.0f;
+	if (team)
+	{
+		if (Team *t = ScriptConditions::team(*this, name))
+		{
+			value = ScriptThreat::getThreatInRange(m_logic, *t, radius);
+		}
+	}
+	else if (Object *unit = getUnitNamed(name))
+	{
+		static const int kThreatFinder = ObjectTemplateInfoBuilder::kindOfIndex("THREAT_FINDER"); // 195
+		const ThingTemplate *tt = unit->getTemplate();
+		if (tt && kThreatFinder >= 0 && MaskTest(m_logic.templateInfo(tt).kindOf, (unsigned)kThreatFinder))
+		{
+			if (ThreatFinder *finder = m_logic.threatFinders().find(m_logic, name))
+			{
+				value = finder->threatForPlayer(m_logic, unit->getControllingPlayer(), 0).v[0]; // RW 0x7EE166(.., player, 0, 0)
+			}
+		}
+		else
+		{
+			value = ScriptThreat::getThreatInRange(m_logic, *unit, radius);
+		}
+	}
+	c.value = SimMath::truncToInt32(value);
 }
 
 // RW 0x608B28
@@ -1574,8 +1645,8 @@ void ScriptEngine::adjustMsecTimer(const ScriptActionRec &a, bool milliseconds, 
 	c.value += secondsToFrames(s);
 }
 
-// RW 0x604ADD / 0x604BA1: the group of that name, then the script of that name (the team instance bookkeeping RW 0x7A4DDE for a condition team
-// is part of S-1183)
+// The team instance bookkeeping for a condition team is part of S-1183.
+// Both editions: RW 0x00604ADD (enableScript) / RW 0x00604BA1 (disableScript): the group of that name, then the script of that name.
 void ScriptEngine::enableScript(const ScriptActionRec &a, bool enable)
 {
 	const std::string &name = param(a.params, 0).stringValue;
@@ -2273,6 +2344,20 @@ void ScriptEngine::crc(StateHasher &h) const
 			}
 		}
 	}
+	for (size_t i = 0; i < m_objectCounts.size(); ++i) // LOCAL-94: RW + 0x1A264, hashed once a player has an entry
+	{
+		const auto &m = m_objectCounts[i];
+		if (!m.empty())
+		{
+			h.addU32(0x5B6u | ((std::uint32_t)i << 12));
+			h.addU32((std::uint32_t)m.size());
+			for (const auto &kv : m)
+			{
+				h.addU32(kv.first);
+				h.addI32(kv.second);
+			}
+		}
+	}
 }
 
 // RW 0x7BC3A0 (MAP_REVEAL_AT_WAYPOINT) / 0x7C0BCF (MAP_REVEAL_IN_TRIGGER): look, then unlook at once. RW 0x7BD4C1 / 0x7BD4F3 (the permanent
@@ -2341,7 +2426,7 @@ void ScriptEngine::executeMapReveal(const ScriptActionRec &action)
 }
 
 // ---- lane BACKLOG4 (S-529): the triggered special powers ---------------------------------------------------------------------------------------
-// RW 0x7ED86B -> CRC_String (BFME2 decomp WWLib/realcrc_one_arg.cpp, tier A): the CRC-32 of the name's bytes, case kept; 0 for an empty name
+// RW 0x7ED86B -> RW 0x007ED77A (CRC_String, IEEE 802.3 CRC-32 table 0xC4BF10, BFME2 decomp WWLib/realcrc_one_arg.cpp, tier A): 0 for an empty name
 std::uint32_t ScriptEngine::specialPowerNameCrc(const std::string &name)
 {
 	return name.empty() ? 0u : crc32Bytes(name.data(), name.size());
@@ -2421,6 +2506,66 @@ bool ScriptEngine::isUpgradeCompleted(int playerIndex, const std::string &name, 
 		}
 	}
 	return false;
+}
+
+// ---- LOCAL-94 (issue #720): PLAYER_LOST_OBJECT_TYPE per-player object counts (RW + 0x1A264) & skirmish enemy ----------------------------------
+
+// RW 0x605DB0 (DONOR BFME2 0x00206255, ScriptEngine::getObjectCount): looks up playerIndex in ThePlayerList (RW 0x6A844E), returns 0 unless
+// Player::isPlayerActive (RW 0x6AAC52: !m_observer && !m_defeated), then looks up CRC_String(typeName) (RW 0x7ED86B) in m_objectCounts[playerIndex]
+// (RW + 0x1A264 + playerIndex * 0xC, tree find RW 0x606F7A); returns 0 when absent.
+int ScriptEngine::getObjectCount(int playerIndex, const std::string &typeName) const
+{
+	if (playerIndex < 0 || playerIndex >= kSpecialPowerListPlayers)
+	{
+		return 0;
+	}
+	const Player *pl = m_logic.players().getNthPlayer(playerIndex);
+	if (!pl || pl->isObserver() || pl->isDefeated())
+	{
+		return 0;
+	}
+	const std::uint32_t key = specialPowerNameCrc(typeName);
+	const auto &m = m_objectCounts[(size_t)playerIndex];
+	const auto it = m.find(key);
+	return it != m.end() ? it->second : 0;
+}
+
+// RW 0x607822 (DONOR BFME2 0x00207DF4, ScriptEngine::setObjectCount): m_objectCounts[playerIndex][CRC_String(typeName)] = newCount
+// (RW 0x7ED86B, tree insert-or-find RW 0x607027).
+void ScriptEngine::setObjectCount(int playerIndex, const std::string &typeName, int newCount)
+{
+	if (playerIndex < 0 || playerIndex >= kSpecialPowerListPlayers)
+	{
+		return;
+	}
+	m_objectCounts[(size_t)playerIndex][specialPowerNameCrc(typeName)] = newCount;
+}
+
+// RW 0x758AB1 (DONOR BFME2 0x00357900, ScriptEngine::getSkirmishEnemyPlayer): m_currentPlayer's getCurrentEnemy (RW 0x6AA5F5 ->
+// AISkirmishPlayer::getAiEnemy RW 0x8F47EB / AIPlayer::getAiEnemy RW 0x851E97); when null, walks ThePlayerList (RW 0x6A844E) and returns the first
+// player whose playerType (+ 0x5C) is PLAYER_HUMAN (0).
+Player *ScriptEngine::getSkirmishEnemyPlayer()
+{
+	if (!m_currentPlayer)
+	{
+		return nullptr;
+	}
+	if (AISkirmishPlayer *ai = m_logic.skirmishAI().findAI(m_currentPlayer->getPlayerIndex()))
+	{
+		if (const Player *enemy = AITacticalAI::enemyPlayer(m_logic, *ai))
+		{
+			return const_cast<Player *>(enemy);
+		}
+	}
+	for (int i = 0; i < m_logic.players().getPlayerCount(); ++i)
+	{
+		Player *p = m_logic.players().getNthPlayer(i);
+		if (p && p->getPlayerType() == PLAYER_HUMAN)
+		{
+			return p;
+		}
+	}
+	return nullptr;
 }
 
 // ---- lane SCRIPT-3: HAS_FINISHED_AUDIO ----------------------------------------------------------------------------------------------------------

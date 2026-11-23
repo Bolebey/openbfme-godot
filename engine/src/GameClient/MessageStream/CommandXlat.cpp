@@ -2,6 +2,7 @@
 // See CommandXlat.h.
 
 #include "GameClient/MessageStream/CommandXlat.h"
+#include "Common/ModEngineFeatures.h"
 #include "GameLogic/Module/StancesBehavior.h"
 
 #include "Common/Team.h"
@@ -23,7 +24,6 @@
 #include "GameClient/HudObjects.h"
 #include "GameLogic/GameMessage.h"
 #include "GameLogic/BeaconCommands.h"
-#include "GameLogic/Combat/CombatNames.h"
 #include "GameLogic/ObjectTemplateInfo.h"
 #include "GameLogic/Module/SpecialPowerModules.h"
 #include "GameLogic/Module/BehaviorModule.h"
@@ -36,6 +36,7 @@
 #include "GameLogic/Module/GiantBirdAIUpdate.h"
 #include "GameLogic/Object/Object.h"
 #include "GameLogic/SimMath.h"
+#include "GameLogic/System/ShroudManager.h"
 
 #include <cstdlib>
 
@@ -194,6 +195,12 @@ bool CommandTranslator::objectCanDamage(Object &obj, Object &victim)
 				return true;
 			}
 		}
+		// PORT-198 (RW 0x6C8A01): WeaponSet slot 6 fallback if the object had matching anti-mask weapons that didn't directly apply
+		const CanAttackResult res = obj.getAbleToUseWeaponAgainstTarget(ATTACK_NEW_TARGET, &victim, victim.getPosition(), CMD_FROM_PLAYER);
+		if (res == ATTACKRESULT_POSSIBLE || res == ATTACKRESULT_POSSIBLE_AFTER_MOVING)
+		{
+			return true;
+		}
 	}
 	if (ContainModuleInterface *contain = obj.getContain())
 	{
@@ -208,19 +215,18 @@ bool CommandTranslator::objectCanDamage(Object &obj, Object &victim)
 			}
 		}
 	}
-	// PORT-208 (issue #490): RW 0x6913B7 .. 0x691416 as in objectCanAttack: a spawner's slaves decide whether the spawner can hurt the victim
-	if (obj.isKindOf((unsigned)CombatNames::kinds().spawnsAreTheWeapons))
+	// RW 0x77208A .. 0x772248 / RW 0x81D9DE: a SPAWNS_ARE_THE_WEAPONS spawner checks shroud and delegates to its closest slave's getAbleToAttackSpecificObject
+	if (obj.isKindOf((unsigned)CombatNames::kinds().spawnsAreTheWeapons) && !ShroudManager::isShroudedForAction(obj, victim))
 	{
 		if (SpawnBehaviorInterface *spawn = SpawnBehaviorInterface::of(obj))
 		{
-			bool any = false;
-			spawn->forEachSpawnID([&](ObjectID slaveId) {
-				Object *slave = m_ctx.logic.findObjectByID(slaveId);
-				any = any || (slave && !slave->isDestroyed() && objectCanDamage(*slave, victim));
-			});
-			if (any)
+			if (Object *slave = spawn->getClosestSlave(victim.getPosition()))
 			{
-				return true;
+				const CanAttackResult res = slave->getAbleToAttackSpecificObject(ATTACK_NEW_TARGET, &victim, CMD_FROM_PLAYER);
+				if (res == ATTACKRESULT_POSSIBLE || res == ATTACKRESULT_POSSIBLE_AFTER_MOVING)
+				{
+					return true;
+				}
 			}
 		}
 	}
@@ -337,6 +343,21 @@ void CommandTranslator::hint(const char *cursor, bool moveHint)
 			return;
 		}
 	}
+	// P-15 (owner 2026-11-13: with troops selected, own units showed Move): createCommandHint's move / attack move hints (jump table RW 0x6A4099) show
+	// Select (13) when the drawable under the pointer can be selected (RW 0x6A3C86: RW 0x83BCB1 (drawable, 0) into [ebp - 0xE], the object [ebp - 0x20]) and
+	// the local player controls it (RW 0x68B749): the move hint 0xBD unless the object is WALK_ON_TOP_OF_WALL (template + 0x10F & 0x10, RW 0x6A3F8E ..
+	// 0x6A3FA6 -> 0x6A3FFA), the attack move hint 0xBE always (RW 0x6A3FE8 .. 0x6A3FFA). The unreachable hint 0xC9 (GenericInvalid, RW 0x6A3F87) has no
+	// such test. Same selectable test as the mouseover's (SelectionXlat.cpp, RW 0x69FD53)
+	if (moveHint && m_ctx.ui.mouseMode() == 0 && (c == MouseCursorName::Move || c == MouseCursorName::AttackMove))
+	{
+		const Object *over = m_ctx.logic.findObjectByID(m_ctx.ui.mouseoverObject());
+		if (over && HudObjects::canSelect(m_ctx, *over, false) && !over->isKindOfName("SHRUBBERY") && HudObjects::isLocallyControlled(m_ctx, *over)
+			&& (c == MouseCursorName::AttackMove || !over->isKindOfName("WALK_ON_TOP_OF_WALL")))
+		{
+			m_ctx.ui.hintCursor(MouseCursorName::Select);
+			return;
+		}
+	}
 	// RW 0x6A3F63 .. 0x6A3F87 (the default mode's move hint 0xBD, jump table RW 0x6A4099; BFME2 InGameUICreateCommandHint.cpp case 0xb3): nothing selectable under the pointer and a
 	// single selected object that the local player controls and that is a STRUCTURE (template + 0x108 & 0x80): GenericInvalid (12), not Move
 	if (m_ctx.ui.mouseMode() == 0 && c == MouseCursorName::Move && m_ctx.ui.getSelectCount() == 1)
@@ -417,6 +438,27 @@ int CommandTranslator::evaluateForceAttack(Object *target, const Coord3D *pos, E
 		// RW 0x81E594 .. 0x81E5A3: the invalid hint (0xB2, GenericInvalid) is only for the eligibility result 1; result 0 (no attacker) gives no hint.
 		// The boolean test here stands for result 0 (S-286), so no hint (lane INPUT-1 r4)
 		return 0;
+	}
+	if (target && first->isKindOf((unsigned)CombatNames::kinds().spawnsAreTheWeapons))
+	{
+		CanAttackResult res = first->getAbleToAttackSpecificObject(ATTACK_NEW_TARGET_FORCED, target, CMD_FROM_PLAYER);
+		if (res != ATTACKRESULT_POSSIBLE && res != ATTACKRESULT_POSSIBLE_AFTER_MOVING)
+		{
+			SpawnBehaviorInterface *spawn = SpawnBehaviorInterface::of(*first);
+			Object *slave = spawn ? spawn->getClosestSlave(target->getPosition()) : nullptr;
+			if (slave)
+			{
+				res = slave->getAbleToAttackSpecificObject(ATTACK_NEW_TARGET_FORCED, target, CMD_FROM_PLAYER);
+			}
+			if (res != ATTACKRESULT_POSSIBLE && res != ATTACKRESULT_POSSIBLE_AFTER_MOVING)
+			{
+				if (res == ATTACKRESULT_INVALID_SHOT && type == EvaluateType::DoHint)
+				{
+					hint(MouseCursorName::GenericInvalid);
+				}
+				return 0;
+			}
+		}
 	}
 	const int msgType = target ? MSG_DO_FORCE_ATTACK_OBJECT : MSG_DO_FORCE_ATTACK_GROUND;
 	if (type == EvaluateType::DoCommand)
@@ -1052,9 +1094,26 @@ MessageDisposition CommandTranslator::translate(const ClientMessage &msg)
 			case CMSG_META_SELECT_ALL:
 				selectAllUnits();
 				return MessageDisposition::Destroy;
+			case CMSG_META_SELECT_NEXT_WORKER:
+				// PYSAGE 1.9.8.7 .hotkeys 0xF38009 / 0xF38490 (ennorath.option-hotkeys-1987): route ETKeyBuilder (0x5F) to InGameHeroSelect::selectNearestBuilder
+				if (ModEngineFeatures::has(ModEngineFeature::EnnorathOptionHotkeys1987) && m_ctx.selectNearestBuilder)
+				{
+					m_ctx.selectNearestBuilder(false);
+					return MessageDisposition::Destroy;
+				}
+				m_retailNoOp[metaNameOf(t)]++;
+				return MessageDisposition::Keep;
+			case CMSG_META_SELECT_ALL_HEROES:
+				// PYSAGE 1.9.8.7 .hotkeys 0xF38510 (hook RW 0x81F983, ennorath.option-hotkeys-1987): route ETKeySelectAllHeroes (0xAB) to InGameHeroSelect::selectAllHeroes
+				if (ModEngineFeatures::has(ModEngineFeature::EnnorathOptionHotkeys1987) && m_ctx.selectAllHeroes)
+				{
+					m_ctx.selectAllHeroes();
+					return MessageDisposition::Destroy;
+				}
+				m_retailNoOp[metaNameOf(t)]++;
+				return MessageDisposition::Keep;
 			case CMSG_META_SELECT_NEXT_UNIT:
 			case CMSG_META_SELECT_PREV_UNIT:
-			case CMSG_META_SELECT_NEXT_WORKER:
 			case CMSG_META_SELECT_PREV_WORKER:
 				// lane HUD-4 (S-1673): RW 0x81F8D8 has no case for 0x5D .. 0x60: the message is kept and nobody acts on it
 				m_retailNoOp[metaNameOf(t)]++;

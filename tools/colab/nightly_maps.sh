@@ -1,7 +1,9 @@
 #!/bin/bash
-# Maps (owner 2026-11-16; 2026-11-17: one run of all three tools on one main, after every landing): the button matrix, the field audit,
-# the RotWK function map and their joins (MATRIX_GAPS, FIELD_GAPS), pushed to the branch auto/maps for Claude to land (never into main from
-# here), with one summary on the Drive (openbfme-runs/maps/<date>.md, and latest.md: the PR checker and the agents read it).
+# Maps (owner 2026-11-16; 2026-11-17: one run of all three tools on one main, after every landing; 2026-11-23: "все карты и свипы и аудиты
+# крутил один скрипт на 3 песочнице"): the script map, the button matrix and its grey explanation (MATRIX_GREY), the field audit, the map
+# sweep (every Ennorath map starts and plays, MAP_SWEEP), the RotWK function map, the modifier map and their joins (MATRIX_GAPS,
+# FIELD_GAPS), pushed to the branch auto/maps; GitHub Actions checks the commit and lands it on main (.github/workflows/maps-land.yml, owner
+# 2026-11-20; never into main from here), with one summary on the Drive (openbfme-runs/maps/<date>.md, and latest.md: the PR checker and the agents read it).
 #
 #   bash tools/colab/nightly_maps.sh          # every 15 min: when origin/main moved since the last run and has been still for 15 min, run
 #   bash tools/colab/nightly_maps.sh --now    # one run now
@@ -20,7 +22,7 @@ REPO=/content/sandbox/openbfme-godot
 # its own tree (2026-11-17): a run after a landing comes in the day, while Claude works in station 3
 T=${MAPS_TREE:-$REPO/workspace/wt/maps}
 DRIVE=/content/drive/MyDrive
-INI=$DRIVE/for-arena/ennorath-ini-1.9.8.3.zip
+INI=$DRIVE/for-arena/ennorath-ini-1.9.8.7.zip   # the mod's INI view: Ennorath 1.9.8.7 since 2026-11-23 (1.9.8.3 before)
 INV=$DRIVE/openbfme-audit/rw_function_blocks.json
 INV_FULL=$DRIVE/openbfme-audit/rw_function_blocks_full.json   # the whole-image inventory (Port 241): more readers for FIELD_GAPS
 AUDIT=$DRIVE/openbfme-audit/field-audit-auto                  # this run's field audit (the numbered vN stay hand releases)
@@ -137,6 +139,11 @@ run() {
   # the matrix review (owner 2026-11-17): layer 1 ran inside `all` (recheck: every red object swept again alone, ORDER when fine alone);
   # layers 2 and 3 here: the lint against the mod's INI, and every button whose verdict moved since the main the previous run measured
   python3 tools/mod/matrix_review.py --ini "$INI" --before "$(cat "$RUNS/last_rev" 2>/dev/null)" > "$RUNS/nightly_review.log" 2>&1       || echo "matrix review failed at $rev (the run goes on)" >> "$LOG"
+  # why the DISABLED buttons are grey (MATRIX_GREY, Port 220), from this run's matrix: the next run's sweep reads it (2026-11-23: it was
+  # last made by hand on 2026-11-18)
+  st "карты на main $rev: серые кнопки (MATRIX_GREY)"
+  python3 tools/mod/matrix_grey.py --ini "$INI" --matrix docs/ennorath/MATRIX.tsv --out docs/ennorath/MATRIX_GREY.tsv \
+      --md docs/ennorath/MATRIX_GREY.md > "$RUNS/nightly_grey.log" 2>&1 || echo "matrix grey failed at $rev (the run goes on)" >> "$LOG"
   # the field audit on this main (2026-11-17): the engine's module coverage table, then field_audit.py with the newest hand verdicts
   mkdir -p "$AUDIT"
   st "карты на main $rev: аудит полей"
@@ -153,6 +160,18 @@ run() {
 %s
 ' "$rev" "$(date -u '+%F %T')" "$SB"       "$(basename "$(dirname "$manual")")" "$(grep -m1 'fields of the mod' "$AUDIT/field-audit.md" 2>/dev/null)" > "$AUDIT/README.txt"
   audit_zip "$rev" "$manual" || echo "audit zip failed at $rev" >> "$LOG"   # never stops the run
+  # the map sweep (owner 2026-11-23: last run by hand on 2026-11-20, and two Local tasks were written from it after their fixes had
+  # landed): every map of the Ennorath install starts a skirmish and plays 60 s, one process per map; the per-map logs stay on the Drive
+  st "карты на main $rev: свип карт Эннората"
+  local sw="$RUNS/map-sweep"; rm -rf "$sw"; mkdir -p "$sw"
+  local jobs; jobs=$(( $(nproc) > 4 ? $(nproc) - 2 : 2 ))
+  if python3 tools/maps/map_sweep.py --tests engine/build/openbfme_tests --out "$sw" --jobs "$jobs" --seconds 60 --timeout 600 \
+        > "$RUNS/nightly_sweep.log" 2>&1; then
+    python3 tools/maps/map_sweep.py --summary "$sw/map-sweep.tsv" --docs docs/ennorath >> "$RUNS/nightly_sweep.log" 2>&1 \
+        || echo "map sweep summary failed at $rev (the run goes on)" >> "$LOG"
+  else
+    echo "map sweep failed at $rev (the run goes on): $RUNS/nightly_sweep.log" >> "$LOG"
+  fi
   [ -d /content/py219/angr ] || python3 -m pip install -q --target /content/py219 angr==9.2.213 bitstring==4.4.0 pycparser==3.0 > /dev/null 2>&1
   export PYTHONPATH=/content/py219
   cp -f "$INV" workspace/rebuild_inventory.json 2>/dev/null
@@ -169,6 +188,19 @@ run() {
   [ -f "$XMAP/rw_map.csv" ] && xm=(--xmap "$XMAP/rw_map.csv")
   python3 tools/mod/field_gaps.py --audit "$AUDIT/field-audit.tsv" --inventory "$finv" --game "$RW_GAME_DAT" "${xm[@]}" \
       > "$RUNS/nightly_fgaps.log" 2>&1 || { echo "field_gaps failed at $rev" >> "$LOG"; return 1; }
+  # the attribute modifier map (owner 2026-11-19) on this run's MATRIX_GAPS: docs/ennorath/MODIFIER_*; the per-list table is the mod's data: Drive only
+  if [ -f "$INV_FULL" ]; then
+    local mm="$RUNS/modifier-map"; mkdir -p "$mm"
+    if python3 tools/mod/modifier_map.py --base "$ROTWK_INSTALL" --overlay "$OPENBFME_ENNORATH_INSTALL" --game "$RW_GAME_DAT" --inventory "$INV_FULL"         --out "$mm" > "$RUNS/nightly_modmap.log" 2>&1; then
+      cp -f "$mm/modifier-map.md" docs/ennorath/MODIFIER_MAP.md
+      cp -f "$mm/modifier-readers.tsv" docs/ennorath/MODIFIER_READERS.tsv
+      cp -f "$mm/modifier-port-reads.tsv" docs/ennorath/MODIFIER_PORT_READS.tsv
+      cp -f "$mm/modifier-unresolved.tsv" docs/ennorath/MODIFIER_UNRESOLVED.tsv
+      cp -f "$mm/modifier-matrix.tsv" docs/ennorath/MODIFIER_MATRIX.tsv
+    else
+      echo "modifier map failed at $rev (the run goes on)" >> "$LOG"
+    fi
+  fi
   rm -f workspace/rebuild_inventory.json
   # task drafts from the red buttons, grouped by module class, after MATRIX_GAPS (owner 2026-11-17): Drive openbfme-runs/maps/drafts, never the repository
   python3 tools/mod/matrix_drafts.py --ini "$INI" --out "$RUNS/drafts" > "$RUNS/nightly_drafts.log" 2>&1           || echo "matrix drafts failed at $rev (the run goes on)" >> "$LOG"
@@ -179,26 +211,27 @@ run() {
   st "карты на main $rev: коммит auto/maps"
   git checkout -q -B auto/maps
   git add docs/ennorath/MATRIX.tsv docs/ennorath/README.md docs/ennorath/RW_FUNCTION_MAP.tsv docs/ennorath/RW_FUNCTION_MAP.md \
-      docs/ennorath/MATRIX_GAPS.tsv docs/ennorath/MATRIX_GAPS.md docs/ennorath/FIELD_GAPS.tsv docs/ennorath/PROGRESS.tsv docs/ennorath/MATRIX_FACTIONS.tsv docs/ennorath/MATRIX_REVIEW.md       docs/ennorath/SCRIPT_GRANTS.tsv docs/ennorath/SCRIPT_MAP.md docs/ennorath/GRANTS_INI.tsv
+      docs/ennorath/MATRIX_GAPS.tsv docs/ennorath/MATRIX_GAPS.md docs/ennorath/FIELD_GAPS.tsv docs/ennorath/PROGRESS.tsv docs/ennorath/MATRIX_FACTIONS.tsv docs/ennorath/MATRIX_REVIEW.md       docs/ennorath/SCRIPT_GRANTS.tsv docs/ennorath/SCRIPT_MAP.md docs/ennorath/GRANTS_INI.tsv \
+      docs/ennorath/MODIFIER_MAP.md docs/ennorath/MODIFIER_READERS.tsv docs/ennorath/MODIFIER_PORT_READS.tsv docs/ennorath/MODIFIER_UNRESOLVED.tsv docs/ennorath/MODIFIER_MATRIX.tsv \
+      docs/ennorath/MATRIX_GREY.tsv docs/ennorath/MATRIX_GREY.md docs/ennorath/MAP_SWEEP.tsv docs/ennorath/MAP_SWEEP.md \
+      || { echo "$day: git add of the maps failed at $rev (nothing committed)" >> "$LOG"; return 1; }
   local red; red=$(python3 -c "import sys; sys.path.insert(0,'tools/mod'); import progress_snapshot as p; print(*p.matrix_counts(None))")
   if git diff --cached --quiet; then
     echo "$day: nothing changed at $rev" >> "$LOG"
   else
-    git commit -q -m "Nightly maps $day on main $rev: matrix, function map, MATRIX_GAPS, FIELD_GAPS (red buttons / specific gaps: $red)" \
-        -m "tools/colab/nightly_maps.sh (sandbox $SB); land with the next batch." || { echo "commit refused at $rev" >> "$LOG"; return 1; }
+    git commit -q -m "Nightly maps $day on main $rev: matrix, MATRIX_GREY, map sweep, function map, MATRIX_GAPS, FIELD_GAPS (red buttons / specific gaps: $red)" \
+        -m "tools/colab/nightly_maps.sh (sandbox $SB); GitHub Actions lands it (maps-land.yml)." || { echo "commit refused at $rev" >> "$LOG"; return 1; }
     # the sandbox shell may have no GitHub credentials: the commit then waits on the Drive as a patch (Claude applies it on the PC, 2026-11-16)
     git format-patch -1 --stdout HEAD > "$RUNS/$day.patch"
     git push -q -f origin auto/maps 2>/dev/null && rm -f "$RUNS/$day.patch" || echo "push failed at $rev: the commit is $RUNS/$day.patch" >> "$LOG"
-    # owner 2026-11-17: the agents read the maps from main, so the commit (only the generated tables and the progress row, checked by the
-    # gate) fast-forwards main when main has not moved during the run; otherwise it waits in auto/maps for the next landing
-    if [ -z "$(git diff --name-only HEAD~1 HEAD | grep -vxE 'docs/ennorath/(MATRIX\.tsv|README\.md|RW_FUNCTION_MAP\.(tsv|md)|MATRIX_GAPS\.(tsv|md)|FIELD_GAPS\.tsv|PROGRESS\.tsv|MATRIX_FACTIONS\.tsv|MATRIX_REVIEW\.md)')" ]; then
-      git push -q origin HEAD:main 2>/dev/null && echo "$day: maps fast-forwarded main" >> "$LOG" || echo "$day: main moved during the run, maps wait in auto/maps" >> "$LOG"
-    fi
+    # owner 2026-11-20: GitHub Actions lands the commit on main (.github/workflows/maps-land.yml, tools/ci/maps_land.py: only the maps
+    # files, whole tables, PROGRESS by date, README three-way); a red check leaves auto/maps for Claude
   fi
   { echo "# Nightly maps $day (main $rev, sandbox $SB)"; echo; echo "red buttons / specific gaps: $red"; echo
     echo "stops since the previous progress row: $stops"; echo
     echo '## Function map'; tail -3 "$RUNS/nightly_map.log"; echo; echo '## MATRIX_GAPS'; tail -2 "$RUNS/nightly_gaps.log"
     echo; echo '## FIELD_GAPS'; tail -2 "$RUNS/nightly_fgaps.log"; echo; echo '## Matrix'; tail -5 "$RUNS/nightly_matrix.log"
+    echo; echo '## Map sweep'; grep -m1 '^Maps:' docs/ennorath/MAP_SWEEP.md 2>/dev/null; echo; echo '## MATRIX_GREY'; tail -2 "$RUNS/nightly_grey.log"
     echo; echo '## Field audit (changes against the previous run)'; head -40 "$AUDIT/field-audit-diff.md" 2>/dev/null
     echo; echo '## Task drafts (Drive openbfme-runs/maps/drafts/index.md)'; tail -1 "$RUNS/nightly_drafts.log"
     echo; sed -n '/^## Lint/,$p' docs/ennorath/MATRIX_REVIEW.md 2>/dev/null | head -60; } > "$RUNS/$day.md"

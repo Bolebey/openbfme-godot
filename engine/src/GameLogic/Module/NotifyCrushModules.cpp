@@ -122,7 +122,8 @@ WorldShape worldShape(const ObjectGeometry::Shape &s, const Coord3D &pos, float 
 	return w;
 }
 
-// the box record of RW 0xAD4870 / 0xAD4790: centre, axis u = (cos, sin), axis v = (-sin, cos) stored as floats, half extents
+// RW 0x00AD4790 (DONOR BFME2 0x006C0630): 2D OBB box/box overlap setup calling RW 0xAD4660
+// the box record of RW 0xAD4870 / RW 0x00AD4790: centre, axis u = (cos, sin), axis v = (-sin, cos) stored as floats, half extents
 struct BoxRecord
 {
 	float x, y, ux, uy, vx, vy, e1, e2;
@@ -456,6 +457,7 @@ void NotifyCrushUpdate::crc(StateHasher &h) const
 	h.addU32(m_warned);
 }
 
+// RW 0x00653C8F (getModuleName), RW 0x00653C4A (getModuleNameKey), RW 0x00653CB1 (~NotifyCrush), RW 0x00653C95 (scalar deleting dtor)
 void NotifyCrushModules::registerAll(ModuleFactory &modules)
 {
 	for (const char *name : { "NotifyTargetsOfImminentProbableCrushingUpdate", "HordeNotifyTargetsOfImminentProbableCrushingUpdate" })
@@ -474,6 +476,7 @@ void NotifyCrushModules::registerAll(ModuleFactory &modules)
 }
 
 // ---- lane SAVE-4b: the snapshot (OpenBFME native, S-4190) ---------------------------------------------------------------------------------------------------
+// RW 0x008D3244 (NotifyTargetsOfImminentProbableCrushingUpdate::xfer: version (1,1), UpdateModule::xfer RW 0x850C60, NotifyCrushMux::xfer RW 0x8D2B05)
 void NotifyCrushUpdate::xfer(Xfer &x)
 {
 	SnapshotXfer::version(x, 1, 1);

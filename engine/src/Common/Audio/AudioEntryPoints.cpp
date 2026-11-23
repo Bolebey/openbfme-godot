@@ -456,6 +456,26 @@ float enemySightedMaxVoicePositionScanRange()
 	return 1100.0f;
 }
 
+unsigned enemyCampDestroyedDamageTimeoutFrames()
+{
+	Eva *eva = nullptr;
+	{
+		std::lock_guard<std::mutex> lock(g_bindMutex);
+		eva = g_eva;
+	}
+	return eva ? eva->enemyCampDestroyedDamageTimeoutFrames() : 0u;
+}
+
+unsigned friendlyCampDestroyedDamageTimeoutFrames()
+{
+	Eva *eva = nullptr;
+	{
+		std::lock_guard<std::mutex> lock(g_bindMutex);
+		eva = g_eva;
+	}
+	return eva ? eva->friendlyCampDestroyedDamageTimeoutFrames() : 0u;
+}
+
 std::string reportEvaDamage(const std::string &event, const std::string &second, bool farFrameDue, const Coord3D &position)
 {
 	// lane EVADAMAGE-1: the TheEva half of RW 0x67B644 .. 0x67B6A4 on the Eva's thread (a report made elsewhere waits like reportEva's, S-814)
@@ -677,7 +697,7 @@ void postHeldSound(int slot, const std::string &n, std::uint32_t holderId, std::
 		mgr->removeAudioEvent(it->second);
 		held.erase(it);
 	}
-	static const char *const kTag[HELD_SOUND_SLOTS] = { "building loop", "move loop", "upgrade loop", "ability loop", "flammable loop", "production speed bonus loop" };
+	static const char *const kTag[HELD_SOUND_SLOTS] = { "building loop", "move loop", "upgrade loop", "ability loop", "flammable loop", "production speed bonus loop", "castle build loop" };
 	AudioLog::Scope scope(kTag[slot]);
 	const AudioHandle h = mgr->playSoundForObject(n, objectId);
 	if (h >= AHSV_FirstHandle)
@@ -716,7 +736,7 @@ void resumeHeldSound(int slot, const std::string &n, std::uint32_t holderId, std
 	{
 		held.erase(it); // the kept handle outlived its sound: dropped, then the event is added below
 	}
-	static const char *const kTag[HELD_SOUND_SLOTS] = { "building loop", "move loop", "upgrade loop", "ability loop", "flammable loop", "production speed bonus loop" };
+	static const char *const kTag[HELD_SOUND_SLOTS] = { "building loop", "move loop", "upgrade loop", "ability loop", "flammable loop", "production speed bonus loop", "castle build loop" };
 	AudioLog::Scope scope(kTag[slot]);
 	const AudioHandle h = mgr->playSoundForObject(n, objectId, owningPlayerIndex);
 	if (h >= AHSV_FirstHandle)

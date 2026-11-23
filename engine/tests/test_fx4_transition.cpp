@@ -255,8 +255,11 @@ TEST_CASE("fx4 runtime: a hit that makes the state worse plays the new state's F
 	CHECK(attach[0]->position.z == 3.0f);
 	const std::uint32_t damagedSlot = attach[0]->slot;
 	CHECK(bySite(ev, FXEvent::DESTROY_PARTICLE_SYSTEM).empty()); // PRISTINE had no systems
-	// the new state's lists: Hide first, then Show, permanent (RW 0x8BDCF7)
-	CHECK(hooks.calls == std::vector<std::string>{ "DOOR hide permanent", "DOOR_D2 hide permanent", "DOOR_D1 show permanent" });
+	// RW 0x008BDEE5 (onDrawableBoundToObject on friend_bindToClient): PRISTINE Hide then Show first;
+	// then RW 0x8BDCF7 on the transition to DAMAGED: DAMAGED Hide then Show, permanent.
+	CHECK(hooks.calls == std::vector<std::string>{
+		"DOOR_D1 hide permanent", "DOOR_D2 hide permanent", "DOOR show permanent",
+		"DOOR hide permanent", "DOOR_D2 hide permanent", "DOOR_D1 show permanent" });
 
 	DamageInfo second = hit(30.0f, DAMAGE_FLAME); // 70 -> 40: REALLYDAMAGED
 	const size_t before = w.events().size();
@@ -383,7 +386,7 @@ TEST_CASE("fx4 bones: RandomBone draws the logic random among the drawable's bon
 	w.combat().setLaunchOffsets(nullptr);
 }
 
-TEST_CASE("fx4 save: the last damage record's type round-trips in ActiveBody's xfer version 3; version 1 and 2 load with defaults")
+TEST_CASE("fx4 save: the last damage record's type round-trips in ActiveBody's xfer version 6; versions 1 to 5 load with defaults")
 {
 	FxWorld w;
 	Object *a = w.unit("TdfxProbe", 'B', 400, 300);
@@ -404,7 +407,7 @@ TEST_CASE("fx4 save: the last damage record's type round-trips in ActiveBody's x
 	XferSave saved;
 	ba->xfer(saved);
 	REQUIRE_FALSE(saved.data().empty());
-	CHECK(saved.data()[0] == 3); // includes the record's noEffect byte
+	CHECK(saved.data()[0] == 6); // the record's noEffect byte, PORT-293's last-healing frame, PORT-296's amount, upstream BLDGDEBRIS-1's side stage and values (24 bytes)
 	XferLoad load(saved.data());
 	bb->xfer(load);
 	REQUIRE(load.atEnd());
@@ -414,13 +417,45 @@ TEST_CASE("fx4 save: the last damage record's type round-trips in ActiveBody's x
 	bool noEffect = true;
 	REQUIRE(bb->lastDamageRecordNoEffect(noEffect));
 	CHECK_FALSE(noEffect);
+	CHECK(bb->lastDamageAmount() == water.m_input.m_amount);
 	XferSave again;
 	bb->xfer(again);
 	CHECK(again.data() == saved.data());
-	// version 2 (before Local 30): without the trailing noEffect byte (loads cleanly with default false)
-	std::vector<std::uint8_t> v2 = saved.data();
+	// version 5 (before upstream's side stage): without the trailing stage and four value / flag pairs (24 bytes)
+	std::vector<std::uint8_t> v5 = saved.data();
+	v5[0] = 5;
+	v5.resize(v5.size() - 24);
+	XferLoad oldV5(v5);
+	bc->xfer(oldV5);
+	REQUIRE(oldV5.atEnd());
+	CHECK(bc->sideStage() == 0);
+	// version 4 (before PORT-296): without the trailing amount (loads cleanly with the default zero); the noEffect byte and PORT-293's frame stay
+	std::vector<std::uint8_t> v4 = v5;
+	v4[0] = 4;
+	v4.resize(v4.size() - 4);
+	XferLoad oldV4(v4);
+	bc->xfer(oldV4);
+	REQUIRE(oldV4.atEnd());
+	REQUIRE(bc->lastDamageRecordType(type));
+	CHECK(type == DAMAGE_WATER);
+	REQUIRE(bc->lastDamageRecordNoEffect(noEffect));
+	CHECK_FALSE(noEffect);
+	CHECK(bc->lastDamageAmount() == 0.0f);
+	// version 3 (before PORT-293): without the trailing last-healing frame either; PORT-293 added the 4-byte frame after the noEffect byte
+	std::vector<std::uint8_t> v3 = v4;
+	v3[0] = 3;
+	v3.resize(v3.size() - 4);
+	XferLoad oldV3(v3);
+	bc->xfer(oldV3);
+	REQUIRE(oldV3.atEnd());
+	REQUIRE(bc->lastDamageRecordType(type));
+	CHECK(type == DAMAGE_WATER);
+	REQUIRE(bc->lastDamageRecordNoEffect(noEffect));
+	CHECK_FALSE(noEffect);
+	// version 2 (before Local 30): without the noEffect byte (loads cleanly with default false)
+	std::vector<std::uint8_t> v2 = v3;
 	v2[0] = 2;
-	v2.pop_back();
+	v2.resize(v2.size() - 1);
 	XferLoad oldV2(v2);
 	bc->xfer(oldV2);
 	REQUIRE(oldV2.atEnd());

@@ -51,6 +51,8 @@ public:
 	static void buildFieldParse(MultiIniFieldParse &p);
 };
 
+// GetSnapshotName RW 0x0089D973, getModuleNameKey RW 0x0089D979, scalar deleting dtor RW 0x0089DA02
+// RW 0x0089D95A (dtor -> RW 0x0064A492)
 class AutoDepositUpdate : public UpdateModule
 {
 public:

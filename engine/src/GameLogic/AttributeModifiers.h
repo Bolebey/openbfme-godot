@@ -45,6 +45,7 @@ enum AttributeModifierType
 	ATTRIBUTE_DAMAGE_ADD = 2,
 	ATTRIBUTE_DAMAGE_MULT = 3,
 	ATTRIBUTE_EXPERIENCE = 6,
+	ATTRIBUTE_RANGE = 7,
 	ATTRIBUTE_SPEED = 8,
 	ATTRIBUTE_SPELL_DAMAGE = 11,
 	ATTRIBUTE_RECHARGE_TIME = 12,
@@ -53,6 +54,7 @@ enum AttributeModifierType
 	ATTRIBUTE_HEALTH_MULT = 15,
 	ATTRIBUTE_AUTO_HEAL = 19,
 	ATTRIBUTE_SHROUD_CLEARING = 20,
+	ATTRIBUTE_RATE_OF_FIRE = 21,
 	ATTRIBUTE_INVULNERABLE = 27,
 	ATTRIBUTE_TYPE_COUNT = 28,
 	// lane MODS-3: edain-unchained.production-split's types (parsed only with the feature)
@@ -102,6 +104,9 @@ struct ModifierListTemplate
 
 	// RW 0x805268: the value of `type` (first entry); `name` filters on the entry's name list when both are present
 	bool value(int type, const char *name, float &out) const;
+	// Both editions: RW 0x00804E32 (getFX) / RW 0x00804E8A (getEndFX): with MultiLevelFX (+0xD0), indexes m_fx/m_endFx by (categoryCount - 1) in [0, 2], else slot 0.
+	const std::string &getFX(int categoryCount = 0) const;
+	const std::string &getEndFX(int categoryCount = 0) const;
 	static const FieldParse *getFieldParse(); ///< RW 0xC4EAF0
 };
 
@@ -119,6 +124,14 @@ public:
 	int findIndex(const std::string &name) const; ///< RW 0x614470: -1 when unknown
 	const ModifierListTemplate *get(int index) const; ///< RW 0x6146E0
 	const ModifierListTemplate *find(const std::string &name) const { return get(findIndex(name)); }
+	// Both editions: index-based accessors on AttributeModifierStore:
+	// RW 0x006144FE (getFX), RW 0x0061452E (getEndFX), RW 0x0061455E (getModelCondition),
+	// RW 0x006145BF (getClearModelCondition), RW 0x00614620 (getUpgrade).
+	const std::string &getFX(int index, int categoryCount = 0) const;
+	const std::string &getEndFX(int index, int categoryCount = 0) const;
+	std::array<std::uint32_t, 19> getModelCondition(int index) const;
+	std::array<std::uint32_t, 19> getClearModelCondition(int index) const;
+	const ModifierListTemplate::UpgradeGrant *getUpgrade(int index) const;
 	size_t size() const { return m_lists.size(); }
 
 private:

@@ -187,6 +187,7 @@ void ScriptCameraDirector::apply(const ScriptClientRequest &r, const Coord3D &ca
 			updateFades();
 		}
 		f.active = true;
+		m_missionFadeUpActive = false; // explicit script fade supersedes the mission-start FadeWholeScreen hold
 		return;
 	}
 	if (a == "CAMERA_FOLLOW_NAMED") // (unit, snap, ?): RW 0x7BB4B0 -> the view's follow (slot 0x184) of the object
@@ -279,6 +280,14 @@ void ScriptCameraDirector::apply(const ScriptClientRequest &r, const Coord3D &ca
 	{
 		return; // lane MODCOMPAT-AI: the HUD camera's far plane (scripts/campaign_cine.gd -> InGameHud camera_set_clip_depth_multiplier)
 	}
+	if (a == "RESIZE_VIEW_GUARDBAND")
+	{
+		// LOCAL-94 (issue #720): RW 0x7CE53A -> RW 0x7BD6E9 (DONOR BFME2 0x003BCC08, ScriptActions::doResizeViewGuardband) ->
+		// TheTacticalView vslot + 0x1BC = W3DView::setGuardBandBias (RW 0x48B5FC, View + 0x78 / + 0x7C).
+		m_guardBandBiasX = realParam(r, 0);
+		m_guardBandBiasY = realParam(r, 1);
+		return;
+	}
 	m_unhandled.push_back(a);
 }
 
@@ -356,6 +365,24 @@ void ScriptCameraDirector::updateFades()
 	f.type = FADE_NONE;
 }
 
+void ScriptCameraDirector::startMissionFadeUp(unsigned fadeUpFrames)
+{
+	// RW 0x5EACF9 -> RW 0x62B620 .. 0x62B906 -> RW 0x627062: hold black ("FadeWholeScreen") until TheGameLogic->getFrame() >= fadeUpFrames,
+	// then release the fade-up. Default is 7 logic frames (RW 0x5EBA4A / RW 0x625502).
+	m_missionFadeUpTarget = fadeUpFrames;
+	m_missionFadeUpActive = fadeUpFrames > 0;
+	if (m_missionFadeUpActive)
+	{
+		m_fadeState = Fade{}; // RW 0x627062: hold black FadeWholeScreen until fadeUpFrames
+		m_fadeState.type = FADE_SUBTRACT;
+		m_fadeState.curValue = 1.0f;
+		m_fadePrev = 1.0f;
+		m_fadeCur = 1.0f;
+		m_fade = 1.0f;
+		m_fadePresent = 0;
+	}
+}
+
 void ScriptCameraDirector::update(double ms, std::uint32_t presentedFrame, double alpha)
 {
 	if (m_move.active)
@@ -405,6 +432,27 @@ void ScriptCameraDirector::update(double ms, std::uint32_t presentedFrame, doubl
 		}
 	}
 	{
+		if (m_missionFadeUpActive)
+		{
+			// RW 0x62707D: cmp currentFrame, targetFrame; jb keep_waiting -> once reached, reverse "FadeWholeScreen"
+			if (presentedFrame < m_missionFadeUpTarget)
+			{
+				m_fadeState.type = FADE_SUBTRACT; // RW 0x62707D: keep FadeWholeScreen held black while frame < target
+				m_fadeState.curValue = 1.0f;
+				m_fadePrev = 1.0f;
+				m_fadeCur = 1.0f;
+				m_fade = 1.0f;
+				m_fadePresent = presentedFrame;
+				return;
+			}
+			m_missionFadeUpActive = false; // RW 0x627083: target frame reached -> release FadeWholeScreen
+			m_fadeState = Fade{};
+			m_fadePrev = -1.0f;
+			m_fadeCur = 0.0f;
+			m_fade = 0.0f;
+			m_fadePresent = presentedFrame;
+			return;
+		}
 		Fade &f = m_fadeState;
 		// ScriptEngine::update (RW 0x60CC67 ~ BFME2 0x20D065) runs updateFades once per logic frame, before the frame's actions — so
 		// a fade set on frame F steps first at F + 1, plus the step run inside setFade when increase is 0. A FADE_NONE steps no more.

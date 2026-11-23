@@ -461,6 +461,7 @@ bool ObjectCrush::shapesTouch(const Object &self, float selfRadius, const Object
 	                                             *self.getPosition(), self.getOrientation());
 }
 
+// RW 0x008BFAAB (getModuleName), RW 0x008BFAD3 (getModuleNameKey), RW 0x008BFB42 (scalar deleting dtor -> ~SquishCollide RW 0x008BFA92)
 void SquishCollide::registerClass(ModuleFactory &modules)
 {
 	// the registry entry: create RW 0x650D84, the shared collide data RW 0x654811 (no fields of its own)
@@ -622,6 +623,7 @@ void ObjectCollide::onCollide(Object &self, Object &other)
 	}
 }
 
+// RW 0x008C0487 (getModuleName), RW 0x008C048D (getModuleNameKey), RW 0x008C04FC (scalar deleting dtor -> ~HordeMemberCollide RW 0x008C046E)
 void HordeMemberCollide::registerClass(ModuleFactory &modules)
 {
 	modules.bindModuleProc("HordeMemberCollide", MODULETYPE_BEHAVIOR, [](Thing *thing, const ModuleData *data, const ModuleFactory::ModuleTemplate &) -> std::unique_ptr<Module> {
@@ -650,7 +652,7 @@ void HordeMemberCollide::onCollide(Object *other, const Coord3D *, const Coord3D
 	{
 		return;
 	}
-	const ObjectID tid = h->meleeTargetId();
+	const ObjectID tid = h->meleeTargetId(); // RW 0x00872AEE (horde slot 0x16C, called at RW 0x8C0560 / 0x8C0576)
 	if (other->getID() == tid)
 	{
 		h->refreshMeleeReadiness(*other);

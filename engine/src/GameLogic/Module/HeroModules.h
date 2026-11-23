@@ -77,7 +77,8 @@
 //     FX unless the contain's flag; a contained healer uses its parent's contain); Radius: the allies within Radius (FROM_CENTER_2D) that are KindOf, below their
 //     max health and pass RW 0x855533 are healed. RespawnNearbyHordeMembers independently refills non-construction hordes below Slots after the raw-frame
 //     RespawnMinimumDelay (RW 0x855D16); else the object itself when below its max health; then FOREVER after a SingleBurst, else HealingDelay.
-//     heal one (RW 0x855761): not while waiting for the button; NonStackable needs the body's last heal frame (body vslot 0x48, S-858); amount as above; Radius 0:
+//     heal one (RW 0x855761): not while waiting for the button; NonStackable refuses while the body's last heal frame (body vslot 0x48) plus HealingDelay is
+//     in the future (PORT-293, RW 0x855777 .. 0x8557A2); amount as above; Radius 0:
 //     Object::attemptHealing(amount, the object) (RW 0x690532), else attemptHealingFromSoleBenefactor(amount, the object, HealingDelay) (RW 0x690584);
 //     UnitHealPulseFX on the target; the next heal frame = now + HealingDelay.
 //     eligible (RW 0x855533): HealOnlyOthers and the healer itself: no; HealOnlyIfNotInCombat and the healer in combat: no; HealOnlyIfNotUnderAttack and healer
@@ -301,6 +302,7 @@ public:
 	static void buildFieldParse(MultiIniFieldParse &p);
 };
 
+// RW 0x008553A9 (dtor -> RW 0x0064A492)
 class AutoHealBehavior : public UpdateModule, public UpgradeMux, public DamageModuleInterface
 {
 public:
@@ -325,6 +327,7 @@ protected:
 	void processUpgradeRemoval() override;  ///< RW 0x85544E
 
 private:
+	friend struct Port293HealAccess;        // PORT-293 tests (test_port_293.cpp) drive healOne (RW 0x855761) directly, a step update() owns otherwise
 	void healOne(Object &target, bool fx);  ///< RW 0x855761
 	bool eligible(Object &target) const;    ///< RW 0x855533
 	int amount() const;
@@ -341,6 +344,8 @@ public:
 	static void buildFieldParse(MultiIniFieldParse &p) { buildBaseFieldParse(p); }
 };
 
+// scalar deleting dtor RW 0x008BC4AA
+// RW 0x008BC3EC (dtor -> RW 0x0086393B)
 class BuildableHeroListUpgrade : public UpgradeModule
 {
 public:
@@ -349,7 +354,7 @@ public:
 
 protected:
 	void upgradeImplementation() override; ///< RW 0x8BC4C6
-	void processUpgradeRemoval() override {}
+	void processUpgradeRemoval() override; ///< slot 8, RW 0x008BC5CB
 };
 
 namespace HeroModules

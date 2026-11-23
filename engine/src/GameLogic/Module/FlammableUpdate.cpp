@@ -429,9 +429,9 @@ void FlammableUpdate::onDamage(const DamageInfo &info)
 			}
 		}
 	}
-	else if (obj->getContain())
+	else if (ContainModuleInterface *contain = obj->getContain())
 	{
-		noteStop(*obj, "FlammableUpdate: the contain module's slot 0x88(2) at ignition (RW 0x890666) is not ported");
+		contain->evacuateCrew(2 /*CMD_FROM_AI*/); // RW 0x00890656 .. 0x00890666: contain slot 0x88(2)
 	}
 }
 
@@ -686,7 +686,7 @@ void FlammableUpdate::crc(StateHasher &hasher) const
 	hasher.addBool(m_panicLocomotorWhileAflameActive);
 }
 
-// ---- FireSpreadUpdate ---------------------------------------------------------------------------------------------------------------
+// ---- FireSpreadUpdate (dtor RW 0x0088ECE2 / RW 0x0088EE2E, name RW 0x0088ECFB, getModuleNameKey RW 0x0088ED01; DONOR BFME2 0x0088ACCE / 0x0088ACE7 / 0x0088ACED / 0x0088AE1A) ----
 // RW 0x88EDDA
 FireSpreadUpdate::FireSpreadUpdate(Thing *thing, const FireSpreadUpdateModuleData *data)
 	: UpdateModule(thing, data)

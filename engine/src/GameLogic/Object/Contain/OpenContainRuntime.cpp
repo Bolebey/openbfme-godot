@@ -5,6 +5,7 @@
 // inside GarrisonContain, moved here unchanged, and RW 0x8682D9 / 0x86702D / 0x867242 / 0x866B69 / 0x867D6A).
 
 #include "GameLogic/Object/Contain/OpenContainRuntime.h"
+#include "Common/ModEngineFeatures.h"
 #include "GameLogic/SnapshotXfer.h"
 
 #include "Common/Audio/AudioRequests.h"
@@ -192,6 +193,11 @@ bool OpenContain::allowAlliesInside() const
 // RW 0x86603B
 bool OpenContain::openContainAllows(const Object &obj) const
 {
+	return openContainAllowsFor(*getObject(), openData(), m_enabled, obj);
+}
+
+bool OpenContain::openContainAllowsFor(const Object &containerObj, const OpenContainModuleData &d, bool enabled, const Object &obj)
+{
 	static const CombatNames::Status &st = CombatNames::statuses();
 	static const int temporarilyDefected = statusBit("TEMPORARILY_DEFECTED");
 	static const int holdingTheRing = statusBit("HOLDING_THE_RING");
@@ -203,10 +209,9 @@ bool OpenContain::openContainAllows(const Object &obj) const
 	static const int rockVendor = CombatNames::kindOf("ROCK_VENDOR");
 	static const int cavalry = CombatNames::kindOf("CAVALRY");
 	static const int mounted = CombatNames::modelCondition("MOUNTED");
-	const Object *container = getObject();
+	const Object *container = &containerObj;
 	GameLogic &logic = container->logic();
-	const OpenContainModuleData &d = openData();
-	if (obj.isDestroyed() || obj.testStatus((unsigned)temporarilyDefected) || obj.testStatus((unsigned)holdingTheRing) || !m_enabled)
+	if (obj.isDestroyed() || obj.testStatus((unsigned)temporarilyDefected) || obj.testStatus((unsigned)holdingTheRing) || !enabled)
 	{
 		return false;
 	}
@@ -302,6 +307,43 @@ bool OpenContain::isValidContainerFor(const Object &obj, bool checkCapacity, boo
 	(void)checkCapacity;
 	(void)checkPath;
 	return openContainAllows(obj);
+}
+
+// RW 0x008666A1 (contain slot 0x110): iterate m_contained when (flags & 1) != 0; reverse when (flags & 8) != 0.
+void OpenContain::iterateContained(const std::function<void(Object *)> &fn, unsigned flags)
+{
+	if (!fn || (flags & 1u) == 0)
+	{
+		return;
+	}
+	if ((flags & 8u) != 0)
+	{
+		if (!m_contained.empty())
+		{
+			auto cur = std::prev(m_contained.end());
+			for (;;)
+			{
+				Object *o = *cur;
+				const bool done = (cur == m_contained.begin());
+				auto prevIt = done ? m_contained.begin() : std::prev(cur);
+				fn(o);
+				if (done)
+				{
+					break;
+				}
+				cur = prevIt;
+			}
+		}
+	}
+	else
+	{
+		for (auto it = m_contained.begin(); it != m_contained.end();)
+		{
+			Object *o = *it;
+			++it;
+			fn(o);
+		}
+	}
 }
 
 // ---------------------------------------------------------------------------------------------------------------------------------
@@ -682,6 +724,16 @@ void OpenContain::onDelete()
 	{
 		removeFromContain(r, true); // RW 0x8670C7: contain slot 0xA4(rider, true)
 		r->friend_setContainedBy(nullptr);
+		// PYSAGE 1.9.8.7 .wmfeat 0xF3A9B2 .. 0xF3A9EB (hook RW 0x8670D2, ennorath.garrison-hero-survive):
+		// For a STRUCTURE GarrisonContain with EjectPassengersOnDeath and !KillPassengersOnDeath, spare alive non-HORDE HERO riders.
+		if (ModEngineFeatures::has(ModEngineFeature::EnnorathGarrisonHeroSurvive) &&
+			isGarrisonContain() && openData().m_ejectPassengersOnDeath && !openData().m_killPassengersOnDeath &&
+			getObject() && getObject()->isKindOfName("STRUCTURE") &&
+			r && r->getBodyModule() && !r->isDestroyed() && !r->isEffectivelyDead() &&
+			!r->isKindOfName("HORDE") && r->isKindOf((unsigned)hero))
+		{
+			continue;
+		}
 		if (r->isKindOf((unsigned)hero))
 		{
 			r->kill(DAMAGE_UNRESISTABLE, 0); // RW 0x8670EB: kill(8, 0)
@@ -941,6 +993,26 @@ void OpenContain::onSelling()
 {
 	m_killingRiders = false;             // RW 0x865623
 	orderAllPassengersToExit((int)CMD_FROM_AI); // RW 0x86562A: the virtual, so a horde garrison orders its riders out through RW 0x991027
+}
+
+// RW 0x00865631 (DONOR BFME2 0x00462516): contain vslot 0x68 onContainedAboutToTakeDamage(rider, damageSource, info)
+void OpenContain::onContainedAboutToTakeDamage(Object *rider, const void *damageSource, DamageInfo *info)
+{
+	if (!rider || !damageSource || !info)
+	{
+		return;
+	}
+	const int type = info->m_input.m_damageType;
+	if (type == DAMAGE_PASSENGER || type == DAMAGE_UNRESISTABLE)
+	{
+		if (info->m_input.m_kill)
+		{
+			removeFromContain(rider, false); // RW 0x865660: contain slot 0xA4(rider, false)
+		}
+		return;
+	}
+	info->m_input.m_amount = 0.0f; // RW 0x865669
+	info->m_input.m_kill = false;  // RW 0x86566D
 }
 
 // RW 0x86588C: `xor eax, eax; cmp byte [ecx + 0xE1], al; je` (the byte cleared by the sale, RW 0x865623), then `mov ecx, [ecx + 4]` (the module data)

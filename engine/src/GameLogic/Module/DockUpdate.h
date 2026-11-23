@@ -36,6 +36,7 @@
 
 #include "Common/INI.h"
 #include "Common/Module.h"
+#include "GameLogic/Module/DamageModule.h"
 #include "GameLogic/Module/UpdateModule.h"
 
 #include <string>
@@ -113,6 +114,7 @@ public:
 	const std::vector<ObjectID> &approachOwners() const { return m_approachPositionOwners; }
 	const std::vector<bool> &approachReached() const { return m_approachPositionReached; }
 	bool dockerInside() const { return m_dockerInside; }
+	bool dockCrippled() const { return m_dockCrippled; } ///< + 0x85 (RW 0x991727 sets it)
 
 	void crc(StateHasher &hasher) const override;
 	static std::string stopLine(); ///< [S-5201]
@@ -151,6 +153,7 @@ public:
 	static void buildFieldParse(MultiIniFieldParse &p);
 };
 
+// scalar deleting dtor RW 0x008A4558
 class SupplyCenterDockUpdate : public DockUpdate
 {
 public:
@@ -177,6 +180,20 @@ private:
 // SupplyWarehouseDockUpdate (ZH GameLogic/Object/Update/DockUpdate/SupplyWarehouseDockUpdate.cpp; RotWK's own source path at RW 0xC6A218): a source of
 // boxes the supply trucks / workers take one at a time. Table RW 0xC6A15C: StartingBoxes (+ 0x10, parseInt RW 0x42EC5E), DeleteWhenEmpty (+ 0x14, parseBool).
 // The dock interface's slot 12 is action RW 0x8AB53D. No RotWK retail object has one; Ennorath's supply rocks do.
+// The class's own functions (Port 297, fork issue 689; module vtable RW 0xC6A1E0, dock interface vtable RW 0xC6A190; every body read from its first
+// instruction in game.dat 2.01):
+//   * the constructor RW 0x8AB4C0 (DockUpdate RW 0x99230C, then the boxes (+0x88) = StartingBoxes (data + 0x10)); slot 0 RW 0x8AB4FD the scalar deleting
+//     destructor (RW 0x8AB42B: not behaviour); slot 2 getModuleName RW 0x8AB44B (the literal "SupplyWarehouseDockUpdate", RW 0xC0B20C) and slot 4
+//     getModuleNameKey RW 0x8AB47B (its cached name key): the ModuleFactory's class name and key.
+//   * slot 3 xfer RW 0x8AB451: version 1 (RW 0x404F15), DockUpdate::xfer (RW 0x99248C), the boxes (+0x88, Xfer slot 0x7C): xfer below.
+//   * slot 5 onObjectCreated RW 0x8AB519 and slot 1 loadPostProcess RW 0x8AB69B (after DockUpdate's RW 0x99198A): the drawable (RW 0x70E013), when there is
+//     one, hears StartingBoxes and the boxes left (RW 0x671948, W3DSupplyDraw). The port records the same call as the SUPPLY_STATUS client event when the
+//     object is created and when it is loaded (ClientEventRecorder::recordSupplyStatus), and after every box taken (action).
+//   * dock interface slot 17 setDockCrippled RW 0x8AB6E3: see setDockCrippled below. Its only retail caller is SupplyWarehouseCripplingBehavior
+//     (RW 0x886E38 with true, RW 0x886E4A with false, its vtable RW 0xC603A8), which no RotWK or Ennorath object uses and the port does not have (S-7533).
+//   * RW 0x8AB64E setCashValue (the boxes = ceil(value / ValuePerSupplyBox), then the drawable as above) is called only by the script action
+//     WAREHOUSE_SET_VALUE (RW 0x7C191A, found by the object's script name), which the port's script engine does not execute and no Ennorath library script
+//     uses (S-7534).
 class SupplyWarehouseDockUpdateModuleData : public DockUpdateModuleData
 {
 public:
@@ -192,6 +209,14 @@ public:
 	SupplyWarehouseDockUpdate(Thing *thing, const SupplyWarehouseDockUpdateModuleData *data);
 	static void registerClass(ModuleFactory &modules);
 	bool action(Object &docker, Object *drone) override; // RW 0x8AB53D
+	// RW 0x8AB6E3: crippling (setting true) with an active docker that still exists: one inside (DockUpdate's dockerInside) dies, Object::kill(UNRESISTABLE,
+	// NORMAL) (RW 0x698EC3(8, 0)), unless it moves on an airborne locomotor (RW 0x68BEED); one not inside yet, when it has a supply truck AI interface
+	// (AI vslot 0x17C), goes idle (aiIdle(CMD_FROM_AI), RW 0x5E821A with 2) and is forced into its wanting state (slot 0x2C, true). Then DockUpdate's flag
+	// (RW 0x991727), crippled or not.
+	void setDockCrippled(bool setting) override;
+	// RW 0x8AB64E: m_boxesStored = ceil(cashValue / ValuePerSupplyBox, GlobalData + 0xA5C),
+	// then dispatches drawable supply status (RW 0x671948 -> SUPPLY_STATUS client event).
+	void setCashValue(int cashValue);
 	int boxesStored() const { return m_boxesStored; }
 	int startingBoxes() const { return m_data->m_startingBoxes; }
 	void crc(StateHasher &hasher) const override;
@@ -199,4 +224,49 @@ public:
 private:
 	const SupplyWarehouseDockUpdateModuleData *m_data;
 	int m_boxesStored = 0; ///< the interface's + 0x68 (ZH m_boxesStored, StartingBoxes at construction)
+};
+
+// SupplyWarehouseCripplingBehavior (RW create 0x64C16D, data ctor 0x886CDE, field table 0xC60420, vtable 0xC603A8; both editions):
+//   * SelfHealSupression (+0x08, RW 0x73A429), SelfHealDelay (+0x0C, RW 0x73A429), SelfHealAmount (+0x10, RW 0x42ED00).
+//   * ctor RW 0x886D08: zeroes +0x24/+0x28, sleeps forever (0x3FFFFFFF).
+//   * onDamage RW 0x886D8D: resetSelfHealSupression (RW 0x886E20: +0x24 = +0x28 = now + SelfHealSupression), setWakeFrame(+0x24 - now).
+//   * onBodyDamageStateChange RW 0x886C76: newState == BODY_REALLYDAMAGED (2) -> startCrippled (RW 0x886E38 -> dock->setDockCrippled(true));
+//     else oldState == BODY_REALLYDAMAGED (2) -> stopCrippled (RW 0x886E4A -> dock->setDockCrippled(false)).
+//   * update RW 0x886DBA: +0x28 = now + SelfHealDelay; obj->attemptHealing(SelfHealAmount, nullptr) (RW 0x690532);
+//     if body->getHealth() == body->getMaxHealth() sleep forever, else sleep (+0x28 - now).
+//   * xfer RW 0x886E5C: UpdateModule::xfer (RW 0x850C60), version 1, +0x24, +0x28.
+class SupplyWarehouseCripplingBehaviorModuleData : public ModuleData
+{
+public:
+	UnsignedInt m_selfHealSupression = 0; ///< +0x08 (SelfHealSupression, frames)
+	UnsignedInt m_selfHealDelay = 0;      ///< +0x0C (SelfHealDelay, frames)
+	float m_selfHealAmount = 0.0f;        ///< +0x10 (SelfHealAmount)
+	static void buildFieldParse(MultiIniFieldParse &p);
+};
+
+class SupplyWarehouseCripplingBehavior : public UpdateModule, public DamageModuleInterface
+{
+public:
+	OBFME_MODULE_XFER(SupplyWarehouseCripplingBehavior)
+	SupplyWarehouseCripplingBehavior(Thing *thing, const SupplyWarehouseCripplingBehaviorModuleData *data);
+	static void registerClass(ModuleFactory &modules);
+
+	DamageModuleInterface *getDamage() override { return this; }
+	void onDamage(const DamageInfo &info) override; // RW 0x886D8D
+	void onHealing(const DamageInfo &info) override { (void)info; }
+	void onBodyDamageStateChange(const DamageInfo *info, BodyDamageType oldState, BodyDamageType newState) override; // RW 0x886C76
+	UpdateSleepTime update() override; // RW 0x886DBA
+	void crc(StateHasher &hasher) const override;
+
+	UnsignedInt healSuppressedUntilFrame() const { return m_healSuppressedUntilFrame; }
+	UnsignedInt nextHealFrame() const { return m_nextHealFrame; }
+
+private:
+	void resetSelfHealSupression(); // RW 0x886E20
+	void startCrippled();           // RW 0x886E38
+	void stopCrippled();            // RW 0x886E4A
+
+	const SupplyWarehouseCripplingBehaviorModuleData *m_data;
+	UnsignedInt m_healSuppressedUntilFrame = 0; ///< +0x24
+	UnsignedInt m_nextHealFrame = 0;            ///< +0x28
 };

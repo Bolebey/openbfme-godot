@@ -138,6 +138,9 @@ public:
 	void setHandicap(int h) { m_handicap = h; }
 	// lane CAMP-1H: RW 0x6AC32D, the difficulty bonus of `obj` (Object::setReceivingDifficultyBonus); defined in GameLogic/Object/Object.cpp (it reads the logic)
 	void applyDifficultyBonusesForObject(Object &obj, bool apply);
+	// PORT-198: RW 0x6AA688 Player::onUnitCreated(factory, unit), called by SpawnBehavior::createSpawn (RW 0x862BC5) and by the builder
+	// (RW 0x62B147). Defined in Common/Player.cpp; forwards the pair to the player's skirmish AI as RW 0x6C77C9 -> RW 0x8F06FF(..., 0).
+	void onUnitCreated(Object *factory, Object *unit);
 	// the colour tints the player's models: the map or the lobby chose it, or the faction is one that can be played (a template with a
 	// StartingBuilding; Civilian, Neutral and Observer have no team colour). MAPOBJ-1's rule for side colours (stop S-119).
 	bool hasTeamColor() const { return m_colorExplicit || (m_template && m_template->hasStartingBuilding()); }
@@ -323,6 +326,7 @@ public:
 	bool removeCostModifier(const ObjectFilter *filter, const std::vector<float> &percents, ObjectID source);
 	const std::vector<CostModifier> &costModifiers() const { return m_costModifiers; }
 	// RW Player + 0x3D0: the UpgradeDiscount entries (RW 0x6B2C67 add / 0x6B1992 remove, reference counted by (source template name, percents, ApplyToTheseUpgrades))
+	// RW 0x006B0060 (ctor), RW 0x006AFCE3 (dtor)
 	struct UpgradeDiscount
 	{
 		std::string sourceName;
@@ -401,6 +405,14 @@ public:
 	int getProductionTimeTimer(const std::string &templateName) const;                      // test read of RW + 0x2DC (0 when absent)
 	void updateProductionTimeTimers();                                                      // RW 0x6AF269 (loop RW 0x6AF28E .. 0x6AF2DD)
 
+	// LOCAL-94 (issue #720): RW 0x6AA671 (Player::repairStructure -> AIPlayer::repairStructure RW 0x8F78EB, DONOR BFME2 0x004F2F66),
+	// RW 0x8F9705 -> RW 0x8F8F68 (AIPlayer::updateBridgeRepair, DONOR BFME2 0x004F418A; findDozer RW 0x8F55FD), and
+	// RW 0x6AA5CA (Player::computeSuperweaponTarget -> AISkirmishPlayer::computeSuperweaponTarget RW 0x8F481C /
+	// AIPlayer::computeSuperweaponTarget RW 0x8F66BD, DONOR BFME2 0x004F1D38).
+	void repairStructure(GameLogic &logic, ObjectID structureID);
+	void updateAIPlayerRepair(GameLogic &logic);
+	void computeSuperweaponTarget(GameLogic &logic, const SpecialPowerTemplate *power, Coord3D &retPos, int enemyPlayerIndex, float weaponRadius) const;
+
 	void setEconomyHost(PlayerEconomyHost *host) { m_host = host; }
 	PlayerEconomyHost *economyHost() const { return m_host; }
 
@@ -408,6 +420,9 @@ private:
 	PlayerEconomyHost &host() const;
 	void resetProductionTimeChanges(const PlayerTemplate *pt);
 	bool isProductionTimeUntouched() const;
+	void resetAIPlayerRepair();
+	bool isAIPlayerRepairUntouched() const;
+	Object *findDozerForRepair(GameLogic &logic, const Coord3D &pos) const; // RW 0x8F55FD
 
 	int m_index;
 	std::string m_name;
@@ -467,4 +482,12 @@ private:
 	std::map<std::string, float> m_productionTimeChanges;         ///< PORT-280: RW + 0x2B4 (active build time percent delta per ThingTemplate name)
 	std::map<std::string, float> m_startingProductionTimeChanges; ///< PORT-280: RW + 0x2C8 (PlayerTemplate baseline restored when a timer expires)
 	std::map<std::string, int> m_productionTimeTimers;            ///< PORT-280: RW + 0x2DC (remaining frames per ThingTemplate name; 0 = none)
+	static constexpr int kMaxStructuresToRepair = 2;              ///< LOCAL-94: RW AIPlayer::MAX_STRUCTURES_TO_REPAIR = 2
+	std::array<ObjectID, kMaxStructuresToRepair> m_structuresToRepair{ INVALID_ID, INVALID_ID }; ///< LOCAL-94: RW AIPlayer + 0x4C
+	ObjectID m_repairDozer = INVALID_ID;                          ///< LOCAL-94: RW AIPlayer + 0x54
+	Coord3D m_repairDozerOrigin{ 0.0f, 0.0f, 0.0f };              ///< LOCAL-94: RW AIPlayer + 0x58
+	int m_structuresInQueue = 0;                                  ///< LOCAL-94: RW AIPlayer + 0x64
+	bool m_dozerQueuedForRepair = false;                          ///< LOCAL-94: RW AIPlayer + 0x68
+	bool m_dozerIsRepairing = false;                              ///< LOCAL-94: RW AIPlayer + 0x69
+	int m_bridgeTimer = 0;                                        ///< LOCAL-94: RW AIPlayer + 0x6C
 };

@@ -137,12 +137,14 @@ void parseUpgrade(INI *ini, void *instance, void *, const void *)
 	}
 	list->m_upgrade = std::make_unique<ModifierListTemplate::UpgradeGrant>();
 	list->m_upgrade->upgrade = TheUpgradeCenter->findUpgrade(name);
-	const char *delay = ini->getNextTokenOrNull();
+	// RW 0x8050D3 uses INI +0x420 for the tag (Delay:ms), then the default separators for the value.
+	// DONOR BFME2 0x0040351C (Update/AttributeModifierPoolUpdate.cpp).
+	const char *delay = ini->getNextTokenOrNull(ini->getSepsColon());
 	if (delay && std::strcmp(delay, "Delay") == 0) // RW 0x805163: strcmp with "Delay" (RW 0xBF00F4)
 	{
 		if (const char *ms = ini->getNextTokenOrNull())
 		{
-			const unsigned v = (unsigned)ini->scanInt(ms); // fild, + 2^32 when negative
+			const unsigned v = ini->scanUnsignedInt(ms); // fild, + 2^32 when negative
 			list->m_upgrade->delayFrames = NumericState::ceilScaled(v, LOGICFRAMES_PER_MSEC_REAL) & 0xFFFFu; // * 0.005f (RW 0xD9F610), ceil, movzx ax
 		}
 	}
@@ -199,6 +201,44 @@ bool ModifierListTemplate::value(int type, const char *name, float &out) const
 		return true;
 	}
 	return false;
+}
+
+// Both editions: RW 0x00804E32 (DONOR BFME2 0x0040327B)
+const std::string &ModifierListTemplate::getFX(int categoryCount) const
+{
+	if (m_multiLevelFX)
+	{
+		int i = categoryCount - 1;
+		if (i < 0)
+		{
+			i = 0;
+		}
+		if (i > 2)
+		{
+			i = 2;
+		}
+		return m_fx[i];
+	}
+	return m_fx[0];
+}
+
+// Both editions: RW 0x00804E8A (DONOR BFME2 0x004032D3)
+const std::string &ModifierListTemplate::getEndFX(int categoryCount) const
+{
+	if (m_multiLevelFX)
+	{
+		int i = categoryCount - 1;
+		if (i < 0)
+		{
+			i = 0;
+		}
+		if (i > 2)
+		{
+			i = 2;
+		}
+		return m_endFx[i];
+	}
+	return m_endFx[0];
 }
 
 const FieldParse *ModifierListTemplate::getFieldParse()
@@ -260,4 +300,41 @@ const ModifierListTemplate *AttributeModifierStore::get(int index) const
 		return nullptr;
 	}
 	return m_lists[(size_t)index].get();
+}
+
+// Both editions: RW 0x006144FE (DONOR BFME2 0x00214873)
+const std::string &AttributeModifierStore::getFX(int index, int categoryCount) const
+{
+	static const std::string kEmpty;
+	const ModifierListTemplate *list = get(index);
+	return list ? list->getFX(categoryCount) : kEmpty;
+}
+
+// Both editions: RW 0x0061452E (DONOR BFME2 0x002148A3)
+const std::string &AttributeModifierStore::getEndFX(int index, int categoryCount) const
+{
+	static const std::string kEmpty;
+	const ModifierListTemplate *list = get(index);
+	return list ? list->getEndFX(categoryCount) : kEmpty;
+}
+
+// Both editions: RW 0x0061455E (DONOR BFME2 0x002148D3)
+std::array<std::uint32_t, 19> AttributeModifierStore::getModelCondition(int index) const
+{
+	const ModifierListTemplate *list = get(index);
+	return list ? list->m_modelCondition : std::array<std::uint32_t, 19>{};
+}
+
+// Both editions: RW 0x006145BF (DONOR BFME2 0x00214934)
+std::array<std::uint32_t, 19> AttributeModifierStore::getClearModelCondition(int index) const
+{
+	const ModifierListTemplate *list = get(index);
+	return list ? list->m_clearModelCondition : std::array<std::uint32_t, 19>{};
+}
+
+// Both editions: RW 0x00614620 (DONOR BFME2 0x00214995)
+const ModifierListTemplate::UpgradeGrant *AttributeModifierStore::getUpgrade(int index) const
+{
+	const ModifierListTemplate *list = get(index);
+	return (list && list->m_upgrade) ? list->m_upgrade.get() : nullptr;
 }

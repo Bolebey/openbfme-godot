@@ -23,6 +23,10 @@
 
 namespace
 {
+// ModelConditionSoundSelectorClientBehavior: getModuleNameKey RW 0x0065492E, getModuleName RW 0x00654973,
+// VoicePriority interface thunk RW 0x008CF003, UnitSpecificSounds interface thunk RW 0x008CF0D2.
+// UpgradeSoundSelectorClientBehavior: getModuleNameKey RW 0x00652A80, getModuleName RW 0x00652AC5,
+// audio row accessor RW 0x008CF59D, UnitSpecificSounds lookup RW 0x008CF8C5.
 // RW 0xC26720: the audio table (33 voice rows parsed by RW 0x73ACEF, then 23 sound rows parsed by RW 0x73AD07)
 const char *const kRowNames[SoundSelector::AUDIO_ROW_COUNT] = {
 	"VoiceSelect", "VoiceSelectUnderConstruction", "VoiceSelectBattle", "VoiceMove", "VoiceMoveToHigherGround", "VoiceMoveOverWalls", "VoiceAttack",
@@ -532,6 +536,8 @@ bool SoundSelectors::any(const ThingTemplate &tt)
 	return false;
 }
 
+// RandomSoundSelectorClientBehavior: RW 0x008D00E2 (getModuleName), RW 0x008D00E8 (getModuleNameKey, DONOR BFME2 0x004CBCAD),
+// RW 0x008D01C2 (client DrawableModule xfer, DONOR BFME2 0x004CBD7C; client-only, S-4190)
 void SoundSelectorClientBehavior::registerClasses(ModuleFactory &modules)
 {
 	modules.bindTypedData<MCData>("ModelConditionSoundSelectorClientBehavior", MODULETYPE_CLIENT_BEHAVIOR);
