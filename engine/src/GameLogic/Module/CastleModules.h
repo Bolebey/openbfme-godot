@@ -111,6 +111,7 @@
 
 #include <cstdint>
 #include <memory>
+#include <map>
 #include <set>
 #include <string>
 #include <utility>
@@ -237,8 +238,13 @@ public:
 	// RW 0x79CB47 (abandon): what a player's pack starts (MSG_CASTLE_PACK, RW 0x77C2B7)
 	void abandonByPlayer() { abandon(); }
 	// RW 0x799440 (the camp-destroyed EVA, called by RW 0x79CB5C at the start of the abandon): the owner / ally / attacker event of the
-	// castle's CastleMemberBehavior data, chosen against the local player and reported at the castle (RW 0x79951F / 0x799560 / 0x7995C2 -> RW 0x7995DB)
+	// castle's CastleMemberBehavior data, chosen against the local player and reported at the castle (RW 0x79951F / 0x799560 / 0x7995C2 -> RW 0x7995DB),
+	// gated by MiscEvaData FriendlyCampDestroyedDamageTimeoutMS (+0x88, RW 0x7994FF / 0x79953D -> 0x7987C4) and EnemyCampDestroyedDamageTimeoutMS (+0x84, RW 0x7995AE)
 	void reportCampDestroyedEva();
+	// RW 0x79B374 (called by CastleMemberBehavior::onDamage RW 0x79B757 -> 0x79B793): records logic frame per attacking player bit in m_damageMap (+0xA0)
+	void recordDamageByPlayers(const struct DamageInfo &info);
+	// RW 0x7987C4: true when m_damageMap (+0xA0) contains any player index other than ownerPlayerIndex
+	bool wasDamagedByOtherPlayer(int ownerPlayerIndex, unsigned timeoutFrames) const;
 	// RW + 0x4C: the price the last player's unpack paid (0 for the starting fortress and a summoned castle)
 	float storedPrice() const { return m_storedPrice; }
 	const std::string &evaEnemyCastleSightedEvent() const { return m_data->m_evaEnemyCastleSightedEvent; }
@@ -331,6 +337,7 @@ private:
 	std::vector<ObjectID> m_foundations, m_members, m_crew, m_defenseFoundations; // RW + 0x50, + 0x5C, + 0x68, + 0x74
 	std::vector<Area> m_areas;  // RW + 0x80 (lane CASTLEAREA-1)
 	std::set<ObjectID> m_inside; // RW + 0x8C (lane CASTLEAREA-1)
+	std::map<int, UnsignedInt> m_damageMap; // RW + 0xA0 (Local 139: playerIndex -> last damaged frame, RW 0x79B374 / 0x7985AA / 0x79BBBC)
 	std::string m_lastError;
 };
 
